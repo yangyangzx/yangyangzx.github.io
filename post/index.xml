@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Posts on 杨中校的博客</title>
+    <link>https://yangyangzx.github.io/post/</link>
+    <description>Recent content in Posts on 杨中校的博客</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en-us</language>
+    <lastBuildDate>Thu, 06 May 2021 10:36:59 +0800</lastBuildDate><atom:link href="https://yangyangzx.github.io/post/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>Blog</title>
+      <link>https://yangyangzx.github.io/post/blog/</link>
+      <pubDate>Thu, 06 May 2021 10:36:59 +0800</pubDate>
+      
+      <guid>https://yangyangzx.github.io/post/blog/</guid>
+      <description>项目地址：https://github.com/gohugoio/hugo
+以下环境使用：树莓派Linux kali 4.19.127-Re4son-v8l+
+安装hugo $ apt-get install hugo 生成博客 $ hugo new site myblog #指定博客名称为myblog  此时，站点已经生成，在当前目录下会有myblog这个目录，里面存放了博客配置信息。  设置主题 官方主题库：https://themes.gohugo.io/
+此次演示：https://themes.gohugo.io/hugo-theme-m10c/
+$ cd myblog &amp;amp;&amp;amp; git clone https://github.com/vaga/hugo-theme-m10c.git themes/m10c 更改配置
+$ echo theme = &amp;#34;\&amp;#34;m10c&amp;#34;\&amp;#34; &amp;gt;&amp;gt; config.toml 启动服务 $ hugo server -t m10c --buildDrafts 写一遍文章 $ hugo new post/blog.md </description>
+    </item>
+    
+  </channel>
+</rss>
