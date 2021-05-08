@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en-us">
   <head>
-    <title>Blog // 杨中校的博客</title>
+    <title>杨中校的第二次测试 // 杨中校的博客</title>
     <link rel="shortcut icon" href="/favicon.ico" />
     <meta charset="utf-8" />
     <meta name="generator" content="Hugo 0.80.0" />
@@ -12,25 +12,45 @@
 
     
     <meta name="twitter:card" content="summary"/>
-<meta name="twitter:title" content="Blog"/>
-<meta name="twitter:description" content="项目地址：https://github.com/gohugoio/hugo
-以下环境使用：树莓派Linux kali 4.19.127-Re4son-v8l&#43;
-安装hugo $ apt-get install hugo 生成博客 $ hugo new site myblog #指定博客名称为myblog  此时，站点已经生成，在当前目录下会有myblog这个目录，里面存放了博客配置信息。  设置主题 官方主题库：https://themes.gohugo.io/
-此次演示：https://themes.gohugo.io/hugo-theme-m10c/
-$ cd myblog &amp;&amp; git clone https://github.com/vaga/hugo-theme-m10c.git themes/m10c 更改配置
-$ echo theme = &#34;\&#34;m10c&#34;\&#34; &gt;&gt; config.toml 启动服务 $ hugo server -t m10c --buildDrafts 写一遍文章 $ hugo new post/blog.md "/>
+<meta name="twitter:title" content="杨中校的第二次测试"/>
+<meta name="twitter:description" content="语言类型    编译型（全文翻译） 解释型（实时翻译的功能）     C Python   C&#43;&#43; PHP   Java JavaScript   Gc Ruby    Go特性 1.既有静态编译语言的安全和性能，又有动态语言开发维护的高效率，Go=C&#43;Python，继承了C的理念包括表达式语法，控制结构，基础数据类型，调用参数传值，指针，保留了C语言一样的编译执行方式及弱化的指针。
+2.引入包的概念，Go语言的一个文件都归属一个包，而不能单独存在。
+3.垃圾回收，内存自动回收。
+4.支持高并发，Goroutine轻量级线程实现大并发，高效使用多核处理，基于CPS并发模型实现。
+5.吸收了管道通信机制，形成Go语言特有的Channel，实现不同的Goroutine之间的相互通信。
+6.函数返回多个值。
+7.增加了切片slice，延时执行defer等。
+配置环境 ​	即搭建Go开发环境，SDK（Software Developmen Kit），包含了Go程序开发语言的工具。
+Linux配置 官网https://golang.google.cn/
+以下使用了armCPU架构的Kali系统部署。
+1.下载安装包
+$ cd $HOME/ &amp;&amp; wget https://golang.google.cn/dl/go1.14.14.linux-arm64.tar.gz 2.解压缩
+$ tar xvf go1.14.14.linux-arm64.tar.gz 3.配置环境变量
+$ export PATH=/home/kali/go/go/bin/:$PATH #适用于单次添加环境变量，全局生效需写入profile文件 4.版本查看
+$ go version go version go1.14.14 linux/arm64 5.创建任意目录，用于存放之后编写的代码文件，以及存放编译后的可执行文件
+$ cd $HOME &amp;&amp; mkdir go_project/{bin,pkg,src} -pv #src为必须创建的目录，bin和pkg当使用go install时会被自动创建 mkdir: 已创建目录 &#39;go_project&#39; mkdir: 已创建目录 &#39;go_project/bin&#39; #在执行install时后，执行程序的保存路径 mkdir: 已创建目录 &#39;go_project/pkg&#39; #执行install后，存放包文件 mkdir: 已创建目录 &#39;go_project/src&#39; #编写的所有代码和依赖文件 7."/>
 
-    <meta property="og:title" content="Blog" />
-<meta property="og:description" content="项目地址：https://github.com/gohugoio/hugo
-以下环境使用：树莓派Linux kali 4.19.127-Re4son-v8l&#43;
-安装hugo $ apt-get install hugo 生成博客 $ hugo new site myblog #指定博客名称为myblog  此时，站点已经生成，在当前目录下会有myblog这个目录，里面存放了博客配置信息。  设置主题 官方主题库：https://themes.gohugo.io/
-此次演示：https://themes.gohugo.io/hugo-theme-m10c/
-$ cd myblog &amp;&amp; git clone https://github.com/vaga/hugo-theme-m10c.git themes/m10c 更改配置
-$ echo theme = &#34;\&#34;m10c&#34;\&#34; &gt;&gt; config.toml 启动服务 $ hugo server -t m10c --buildDrafts 写一遍文章 $ hugo new post/blog.md " />
+    <meta property="og:title" content="杨中校的第二次测试" />
+<meta property="og:description" content="语言类型    编译型（全文翻译） 解释型（实时翻译的功能）     C Python   C&#43;&#43; PHP   Java JavaScript   Gc Ruby    Go特性 1.既有静态编译语言的安全和性能，又有动态语言开发维护的高效率，Go=C&#43;Python，继承了C的理念包括表达式语法，控制结构，基础数据类型，调用参数传值，指针，保留了C语言一样的编译执行方式及弱化的指针。
+2.引入包的概念，Go语言的一个文件都归属一个包，而不能单独存在。
+3.垃圾回收，内存自动回收。
+4.支持高并发，Goroutine轻量级线程实现大并发，高效使用多核处理，基于CPS并发模型实现。
+5.吸收了管道通信机制，形成Go语言特有的Channel，实现不同的Goroutine之间的相互通信。
+6.函数返回多个值。
+7.增加了切片slice，延时执行defer等。
+配置环境 ​	即搭建Go开发环境，SDK（Software Developmen Kit），包含了Go程序开发语言的工具。
+Linux配置 官网https://golang.google.cn/
+以下使用了armCPU架构的Kali系统部署。
+1.下载安装包
+$ cd $HOME/ &amp;&amp; wget https://golang.google.cn/dl/go1.14.14.linux-arm64.tar.gz 2.解压缩
+$ tar xvf go1.14.14.linux-arm64.tar.gz 3.配置环境变量
+$ export PATH=/home/kali/go/go/bin/:$PATH #适用于单次添加环境变量，全局生效需写入profile文件 4.版本查看
+$ go version go version go1.14.14 linux/arm64 5.创建任意目录，用于存放之后编写的代码文件，以及存放编译后的可执行文件
+$ cd $HOME &amp;&amp; mkdir go_project/{bin,pkg,src} -pv #src为必须创建的目录，bin和pkg当使用go install时会被自动创建 mkdir: 已创建目录 &#39;go_project&#39; mkdir: 已创建目录 &#39;go_project/bin&#39; #在执行install时后，执行程序的保存路径 mkdir: 已创建目录 &#39;go_project/pkg&#39; #执行install后，存放包文件 mkdir: 已创建目录 &#39;go_project/src&#39; #编写的所有代码和依赖文件 7." />
 <meta property="og:type" content="article" />
 <meta property="og:url" content="https://yangyangzx.github.io/post/blog/" />
-<meta property="article:published_time" content="2021-05-06T10:36:59+08:00" />
-<meta property="article:modified_time" content="2021-05-06T10:36:59+08:00" />
+<meta property="article:published_time" content="2021-05-08T09:21:39+08:00" />
+<meta property="article:modified_time" content="2021-05-08T09:21:39+08:00" />
 
 
   </head>
@@ -44,45 +64,605 @@ $ echo theme = &#34;\&#34;m10c&#34;\&#34; &gt;&gt; config.toml 启动服务 $ hu
       
   <article class="post">
     <header class="post-header">
-      <h1 class ="post-title">Blog</h1>
+      <h1 class ="post-title">杨中校的第二次测试</h1>
       <div class="post-meta">
         <div>
           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-calendar">
   <title>calendar</title>
   <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line>
 </svg>
-          May 6, 2021
+          May 8, 2021
         </div>
         <div>
           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-clock">
   <title>clock</title>
   <circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline>
 </svg>
-          1 min read
+          6 min read
         </div>
       </div>
     </header>
     <div class="post-content">
-      <p>项目地址：<code>https://github.com/gohugoio/hugo</code></p>
-<p>以下环境使用：树莓派<code>Linux kali 4.19.127-Re4son-v8l+</code></p>
-<h1 id="安装hugo">安装hugo</h1>
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell">$ apt-get install hugo
-</code></pre></div><h2 id="生成博客">生成博客</h2>
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell">$ hugo new site myblog   <span style="color:#75715e">#指定博客名称为myblog</span>
-</code></pre></div><ul>
-<li>此时，站点已经生成，在当前目录下会有myblog这个目录，里面存放了博客配置信息。</li>
+      <h1 id="语言类型">语言类型</h1>
+<table>
+<thead>
+<tr>
+<th>编译型（全文翻译）</th>
+<th>解释型（实时翻译的功能）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>C</td>
+<td>Python</td>
+</tr>
+<tr>
+<td>C++</td>
+<td>PHP</td>
+</tr>
+<tr>
+<td>Java</td>
+<td>JavaScript</td>
+</tr>
+<tr>
+<td>Gc</td>
+<td>Ruby</td>
+</tr>
+</tbody>
+</table>
+<h1 id="go特性">Go特性</h1>
+<p>1.既<strong>有静态编译语言的安全和性能，又有动态语言开发维护的高效率</strong>，<code>Go=C+Python</code>，继承了C的理念包括表达式语法，控制结构，基础数据类型，调用参数传值，指针，保留了C语言一样的编译执行方式及弱化的指针。</p>
+<p>2.引入包的概念，<strong>Go语言的一个文件都归属一个</strong>包，而不能单独存在。</p>
+<p>3.垃圾回收，<strong>内存自动回收</strong>。</p>
+<p>4.<strong>支持高并发</strong>，<code>Goroutine轻量级线程实现大并发</code>，高效使用多核处理，<strong>基于CPS并发模型实现</strong>。</p>
+<p>5.吸收了管道通信机制，形成Go语言特有的Channel，实现不同的Goroutine之间的相互通信。</p>
+<p>6.函数返回多个值。</p>
+<p>7.增加了切片slice，延时执行defer等。</p>
+<h1 id="配置环境">配置环境</h1>
+<p>​	即搭建<code>Go</code>开发环境，<code>SDK（Software Developmen Kit）</code>，包含了Go程序开发语言的工具。</p>
+<h2 id="linux配置">Linux配置</h2>
+<p>官网<code>https://golang.google.cn/</code></p>
+<p>以下使用了<code>arm</code>CPU架构的Kali系统部署。</p>
+<p>1.下载安装包</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell">$ cd $HOME/ <span style="color:#f92672">&amp;&amp;</span> wget https://golang.google.cn/dl/go1.14.14.linux-arm64.tar.gz
+</code></pre></div><p>2.解压缩</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell">$ tar xvf go1.14.14.linux-arm64.tar.gz
+</code></pre></div><p>3.配置环境变量</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell">$ export PATH<span style="color:#f92672">=</span>/home/kali/go/go/bin/:$PATH  <span style="color:#75715e">#适用于单次添加环境变量，全局生效需写入profile文件</span>
+</code></pre></div><p>4.版本查看</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell">$  go version
+go version go1.14.14 linux/arm64
+</code></pre></div><p>5.<strong>创建任意目录，用于存放之后编写的代码文件，以及存放编译后的可执行文件</strong></p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell">$ cd $HOME <span style="color:#f92672">&amp;&amp;</span> mkdir go_project/<span style="color:#f92672">{</span>bin,pkg,src<span style="color:#f92672">}</span> -pv   <span style="color:#75715e">#src为必须创建的目录，bin和pkg当使用go install时会被自动创建</span>
+mkdir: 已创建目录 <span style="color:#e6db74">&#39;go_project&#39;</span>
+mkdir: 已创建目录 <span style="color:#e6db74">&#39;go_project/bin&#39;</span>          <span style="color:#75715e">#在执行install时后，执行程序的保存路径</span>
+mkdir: 已创建目录 <span style="color:#e6db74">&#39;go_project/pkg&#39;</span>          <span style="color:#75715e">#执行install后，存放包文件</span>
+mkdir: 已创建目录 <span style="color:#e6db74">&#39;go_project/src&#39;</span>          <span style="color:#75715e">#编写的所有代码和依赖文件</span>
+</code></pre></div><p>7.添加<code>profile</code>，写入全局变量</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell">$ vim /etc/profile                         <span style="color:#75715e">#写入系统变量，或写入用户变量~/etc/profile</span>
+export PATH<span style="color:#f92672">=</span>/home/kali/go/go/bin/:$PATH    <span style="color:#75715e">#go的可执行路径</span>
+export GOROOT<span style="color:#f92672">=</span>/home/kali/go/go             <span style="color:#75715e">#go SDK的安装路径</span>
+export GOPATH<span style="color:#f92672">=</span>/home/kaii/go_project        <span style="color:#75715e">#存放自己写程序的路径和编译程序的路径 </span>
+export GOBIN<span style="color:#f92672">=</span>/home/kali/go_project/bin
+</code></pre></div><h2 id="编写可执行程序">编写可执行程序</h2>
+<ul>
+<li>编写一个简单的go代码</li>
 </ul>
-<h2 id="设置主题">设置主题</h2>
-<p>官方主题库：<code>https://themes.gohugo.io/</code></p>
-<p>此次演示：<code>https://themes.gohugo.io/hugo-theme-m10c/</code></p>
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell">$ cd myblog <span style="color:#f92672">&amp;&amp;</span> git clone https://github.com/vaga/hugo-theme-m10c.git themes/m10c
-</code></pre></div><p>更改配置</p>
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell">$ echo theme <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;\&#34;m10c&#34;</span><span style="color:#ae81ff">\&#34;</span> &gt;&gt; config.toml
-</code></pre></div><h1 id="启动服务">启动服务</h1>
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell">$ hugo server -t m10c --buildDrafts
-</code></pre></div><h1 id="写一遍文章">写一遍文章</h1>
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell">$ hugo new post/blog.md
-</code></pre></div>
+<p>1.创建项目目录</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell">$ cd $GOPATH/src <span style="color:#f92672">&amp;&amp;</span> mkdir crm     
+</code></pre></div><p>2.代码编写</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#960050;background-color:#1e0010">$</span> <span style="color:#a6e22e">vim</span> <span style="color:#a6e22e">crm</span><span style="color:#f92672">/</span><span style="color:#a6e22e">app</span>.<span style="color:#66d9ef">go</span>      <span style="color:#75715e">//Go代码文件的后缀为.go
+</span><span style="color:#75715e"></span><span style="color:#f92672">package</span> <span style="color:#a6e22e">main</span>          <span style="color:#75715e">//该文件所在的包是main包，归属为main包
+</span><span style="color:#75715e"></span><span style="color:#f92672">import</span> <span style="color:#e6db74">&#34;fmt&#34;</span>          <span style="color:#75715e">//引入一个“fmt”的包，并在以下调用fmt包的函数。fmt包用于格式化，输出，输入的函数
+</span><span style="color:#75715e"></span><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">main</span>(){          <span style="color:#75715e">//main是程序的入口，即主函数
+</span><span style="color:#75715e"></span>    <span style="color:#a6e22e">fmt</span>.<span style="color:#a6e22e">Println</span>(<span style="color:#e6db74">&#34;叫爷爷&#34;</span>)   <span style="color:#75715e">//调用fmt这个函数，输出叫爷爷
+</span><span style="color:#75715e"></span>}
+<span style="color:#960050;background-color:#1e0010">##################</span>
+<span style="color:#960050;background-color:#1e0010">#</span><span style="color:#a6e22e">程序结构如下</span>
+<span style="color:#a6e22e">kali</span><span style="color:#960050;background-color:#1e0010">@</span><span style="color:#a6e22e">kali</span>:<span style="color:#960050;background-color:#1e0010">~</span><span style="color:#f92672">/</span><span style="color:#a6e22e">go_project</span><span style="color:#960050;background-color:#1e0010">$</span> <span style="color:#a6e22e">tree</span> .<span style="color:#f92672">/</span>
+.<span style="color:#f92672">/</span>
+<span style="color:#960050;background-color:#1e0010">├──</span> <span style="color:#a6e22e">bin</span>
+<span style="color:#960050;background-color:#1e0010">├──</span> <span style="color:#a6e22e">pkg</span>
+<span style="color:#960050;background-color:#1e0010">└──</span> <span style="color:#a6e22e">src</span>
+    <span style="color:#960050;background-color:#1e0010">└──</span> <span style="color:#a6e22e">crm</span>
+            <span style="color:#960050;background-color:#1e0010">└──</span> <span style="color:#a6e22e">app</span>.<span style="color:#66d9ef">go</span>
+	    <span style="color:#960050;background-color:#1e0010">~~~</span>
+
+	    <span style="color:#ae81ff">3.</span><span style="color:#a6e22e">代码运行</span>
+
+	    <span style="color:#ae81ff">1.</span><span style="color:#a6e22e">编译后运行</span>
+
+	    <span style="color:#960050;background-color:#1e0010">~~~</span><span style="color:#a6e22e">shell</span>
+	    <span style="color:#960050;background-color:#1e0010">$</span> <span style="color:#a6e22e">cd</span> <span style="color:#960050;background-color:#1e0010">$</span><span style="color:#a6e22e">GOPATH</span><span style="color:#f92672">/</span><span style="color:#a6e22e">src</span><span style="color:#f92672">/</span><span style="color:#a6e22e">crm</span>    <span style="color:#960050;background-color:#1e0010">#</span><span style="color:#a6e22e">进入项目代码目录</span><span style="color:#960050;background-color:#1e0010">$</span> <span style="color:#66d9ef">go</span> <span style="color:#a6e22e">build</span>    <span style="color:#960050;background-color:#1e0010">#</span><span style="color:#a6e22e">执行代码编译或使用</span><span style="color:#f92672">-</span><span style="color:#a6e22e">o参数</span><span style="color:#960050;background-color:#1e0010">$</span> <span style="color:#66d9ef">go</span> <span style="color:#a6e22e">build</span> <span style="color:#f92672">-</span><span style="color:#a6e22e">o</span> <span style="color:#a6e22e">crm</span>.<span style="color:#a6e22e">exe</span>  <span style="color:#960050;background-color:#1e0010">#</span><span style="color:#f92672">-</span><span style="color:#a6e22e">o制定编译后生成的程序名称</span><span style="color:#960050;background-color:#1e0010">#</span><span style="color:#a6e22e">此时在本路径下会生成名加crm的可执行程序</span><span style="color:#960050;background-color:#1e0010">$</span> .<span style="color:#f92672">/</span><span style="color:#a6e22e">crm叫爷爷</span>
+	    <span style="color:#960050;background-color:#1e0010">~~~</span>
+
+	    <span style="color:#ae81ff">2.</span><span style="color:#e6db74">`go install`</span>
+
+	    <span style="color:#960050;background-color:#1e0010">~~~</span><span style="color:#a6e22e">shell</span>
+	    <span style="color:#960050;background-color:#1e0010">$</span> <span style="color:#a6e22e">kali</span><span style="color:#960050;background-color:#1e0010">@</span><span style="color:#a6e22e">kali</span>:<span style="color:#960050;background-color:#1e0010">~</span><span style="color:#f92672">/</span><span style="color:#a6e22e">go_project</span><span style="color:#960050;background-color:#1e0010">$</span> <span style="color:#a6e22e">tree</span> .<span style="color:#960050;background-color:#1e0010">├──</span> <span style="color:#a6e22e">bin</span>    <span style="color:#960050;background-color:#1e0010">│</span>   <span style="color:#960050;background-color:#1e0010">└──</span> <span style="color:#a6e22e">crm</span>        <span style="color:#960050;background-color:#1e0010">#</span><span style="color:#a6e22e">此为生成的编译文件</span><span style="color:#960050;background-color:#1e0010">├──</span> <span style="color:#a6e22e">pkg</span>    <span style="color:#960050;background-color:#1e0010">└──</span> <span style="color:#a6e22e">src</span>        <span style="color:#960050;background-color:#1e0010">└──</span> <span style="color:#a6e22e">crm</span>        <span style="color:#960050;background-color:#1e0010">#</span><span style="color:#a6e22e">在此路径下执行go</span> <span style="color:#a6e22e">install时</span><span style="color:#960050;background-color:#1e0010">，</span><span style="color:#a6e22e">会将编译后的文件保存在</span><span style="color:#960050;background-color:#1e0010">$</span><span style="color:#a6e22e">GOPATH</span><span style="color:#f92672">/</span><span style="color:#a6e22e">bin目录</span>        <span style="color:#960050;background-color:#1e0010">└──</span> <span style="color:#a6e22e">app</span>.<span style="color:#66d9ef">go</span>  
+	    <span style="color:#960050;background-color:#1e0010">~~~</span>
+
+<span style="color:#960050;background-color:#1e0010">##</span> <span style="color:#a6e22e">编写一个包文件</span>
+
+<span style="color:#ae81ff">1.</span><span style="color:#a6e22e">创建项目目录</span>
+
+<span style="color:#960050;background-color:#1e0010">~~~</span><span style="color:#a6e22e">shell</span>
+<span style="color:#960050;background-color:#1e0010">$</span> <span style="color:#a6e22e">cd</span> <span style="color:#960050;background-color:#1e0010">$</span><span style="color:#a6e22e">GOPATH</span><span style="color:#f92672">/</span><span style="color:#a6e22e">src</span> <span style="color:#f92672">&amp;&amp;</span> <span style="color:#a6e22e">mkdir</span> <span style="color:#a6e22e">utils</span> <span style="color:#f92672">&amp;&amp;</span> <span style="color:#a6e22e">cd</span> <span style="color:#a6e22e">utils</span>
+</code></pre></div><p>2.编写代码</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#960050;background-color:#1e0010">$</span> <span style="color:#a6e22e">vim</span> <span style="color:#a6e22e">page</span>.<span style="color:#a6e22e">gopackage</span> <span style="color:#a6e22e">utilsfunc</span> <span style="color:#a6e22e">Add</span>(<span style="color:#a6e22e">n1</span> <span style="color:#66d9ef">int</span>, <span style="color:#a6e22e">n2</span> <span style="color:#66d9ef">int</span>) <span style="color:#66d9ef">int</span> {    <span style="color:#66d9ef">return</span> <span style="color:#ae81ff">8888</span>}
+</code></pre></div><p>2.执行构建</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell">$ go install   <span style="color:#75715e">#会生成一个以目录为名称.a的文件$ kali@kali:~/go_project$ tree ././├── bin│   └── crm├── pkg│   └── linux_arm64│       └── utils.a└── src    ├── crm    │   └── app.go    └── utils        └── page.go</span>
+</code></pre></div><h2 id="书写规范格式化">书写规范格式化</h2>
+<ol>
+<li>运算符两边各加一个空格，比如<code>2+4*5</code>应该写成<code>var num  = 2 + 4 * 5</code></li>
+<li><code>{}</code>的使用必须将第一个<code>{</code>跟在函数名<code>()</code>后（即第一个{跟函数名为一行）</li>
+<li>每一行代码建议不超过80个字符，可使用以下方案</li>
+</ol>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#f92672">package</span> <span style="color:#a6e22e">mainimport</span> <span style="color:#e6db74">&#34;fmt&#34;</span><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">main</span>() {	<span style="color:#a6e22e">fmt</span>.<span style="color:#a6e22e">Println</span>(<span style="color:#e6db74">&#34;你好吗？&#34;</span>,	<span style="color:#e6db74">&#34;你好吗？&#34;</span>,	<span style="color:#e6db74">&#34;你好吗？&#34;</span>,	<span style="color:#e6db74">&#34;你好吗？&#34;</span>,	<span style="color:#e6db74">&#34;你好吗？&#34;</span>,	<span style="color:#e6db74">&#34;你好吗？&#34;</span>,	<span style="color:#e6db74">&#34;你好吗？&#34;</span>,	<span style="color:#e6db74">&#34;你好吗？&#34;</span>)   <span style="color:#75715e">//即将一行较多的字符使用，号进行分割，在打印时依然会被打印为一行}//运行后结果 go run .\1.go你好吗？ 你好吗？ 你好吗？ 你好吗？ 你好吗？ 你好吗？ 你好吗？ 你好吗？
+</span></code></pre></div><p>**如：**一个代码没有书写公正</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#f92672">package</span> <span style="color:#a6e22e">mainimport</span> <span style="color:#e6db74">&#34;fmt&#34;</span><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">main</span>(){<span style="color:#a6e22e">fmt</span>.<span style="color:#a6e22e">Println</span>(<span style="color:#e6db74">&#34;你好吗？&#34;</span>)   <span style="color:#75715e">//良好的书写方式，应该使用tab键缩进}
+</span></code></pre></div><ul>
+<li>使用<code>gofmt</code>指令可以对代码文件执行标准格式化</li>
+</ul>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"> <span style="color:#a6e22e">gofmt</span>.<span style="color:#a6e22e">exe</span> <span style="color:#f92672">-</span><span style="color:#a6e22e">w</span> .<span style="color:#960050;background-color:#1e0010">\</span><span style="color:#ae81ff">1.</span><span style="color:#66d9ef">go</span><span style="color:#75715e">//格式化之后的代码规范package mainimport &#34;fmt&#34;func main() {	fmt.Println(&#34;你好吗？&#34;)}
+</span></code></pre></div><h2 id="go的转义字符">Go的转义字符</h2>
+<table>
+<thead>
+<tr>
+<th>符号</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>\t</td>
+<td>一个制表符号，实现对齐的功能，一个tab建，大约四个空格键</td>
+</tr>
+<tr>
+<td>\n</td>
+<td>换行符号</td>
+</tr>
+<tr>
+<td>\\</td>
+<td>一个\，即使用了转义符号\</td>
+</tr>
+<tr>
+<td>\&quot;</td>
+<td>一个&quot;</td>
+</tr>
+<tr>
+<td>\r</td>
+<td>一个回车fmt.Println(&ldquo;我是你什么？\r爸爸&rdquo;)，输出至当前行的最前面，并覆盖掉固定的数量</td>
+</tr>
+</tbody>
+</table>
+<p><strong>制表符</strong></p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#f92672">package</span> <span style="color:#a6e22e">mainimport</span> <span style="color:#e6db74">&#34;fmt&#34;</span><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">main</span>(){									<span style="color:#a6e22e">fmt</span>.<span style="color:#a6e22e">Println</span>(<span style="color:#e6db74">&#34;我是你的谁？\t 爸爸&#34;</span>)	<span style="color:#a6e22e">fmt</span>.<span style="color:#a6e22e">Println</span>(<span style="color:#e6db74">&#34;我是你的csd谁？\t 爸爸&#34;</span>)	<span style="color:#a6e22e">fmt</span>.<span style="color:#a6e22e">Println</span>(<span style="color:#e6db74">&#34;我是你吗?\t 爸爸&#34;</span>)	<span style="color:#a6e22e">fmt</span>.<span style="color:#a6e22e">Println</span>(<span style="color:#e6db74">&#34;辅助快来？\t 爸爸&#34;</span>)}<span style="color:#75715e">//运行结果PS D:\go\Project\src\yangzhongxiao&gt; go run .\app.go我是你的谁？     爸爸我是你的csd谁？  爸爸我是你吗?        爸爸辅助快来？       爸爸
+</span></code></pre></div><p><strong>换行符</strong></p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#f92672">package</span> <span style="color:#a6e22e">mainimport</span> <span style="color:#e6db74">&#34;fmt&#34;</span><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">main</span>(){									<span style="color:#a6e22e">fmt</span>.<span style="color:#a6e22e">Println</span>(<span style="color:#e6db74">&#34;我是你的谁？\t 爸爸&#34;</span>)	<span style="color:#a6e22e">fmt</span>.<span style="color:#a6e22e">Println</span>(<span style="color:#e6db74">&#34;辅助快来？\n 爸爸&#34;</span>)}<span style="color:#75715e">//运行结果PS D:\go\Project\src\yangzhongxiao&gt; go run .\app.go我是你的谁？     爸爸辅助快来？ 爸爸
+</span></code></pre></div><p><strong>\r覆盖替换</strong></p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#f92672">package</span> <span style="color:#a6e22e">mainimport</span> <span style="color:#e6db74">&#34;fmt&#34;</span><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">main</span>(){									<span style="color:#a6e22e">fmt</span>.<span style="color:#a6e22e">Println</span>(<span style="color:#e6db74">&#34;我是你的谁？\t 爸爸&#34;</span>)	<span style="color:#a6e22e">fmt</span>.<span style="color:#a6e22e">Println</span>(<span style="color:#e6db74">&#34;辅助快来？\r爸爸&#34;</span>)}<span style="color:#75715e">//运行结果PS D:\go\Project\src\yangzhongxiao&gt; go run .\app.go我是你的谁？     爸爸爸爸快来？     //即用爸爸替换掉了辅助
+</span></code></pre></div><h2 id="build和install的区别">build和install的区别</h2>
+<p><code>build</code>：只能用来生成可执行程序，不能生成包文件；</p>
+<blockquote>
+<p><code>go build -o NAME CodeFile</code>：使用<code>-o</code>参数可以指定编译后的文件名称；</p>
+</blockquote>
+<p><code>install</code>：<strong>可以生成可执行程序，也可以生成包文件。</strong></p>
+<h2 id="go-code交付的标的">GO code交付的标的</h2>
+<blockquote>
+<p>产出一个可执行文件</p>
+<p>产出一个包文件</p>
+</blockquote>
+<h2 id="go开发注意事项">Go开发注意事项</h2>
+<p><strong>1.Go程序的源代码是以<code>.go</code>为后缀；</strong></p>
+<p><strong>2.Go应用程序的执行入口是<code>main</code>函数；</strong></p>
+<p><strong>3.Go语言严格区分大小写；</strong></p>
+<p><strong>4.Go的方法是由一条一条语句构成，每个语句后面不需要加<code>;</code>号（Go会自动添加）；</strong></p>
+<p><strong>5.Go编译器是逐行编译，每一行就写一条语句，不能把多条语句写在同一行，否则报错；</strong></p>
+<p><strong>6.Go语言定义的变量或者import的包必须被使用到，否则编译不通过；</strong></p>
+<p><strong>7.<code>{}</code>括号是成对出现的，缺一不可，第一个{写在函数名称同一行末;</strong></p>
+<p><strong>8.推荐使用行注释，注释整个方法或语句;</strong></p>
+<p><strong>9.正确的缩进和空白;</strong></p>
+<p><strong>10.运算符两边加空格，如：<code>num = 2 + 4 * 2</code>;</strong></p>
+<p><strong>11.一行的长度不超过80个字符</strong>对于超长的字符可以使用以下方法（假设以下为超长字符）。</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#a6e22e">fmt</span>.<span style="color:#a6e22e">Println</span>(<span style="color:#e6db74">&#34;hello&#34;</span>,			<span style="color:#e6db74">&#34;hello&#34;</span>,            <span style="color:#e6db74">&#34;hello&#34;</span>)    <span style="color:#960050;background-color:#1e0010">#</span><span style="color:#a6e22e">最后一个不使用</span>,<span style="color:#a6e22e">号</span>
+</code></pre></div><p>&mdash;&mdash;&mdash;&mdash;&mdash;-<strong>以下编程环境使用Goland软件进行</strong>&mdash;&mdash;&mdash;&mdash;&mdash;&mdash;&ndash;</p>
+<h1 id="包管理">包管理</h1>
+<p>一个文件夹可以被称为是一个包；</p>
+<p>一个文件夹中可以有多个文件；</p>
+<p>同一个包下的所有文件中，必须指定包名称，且名称是相同的。</p>
+<h2 id="包分类">包分类</h2>
+<ul>
+<li>
+<pre><code>main 包：必须写一个main主函数，作为项目的入口。因为有main包和对应的函数存在，所以在执行build时才能生成可执行文件。
+</code></pre><ul>
+<li>
+<pre><code>非main包：多用于将代码进行分类，分别放到不同的包和文件中
+</code></pre></li>
+</ul>
+</li>
+</ul>
+<h2 id="演示包调用">演示包调用</h2>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#f92672">import</span> <span style="color:#960050;background-color:#1e0010">“</span><span style="color:#a6e22e">包</span><span style="color:#960050;background-color:#1e0010">&#34;</span>    <span style="color:#960050;background-color:#1e0010">#</span><span style="color:#a6e22e">先导入包名</span>    <span style="color:#a6e22e">包</span>.<span style="color:#a6e22e">函数名</span>    
+</code></pre></div><p>1.创建一个项目目录</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell">$ mkdir yangzhongxiao <span style="color:#f92672">&amp;&amp;</span> cd yangzhongxiao
+</code></pre></div><p>2.创建一个包文件（包含两个文件）</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#960050;background-color:#1e0010">$</span> <span style="color:#a6e22e">mkdir</span> <span style="color:#a6e22e">dengjiayan</span>  <span style="color:#75715e">//这个包和主程序的目录同级$ vim baidu.go     //本程序将被主main调用package dengjiayan //包名称和上级目录名称一致import &#34;fmt&#34;     //导入fmtfunc Baidu() {   //创建一个名为Baidu的函数，用于打印指定的内容	fmt.Println(&#34;我是百度&#34;)}
+</span></code></pre></div><div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#960050;background-color:#1e0010">$</span> <span style="color:#a6e22e">vim</span> <span style="color:#a6e22e">Google</span>.<span style="color:#a6e22e">gopackage</span> <span style="color:#a6e22e">dengjiayan</span>   <span style="color:#75715e">//包名和上级目录名称一致import &#34;fmt&#34;func Google() {	fmt.Println(&#34;我是谷歌&#34;)}
+</span></code></pre></div><p>2.创建一个和main同级的包文件</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#960050;background-color:#1e0010">$</span> <span style="color:#a6e22e">cd</span> <span style="color:#a6e22e">yangzhongxiao</span><span style="color:#960050;background-color:#1e0010">$</span> <span style="color:#a6e22e">vim</span> <span style="color:#a6e22e">city</span>.<span style="color:#a6e22e">gopackage</span> <span style="color:#a6e22e">mainimport</span> <span style="color:#e6db74">&#34;fmt&#34;</span><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">Add</span>() {	<span style="color:#a6e22e">fmt</span>.<span style="color:#a6e22e">Println</span>(<span style="color:#e6db74">&#34;我是city的add函数&#34;</span>)}
+</code></pre></div><p>3.创建主程序，对以上的两个包文件进行调用</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#960050;background-color:#1e0010">$</span> <span style="color:#a6e22e">cd</span> <span style="color:#a6e22e">yangzhongxiao</span><span style="color:#960050;background-color:#1e0010">$</span> <span style="color:#a6e22e">vim</span> <span style="color:#a6e22e">app</span>.<span style="color:#a6e22e">gopackage</span> <span style="color:#a6e22e">main</span>     <span style="color:#75715e">//这个代表了主程序import (          //导入的包	&#34;fmt&#34;        	&#34;yangzhongxiao/dengjiayan&#34;  //导入的统一目录下的包文件)func main() {        //定义了main函数体	fmt.Println(&#34;叫大爷&#34;)	//注意事项：导入本项目的包和其他项目的包时，定义的名称首字母必须大写	Add()           //导入和main同级别的包文件	dengjiayan.Baidu()   //导入同级下的dengjiayan这个包内的Baidu这个函数	dengjiayan.Google()  //导入同级别下dengjiayan这个包内的goog这个函数}
+</span></code></pre></div><h2 id="程序结构">程序结构</h2>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell">$ cd yangzhongxiao <span style="color:#f92672">&amp;&amp;</span> go build$ kali@kali:~/go_project/src/yangzhongxiao$ tree ..├── App.go         <span style="color:#75715e">#主程序├── city.go        #和主程序同级别的包├── dengjiayan     #定义一个外部包文件│   ├── Baidu.go   #包含的两个函数│   └── Google.go  #包含的两个函数└── yangzhongxiao  #build后生成的可执行文件</span>
+</code></pre></div><h1 id="输出">输出</h1>
+<blockquote>
+<p>将程序呈现的内容通过终端展示出来，例如：提示欢迎登录信息，请输入用户名密码等。</p>
+<blockquote>
+<p>实现工具：</p>
+<p>1.内置函数</p>
+<blockquote>
+<p>print和println</p>
+</blockquote>
+<p>2.通过fmt包（推荐使用）</p>
+<blockquote>
+<p>fpm.print</p>
+<p>fmt.println</p>
+</blockquote>
+</blockquote>
+</blockquote>
+<h1 id="注释">注释</h1>
+<ul>
+<li>单行注释//</li>
+<li>多行注释/*       */</li>
+<li>选中代码块后使用，<code>Ctrl+/</code>（Vscode的快捷键）第二次选中后再使用，即为取消注释</li>
+<li>快捷键注释，选中代码块，<code>按ctl+?</code>（Goland开发IDE）</li>
+</ul>
+<h1 id="变量的数据类型">变量的数据类型</h1>
+<h2 id="基本数据类型">基本数据类型</h2>
+<blockquote>
+<p>数值型</p>
+<blockquote>
+<p>整数类型（int,int8,int16,int32,int64,uint,uint8,uint32,uint64,byte）</p>
+<p>浮点类型（float32,float64）</p>
+</blockquote>
+<p>字符型（没有专用的字符型，使用byte来保存单个字母字符）</p>
+<p>布尔型（bool）</p>
+<p>字符串（string）基本数据类型</p>
+</blockquote>
+<h2 id="派生复杂数据类型">派生/复杂数据类型</h2>
+<blockquote>
+<p>指针</p>
+<p>数组</p>
+<p>结构体</p>
+<p>管道</p>
+<p>函数</p>
+<p>切片</p>
+<p>接口</p>
+<p>map</p>
+</blockquote>
+<h3 id="整数类型">整数类型</h3>
+<p><strong>有符号整数类型</strong></p>
+<table>
+<thead>
+<tr>
+<th>类型</th>
+<th>占用的存储空间</th>
+<th>表述的范围</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>int8</td>
+<td>1字节</td>
+<td>-128~127</td>
+</tr>
+<tr>
+<td>int16</td>
+<td>2字节</td>
+<td>-2的15次方~2的15次方-1</td>
+</tr>
+<tr>
+<td>int32</td>
+<td>4字节</td>
+<td>-2的31次方~2的31次方-1</td>
+</tr>
+<tr>
+<td>int64</td>
+<td>8字节</td>
+<td>-2的63次方~2的63次方-1</td>
+</tr>
+</tbody>
+</table>
+<p><strong>无符号整数类型</strong></p>
+<table>
+<thead>
+<tr>
+<th>类型</th>
+<th>占用的存储空间</th>
+<th>表述的范围</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>uint8</td>
+<td>1字节</td>
+<td>0~255</td>
+</tr>
+<tr>
+<td>uint16</td>
+<td>2字节</td>
+<td>0-2的16次方-1</td>
+</tr>
+<tr>
+<td>uint32</td>
+<td>4字节</td>
+<td>0~2的32次方-1</td>
+</tr>
+<tr>
+<td>uint64</td>
+<td>8字节</td>
+<td>0~2的64次方-1</td>
+</tr>
+</tbody>
+</table>
+<p>整数数字</p>
+<p>整型变量只声明不赋值时，默认为0</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#f92672">package</span> <span style="color:#a6e22e">mainimport</span> <span style="color:#e6db74">&#34;fmt&#34;</span><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">main</span>() {	<span style="color:#75715e">//整型	fmt.Println(666)	fmt.Println(6 + 9)	fmt.Println(6 - 9)    fmt.Println(16 / 9)  //商	fmt.Println(16 % 9)  //余数}
+</span></code></pre></div><h4 id="整型的细节">整型的细节</h4>
+<ul>
+<li>整型分为有符号型和无符号型，<code>int</code>和<code>unit</code>的大小和系统有关；</li>
+<li>Golang的整型默认声明为int型；</li>
+<li>整型变量的使用中遵循保小不保大的原则，在程序可运行的情况下尽量使用小的占用空间，如<code>age</code>这个变量建议使用<code>byte或init8</code>因为人的年龄有基本值不会超过127岁；</li>
+<li>计算机中使用的最小存储单位为<code>bit</code>,``byte<code>是计算机中最基本的存储单元。</code>1byte=8bit`.</li>
+</ul>
+<h3 id="小数型浮点型">小数型/浮点型</h3>
+<table>
+<thead>
+<tr>
+<th>类型</th>
+<th>占用的字节空间</th>
+<th>表述范围</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>单精度float32</td>
+<td>4字节</td>
+<td>-3.403E38 ~ 3.403E38</td>
+</tr>
+<tr>
+<td>双精度float64（精准度更高一些,且是浮点类型的默认格式）</td>
+<td>8字节</td>
+<td>-1.798E308 ~ 1.798E308</td>
+</tr>
+</tbody>
+</table>
+<p>例：</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">main</span>() {    <span style="color:#66d9ef">var</span> <span style="color:#a6e22e">beizi</span> <span style="color:#66d9ef">float32</span> = <span style="color:#ae81ff">12.354</span>	<span style="color:#a6e22e">fmt</span>.<span style="color:#a6e22e">Print</span>(<span style="color:#e6db74">&#34;杯子的价格是：&#34;</span>, <span style="color:#a6e22e">beizi</span>)}
+</code></pre></div><h4 id="浮点型的细节">浮点型的细节</h4>
+<ul>
+<li>浮点数在机器中存在的形式，浮点数=符号位+指数位+尾数位</li>
+<li>会有精度损失，保存精度高的浮点数建议使用<code>float64</code>类型。</li>
+</ul>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">main</span>() {    <span style="color:#a6e22e">abc</span> <span style="color:#f92672">:=</span> <span style="color:#ae81ff">2.1415926</span>	<span style="color:#a6e22e">fmt</span>.<span style="color:#a6e22e">Println</span>(<span style="color:#e6db74">&#34;abc等于&#34;</span>, <span style="color:#a6e22e">abc</span>, <span style="color:#e6db74">&#34;abc的数据大小是&#34;</span>, <span style="color:#a6e22e">unsafe</span>.<span style="color:#a6e22e">Sizeof</span>(<span style="color:#a6e22e">abc</span>), <span style="color:#e6db74">&#34;\t&#34;</span>)	<span style="color:#a6e22e">fmt</span>.<span style="color:#a6e22e">Printf</span>(<span style="color:#e6db74">&#34;abc的数据类型是：%T&#34;</span>, <span style="color:#a6e22e">abc</span>)  <span style="color:#75715e">//此时会显示默认使用的float64类型的的浮点型数据}	 
+</span></code></pre></div><h4 id="浮点型常量表示">浮点型常量表示</h4>
+<p>两种方式</p>
+<ul>
+<li>十进制表示方式 如5.12    0.512（必须有小数点）</li>
+<li>科学计数法，如：5.1234e2 = 5.12*10的2次方 5.12e-2 = 5.12/10的2次方</li>
+</ul>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">main</span>() {    <span style="color:#a6e22e">num</span> <span style="color:#f92672">:=</span> <span style="color:#ae81ff">5.1234e2</span>   <span style="color:#75715e">//这里的字母不分大小写	fmt.Println(&#34;num=&#34;, num)}	 $ go run .\zhuanyi.gonum= 512.34
+</span></code></pre></div><h3 id="字符型">字符型</h3>
+<ul>
+<li>Golang中没有专门的字符类型，如果存储单个字符（如：字母），一般都使用<code>byte</code>来保存。</li>
+<li>字符串是遗传固定长度的字符连接起来的字符序列，GO的字符串是由字节组成的。</li>
+</ul>
+<p>字符类型的演示</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">main</span>() {    <span style="color:#66d9ef">var</span> <span style="color:#a6e22e">a1</span> <span style="color:#66d9ef">byte</span> = <span style="color:#e6db74">&#39;8&#39;</span>    <span style="color:#75715e">//在输出时byte类型的数据值为ASCII码中对应的值	var b1 byte = &#39;c&#39;    //如果希望输出字符本身，需使用格式化输出	fmt.Println(a1, b1)	fmt.Println(&#34;a1类型是:&#34;, a1, unsafe.Sizeof(a1))	fmt.Println(&#34;b1类型是:&#34;, b1, unsafe.Sizeof(b1))    fmt.Printf(&#34;a1=%c b1=%c&#34;, a1, b1)   //此处使用了格式化输出字符本身}
+</span></code></pre></div><ul>
+<li>如果字符在<code>Asci表</code>中，比如<code>[0-1,A-Z...]</code>可直接使用<code>byte</code>；</li>
+<li>如果字符对应的值大于255，需使用int类型的保存；</li>
+<li>如果需要显示字符本身，则需要格式化输出，即<code>fmt.Printf(&quot;%c&quot;, 变量名称)</code></li>
+<li>Golang的字符串使用<code>Unicode(UTF-8)编码格式</code>，常量赋值时可查看UTF-8编码表查看对应的<code>Unicode编码</code></li>
+</ul>
+<h4 id="字符类型的细节">字符类型的细节</h4>
+<ul>
+<li>字符常量需使用<code>('')</code>单引号，括起来单个字符，如：<code>var a1 byte = 'a'  var c2 int = '中'  var b3 byte = '9'</code></li>
+<li>Go语言的字符使用UTF-8编码，英文字母是1个字节，汉字是3个字节；</li>
+<li>Go中，字符的本质是一个整数，直接输出时，是该字符对应的UTF-8编码的码值；</li>
+<li>可以直接给一个变量赋值一个数字，然后格式化输出时使用%c，可直接输出该数字对应的Unicode字符。</li>
+<li>字符类型可参数运算，相当于一个整数，因为都有对应的Unicode码。</li>
+</ul>
+<h4 id="字符串">字符串</h4>
+<p>文本信息，需要使用双引号</p>
+<p>只声明不赋值时，默认为空&quot;&quot;</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#f92672">package</span> <span style="color:#a6e22e">mainimport</span> <span style="color:#e6db74">&#34;fmt&#34;</span><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">main</span>() {    <span style="color:#75715e">//字符型	fmt.Println(&#34;钓鱼要钓刀鱼，刀鱼要到岛上钓&#34;)  //字符串必须使用双引号，字符串和字符串可以相+，但不能跨类型，如字符串和数字}
+</span></code></pre></div><h2 id="布尔值-bool">布尔值 bool</h2>
+<p>真|假</p>
+<p>在内存空间中占用一个字节</p>
+<p>bool类型基于逻辑运算，一般用于程序流程控制如：<code>if</code>条件或<code>for</code>循环语句</p>
+<p>只声明不赋值，默认为假</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#f92672">package</span> <span style="color:#a6e22e">mainimport</span> <span style="color:#e6db74">&#34;fmt&#34;</span><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">main</span>() {	<span style="color:#75715e">//字符串	fmt.Println(1 &gt; 2)	fmt.Println(4 &lt; 9)}
+</span></code></pre></div><h1 id="变量值类型">变量（值类型）</h1>
+<ul>
+<li>变量表示内存中的一个存储区域，这个区域有变量的名称和数据类型；</li>
+<li>在<code>Go</code>语言中所有的变量声明或者赋值后必须使用，否则就会报错。</li>
+<li>变量的三要素<code>变量=变量名+值+数据类型</code></li>
+<li>如果变量没赋值，变量的默认值为<code>int=0,string=空，bool=false</code></li>
+</ul>
+<h2 id="名称要求">名称要求</h2>
+<ul>
+<li>变量名称必须只包含<code>字母,数字,下划线</code></li>
+<li>不能以<code>数字</code>开头</li>
+<li>不能使用<code>Go语言内置的关键字</code></li>
+</ul>
+<p>以下为<code>Go</code>语言的关键字</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#66d9ef">break</span>,<span style="color:#66d9ef">default</span>,<span style="color:#66d9ef">func</span>,<span style="color:#66d9ef">interface</span>,<span style="color:#66d9ef">select</span>,<span style="color:#66d9ef">case</span>,<span style="color:#66d9ef">defer</span>,<span style="color:#66d9ef">go</span>,<span style="color:#66d9ef">map</span>,<span style="color:#66d9ef">struct</span>,<span style="color:#66d9ef">chan</span>,<span style="color:#66d9ef">else</span>,<span style="color:#66d9ef">goto</span>,<span style="color:#f92672">package</span>,<span style="color:#66d9ef">switch</span>,<span style="color:#66d9ef">const</span>,<span style="color:#66d9ef">fallthrough</span>,<span style="color:#66d9ef">if</span>,<span style="color:#66d9ef">range</span>,<span style="color:#66d9ef">type</span>,<span style="color:#66d9ef">continue</span>,<span style="color:#66d9ef">for</span>,<span style="color:#f92672">import</span>,<span style="color:#66d9ef">return</span>,<span style="color:#66d9ef">var</span>
+</code></pre></div><p><strong>建议</strong></p>
+<blockquote>
+<p>变量名见名知意，name/age/num</p>
+<p>驼峰式命名法，即第一个字母小写后面的大写，如nAME,myBOSS等</p>
+</blockquote>
+<h2 id="赋值方法">赋值方法</h2>
+<ul>
+<li>声明变量是必须指定数据类型</li>
+</ul>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#66d9ef">var</span> <span style="color:#a6e22e">NAME</span><span style="color:#960050;background-color:#1e0010">（</span><span style="color:#a6e22e">变量名称</span><span style="color:#960050;background-color:#1e0010">）</span> <span style="color:#a6e22e">数据类型</span> = <span style="color:#a6e22e">Value</span><span style="color:#75715e">//或使用简写NAME（变量名称） := Valve   //GO会自动判断Value的数据类型
+</span></code></pre></div><table>
+<thead>
+<tr>
+<th>数据类型</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>string</td>
+<td>字符串类型</td>
+</tr>
+<tr>
+<td>int</td>
+<td>整型（数字）</td>
+</tr>
+<tr>
+<td>bool</td>
+<td>布尔值（真|假）</td>
+</tr>
+</tbody>
+</table>
+<h2 id="基本使用">基本使用</h2>
+<ul>
+<li>使用声明+赋值的方法</li>
+</ul>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#f92672">package</span> <span style="color:#a6e22e">mainimport</span> <span style="color:#e6db74">&#34;fmt&#34;</span><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">main</span>() {    <span style="color:#66d9ef">var</span> <span style="color:#a6e22e">sb</span> <span style="color:#66d9ef">string</span> = <span style="color:#e6db74">&#34;王英豪&#34;</span>   <span style="color:#75715e">//定义字符串类型的变量    var age int = 100        //定义整型变量	var flag bool = true     //定义bool类型的变量    var v1,v2 = 11,22    fmt.Println(sb ,age ,flag,v1,v2)}
+</span></code></pre></div><ul>
+<li>或使用先声明后赋值</li>
+</ul>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#f92672">package</span> <span style="color:#a6e22e">mainimport</span> <span style="color:#e6db74">&#34;fmt&#34;</span><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">main</span>() {    <span style="color:#75715e">//声明类型	var sb string	sb = &#34;沙雕&#34;	fmt.Println(sb)}
+</span></code></pre></div><h2 id="查看变量类型">查看变量类型</h2>
+<ul>
+<li>使用<code>fmt.Printf(&quot;%T&quot;)</code>函数</li>
+</ul>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">main</span>() {	<span style="color:#a6e22e">a1</span>, <span style="color:#a6e22e">a2</span> <span style="color:#f92672">:=</span> <span style="color:#ae81ff">2</span>, <span style="color:#ae81ff">3</span>	<span style="color:#a6e22e">b1</span>, <span style="color:#a6e22e">b2</span> <span style="color:#f92672">:=</span> <span style="color:#e6db74">&#34;Hello&#34;</span>, <span style="color:#e6db74">&#34;世界!&#34;</span>	<span style="color:#a6e22e">fmt</span>.<span style="color:#a6e22e">Println</span>(<span style="color:#a6e22e">a1</span>, <span style="color:#a6e22e">a2</span>, <span style="color:#e6db74">&#34;\n&#34;</span> <span style="color:#f92672">+</span> <span style="color:#a6e22e">b1</span>, <span style="color:#a6e22e">b2</span>)	<span style="color:#a6e22e">fmt</span>.<span style="color:#a6e22e">Printf</span>(<span style="color:#e6db74">&#34;a1的类型是: %T&#34;</span>, <span style="color:#a6e22e">a1</span>)  <span style="color:#75715e">//使用fmt.Printf的%T}
+</span></code></pre></div><h2 id="查看变量大小">查看变量大小</h2>
+<ul>
+<li>查看变量的占用字节大小和数据类型，使用<code>unsafe.Sizeof()</code>函数返回指定变量的字节数</li>
+</ul>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">main</span>() {	<span style="color:#a6e22e">a1</span>, <span style="color:#a6e22e">a2</span> <span style="color:#f92672">:=</span> <span style="color:#ae81ff">2</span>, <span style="color:#ae81ff">3</span>	<span style="color:#a6e22e">b1</span>, <span style="color:#a6e22e">b2</span> <span style="color:#f92672">:=</span> <span style="color:#e6db74">&#34;Hello&#34;</span>, <span style="color:#e6db74">&#34;世界!&#34;</span>	<span style="color:#a6e22e">fmt</span>.<span style="color:#a6e22e">Println</span>(<span style="color:#a6e22e">a1</span>, <span style="color:#a6e22e">a2</span>, <span style="color:#e6db74">&#34;\n&#34;</span> <span style="color:#f92672">+</span> <span style="color:#a6e22e">b1</span>, <span style="color:#a6e22e">b2</span>)	<span style="color:#a6e22e">fmt</span>.<span style="color:#a6e22e">Printf</span>(<span style="color:#e6db74">&#34;a1的类型是: %T a1占用的字节数是：%d&#34;</span>, <span style="color:#a6e22e">a1</span>, <span style="color:#a6e22e">unsafe</span>.<span style="color:#a6e22e">Sizeof</span>(<span style="color:#a6e22e">a1</span>))  <span style="color:#75715e">//%d返回字节数，并使用unsafe.Sizeof这个函数}
+</span></code></pre></div><h2 id="使用注意事项">使用注意事项</h2>
+<ul>
+<li>指定变量类型，声明后不赋值，使用默认值</li>
+<li>根据值自行判断变量类型（类型推导）</li>
+<li>省略var，:=左侧的变量名不应该是已经声明过的，否则会导致编译错误</li>
+<li><strong>变量在作用域内的数据值可以在同一类型范围内不断变化</strong></li>
+<li>变量在同一个作用域内不能重名（如出现两个名为a的变量名）</li>
+<li>变量使用中，遵守保小不保大的原则，在保证程序正确运行的情况下，尽量使用占用空间小的数据类型。如age这个变量不建议使用int64，因为  int64占用的空间更多<code>-2的63次方~2的63次方-1</code>使用<code>byte</code>类型就足够.,</li>
+</ul>
+<h2 id="变量因式分解">变量因式分解</h2>
+<p>即对变量赋值，又申明变量类型</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#66d9ef">var</span> (    <span style="color:#a6e22e">name</span> = <span style="color:#e6db74">&#34;杨中校&#34;</span>    <span style="color:#a6e22e">age</span> = <span style="color:#ae81ff">18</span>            <span style="color:#a6e22e">gender</span> = <span style="color:#66d9ef">string</span>    <span style="color:#75715e">//声明类型，只声明不赋值的情况下，默认值为空&#34;&#34;,int类型的默认值为0，布尔类型的默认为false)
+</span></code></pre></div><h2 id="变量作用">变量作用</h2>
+<ul>
+<li>1.更高效省力</li>
+<li>2.数据存储</li>
+</ul>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">main</span>() {    <span style="color:#75715e">//存储一个结果，便于之后使用	var v1 int = 199	var v2 int = 266	var v3 int = v1 + v2	fmt.Println(v3)}
+</span></code></pre></div><ul>
+<li>3.存储用户输入的值</li>
+</ul>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#f92672">package</span> <span style="color:#a6e22e">mainimport</span> <span style="color:#e6db74">&#34;fmt&#34;</span><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">main</span>() {   <span style="color:#66d9ef">var</span> <span style="color:#a6e22e">name</span> <span style="color:#66d9ef">string</span>             <span style="color:#75715e">//声明一个name这个变量的类型   fmt.Println(&#34;请在下面输入一个名字&#34;)   fmt.Scanf(&#34;%s&#34;,&amp;name)      //取客户输入的内容，并赋值给name这个变量   fmt.Println(&#34;您输入了&#34;,name)  //答应客户输入的变量   if name == &#34;xiaowang&#34; {     //判断客户输入的值是否等于xiaowang，如果等于   	    fmt.Println(&#34;输入正确&#34;)  //输出“输入正确”   }else {                     //否则   	    fmt.Println(&#34;输入错误&#34;)   //输出“输入错误”   }}
+</span></code></pre></div><p>————————————————————————————————————————————</p>
+<h2 id="变量简写">变量简写</h2>
+<ul>
+<li>声明+赋值</li>
+</ul>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#66d9ef">var</span> <span style="color:#a6e22e">name</span> <span style="color:#66d9ef">string</span> <span style="color:#e6db74">&#34;小王&#34;</span><span style="color:#66d9ef">var</span> <span style="color:#a6e22e">name</span> = <span style="color:#e6db74">&#34;小王&#34;</span>    <span style="color:#75715e">//Go程序会自动判断Value类型name := &#34;小王&#34;    //针对直接声明和赋值的变量，推荐使用这个方法，当不使用关键字var时，必须使用:=
+</span></code></pre></div><ul>
+<li>先声明在赋值</li>
+</ul>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#66d9ef">var</span> <span style="color:#a6e22e">name</span> <span style="color:#a6e22e">stringvar</span> <span style="color:#a6e22e">massage</span> <span style="color:#a6e22e">stringvar</span> <span style="color:#a6e22e">data</span> <span style="color:#a6e22e">stringvar</span> <span style="color:#a6e22e">name</span>,<span style="color:#a6e22e">massage</span>,<span style="color:#a6e22e">date</span> <span style="color:#66d9ef">string</span>   <span style="color:#75715e">//针对先声明后赋值的，推荐使用此方法，即同时对多个变量名称声明数据类型name := &#34;yangzhongxiao&#34;massage &#34;&#34;= &#34;中奖了&#34;data := &#34;中了1000万&#34;
+</span></code></pre></div><p><strong>声明多类型变量，混合变量使用</strong></p>
+<blockquote>
+<p>即使用直接赋值也使用先声明后赋值，或不赋值</p>
+</blockquote>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#f92672">package</span> <span style="color:#a6e22e">mainimport</span> <span style="color:#e6db74">&#34;fmt&#34;</span><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">main</span>() {    <span style="color:#66d9ef">var</span> (    	<span style="color:#a6e22e">name</span> = <span style="color:#e6db74">&#34;杨中校&#34;</span>    	<span style="color:#a6e22e">age</span> = <span style="color:#ae81ff">29</span>    	<span style="color:#a6e22e">massage</span> <span style="color:#66d9ef">string</span>    	<span style="color:#a6e22e">changdu</span> <span style="color:#66d9ef">int</span>    	<span style="color:#a6e22e">shazima</span> <span style="color:#66d9ef">bool</span>     <span style="color:#75715e">//以上的变量，声明后必须使用，否则会报错    )    fmt.Println(name,age,massage,changdu,shazima)  //对于先声明，后赋值的变量，字符串类型，默认为空，整型类型，默认为0，布尔类型，默认为false}//执行后杨中校 29  0 false   
+</span></code></pre></div><h2 id="变量作用域">变量作用域</h2>
+<ul>
+<li><strong>如果我们{}定义了一个域，那么花括号内的变量，将不能被自己的上级所调用，可以在同级使用，也可以调用上级变量</strong></li>
+</ul>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#f92672">package</span> <span style="color:#a6e22e">mainimport</span> <span style="color:#e6db74">&#34;fmt&#34;</span><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">main</span>() {    <span style="color:#66d9ef">var</span> (    	<span style="color:#a6e22e">name</span> = <span style="color:#e6db74">&#34;杨中校&#34;</span>    	<span style="color:#a6e22e">age</span> = <span style="color:#ae81ff">29</span>    	<span style="color:#a6e22e">massage</span> <span style="color:#66d9ef">string</span>    	<span style="color:#a6e22e">changdu</span> <span style="color:#66d9ef">int</span>    	<span style="color:#a6e22e">shazima</span> <span style="color:#66d9ef">bool</span>    )                                         <span style="color:#75715e">//main函数自身的变量体    fmt.Println(name,age,massage,changdu,shazima)    if true {                   //main内的第一个作用域，使用{}定义内的变量    	num := 30              //此变量只能在作用域内使用        nmae := &#34;邓佳艳&#34;    	fmt.Println(num,name,age)  //但域内可以调用上级main函数的一级变量	}	fmt.Println(num)           //这个调用方法将会报错，因为num变量属于main内的作用域，所以不能被调用}
+</span></code></pre></div><ul>
+<li>以上的变量类型，均为局部变量，即定义在函数<code>{}</code>内的变量。</li>
+</ul>
+<h2 id="全局变量">全局变量</h2>
+<ul>
+<li>没有写在函数里的变量，变量赋值不能使用简化方式如：<code>v1 := &quot;老王&quot;</code>，可使用因式分解的方式来定义</li>
+<li>程序会先查找函数内的变量，最终找全局变量。</li>
+</ul>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#f92672">package</span> <span style="color:#a6e22e">mainimport</span> <span style="color:#e6db74">&#34;fmt&#34;</span><span style="color:#75715e">//全局变量var xuexiao string = &#34;清华大学&#34;  //第一种方式，必须写var字符串var (          //第二种方式    v1 = 1    v2 = &#34;zhong&#34;    v3 int)     //即定义在函数外的变量，一般用于写程序公用的变量func main() {	fmt.Println(v1 ,v2 ,v3)}
+</span></code></pre></div><h2 id="赋值于内存">赋值于内存</h2>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#a6e22e">name</span> <span style="color:#f92672">:=</span> <span style="color:#e6db74">&#34;杨中校&#34;</span>      <span style="color:#75715e">//在内存中把name指向杨中校的存储位置bOSSname := name     //在内存中会拷贝一份杨中校，被Bossname所指向
+</span></code></pre></div><p>实例：</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#f92672">package</span> <span style="color:#a6e22e">mainimport</span> <span style="color:#e6db74">&#34;fmt&#34;</span><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">main</span>() {	<span style="color:#a6e22e">name</span> <span style="color:#f92672">:=</span> <span style="color:#e6db74">&#34;yangzhongxiao&#34;</span>	<span style="color:#a6e22e">BOSSNAME</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">name</span>	<span style="color:#a6e22e">fmt</span>.<span style="color:#a6e22e">Println</span>(<span style="color:#a6e22e">BOSSNAME</span>, <span style="color:#f92672">&amp;</span><span style="color:#a6e22e">BOSSNAME</span>, <span style="color:#a6e22e">name</span>, <span style="color:#f92672">&amp;</span><span style="color:#a6e22e">name</span>)  <span style="color:#75715e">//&amp;符号后跟变量名称是获取内存中的位置}
+</span></code></pre></div><div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#a6e22e">yangzhongxiao</span> <span style="color:#ae81ff">0xc00003a200</span> <span style="color:#a6e22e">yangzhongxiao</span> <span style="color:#ae81ff">0xc00003a1f0</span>   <span style="color:#75715e">//运行后可看到在内存中所占的位置不同
+</span></code></pre></div><p>实例：替换变量值</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#f92672">package</span> <span style="color:#a6e22e">mainimport</span> <span style="color:#e6db74">&#34;fmt&#34;</span><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">main</span>() {	<span style="color:#a6e22e">name</span> <span style="color:#f92672">:=</span> <span style="color:#e6db74">&#34;yangzhongxiao&#34;</span>	<span style="color:#a6e22e">BOSSNAME</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">name</span>	<span style="color:#a6e22e">fmt</span>.<span style="color:#a6e22e">Println</span>(<span style="color:#a6e22e">name</span>,<span style="color:#f92672">&amp;</span><span style="color:#a6e22e">name</span>)	<span style="color:#a6e22e">fmt</span>.<span style="color:#a6e22e">Println</span>(<span style="color:#a6e22e">BOSSNAME</span>, <span style="color:#f92672">&amp;</span><span style="color:#a6e22e">BOSSNAME</span>)	<span style="color:#a6e22e">name</span> = <span style="color:#e6db74">&#34;dengjiayan&#34;</span>	<span style="color:#a6e22e">fmt</span>.<span style="color:#a6e22e">Println</span>(<span style="color:#a6e22e">name</span>, <span style="color:#f92672">&amp;</span><span style="color:#a6e22e">name</span>)	<span style="color:#a6e22e">fmt</span>.<span style="color:#a6e22e">Println</span>(<span style="color:#a6e22e">BOSSNAME</span>, <span style="color:#f92672">&amp;</span><span style="color:#a6e22e">BOSSNAME</span>)}
+</code></pre></div><div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#a6e22e">yangzhongxiao</span> <span style="color:#ae81ff">0xc00003a1f0</span>   <span style="color:#75715e">//初始化name的内存地址为1f0yangzhongxiao 0xc00003a200   //初始化BOSSNAME的内存地址为200dengjiayan 0xc00003a1f0      //name重新赋值后，地址仍为1f0yangzhongxiao 0xc00003a200   //此时的BOSSNAME的地址不变，因为BOSSNAME的值是拷贝出来的
+</span></code></pre></div><h2 id="更新赋值">更新赋值</h2>
+<p>同一作用域内的变量数据值在同一类型范围内可以不断变化。</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#f92672">package</span> <span style="color:#a6e22e">mainimport</span> <span style="color:#e6db74">&#34;fmt&#34;</span><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">main</span>() {	<span style="color:#66d9ef">var</span> <span style="color:#a6e22e">name</span> = <span style="color:#e6db74">&#34;杨中校&#34;</span>	<span style="color:#a6e22e">name</span> = <span style="color:#e6db74">&#34;邓佳艳&#34;</span>     <span style="color:#75715e">//赋值的数据类型必须一致，且在一个作用域	fmt.Println(name)}
+</span></code></pre></div><h2 id="号的作用">+号的作用</h2>
+<ul>
+<li>
+<p>当左右两边是数值时，则做加法运算；</p>
+</li>
+<li>
+<p>当左右两边是字符串时，则做字符串拼接;</p>
+</li>
+<li></li>
+</ul>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#f92672">package</span> <span style="color:#a6e22e">mainimport</span> <span style="color:#e6db74">&#34;fmt&#34;</span><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">main</span>() {	<span style="color:#a6e22e">a1</span>, <span style="color:#a6e22e">a2</span> <span style="color:#f92672">:=</span> <span style="color:#ae81ff">2</span>, <span style="color:#ae81ff">3</span>	<span style="color:#a6e22e">b1</span>, <span style="color:#a6e22e">b2</span> <span style="color:#f92672">:=</span> <span style="color:#e6db74">&#34;Hello&#34;</span>, <span style="color:#e6db74">&#34;世界!&#34;</span>	<span style="color:#a6e22e">fmt</span>.<span style="color:#a6e22e">Println</span>(<span style="color:#a6e22e">a1</span>, <span style="color:#a6e22e">a2</span>, <span style="color:#e6db74">&#34;\n&#34;</span> <span style="color:#f92672">+</span> <span style="color:#a6e22e">b1</span>, <span style="color:#a6e22e">b2</span>)  <span style="color:#75715e">//此处的换行符使用&#34;&#34;双引号作为字符串处理，同一类型的数据可以相加，被当作字符换和后面进行拼接}
+</span></code></pre></div><h1 id="常量">常量</h1>
+<blockquote>
+<p>不可被修改的变量，一般常量定义在全局中。</p>
+<blockquote>
+<p>定义常量时必须赋值，不能声明数据格式</p>
+</blockquote>
+</blockquote>
+<h2 id="赋值方法-1">赋值方法</h2>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">NAME</span> <span style="color:#a6e22e">数据类型</span> = <span style="color:#a6e22e">Value</span><span style="color:#75715e">//或简写为const NAME = Value   //编译器会自动识别数据类型
+</span></code></pre></div><div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#f92672">package</span> <span style="color:#a6e22e">mainimport</span> <span style="color:#e6db74">&#34;fmt&#34;</span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">NAME</span> = <span style="color:#e6db74">&#34;yangzhxongxiao&#34;</span>   <span style="color:#75715e">//全局常量，一般常量都定义在这个位置func main() {	const (    //函数内常量	    v1 = 1   //当下面的v2和v3没有赋值时，默认值为v1的值，即等于1	    v2 = 2		v3 = 3	)    fmt.Println(NAME,v1,v2,v3)	const m1,m2,m3 = &#34;m&#34;,&#34;n&#34;,&#34;d&#34;  //函数内常量	fmt.Println(m1,m2,m3)}
+</span></code></pre></div><h2 id="iota">iota</h2>
+<blockquote>
+<p>是一个计数器，用于声明常量时，可有可无。</p>
+<blockquote>
+<p>当const这个关键字出现时，将被重置为0</p>
+</blockquote>
+</blockquote>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#f92672">package</span> <span style="color:#a6e22e">mainimport</span> <span style="color:#e6db74">&#34;fmt&#34;</span><span style="color:#66d9ef">const</span> (     <span style="color:#a6e22e">NAME1</span> = <span style="color:#66d9ef">iota</span> <span style="color:#f92672">+</span> <span style="color:#ae81ff">1</span>   <span style="color:#75715e">//如果不使用+1，NAME1=0,NAME2=2,NAME3=3此处使用iota + 1表示从1开始计算，即NAME1=1,NAME2=2,NAME3=3。以恶搞iota只在一个赋值块或函数有效，再使用是不做数字累加     _      //如果加上_,输出将会是1 3 4     NAME2     NAME3	)func main() {    fmt.Println(NAME1,NAME2,NAME3)}
+</span></code></pre></div><h1 id="go的数据类型">Go的数据类型</h1>
+<h2 id="基本数据类型-1">基本数据类型</h2>
+<blockquote>
+<p>数值型</p>
+<blockquote>
+<p>整数类型（int,int8,int16,int32,int64,uint,uint8,uint32,uint64,byte）</p>
+<p>浮点类型（float32,float64）</p>
+</blockquote>
+<p>字符型（没有专用的字符型，使用byte来保存单个字母字符）</p>
+<p>布尔型（bool）</p>
+<p>字符串（string）</p>
+</blockquote>
+<h2 id="派生复杂数据类型-1">派生/复杂数据类型</h2>
+<h1 id="输入">输入</h1>
+<p>读取用户输入，完成项目交互</p>
+<ul>
+<li>fmt.Scan</li>
+<li>fmt.Scanln</li>
+<li>fmt.Scanf</li>
+</ul>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#f92672">package</span> <span style="color:#a6e22e">mainimport</span> <span style="color:#e6db74">&#34;fmt&#34;</span><span style="color:#66d9ef">var</span> <span style="color:#a6e22e">NAME</span> <span style="color:#a6e22e">stringvar</span> <span style="color:#a6e22e">AGE</span> <span style="color:#a6e22e">intfunc</span> <span style="color:#a6e22e">main</span>() {    <span style="color:#a6e22e">fmt</span>.<span style="color:#a6e22e">Println</span>(<span style="color:#e6db74">&#34;请输入您的姓名和年龄：&#34;</span>)    <span style="color:#75715e">//使用Scan时，会要求客户输入指定数量的信息    //当用户输入完成后，会得到两个值，count（用户输入了几个值）；err（用户输入错误，则提示错误信息)    _, err := fmt.Scan(&amp;NAME, &amp;AGE)  //此处使用的Scan，要求输入两个值。Scanln不强制数量，等待回车键，即确认输入完成    //如果客户输入的信息后返回为为nil（即没有错误）    if err == nil {      //则打印客户输入的信息    	fmt.Println(NAME,AGE)	}else {    //否则，将打印错误信息		fmt.Println(&#34;用户输入错误&#34;,err)	}    fmt.Println(NAME, AGE)}
+</span></code></pre></div>
     </div>
     <div class="post-footer">
       

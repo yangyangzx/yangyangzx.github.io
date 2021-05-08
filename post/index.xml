@@ -6,19 +6,29 @@
     <description>Recent content in Posts on 杨中校的博客</description>
     <generator>Hugo -- gohugo.io</generator>
     <language>en-us</language>
-    <lastBuildDate>Thu, 06 May 2021 10:36:59 +0800</lastBuildDate><atom:link href="https://yangyangzx.github.io/post/index.xml" rel="self" type="application/rss+xml" />
+    <lastBuildDate>Sat, 08 May 2021 09:21:39 +0800</lastBuildDate><atom:link href="https://yangyangzx.github.io/post/index.xml" rel="self" type="application/rss+xml" />
     <item>
-      <title>Blog</title>
+      <title>杨中校的第二次测试</title>
       <link>https://yangyangzx.github.io/post/blog/</link>
-      <pubDate>Thu, 06 May 2021 10:36:59 +0800</pubDate>
+      <pubDate>Sat, 08 May 2021 09:21:39 +0800</pubDate>
       
       <guid>https://yangyangzx.github.io/post/blog/</guid>
-      <description>项目地址：https://github.com/gohugoio/hugo
-以下环境使用：树莓派Linux kali 4.19.127-Re4son-v8l+
-安装hugo $ apt-get install hugo 生成博客 $ hugo new site myblog #指定博客名称为myblog  此时，站点已经生成，在当前目录下会有myblog这个目录，里面存放了博客配置信息。  设置主题 官方主题库：https://themes.gohugo.io/
-此次演示：https://themes.gohugo.io/hugo-theme-m10c/
-$ cd myblog &amp;amp;&amp;amp; git clone https://github.com/vaga/hugo-theme-m10c.git themes/m10c 更改配置
-$ echo theme = &amp;#34;\&amp;#34;m10c&amp;#34;\&amp;#34; &amp;gt;&amp;gt; config.toml 启动服务 $ hugo server -t m10c --buildDrafts 写一遍文章 $ hugo new post/blog.md </description>
+      <description>语言类型    编译型（全文翻译） 解释型（实时翻译的功能）     C Python   C++ PHP   Java JavaScript   Gc Ruby    Go特性 1.既有静态编译语言的安全和性能，又有动态语言开发维护的高效率，Go=C+Python，继承了C的理念包括表达式语法，控制结构，基础数据类型，调用参数传值，指针，保留了C语言一样的编译执行方式及弱化的指针。
+2.引入包的概念，Go语言的一个文件都归属一个包，而不能单独存在。
+3.垃圾回收，内存自动回收。
+4.支持高并发，Goroutine轻量级线程实现大并发，高效使用多核处理，基于CPS并发模型实现。
+5.吸收了管道通信机制，形成Go语言特有的Channel，实现不同的Goroutine之间的相互通信。
+6.函数返回多个值。
+7.增加了切片slice，延时执行defer等。
+配置环境 ​	即搭建Go开发环境，SDK（Software Developmen Kit），包含了Go程序开发语言的工具。
+Linux配置 官网https://golang.google.cn/
+以下使用了armCPU架构的Kali系统部署。
+1.下载安装包
+$ cd $HOME/ &amp;amp;&amp;amp; wget https://golang.google.cn/dl/go1.14.14.linux-arm64.tar.gz 2.解压缩
+$ tar xvf go1.14.14.linux-arm64.tar.gz 3.配置环境变量
+$ export PATH=/home/kali/go/go/bin/:$PATH #适用于单次添加环境变量，全局生效需写入profile文件 4.版本查看
+$ go version go version go1.14.14 linux/arm64 5.创建任意目录，用于存放之后编写的代码文件，以及存放编译后的可执行文件
+$ cd $HOME &amp;amp;&amp;amp; mkdir go_project/{bin,pkg,src} -pv #src为必须创建的目录，bin和pkg当使用go install时会被自动创建 mkdir: 已创建目录 &amp;#39;go_project&amp;#39; mkdir: 已创建目录 &amp;#39;go_project/bin&amp;#39; #在执行install时后，执行程序的保存路径 mkdir: 已创建目录 &amp;#39;go_project/pkg&amp;#39; #执行install后，存放包文件 mkdir: 已创建目录 &amp;#39;go_project/src&amp;#39; #编写的所有代码和依赖文件 7.</description>
     </item>
     
   </channel>
