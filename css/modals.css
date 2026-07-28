@@ -1,0 +1,246 @@
+/* ==================== 编辑模态框 ==================== */
+.modal-overlay {
+  position: fixed; 
+  inset: 0; 
+  z-index: 10000;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex; 
+  align-items: center; 
+  justify-content: center;
+  padding: 20px;
+}
+
+.modal-content {
+  width: 100%; 
+  max-width: 620px; 
+  max-height: 88vh;
+  display: flex; 
+  flex-direction: column;
+  box-shadow: var(--shadow-xl);
+  animation: materialIn 0.45s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+  background: var(--glass-bg-heavy);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: var(--glass-blur-heavy);
+  -webkit-backdrop-filter: var(--glass-blur-heavy);
+}
+
+/* §7: Exit path mirrors entrance — spring scale-down + fade */
+.modal-overlay.closing .modal-content {
+  animation: springOut 0.3s cubic-bezier(0.55, 0.06, 0.68, 0.19) forwards;
+}
+
+.modal-header {
+  display: flex; 
+  align-items: center; 
+  justify-content: space-between;
+  padding: var(--space-lg) var(--space-xl); 
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.modal-header h3 { 
+  margin: 0; 
+  font-size: 17px; 
+  font-weight: var(--font-weight-bold); 
+  color: var(--color-text); 
+}
+
+/* 编辑弹窗 Tab 导航 */
+.modal-tabs {
+  display: flex;
+  gap: 0;
+  padding: 0;
+  border-bottom: 1px solid var(--glass-border);
+  background: var(--glass-bg-light);
+}
+
+.modal-tab {
+  flex: 1;
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  border-bottom: 2px solid transparent;
+}
+
+.modal-tab:hover {
+  color: var(--color-text);
+  background: var(--glass-bg);
+}
+
+/* §1: Instant :active */
+.modal-tab:active {
+  transform: scale(0.97);
+  transition: transform 100ms ease-out;
+}
+
+.modal-tab.active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+  background: var(--glass-bg);
+}
+
+/* Tab 面板 */
+.modal-tab-panel {
+  display: none;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-md) 28px;
+}
+
+.modal-tab-panel.active {
+  display: grid;
+}
+
+.modal-tab-panel .form-group.row-2,
+.modal-tab-panel .fp.span-2 {
+  grid-column: span 2;
+}
+
+
+.modal-close {
+  background: none; 
+  border: none; 
+  font-size: 20px; 
+  cursor: pointer;
+  color: var(--color-text-placeholder); 
+  width: var(--space-2xl); 
+  height: var(--space-2xl); 
+  border-radius: var(--radius-sm);
+  display: flex; 
+  align-items: center; 
+  justify-content: center; 
+  transition: all var(--transition-fast);
+}
+
+.modal-close:hover { 
+  background: var(--glass-bg-light); 
+  color: var(--color-text); 
+}
+
+.modal-body {
+  padding: var(--space-xl) var(--space-xl); 
+  overflow-y: auto; 
+  flex: 1;
+  display: grid; 
+  grid-template-columns: 1fr 1fr; 
+  gap: var(--space-md) 16px;
+}
+
+.modal-body .fp.span-2 { 
+  grid-column: span 2; 
+}
+
+.modal-body .fp { 
+  display: flex; 
+  flex-direction: column; 
+  gap: var(--space-xs); 
+}
+
+.modal-body .fp label { 
+  font-size: var(--font-sm); 
+  color: var(--color-text-muted); 
+  font-weight: var(--font-weight-semibold); 
+}
+
+.modal-body .fp input,
+.modal-body .fp select,
+.modal-body .fp textarea {
+  padding: var(--space-sm) 10px; 
+  border: 1px solid var(--glass-border); 
+  border-radius: var(--radius-sm);
+  font-size: 13px; 
+  background: var(--glass-bg-light); 
+  outline: none; 
+  transition: all var(--transition-fast);
+  color: var(--color-text);
+}
+
+.modal-body .fp input:focus,
+.modal-body .fp select:focus { 
+  border-color: var(--color-primary); 
+  box-shadow: 0 0 0 3px var(--color-primary-bg); 
+  background: var(--glass-bg); 
+}
+
+.modal-body .fp textarea { 
+  resize: vertical; 
+  min-height: 56px; 
+}
+
+.star-rating-modal { 
+  display: flex; 
+  gap: var(--space-xs); 
+}
+
+.star-rating-modal .star {
+  cursor: pointer; 
+  font-size: 20px; 
+  color: var(--color-text-muted); 
+  transition: color var(--transition-fast);
+}
+
+.star-rating-modal .star.active { 
+  color: var(--color-warning); 
+}
+
+.modal-footer {
+  display: flex; 
+  gap: 10px; 
+  justify-content: flex-end;
+  padding: 16px var(--space-xl); 
+  border-top: 1px solid var(--glass-border);
+  background: var(--glass-bg-light);
+}
+
+
+/* ==================== Toast 通知 ==================== */
+.toast {
+  padding: var(--space-md) 20px;
+  border-radius: var(--radius-md);
+  font-size: 13px; 
+  font-weight: 550;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+  animation: toastIn var(--transition-slow), toastOut 0.25s ease 2.5s forwards;
+  max-width: 360px;
+  pointer-events: auto;
+  background: var(--glass-bg-heavy);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+}
+
+.toast.success { 
+  background: rgba(16, 185, 129, 0.15); 
+  color: var(--color-success); 
+  border-color: var(--color-success-border); 
+}
+
+.toast.error { 
+  background: rgba(239, 68, 68, 0.15); 
+  color: var(--color-danger); 
+  border-color: var(--color-danger-border); 
+}
+
+.toast.warn { 
+  background: rgba(245, 158, 11, 0.15); 
+  color: var(--color-warning); 
+  border-color: var(--color-warning-border); 
+}
+
+.toast.info { 
+  background: rgba(59, 130, 246, 0.15); 
+  color: var(--color-primary-light); 
+  border-color: var(--color-primary-border); 
+}
+
+
+@keyframes toastIn { 
+  from { opacity: 0; transform: translateX(40px); } 
+  to { opacity: 1; transform: translateX(0); } 
+}

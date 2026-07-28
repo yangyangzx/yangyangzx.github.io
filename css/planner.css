@@ -1,0 +1,146 @@
+/* ==================== 开仓计划视图布局 ==================== */
+
+.planner-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.planner-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ——— 盈亏比反推卡片 ——— */
+#rrReverseCard .form-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+#rrReverseCard .form-row label {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  font-weight: 500;
+}
+
+#rrReverseCard .form-row input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  background: var(--glass-bg-light);
+  backdrop-filter: var(--glass-blur-light);
+  -webkit-backdrop-filter: var(--glass-blur-light);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  font-size: 13px;
+}
+
+#rrReverseCard .form-row input[readonly] {
+  color: var(--color-text-muted);
+  cursor: default;
+}
+
+#rrReverseCard .btn {
+  font-size: 12px;
+  padding: 6px 12px;
+}
+
+/* ——— 多止盈位卡片 ——— */
+#multiTPCard .tp-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+#multiTPCard .tp-row > span:first-child {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  width: 32px;
+  flex-shrink: 0;
+}
+
+#multiTPCard .tp-row input {
+  width: 0;
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 6px 8px;
+  background: var(--glass-bg-light);
+  backdrop-filter: var(--glass-blur-light);
+  -webkit-backdrop-filter: var(--glass-blur-light);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-xs);
+  color: var(--color-text);
+  font-size: 12px;
+}
+
+#multiTPCard .tp-row .tp-rr {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-primary);
+  width: 48px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+#multiTPCard .tp-rr.negative {
+  color: var(--color-danger);
+}
+
+/* ——— 检查清单卡片 ——— */
+#checklistCard .checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#checklistCard .check-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--color-bg);
+  transition: all 0.2s;
+}
+
+#checklistCard .check-item .check-icon {
+  font-size: 15px;
+  font-weight: 700;
+  width: 20px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+#checklistCard .check-item .check-icon.pass {
+  color: var(--color-success);
+}
+
+#checklistCard .check-item .check-icon.fail {
+  color: var(--color-danger);
+}
+
+#checklistCard .check-item .check-icon.pending {
+  color: var(--color-text-muted);
+}
+
+#checklistCard .check-item.fail-row {
+  background: var(--color-danger-bg);
+  border-left: 3px solid var(--color-danger);
+  color: var(--color-danger-dark);
+}
+
+/* ——— 响应式 ——— */
+@media (max-width: 900px) {
+  .planner-grid {
+    grid-template-columns: 1fr;
+  }
+}

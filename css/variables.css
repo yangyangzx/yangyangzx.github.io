@@ -1,0 +1,253 @@
+/* ==================== CSS 变量体系 ==================== */
+:root {
+  /* 主色板 */
+  --color-primary:        #3b82f6;
+  --color-primary-dark:   #2563eb;
+  --color-primary-light:  #60a5fa;
+  --color-primary-bg:     rgba(59, 130, 246, 0.08);
+  --color-primary-border: rgba(59, 130, 246, 0.2);
+
+  /* 语义色 */
+  --color-success:        #10b981;
+  --color-success-dark:   #059669;
+  --color-success-light:  #34d399;
+  --color-success-bg:     rgba(16, 185, 129, 0.08);
+  --color-success-border: rgba(16, 185, 129, 0.2);
+
+  --color-danger:         #ef4444;
+  --color-danger-dark:    #dc2626;
+  --color-danger-bg:      rgba(239, 68, 68, 0.08);
+  --color-danger-border:  rgba(239, 68, 68, 0.2);
+
+  --color-warning:        #f59e0b;
+  --color-warning-dark:   #d97706;
+  --color-warning-bg:     rgba(245, 158, 11, 0.08);
+  --color-warning-border: rgba(245, 158, 11, 0.2);
+
+  --color-gold:           #fbbf24;
+  --color-gold-dark:      #f59e0b;
+  --color-gold-bg:        rgba(251, 191, 36, 0.08);
+
+  /* 深色主题中性色 */
+  --color-bg:             #0f172a;
+  --color-bg-gradient:    linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+  --color-surface:        rgba(30, 41, 59, 0.7);
+  --color-surface-hover:  rgba(51, 65, 85, 0.6);
+  --color-surface-raised: rgba(51, 65, 85, 0.8);
+  --color-border:         rgba(148, 163, 184, 0.12);
+  --color-border-light:   rgba(148, 163, 184, 0.08);
+
+  /* 文字色 */
+  --color-text:           #f1f5f9;
+  --color-text-secondary: #cbd5e1;
+  --color-text-muted:     #94a3b8;
+  --color-text-placeholder: #64748b;
+  --color-text-inverse:   #0f172a;
+
+  /* 圆角系统 */
+  --radius-xs:  6px;
+  --radius-sm:  10px;
+  --radius-md:  14px;
+  --radius-lg:  18px;
+  --radius-xl:  24px;
+  --radius-full: 9999px;
+
+  /* 阴影系统 */
+  --shadow-sm:  0 1px 2px rgba(0,0,0,0.15);
+  --shadow-md:  0 4px 16px rgba(0,0,0,0.2), 0 1px 2px rgba(0,0,0,0.1);
+  --shadow-lg:  0 12px 40px rgba(0,0,0,0.25), 0 4px 12px rgba(0,0,0,0.15);
+  --shadow-xl:  0 20px 60px rgba(0,0,0,0.3), 0 8px 20px rgba(0,0,0,0.2);
+
+  /* 毛玻璃效果 */
+  --glass-bg:           rgba(30, 41, 59, 0.6);
+  --glass-bg-light:     rgba(51, 65, 85, 0.4);
+  --glass-bg-heavy:     rgba(30, 41, 59, 0.85);
+  --glass-border:       rgba(148, 163, 184, 0.1);
+  --glass-border-light: rgba(255, 255, 255, 0.05);
+  --glass-blur:         blur(18px);
+  --glass-blur-light:   blur(12px);
+  --glass-blur-heavy:   blur(28px);
+  --glass-shadow:       0 8px 32px rgba(0, 0, 0, 0.3);
+
+  /* 排版 */
+  --font-xs:    11px;
+  --font-sm:    12.5px;
+  --font-base:  14px;
+  --font-md:    16px;
+  --font-lg:    19px;
+  --font-xl:    23px;
+  --font-2xl:   29px;
+  --font-3xl:   35px;
+  --font-weight-normal:  400;
+  --font-weight-medium:  500;
+  --font-weight-semibold:600;
+  --font-weight-bold:    700;
+
+  /* 间距 */
+  --space-xs:  4px;
+  --space-sm:  8px;
+  --space-md:  12px;
+  --space-lg:  18px;
+  --space-xl:  24px;
+  --space-2xl: 32px;
+
+  /* 过渡 */
+  --transition-fast:   0.15s ease;
+  --transition-normal: 0.2s cubic-bezier(0.4,0,0.2,1);
+  --transition-slow:   0.3s ease;
+}
+
+
+/* ─── Apple Design §14: Reduced Motion ─── */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --transition-fast:   0s;
+    --transition-normal: 0s;
+    --transition-slow:   0s;
+  }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  /* Replace spring/scale animations with short opacity cross-fade */
+  .modal-content,
+  .view.active,
+  .dash-card,
+  .review-card,
+  .card,
+  .nav-item {
+    animation: reducedFadeIn 200ms ease forwards !important;
+  }
+  @keyframes reducedFadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+}
+
+/* ─── Apple Design §14: Reduced Transparency ─── */
+@media (prefers-reduced-transparency: reduce) {
+  .card,
+  .dash-card,
+  .review-card,
+  .modal-content,
+  .table-wrap,
+  .result-box,
+  #mainNav,
+  .toast,
+  .form-section-header,
+  .stats-panel,
+  .summary-bar,
+  .close-panel-row td,
+  .batch-bar,
+  .settings-form {
+    background: var(--color-surface-raised) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+  .modal-overlay {
+    background: rgba(15, 23, 42, 0.85) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+}
+
+
+@keyframes flashBorder {
+  0%   { border-color: var(--color-warning); box-shadow: 0 0 0 4px rgba(245,158,11,0.2); }
+  100% { border-color: var(--color-border); box-shadow: none; }
+}
+
+
+@keyframes marginPulse {
+  0%, 100% { box-shadow: 0 0 12px rgba(239,68,68,0.3); }
+  50%      { box-shadow: 0 0 24px rgba(239,68,68,0.5); }
+}
+
+@keyframes modalIn { from { opacity:0; transform:translateY(-16px) scale(0.97); } to { opacity:1; transform:translateY(0) scale(1); } }
+
+@keyframes toastIn  { from { opacity:0; transform:translateX(40px); } to { opacity:1; transform:translateX(0); } }
+
+@keyframes toastOut { from { opacity:1; } to { opacity:0; transform:translateX(40px); } }
+
+@keyframes detailSlideIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes panelSlideIn {
+  from { opacity: 0; max-height: 0; }
+  to   { opacity: 1; max-height: 500px; }
+}
+
+
+@keyframes mindsetGlow {
+  0%, 100% {
+    background: rgba(59,130,246,0.08);
+    border-left-color: var(--color-primary-light);
+    box-shadow: none;
+  }
+  50% {
+    background: rgba(59,130,246,0.18);
+    border-left-color: var(--color-primary);
+    box-shadow: 0 0 12px rgba(59,130,246,0.2);
+  }
+}
+
+
+@keyframes glassFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+
+@keyframes gradientShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* ─── Apple Design §3/§4: Spring Animations ─── */
+/* Critically damped (damping ratio 1.0, response 0.4s) — no overshoot */
+@keyframes springIn {
+  0%   { transform: scale(0.92); opacity: 0; }
+  50%  { transform: scale(1.004); }
+  70%  { transform: scale(0.998); }
+  85%  { transform: scale(1.001); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes springOut {
+  0%   { transform: scale(1); opacity: 1; }
+  30%  { transform: scale(0.996); }
+  100% { transform: scale(0.92); opacity: 0; }
+}
+
+/* Bouncy spring for momentum-driven interactions (damping ~0.8, response 0.4s) */
+@keyframes springBounceIn {
+  0%   { transform: scale(0.88); opacity: 0; }
+  40%  { transform: scale(1.025); }
+  60%  { transform: scale(0.985); }
+  78%  { transform: scale(1.008); }
+  90%  { transform: scale(0.997); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* ─── Apple Design §12: Material Entrance — scale + blur ─── */
+@keyframes materialIn {
+  0%   { transform: scale(0.97); filter: blur(4px); opacity: 0; }
+  60%  { filter: blur(0px); }
+  100% { transform: scale(1); filter: blur(0px); opacity: 1; }
+}
+
+/* Larger surface = deeper shadow + stronger blur on entrance */
+@keyframes materialInLarge {
+  0%   { transform: scale(0.96); filter: blur(6px); opacity: 0; }
+  50%  { filter: blur(1px); }
+  100% { transform: scale(1); filter: blur(0px); opacity: 1; }
+}
+
+/* ─── Apple Design §1: Instant response (reusable) ─── */
+@keyframes tapShrink {
+  0%   { transform: scale(1); }
+  100% { transform: scale(0.97); }
+}

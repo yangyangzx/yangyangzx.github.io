@@ -1,0 +1,323 @@
+/* ==================== 复盘中心视图 ==================== */
+
+.review-section {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  gap: 20px;
+}
+
+/* ——— 卡片基础样式 ——— */
+.review-card {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--glass-border);
+  overflow: hidden;
+  transition: all var(--transition-normal);
+  box-shadow: var(--glass-shadow);
+}
+
+.review-card:hover {
+  background: var(--glass-bg-heavy);
+  border-color: rgba(148, 163, 184, 0.2);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  transform: translateY(-1px);
+}
+
+/* §1: Instant :active */
+.review-card:active {
+  transform: scale(0.98);
+  transition: transform 100ms ease-out;
+}
+
+/* §12: Material entrance — card arrives with scale+blur */
+.review-card {
+  animation: materialIn 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+}
+
+.review-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  background: var(--glass-bg-light);
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.review-card-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: var(--color-primary);
+  background: var(--color-primary-bg);
+}
+
+.review-card-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.review-card-body {
+  padding: 16px;
+}
+
+/* ——— 图表容器 ——— */
+.review-chart-container {
+  position: relative;
+  width: 100%;
+  height: 260px;
+  margin-bottom: 16px;
+}
+
+.review-chart-container canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* ——— 卡片内容区域 ——— */
+.review-content {
+  padding-top: 12px;
+  border-top: 1px solid var(--glass-border);
+}
+
+/* ——— 策略排名榜 ——— */
+.strategy-rank-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.strategy-rank-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--glass-bg-light);
+  font-size: 13px;
+  color: var(--color-text);
+  transition: all var(--transition-fast);
+  border: 1px solid transparent;
+}
+
+.strategy-rank-item:hover {
+  background: var(--glass-bg);
+  border-color: var(--glass-border);
+}
+
+.strategy-rank-item.rank-1 {
+  background: var(--color-gold-bg);
+  border: 1px solid rgba(251, 191, 36, 0.2);
+}
+
+.strategy-rank-badge {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+  background: var(--color-border);
+  color: var(--color-text-muted);
+}
+
+.strategy-rank-item.rank-1 .strategy-rank-badge {
+  background: linear-gradient(135deg, var(--color-gold-dark), var(--color-gold));
+  color: var(--color-text-inverse);
+  font-size: 13px;
+  width: 28px;
+  height: 28px;
+}
+
+.strategy-rank-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.strategy-rank-item.rank-1 .strategy-rank-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-gold);
+}
+
+.strategy-rank-pnl {
+  font-weight: 700;
+  white-space: nowrap;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+.strategy-rank-pnl.risk-safe {
+  color: #4ade80;
+}
+
+.strategy-rank-pnl.risk-danger {
+  color: #f87171;
+}
+
+.strategy-rank-meta {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+/* ——— 情绪关联表格 ——— */
+.emotion-table-wrap {
+  overflow-x: auto;
+  border-radius: 8px;
+}
+
+.emotion-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.emotion-table th {
+  text-align: left;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--glass-border);
+  white-space: nowrap;
+  background: var(--glass-bg-heavy);
+}
+
+.emotion-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--glass-border);
+  color: var(--color-text);
+  font-size: 13px;
+}
+
+.emotion-table tr:hover td {
+  background: var(--color-primary-bg);
+}
+
+.emotion-table tr:last-child td {
+  border-bottom: none;
+}
+
+.emotion-table .risk-safe {
+  color: #4ade80;
+  font-weight: 600;
+}
+
+.emotion-table .risk-danger {
+  color: #f87171;
+  font-weight: 600;
+}
+
+.emotion-table .col-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.emotion-table .col-pnl-pos {
+  color: #4ade80;
+  font-weight: 700;
+  text-align: right;
+}
+
+.emotion-table .col-pnl-neg {
+  color: #f87171;
+  font-weight: 700;
+  text-align: right;
+}
+
+/* ——— 空状态 ——— */
+.review-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 260px;
+  color: var(--color-text-muted);
+  font-size: 14px;
+  gap: 10px;
+}
+
+.review-empty-icon {
+  font-size: 40px;
+  opacity: 0.25;
+}
+
+/* ——— 响应式设计 ——— */
+@media (max-width: 950px) {
+  .review-section {
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .review-section {
+    grid-template-columns: 1fr;
+  }
+  
+  .review-card-body {
+    padding: 12px;
+  }
+  
+  .review-chart-container {
+    height: 220px;
+  }
+  
+  .strategy-rank-item {
+    padding: 8px 10px;
+    gap: 10px;
+  }
+  
+  .strategy-rank-badge {
+    width: 22px;
+    height: 22px;
+  }
+  
+  .strategy-rank-item.rank-1 .strategy-rank-badge {
+    width: 24px;
+    height: 24px;
+  }
+}
+
+@media (max-width: 480px) {
+  .review-section {
+    gap: 12px;
+  }
+  
+  .review-card-header {
+    padding: 12px;
+  }
+  
+  .review-card-body {
+    padding: 10px;
+  }
+  
+  .review-chart-container {
+    height: 200px;
+  }
+  
+  .strategy-rank-item {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+  
+  .strategy-rank-meta {
+    order: 3;
+    width: 100%;
+  }
+}

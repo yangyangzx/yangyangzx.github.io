@@ -1,0 +1,11 @@
+trading.html
+GlassStudio_v2.html
+Killzones.pine
+*.backup
+trading.html.backup_*
+
+# Ignore local assistant/worktree data
+.claude/
+
+# Ignore local assistant/worktree data
+.claude/

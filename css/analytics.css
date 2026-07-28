@@ -1,0 +1,135 @@
+/* ==================== 统计分析视图 ==================== */
+
+.analytics-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.chart-card {
+  overflow: visible;
+}
+
+.chart-wrap {
+  position: relative;
+  width: 100%;
+  height: 300px;
+}
+
+.chart-wrap canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* ——— 策略 / 形态拆解表格 ——— */
+.analytics-table-wrap {
+  overflow-x: auto;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+}
+
+.analytics-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.analytics-table th {
+  text-align: left;
+  padding: 10px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--glass-border);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  background: var(--glass-bg-heavy);
+  position: sticky;
+  top: 0;
+}
+
+.analytics-table th[data-sort="num"] {
+  text-align: right;
+}
+
+.analytics-table th:hover {
+  color: var(--color-text);
+}
+
+/* §1: Instant :active */
+.analytics-table th:active {
+  transform: scale(0.97);
+  transition: transform 100ms ease-out;
+}
+
+.analytics-table th .sort-arrow {
+  margin-left: 4px;
+  font-size: 10px;
+}
+
+.analytics-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--glass-border);
+  color: var(--color-text);
+  font-size: 14px;
+}
+
+.analytics-table tr:last-child td {
+  border-bottom: none;
+}
+
+.analytics-table tr.row-best td {
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.analytics-table tr.row-worst td {
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.analytics-table .col-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.analytics-table .col-pnl-pos {
+  color: #4ade80;
+  font-weight: 700;
+  text-align: right;
+}
+
+.analytics-table .col-pnl-neg {
+  color: #f87171;
+  font-weight: 700;
+  text-align: right;
+}
+
+/* ——— 空状态 ——— */
+.analytics-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 300px;
+  color: var(--color-text-muted);
+  font-size: 14px;
+  gap: 8px;
+}
+
+.analytics-empty-icon {
+  font-size: 40px;
+  opacity: 0.3;
+}
+
+/* ——— 响应式 ——— */
+@media (max-width: 900px) {
+  .analytics-grid {
+    grid-template-columns: 1fr;
+  }
+}
