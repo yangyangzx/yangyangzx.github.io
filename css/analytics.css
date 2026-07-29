@@ -99,13 +99,13 @@
 }
 
 .analytics-table .col-pnl-pos {
-  color: #4ade80;
+  color: var(--color-pnl-positive);
   font-weight: 700;
   text-align: right;
 }
 
 .analytics-table .col-pnl-neg {
-  color: #f87171;
+  color: var(--color-pnl-negative);
   font-weight: 700;
   text-align: right;
 }

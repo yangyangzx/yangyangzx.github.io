@@ -296,153 +296,62 @@ function initMultiTPListeners() {
 // ==================== 检查清单 ====================
 
 /**
- * 读取设置中的当日亏损状态（用于新增的检查项）
- */
-function getTodayLossStatus() {
-  try {
-    var todayStr = window.utils.toLocalDateStr(new Date().toISOString());
-    var totalTodayLoss = 0;
-    // 统计今日所有已平仓的亏损
-    for (var i = 0; i < logs.length; i++) {
-      if (logs[i].closeType && logs[i].pnlAmount != null) {
-        var closeDate = window.utils.toLocalDateStr(logs[i].closeTime || logs[i].time);
-        if (closeDate === todayStr && logs[i].pnlAmount < 0) {
-          totalTodayLoss += logs[i].pnlAmount;
-        }
-      }
-    }
-    return { todayLoss: totalTodayLoss, todayCount: 0 };
-  } catch(e) {
-    return { todayLoss: 0, todayCount: 0 };
-  }
-}
-
-/**
  * 更新开仓前检查清单（读取 _lastCalc）
- * 增强版：新增日亏损上限检查、心态评分检查，支持可配止损阈值，检查结果持久化至日志
  */
 function updateChecklist() {
   if (window._lastCalcDirty) { alert('计算器参数已变更，请先点击「计算仓位」更新结果。'); return; }
   var calc = window._lastCalc;
 
-  // 获取设置（包含可配的止损比例和日亏损上限等）
-  var settings = typeof loadSettings === 'function' ? loadSettings() : {};
-
-  // ========== 辅助函数：带结果的更新 ==========
-  // 返回对象：{ result: boolean|undefined, message?: string }
-  function updateCheckItemWithResult(itemId, checkFn) {
-    var item = document.getElementById(itemId);
-    if (!item) return null;
-    var icon = item.querySelector('.check-icon');
-    var resultObj = checkFn();
-
-    if (resultObj === null || resultObj.result === undefined) {
-      icon.textContent = '○';
-      icon.className = 'check-icon pending';
-      item.classList.remove('fail-row');
-      return null;
-    } else if (resultObj.result) {
-      icon.textContent = '✓';
-      icon.className = 'check-icon pass';
-      item.classList.remove('fail-row');
-      if (resultObj.message) item.title = resultObj.message;
-    } else {
-      icon.textContent = '✗';
-      icon.className = 'check-icon fail';
-      item.classList.add('fail-row');
-      if (resultObj.message) item.title = resultObj.message;
-    }
-    return resultObj.result;
-  }
-
   // 1. 单笔风险 ≤ 账户风险比例（设置值）
-  updateCheckItemWithResult('checkRiskPct', function() {
+  updateCheckItem('checkRiskPct', function() {
     if (!calc || calc.riskPercent == null) return null;
-    var plRisk = (calc.riskPercent * 100).toFixed(1);
-    var settingVal = settings.riskPercent || 2;
-    return { result: plRisk <= settingVal, message: '风险 ' + plRisk + '% ≤ 设置 ' + settingVal + '%' };
+    var plSettings;
+    try { plSettings = typeof loadSettings === 'function' ? loadSettings() : { riskPercent: 2 }; } catch(e) { plSettings = { riskPercent: 2 }; }
+    return calc.riskPercent * 100 <= (plSettings.riskPercent || 2);
   });
 
-  // 2. 止损距离合理（可配阈值，原 ETH ≤2%/其他 ≤3% 改为从设置读取）
-  updateCheckItemWithResult('checkStopDist', function() {
+  // 2. 止损距离合理（ETH ≤2%，其他 ≤3%）
+  updateCheckItem('checkStopDist', function() {
     if (!calc || calc.stopPct == null) return null;
-    // 从设置读取品种特异性止损比例，若未设置则回退到原规则
-    var customLimits = settings.customStopLimit || {}; // { "BTC": 3, "ETH": 2, ... }
     var symbol = (calc.symbol || '').toUpperCase();
-    var maxPct;
-    if (customLimits && customLimits[symbol] != null) {
-      maxPct = customLimits[symbol];
-    } else if (symbol.includes('ETH')) {
-      maxPct = 2;
-    } else {
-      maxPct = 3;
-    }
-    var passed = calc.stopPct <= maxPct;
-    return { result: passed, message: '止损 ' + calc.stopPct.toFixed(2) + '% ≤ 上限 ' + maxPct + '%' };
+    var maxPct = symbol.includes('ETH') ? 2 : 3;
+    return calc.stopPct <= maxPct;
   });
 
   // 3. 止损在强平价格之上（安全）
-  updateCheckItemWithResult('checkLiqSafe', function() {
+  updateCheckItem('checkLiqSafe', function() {
     if (!calc) return null;
-    if (calc.leverage <= 0) return { result: true, message: '现货模式无需强平检查' };
+    if (calc.leverage <= 0) return true; // 现货无需检查
     if (calc.cappedByLiquidation == null) return null;
-    return { result: !calc.cappedByLiquidation, message: calc.cappedByLiquidation ? '止损穿越强平价！' : '止损在强平之上，安全' };
+    return !calc.cappedByLiquidation;
   });
 
   // 4. 连亏未触发熔断（＜3 笔）
-  updateCheckItemWithResult('checkLossStreak', function() {
+  updateCheckItem('checkLossStreak', function() {
     if (!calc || calc.lossStreak == null) return null;
-    var passed = calc.lossStreak < 3;
-    return { result: passed, message: '连亏 ' + calc.lossStreak + ' 笔 (<3) ' + (passed ? '正常' : '已熔断') };
+    return calc.lossStreak < 3;
   });
 
   // 5. 盈亏比 ≥ 2:1（职业交易最低标准）
-  updateCheckItemWithResult('checkRR', function() {
+  updateCheckItem('checkRR', function() {
     if (!calc || calc.targetRR == null) return null;
-    var passed = calc.targetRR >= 2.0;
-    return { result: passed, message: '盈亏比 ' + calc.targetRR.toFixed(2) + ':1 ' + (passed ? '达标' : '偏低') };
+    return calc.targetRR >= 2.0;
   });
 
   // 6. 保证金占本金 ≤ 50%（避免单笔过度暴露）
-  updateCheckItemWithResult('checkMargin', function() {
+  updateCheckItem('checkMargin', function() {
     if (!calc || calc.actualMargin == null || calc.capital == null || calc.capital <= 0) return null;
-    var ratio = calc.actualMargin / calc.capital;
-    var passed = ratio <= 0.5;
-    return { result: passed, message: '保证金占比 ' + (ratio*100).toFixed(1) + '% ≤ 50%' };
+    return calc.actualMargin / calc.capital <= 0.5;
   });
 
   // 7. 入场理由已明确选择
-  updateCheckItemWithResult('checkReason', function() {
+  updateCheckItem('checkReason', function() {
     if (!calc) return null;
     if (calc.reason == null) return null;
-    var passed = calc.reason !== '' && calc.reason !== '— 不选择 —';
-    return { result: passed, message: '入场理由已明确' };
+    return calc.reason !== '' && calc.reason !== '— 不选择 —';
   });
 
-  // 【增强8】当日未超日亏损上限（新增检查项，基于设置中的 dailyLossLimit）
-  updateCheckItemWithResult('checkDailyLoss', function() {
-    // 没有设置或本金无法确定时跳过检查
-    if (!settings.dailyLossLimit || !calc || calc.capital == null || calc.capital <= 0) {
-      return null; // 不适用
-    }
-    var dailyLossPct = settings.dailyLossLimit;
-    var dailyLossLimit = calc.capital * (dailyLossPct / 100);
-    var todayStatus = getTodayLossStatus();
-    var todayLoss = Math.abs(todayStatus.todayLoss); // 今日总亏损额（绝对值）
-    var passed = todayLoss < dailyLossLimit;
-    return { result: passed, message: '今日亏损 ' + todayLoss.toFixed(2) + ' / 上限 ' + dailyLossLimit.toFixed(2) + ' (' + (todayLoss/dailyLossLimit*100).toFixed(0) + '%)' };
-  });
-
-  // 【增强9】心态评分检查（新增检查项，评分<3时警告）
-  updateCheckItemWithResult('checkMindset', function() {
-    if (!calc) return null;
-    var mindsetScore = calc.mindsetScore || 3;
-    // 策略：评分低于 3（中性以下）不禁止但标记警告，可考虑未来扩展为拦截
-    var passed = mindsetScore >= 3; // 中性及以上通过
-    return { result: passed, message: '心态评分 ' + mindsetScore + '/5 ' + (passed ? '(平静/良好)' : '(需谨慎)') };
-  });
-
-  // ========== P1 修复：当 _lastCalc 为 null 时所有检查项均为 null，显示提示 ==========
+  // P1 修复：当 _lastCalc 为 null 时所有检查项均为 null，显示提示
   var hintEl = document.getElementById('checklistHint');
   if (!calc) {
     if (!hintEl) {
@@ -459,31 +368,6 @@ function updateChecklist() {
     }
   } else if (hintEl) {
     hintEl.style.display = 'none';
-  }
-
-  // ========== 将检查结果持久化到 _lastCalc，供日志保存时使用 ==========
-  if (calc) {
-    // 收集所有检查的结果（用于写入日志）
-    var checklistResults = {};
-    var checkItems = ['checkRiskPct','checkStopDist','checkLiqSafe','checkLossStreak','checkRR','checkMargin','checkReason','checkDailyLoss','checkMindset'];
-    for (var i = 0; i < checkItems.length; i++) {
-      var id = checkItems[i];
-      var el = document.getElementById(id);
-      if (el) {
-        var icon = el.querySelector('.check-icon');
-        if (icon) {
-          var className = icon.className;
-          if (className && className.contains('pass')) checklistResults[id] = 'pass';
-          else if (className && className.contains('fail')) checklistResults[id] = 'fail';
-          else checklistResults[id] = 'pending';
-        }
-      }
-    }
-    // 将检查结果合并到 _lastCalc 中（持久化字段）
-    if (typeof calc.checklistResults === 'undefined') {
-      calc.checklistResults = {};
-    }
-    for (var k in checklistResults) calc.checklistResults[k] = checklistResults[k];
   }
 }
 

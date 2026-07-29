@@ -10,7 +10,9 @@ var SETTINGS_DEFAULTS = {
   defaultLeverage: 10,
   mmr: 0.5,
   backupCount: 10,
-  autoBackup: true
+  autoBackup: true,
+  customStopLimit: {},       // 新增：品种自定义止损比例，如 { "ETH": 2, "BTC": 3 }
+  mindsetMinScore: 3         // 新增：心态评分最低通过值
 };
 
 var SETTINGS_VALIDATORS = {
@@ -21,6 +23,7 @@ var SETTINGS_VALIDATORS = {
   defaultLeverage: { min: 1,     max: 125,       label: '默认杠杆' },
   mmr:             { min: 0.1,   max: 5,         label: '维持保证金率' },
   backupCount:     { min: 3,     max: 50,        label: '备份份数' }
+  // customStopLimit 和 mindsetMinScore 不需要简单的数值验证，特殊处理
 };
 
 /**
@@ -57,6 +60,16 @@ function renderSettings() {
   el = document.getElementById('setMmr');              if (el) el.value = settings.mmr;
   el = document.getElementById('setBackupCount');      if (el) el.value = settings.backupCount;
   el = document.getElementById('setAutoBackup');       if (el) el.checked = settings.autoBackup;
+
+  // ✅ 新增：渲染 mindsetMinScore
+  el = document.getElementById('setMindsetMinScore');
+  if (el) el.value = settings.mindsetMinScore !== undefined ? settings.mindsetMinScore : 3;
+
+  // ✅ 新增：渲染 customStopLimit 字段（简化版：显示为文本框，JSON 格式）
+  el = document.getElementById('setCustomStopLimit');
+  if (el) el.value = settings.customStopLimit && Object.keys(settings.customStopLimit).length > 0
+    ? JSON.stringify(settings.customStopLimit)
+    : '';
 }
 
 /**
@@ -65,7 +78,7 @@ function renderSettings() {
 function saveSettings() {
   var settings = loadSettings();
 
-  // 读取 + 验证
+  // 读取 + 验证（原有字段）
   var fields = [
     { key: 'accountBalance',  id: 'setAccountBalance',  parser: parseFloat },
     { key: 'riskPercent',     id: 'setRiskPercent',     parser: parseFloat },
@@ -93,9 +106,41 @@ function saveSettings() {
     settings[f.key] = val;
   }
 
+  // ✅ 新增：保存 mindsetMinScore（整数，范围 1-5）
+  var mindsetEl = document.getElementById('setMindsetMinScore');
+  if (mindsetEl) {
+    var msVal = parseInt(mindsetEl.value) || 3;
+    if (msVal < 1) msVal = 1;
+    if (msVal > 5) msVal = 5;
+    settings.mindsetMinScore = msVal;
+  }
+
+  // ✅ 新增：保存 customStopLimit（JSON 格式字符串解析）
+  var stopLimitEl = document.getElementById('setCustomStopLimit');
+  if (stopLimitEl) {
+    try {
+      var customRaw = stopLimitEl.value.trim();
+      if (customRaw && customRaw !== '{}') {
+        var customParsed = JSON.parse(customRaw);
+        if (typeof customParsed === 'object' && customParsed !== null) {
+          settings.customStopLimit = customParsed;
+        } else {
+          settings.customStopLimit = {};
+        }
+      } else {
+        settings.customStopLimit = {};
+      }
+    } catch(e) {
+      showToast('自定义止损比例格式无效（请输入有效的 JSON 对象，如 {"ETH":2,"BTC":3}）', 'warn');
+      settings.customStopLimit = {}; // 保持原状或清空
+    }
+  }
+
   // 布尔值
   var autoBackupEl = document.getElementById('setAutoBackup');
-  settings.autoBackup = autoBackupEl ? autoBackupEl.checked : true;
+  if (autoBackupEl) {
+    settings.autoBackup = autoBackupEl.checked;
+  }
 
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
 

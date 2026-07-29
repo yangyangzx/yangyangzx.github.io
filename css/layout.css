@@ -9,9 +9,19 @@ body {
   display: flex;
   flex-direction: row;
   margin: 0;
-  background: #0d1117;
-  background-image: radial-gradient(ellipse at 20% 20%, rgba(59, 130, 246, 0.04) 0%, transparent 50%),
-                    radial-gradient(ellipse at 80% 80%, rgba(139, 92, 246, 0.03) 0%, transparent 50%);
+  background: var(--color-bg);
+  background-image:
+    radial-gradient(ellipse at 20% 20%, rgba(59, 130, 246, 0.04) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 80%, rgba(139, 92, 246, 0.03) 0%, transparent 50%);
+
+  /* 浅色主题的背景微调 */
+  transition: background 0.3s ease, color 0.3s ease;
+}
+
+[data-theme="light"] body {
+  background-image:
+    radial-gradient(ellipse at 20% 20%, rgba(59, 130, 246, 0.02) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 80%, rgba(139, 92, 246, 0.015) 0%, transparent 50%);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -35,6 +45,12 @@ body {
   overflow-x: hidden;
   flex-shrink: 0;
   border-right: 1px solid var(--glass-border);
+}
+
+[data-theme="light"] #mainNav {
+  /* 浅色主题下导航更坚实一点 */
+  background: rgba(248, 250, 252, 0.98);
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.03);
 }
 
 .nav-header {

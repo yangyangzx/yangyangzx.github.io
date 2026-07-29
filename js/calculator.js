@@ -433,7 +433,7 @@ function calculate() {
     else { resultBox.classList.remove('warn'); }
   }
 
-  window._lastCalc={ symbol,entryPrice,capital,riskAmount,riskPercent,leverage:leverage,direction,stopLoss,lossStreak,targetPrice:isNaN(targetPrice)?null:targetPrice,positionSize:finalPos,stopDistance,stopPct,liquidationPrice,cappedByLiquidation,targetRR,targetPct,reason:getReason(),signals:getSignals(),actualMargin:finalMargin,fee:parseFloat(fee.toFixed(2)),slippageCost:parseFloat(slippageCost.toFixed(2)),totalCost:parseFloat(totalCost.toFixed(2)),splitMode:_splitMode,weightedStopDistance:useWeightedStop?stopDistance:null };
+  window._lastCalc={ symbol,entryPrice,capital,riskAmount,riskPercent,leverage:leverage,direction,stopLoss,lossStreak,targetPrice:isNaN(targetPrice)?null:targetPrice,positionSize:finalPos,stopDistance,stopPct,liquidationPrice,cappedByLiquidation,targetRR,targetPct,reason:getReason(),signals:getSignals(),actualMargin:finalMargin,fee:parseFloat(fee.toFixed(2)),slippageCost:parseFloat(slippageCost.toFixed(2)),totalCost:parseFloat(totalCost.toFixed(2)),splitMode:_splitMode,weightedStopDistance:useWeightedStop?stopDistance:null, mindsetScore: parseInt(document.getElementById('mindsetScore').value) || 3 };
   // 自动滚动到结果区
   if (resultBox) resultBox.scrollIntoView({behavior:'smooth'});
   if (typeof updateChecklist === 'function') updateChecklist();
@@ -495,6 +495,13 @@ window.saveTradeAction = saveTradeAction;
 function saveLog() {
   const calc = window._lastCalc;
   if (!calc || !calc.positionSize || calc.positionSize<=0) { showToast('请先点击「计算仓位」生成有效数据','warn'); return; }
+
+  // 获取检查清单结果（如已计算）
+  var checklistResults = {};
+  if (calc.checklistResults) {
+    checklistResults = calc.checklistResults;
+  }
+
   const now = new Date();
   const entry = {
     time: now.toISOString(),
@@ -511,6 +518,7 @@ function saveLog() {
     fee: calc.fee != null ? calc.fee : 0,
     slippageCost: calc.slippageCost != null ? calc.slippageCost : 0,
     targetRR: calc.targetRR != null ? calc.targetRR : null,
+    stopPct: calc.stopPct,                                          // ✅ 新增：持久化止损距离百分比
     groupId: null,
     groupLabel: null,
     reason: calc.reason || getReason(),
@@ -533,7 +541,8 @@ function saveLog() {
     lossReason: null,
     emotions: null,
     actions: [],
-    splitEntries: getSplitEntries()
+    splitEntries: getSplitEntries(),
+    checklistResults: checklistResults  // ✅ 新增：持久化检查结果至日志
   };
   logs.push(entry);
   openClosePanelIdx = -1;

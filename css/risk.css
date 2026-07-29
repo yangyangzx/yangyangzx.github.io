@@ -14,9 +14,9 @@
 /* 风控中心关键文本使用深色以确保可读性 */
 .risk-muted   { color: var(--color-text-secondary) !important; }
 
-.risk-badge-safe   { background: var(--color-success-bg);  color: var(--color-success); padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
-.risk-badge-warn   { background: var(--color-warning-bg);  color: var(--color-warning); padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
-.risk-badge-danger { background: var(--color-danger-bg);  color: var(--color-danger); padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+.risk-badge-safe   { background: var(--color-success-bg);  color: var(--color-success); padding: 2px 8px; border-radius: var(--radius-xs); font-size: 12px; font-weight: 600; }
+.risk-badge-warn   { background: var(--color-warning-bg);  color: var(--color-warning); padding: 2px 8px; border-radius: var(--radius-xs); font-size: 12px; font-weight: 600; }
+.risk-badge-danger { background: var(--color-danger-bg);  color: var(--color-danger); padding: 2px 8px; border-radius: var(--radius-xs); font-size: 12px; font-weight: 600; }
 
 /* Risk center dashboard grid layout */
 .risk-dashboard {

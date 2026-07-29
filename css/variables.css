@@ -1,4 +1,17 @@
 /* ==================== CSS 变量体系 ==================== */
+
+/* prefers-color-scheme 兜底：JS 加载前使用深色主题默认值 */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    --color-bg:             #ffffff;
+    --color-surface:        rgba(255, 255, 255, 0.9);
+    --color-text:           #1e293b;
+    --color-text-secondary: #64748b;
+    --color-text-muted:     #94a3b8;
+    --color-text-inverse:   #ffffff;
+  }
+}
+
 :root {
   /* 主色板 */
   --color-primary:        #3b82f6;
@@ -28,7 +41,11 @@
   --color-gold-dark:      #f59e0b;
   --color-gold-bg:        rgba(251, 191, 36, 0.08);
 
-  /* 深色主题中性色 */
+  /* PnL 专用色（正/负盈亏，深色模式亮色、浅色模式深色以保证对比度） */
+  --color-pnl-positive:   #4ade80;
+  --color-pnl-negative:   #f87171;
+
+  /* ———— 深色主题（默认） ———— */
   --color-bg:             #0f172a;
   --color-bg-gradient:    linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
   --color-surface:        rgba(30, 41, 59, 0.7);
@@ -40,9 +57,24 @@
   /* 文字色 */
   --color-text:           #f1f5f9;
   --color-text-secondary: #cbd5e1;
-  --color-text-muted:     #94a3b8;
+  --color-text-muted:     #b0bec5;
   --color-text-placeholder: #64748b;
   --color-text-inverse:   #0f172a;
+
+  /* 毛玻璃效果（深色） */
+  --glass-bg:           rgba(30, 41, 59, 0.6);
+  --glass-bg-light:     rgba(51, 65, 85, 0.4);
+  --glass-bg-heavy:     rgba(30, 41, 59, 0.85);
+  --glass-border:       rgba(148, 163, 184, 0.1);
+  --glass-border-light: rgba(255, 255, 255, 0.05);
+  --glass-blur:         blur(18px);
+  --glass-blur-light:   blur(12px);
+  --glass-blur-heavy:   blur(28px);
+  --glass-shadow:       0 8px 32px rgba(0, 0, 0, 0.3);
+
+  /* 导航背景 */
+  --nav-bg:               rgba(30, 41, 59, 0.8);
+  --nav-border:           rgba(148, 163, 184, 0.1);
 
   /* 圆角系统 */
   --radius-xs:  6px;
@@ -57,17 +89,6 @@
   --shadow-md:  0 4px 16px rgba(0,0,0,0.2), 0 1px 2px rgba(0,0,0,0.1);
   --shadow-lg:  0 12px 40px rgba(0,0,0,0.25), 0 4px 12px rgba(0,0,0,0.15);
   --shadow-xl:  0 20px 60px rgba(0,0,0,0.3), 0 8px 20px rgba(0,0,0,0.2);
-
-  /* 毛玻璃效果 */
-  --glass-bg:           rgba(30, 41, 59, 0.6);
-  --glass-bg-light:     rgba(51, 65, 85, 0.4);
-  --glass-bg-heavy:     rgba(30, 41, 59, 0.85);
-  --glass-border:       rgba(148, 163, 184, 0.1);
-  --glass-border-light: rgba(255, 255, 255, 0.05);
-  --glass-blur:         blur(18px);
-  --glass-blur-light:   blur(12px);
-  --glass-blur-heavy:   blur(28px);
-  --glass-shadow:       0 8px 32px rgba(0, 0, 0, 0.3);
 
   /* 排版 */
   --font-xs:    11px;
@@ -97,6 +118,77 @@
   --transition-slow:   0.3s ease;
 }
 
+/* ———— 浅色主题模式 ———— */
+[data-theme="light"] {
+  /* 主色板（保持不变） */
+  --color-primary:        #3b82f6;
+  --color-primary-dark:   #2563eb;
+  --color-primary-light:  #60a5fa;
+  --color-primary-bg:     rgba(59, 130, 246, 0.08);
+  --color-primary-border: rgba(59, 130, 246, 0.2);
+
+  --color-success:        #10b981;
+  --color-success-dark:   #059669;
+  --color-success-light:  #34d399;
+  --color-success-bg:     rgba(16, 185, 129, 0.08);
+  --color-success-border: rgba(16, 185, 129, 0.2);
+
+  --color-danger:         #ef4444;
+  --color-danger-dark:    #dc2626;
+  --color-danger-bg:      rgba(239, 68, 68, 0.08);
+  --color-danger-border:  rgba(239, 68, 68, 0.2);
+
+  --color-warning:        #f59e0b;
+  --color-warning-dark:   #d97706;
+  --color-warning-bg:     rgba(245, 158, 11, 0.08);
+  --color-warning-border: rgba(245, 158, 11, 0.2);
+
+  --color-gold:           #fbbf24;
+  --color-gold-dark:      #f59e0b;
+  --color-gold-bg:        rgba(251, 191, 36, 0.08);
+
+  /* PnL 专用色（浅色模式深色以保证对比度≥4.5:1） */
+  --color-pnl-positive:   #16a34a;
+  --color-pnl-negative:   #dc2626;
+
+  /* ———— 浅色主题背景 ———— */
+  --color-bg:             #ffffff;
+  --color-bg-gradient:    linear-gradient(135deg, #ffffff 0%, #f8fafc 50%, #e2e8f0 100%);
+  --color-surface:        rgba(255, 255, 255, 0.9);
+  --color-surface-hover:  rgba(248, 250, 252, 0.9);
+  --color-surface-raised: rgba(255, 255, 255, 0.95);
+  --color-border:         rgba(148, 163, 184, 0.2);
+  --color-border-light:   rgba(148, 163, 184, 0.15);
+
+  /* 文字色（反转） */
+  --color-text:           #1e293b;
+  --color-text-secondary: #64748b;
+  --color-text-muted:     #94a3b8;
+  --color-text-placeholder: #64748b;
+  --color-text-inverse:   #ffffff;
+
+  /* 毛玻璃效果（浅色）- 增强层次确保圆角可见 */
+  --glass-bg:           rgba(255, 255, 255, 0.88);      /* 更高透明度保证背景可见 */
+  --glass-bg-light:     rgba(255, 255, 255, 0.78);
+  --glass-bg-heavy:     rgba(248, 250, 252, 0.96);      /* 导航用浅灰非纯白 */
+  --glass-border:       rgba(148, 163, 184, 0.38);      /* 稍深边框显圆角 */
+  --glass-border-light: rgba(148, 163, 184, 0.28);
+  --glass-blur:         blur(12px);
+  --glass-blur-light:   blur(8px);
+  --glass-blur-heavy:   blur(20px);
+  --glass-shadow:       0 4px 12px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0,0,0,0.04);
+
+  /* 导航背景（浅色） */
+  --nav-bg:               rgba(248, 250, 252, 0.95);      /* 浅灰底色而非纯白，增加层次感 */
+  --nav-border:           rgba(148, 163, 184, 0.2);
+
+  /* 浅色主题更轻的阴影 */
+  --shadow-sm:  0 1px 3px rgba(0,0,0,0.06);
+  --shadow-md:  0 2px 8px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-lg:  0 6px 20px rgba(0,0,0,0.1), 0 2px 6px rgba(0,0,0,0.06);
+  --shadow-xl:  0 10px 30px rgba(0,0,0,0.12), 0 4px 10px rgba(0,0,0,0.08);
+}
+
 
 /* ─── Apple Design §14: Reduced Motion ─── */
 @media (prefers-reduced-motion: reduce) {
@@ -116,7 +208,11 @@
   .dash-card,
   .review-card,
   .card,
-  .nav-item {
+  .nav-item,
+  .toast,
+  .result-card.margin-danger,
+  .mindset-reminder,
+  .close-panel-row {
     animation: reducedFadeIn 200ms ease forwards !important;
   }
   @keyframes reducedFadeIn {

@@ -80,6 +80,11 @@
   transition: transform 100ms ease-out;
 }
 
+.modal-tab:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+}
+
 .modal-tab.active {
   color: var(--color-primary);
   border-bottom-color: var(--color-primary);
@@ -216,7 +221,7 @@
 }
 
 .toast.success { 
-  background: rgba(16, 185, 129, 0.15); 
+  background: var(--color-success-bg); 
   color: var(--color-success); 
   border-color: var(--color-success-border); 
 }

@@ -19,8 +19,9 @@
   flex-direction: column;
   gap: 8px;
   transition: all var(--transition-normal);
-  /* §12: Material entrance — cards arrive with scale+blur */
   animation: materialIn 0.45s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+  will-change: transform;
+  content-visibility: auto;
 }
 
 .dash-card:hover {
@@ -94,12 +95,12 @@
 }
 
 .dash-card-value.pnl-positive {
-  color: #4ade80;
+  color: var(--color-pnl-positive);
   text-shadow: 0 0 16px rgba(74, 222, 128, 0.15);
 }
 
 .dash-card-value.pnl-negative {
-  color: #f87171;
+  color: var(--color-pnl-negative);
   text-shadow: 0 0 16px rgba(248, 113, 113, 0.12);
 }
 
@@ -116,12 +117,12 @@
 
 /* PnL 箭头 */
 .pnl-arrow-up {
-  color: #4ade80;
+  color: var(--color-pnl-positive);
   font-size: 16px;
 }
 
 .pnl-arrow-down {
-  color: #f87171;
+  color: var(--color-pnl-negative);
   font-size: 16px;
 }
 
@@ -214,7 +215,7 @@
   padding: 6px 10px;
   background: var(--color-danger-bg);
   border-left: 3px solid var(--color-danger);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 
 .liq-item-symbol {

@@ -1,3 +1,74 @@
+// ==================== 主题管理器 ====================
+// 独立于 DOMContentLoaded，页面随时可调用
+var ThemeManager = (function() {
+  var THEME_KEY = 'user_theme_v1';
+
+  // 从 localStorage 加载主题，或根据系统偏好自动选择
+  function loadPreferredTheme() {
+    // 优先读取用户手动设置
+    var saved = localStorage.getItem(THEME_KEY);
+    if (saved === 'light' || saved === 'dark') {
+      return saved;
+    }
+    // 其次检查系统偏好（prefers-color-scheme）
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+      return 'light';
+    }
+    return 'dark'; // 默认深色
+  }
+
+  function applyTheme(theme) {
+    if (theme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+      var btn = document.getElementById('themeToggleBtn');
+      if (btn) {
+        btn.innerHTML = '<i class="fas fa-sun"></i>';
+        btn.title = '切换到深色模式';
+      }
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+      var btn = document.getElementById('themeToggleBtn');
+      if (btn) {
+        btn.innerHTML = '<i class="fas fa-moon"></i>';
+        btn.title = '切换到浅色模式';
+      }
+    }
+    localStorage.setItem(THEME_KEY, theme);
+  }
+
+  function toggle() {
+    var current = document.documentElement.getAttribute('data-theme');
+    var newTheme = current === 'light' ? 'dark' : 'light';
+    applyTheme(newTheme);
+    return newTheme;
+  }
+
+  // 初始化：应用保存的主题或绑定按钮
+  function init() {
+    var preferred = loadPreferredTheme();
+    applyTheme(preferred);
+
+    // 绑定切换按钮（只绑定一次）
+    var btn = document.getElementById('themeToggleBtn');
+    if (btn && !btn._themeListenerBound) {
+      btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        toggle();
+      });
+      btn._themeListenerBound = true;
+    }
+  }
+
+  return { init, toggle, applyTheme };
+})();
+
+// 如果 DOM 已就绪，立即初始化；否则等待 DOMContentLoaded
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', function() { ThemeManager.init(); });
+} else {
+  ThemeManager.init();
+}
+
 // ==================== 初始化 ====================
 document.addEventListener('DOMContentLoaded', function() {
   loadLogs();
@@ -101,8 +172,8 @@ document.addEventListener('DOMContentLoaded', function() {
   // ==================== 键盘快捷键系统 ====================
   document.addEventListener('keydown', function(e) {
     const target = e.target;
-    const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
-    
+    const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEdited;
+
     if (isInput && !e.ctrlKey && !e.metaKey) return;
 
     // Ctrl+1~7 切换视图
@@ -145,6 +216,7 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     }
   });
+
 });
 
 // ==================== 过滤器控制 ====================

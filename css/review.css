@@ -33,7 +33,7 @@
 
 /* §12: Material entrance — card arrives with scale+blur */
 .review-card {
-  animation: materialIn 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+  animation: materialIn 0.45s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
 }
 
 .review-card-header {
@@ -161,11 +161,11 @@
 }
 
 .strategy-rank-pnl.risk-safe {
-  color: #4ade80;
+  color: var(--color-pnl-positive);
 }
 
 .strategy-rank-pnl.risk-danger {
-  color: #f87171;
+  color: var(--color-pnl-negative);
 }
 
 .strategy-rank-meta {
@@ -215,12 +215,12 @@
 }
 
 .emotion-table .risk-safe {
-  color: #4ade80;
+  color: var(--color-pnl-positive);
   font-weight: 600;
 }
 
 .emotion-table .risk-danger {
-  color: #f87171;
+  color: var(--color-pnl-negative);
   font-weight: 600;
 }
 
@@ -230,13 +230,13 @@
 }
 
 .emotion-table .col-pnl-pos {
-  color: #4ade80;
+  color: var(--color-pnl-positive);
   font-weight: 700;
   text-align: right;
 }
 
 .emotion-table .col-pnl-neg {
-  color: #f87171;
+  color: var(--color-pnl-negative);
   font-weight: 700;
   text-align: right;
 }
