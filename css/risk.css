@@ -134,6 +134,18 @@
 .risk-liq-table .liq-dist-warn   { color: var(--color-warning);  font-weight: 600; }
 .risk-liq-table .liq-dist-danger { color: var(--color-danger);  font-weight: 600; }
 
+/* ——— 风险集中度表格容器（防截断） ——— */
+.risk-concentration-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.risk-conc-table {
+  table-layout: auto;
+  white-space: nowrap;
+  min-width: 100%;
+}
+
 /* ——— 空状态 ——— */
 .risk-empty {
   text-align: center;

@@ -760,6 +760,8 @@ tbody tr:hover > td {
 .log-row:hover .batch-col .batch-checkbox { 
   opacity: 1; 
   pointer-events: auto; 
+  position: relative;
+  z-index: 1;
 }
 
 .batch-mode .batch-col .batch-checkbox { 

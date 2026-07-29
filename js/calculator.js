@@ -180,14 +180,15 @@ function calculate() {
   const maxPos = availableCapital * Math.max(leverage, 1);
   var cappedByMargin = false, capMsg = '';
 
-  // 保证金 60% 硬上限（仅杠杆合约）：margin = positionSize / leverage ≤ capital * 0.6
+  // 保证金 80% 硬上限（仅杠杆合约）：margin = positionSize / leverage ≤ capital * 0.8
+  // 设计依据：单笔保证金不超过可用本金 80%，在相同风险下最大化保证金以获取高收益
   if (leverage > 0) {
-    const marginLimitPos = availableCapital * leverage * 0.6;
+    const marginLimitPos = availableCapital * leverage * 0.8;
     if (positionSize > marginLimitPos) {
       const origMargin = positionSize / leverage;
       riskAmount = marginLimitPos * stopDistance / entryPrice;
       riskPercent = riskAmount / capital;
-      capMsg = '<span class="warning-tag alert"><i class="fas fa-shield-alt"></i> 保证金触及 60% 上限：原需 ' + origMargin.toFixed(2) + ' USDT（' + (origMargin / capital * 100).toFixed(1) + '% 本金），已截断至 ' + (marginLimitPos / leverage).toFixed(2) + ' USDT（60% 本金）。实际风险额 ' + riskAmount.toFixed(2) + ' USDT。建议放宽止损距离或降低风险比例。</span>';
+      capMsg = '<span class="warning-tag alert"><i class="fas fa-shield-alt"></i> 保证金触及 80% 上限：原需 ' + origMargin.toFixed(2) + ' USDT（' + (origMargin / capital * 100).toFixed(1) + '% 本金），已截断至 ' + (marginLimitPos / leverage).toFixed(2) + ' USDT（80% 本金）。实际风险额 ' + riskAmount.toFixed(2) + ' USDT。建议放宽止损距离或降低风险比例。</span>';
       positionSize = marginLimitPos;
       cappedByMargin = true;
     }
@@ -200,6 +201,28 @@ function calculate() {
     riskAmount = maxPos * stopDistance / entryPrice;
     riskPercent = riskAmount / capital;
     positionSize = maxPos;
+  }
+
+  // ===== 多品种聚合上限：总保证金（已有 + 新开）≤ 本金 × 90% =====
+  if (leverage > 0) {
+    var newMargin = positionSize / leverage;
+    var totalMargin = usedMargin + newMargin;
+    var aggregateLimit = capital * 0.9;
+    if (totalMargin > aggregateLimit) {
+      var maxNewMargin = aggregateLimit - usedMargin;
+      if (maxNewMargin > 0) {
+        var aggCappedPos = maxNewMargin * leverage;
+        riskAmount = aggCappedPos * stopDistance / entryPrice;
+        riskPercent = riskAmount / capital;
+        capMsg = (capMsg ? capMsg + ' ' : '') + '<span class="warning-tag alert"><i class="fas fa-layer-group"></i> 总保证金触及 90% 聚合上限：已有 ' + usedMargin.toFixed(2) + ' + 新增 ' + newMargin.toFixed(2) + ' = ' + totalMargin.toFixed(2) + ' USDT（' + (totalMargin / capital * 100).toFixed(1) + '% 本金），已截断新仓位保证金至 ' + maxNewMargin.toFixed(2) + ' USDT。</span>';
+        positionSize = aggCappedPos;
+        cappedByMargin = true;
+      } else {
+        capMsg = (capMsg ? capMsg + ' ' : '') + '<span class="warning-tag alert"><i class="fas fa-layer-group"></i> 总保证金已达 90% 聚合上限：已有持仓已占用 ' + usedMargin.toFixed(2) + ' USDT（' + (usedMargin / capital * 100).toFixed(1) + '% 本金），无法再开新仓。请平仓后重试。</span>';
+        positionSize = 0;
+        cappedByMargin = true;
+      }
+    }
   }
 
   // ===== 止损 vs 强平价校验（仅杠杆合约，现货跳过） =====
@@ -231,14 +254,14 @@ function calculate() {
   let adjPos=positionSize, adjMsg='';
   let adjustedRisk = false;
   if (lossStreak>=3) {
-    adjPos = positionSize * 0.6;
+    adjPos = positionSize * 0.8;
     // Proportionally reduce risk amount to maintain consistent R multiple
     // Risk amount = positionSize * stopDistance / entryPrice
     // When position is reduced, reduce risk by same factor
-    riskAmount = riskAmount * 0.6;
+    riskAmount = riskAmount * 0.8;
     riskPercent = riskAmount / capital;
     adjustedRisk = true;
-    adjMsg = '连续亏损 ' + lossStreak + ' 笔，建议降低仓位至 60% (≈' + adjPos.toFixed(2) + ' USDT';
+    adjMsg = '连续亏损 ' + lossStreak + ' 笔，建议降低仓位至 80% (≈' + adjPos.toFixed(2) + ' USDT';
   } else if (lossStreak>=2) { adjMsg = '连续亏损 ' + lossStreak + ' 笔，注意风险控制'; }
 
   const finalPos = lossStreak>=3 ? adjPos : positionSize;
@@ -690,7 +713,7 @@ function getActiveEntryPrice() {
 
 // ==================== 重置表单 ====================
 function resetForm() {
-  document.getElementById('symbol').value = 'BTC/USDT';
+  document.getElementById('symbol').value = 'BTC';
   document.getElementById('entryPrice').value = '';
   document.getElementById('capital').value = '1000';
   document.getElementById('riskInput').value = '2%';

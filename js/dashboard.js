@@ -1,31 +1,12 @@
 // ==================== 仪表盘渲染 ====================
 
 /**
- * 获取今日 00:00:00 的时间戳
- */
-function _getTodayStart() {
-  var now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-}
-
-/**
- * 获取本周一 00:00:00 的时间戳
- */
-function _getWeekStart() {
-  var now = new Date();
-  var day = now.getDay();
-  var diff = day === 0 ? 6 : day - 1; // 周一为一周开始
-  var monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - diff);
-  return new Date(monday.getFullYear(), monday.getMonth(), monday.getDate()).getTime();
-}
-
-/**
- * 筛选已平仓日志
+ * 筛选已平仓日志（统一使用 utils.isClosedTrade 判定）
  */
 function _getClosedLogs() {
   var result = [];
   for (var i = 0; i < logs.length; i++) {
-    if (logs[i].closeType && logs[i].pnlAmount != null && !isNaN(logs[i].pnlAmount)) {
+    if (window.utils.isClosedTrade(logs[i])) {
       result.push(logs[i]);
     }
   }
@@ -67,7 +48,7 @@ function _fmtPct(val) {
 
 // ==================== 卡片 1：今日 PnL ====================
 function _renderTodayPnl() {
-  var todayStart = _getTodayStart();
+  var todayStr = window.utils.toLocalDateStr(new Date().toISOString());
   var closed = _getClosedLogs();
   var totalPnl = 0;
   var count = 0;
@@ -75,8 +56,9 @@ function _renderTodayPnl() {
   for (var i = 0; i < closed.length; i++) {
     var ct = closed[i].closeTime;
     if (!ct) continue;
-    var ts = new Date(ct).getTime();
-    if (ts >= todayStart) {
+    var closeDateStr = window.utils.toLocalDateStr(ct);
+    if (!closeDateStr) continue;
+    if (closeDateStr === todayStr) {
       totalPnl += parseFloat(closed[i].pnlAmount) || 0;
       count++;
     }
@@ -106,7 +88,12 @@ function _renderTodayPnl() {
 
 // ==================== 卡片 2：本周胜率 ====================
 function _renderWinRate() {
-  var weekStart = _getWeekStart();
+  // 计算本周一的本地日期字符串
+  var now = new Date();
+  var day = now.getDay();
+  var diff = day === 0 ? 6 : day - 1;
+  var monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - diff);
+  var mondayStr = window.utils.toLocalDateStr(monday.toISOString());
   var closed = _getClosedLogs();
   var wins = [];
   var losses = [];
@@ -116,8 +103,9 @@ function _renderWinRate() {
   for (var i = 0; i < closed.length; i++) {
     var ct = closed[i].closeTime;
     if (!ct) continue;
-    var ts = new Date(ct).getTime();
-    if (ts >= weekStart) {
+    var closeDateStr = window.utils.toLocalDateStr(ct);
+    if (!closeDateStr) continue;
+    if (closeDateStr >= mondayStr) {
       var pnl = parseFloat(closed[i].pnlAmount) || 0;
       totalPnl += pnl;
       count++;
@@ -285,18 +273,13 @@ function _renderLiqWarn() {
     if (sl == null || isNaN(sl)) continue; // 无止损的仓位跳过
     var dir = log.direction;
 
-    // 强平价公式（含维持保证金率 MMR）
+    // 强平价：统一使用 utils.calcLiquidationPrice
     var mmr = 0.005;
     try {
       var raw = localStorage.getItem('trade_settings_v1');
       if (raw) { var s = JSON.parse(raw); if (s.mmr != null) mmr = s.mmr / 100; }
     } catch(e) {}
-    var liqPrice;
-    if (dir === 'long') {
-      liqPrice = entry * (1 - (1 - mmr) / lev);
-    } else {
-      liqPrice = entry * (1 + (1 - mmr) / lev);
-    }
+    var liqPrice = window.utils.calcLiquidationPrice(entry, dir, lev, mmr);
 
     // 检查止损是否在强平价之外（安全方向）
     var isSafe;
@@ -304,11 +287,11 @@ function _renderLiqWarn() {
     if (dir === 'long') {
       // 做多：止损价 > 强平价 才安全
       isSafe = sl > liqPrice;
-      distance = liqPrice > 0 ? ((sl - liqPrice) / liqPrice * 100) : 0;
+      distance = liqPrice > 0 ? ((sl - liqPrice) / sl * 100) : 0;
     } else {
       // 做空：止损价 < 强平价 才安全
       isSafe = sl < liqPrice;
-      distance = liqPrice > 0 ? (Math.abs(liqPrice - sl) / Math.abs(sl) * 100) : 0;
+      distance = liqPrice > 0 ? ((liqPrice - sl) / sl * 100) : 0;
     }
 
     if (!isSafe) {
@@ -383,11 +366,11 @@ function _renderEquityChart() {
 
   if (sorted.length === 0) {
     // 绘制灰色占位文字（使用 CSS 像素坐标，因为 ctx 已缩放）
-    ctx.clearRect(0, 0, rect.width, rect.height || 200);
+    ctx.clearRect(0, 0, rectWidth, rectHeight);
     ctx.fillStyle = '#cbd5e1';
     ctx.font = '13px -apple-system, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('暂无交易数据', rect.width / 2, ((rect.height || 200)) / 2);
+    ctx.fillText('暂无交易数据', rectWidth / 2, rectHeight / 2);
     return;
   }
 

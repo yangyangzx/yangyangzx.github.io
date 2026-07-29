@@ -123,24 +123,12 @@
           <div class="form-section-content grid-2">
             <div class="form-group">
               <label><i class="fas fa-coins"></i> 交易品种<span class="required-star">*</span></label>
-              <input type="text" id="symbol" list="symbolList" value="BTC/USDT" placeholder="输入或选择品种" />
-              <datalist id="symbolList">
-                <option value="BTC/USDT">
-                <option value="ETH/USDT">
-                <option value="SOL/USDT">
-                <option value="BNB/USDT">
-                <option value="XRP/USDT">
-                <option value="DOGE/USDT">
-                <option value="ADA/USDT">
-                <option value="AVAX/USDT">
-                <option value="LINK/USDT">
-                <option value="DOT/USDT">
-                <option value="ARB/USDT">
-                <option value="OP/USDT">
-                <option value="SUI/USDT">
-                <option value="APT/USDT">
-                <option value="GOLD/USDT">
-              </datalist>
+              <select id="symbol">
+                <option value="BTC">BTC</option>
+                <option value="ETH">ETH</option>
+                <option value="SOL">SOL</option>
+                <option value="GOLD">GOLD</option>
+              </select>
             </div>
             <div class="form-group">
               <label><i class="fas fa-arrow-right"></i> 入场价格<span class="required-star">*</span></label>
@@ -646,13 +634,13 @@
           <tr><td colspan="9" class="empty"><div class="empty-icon"><i class="fas fa-chart-bar"></i></div><div class="empty-title">暂无交易记录</div><div class="empty-sub">填写上方计算器，点击「保存日志」开始</div></td></tr>
         </tbody>
       </table>
-    </div>
-    <!-- 批量操作栏 -->
+    <!-- 批量操作栏 — 移入 table-wrap 内部，使 .batch-mode .batch-bar 选择器生效 -->
     <div class="batch-bar" id="batchBar">
       <span class="batch-count" id="batchCount">已选 0 条</span>
       <button class="batch-btn batch-btn-primary" id="batchExportBtn"><i class="fas fa-file-code"></i> 批量导出</button>
       <button class="batch-btn batch-btn-danger" id="batchDeleteBtn"><i class="fas fa-trash"></i> 批量删除</button>
       <button class="batch-btn batch-btn-ghost" id="batchCancelBtn">取消</button>
+    </div>
     </div>
     <div style="margin-top:16px; display:flex; gap:12px; flex-wrap:wrap; align-items:center; justify-content:space-between;">
       <span style="font-size:12px; color:#94a3b8; display:flex; align-items:center; gap:6px;">

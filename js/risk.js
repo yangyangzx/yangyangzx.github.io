@@ -6,7 +6,7 @@
 function getAccountCapital() {
   // 从最新的日志开始倒序查找第一个有 capital 的记录
   for (var i = logs.length - 1; i >= 0; i--) {
-    if (logs[i].capital != null && !isNaN(logs[i].capital)) {
+    if (logs[i].capital != null && !isNaN(parseFloat(logs[i].capital))) {
       return parseFloat(logs[i].capital);
     }
   }
@@ -32,14 +32,6 @@ function getOpenPositions() {
  */
 function getClosedSorted() {
   return window.utils.getClosedSorted();
-}
-
-/**
- * 获取今日 00:00:00
- */
-function getTodayStart() {
-  var now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
 }
 
 // ==================== 卡片渲染 ====================
@@ -78,10 +70,10 @@ function renderAccountOverview() {
 
   var exposureClass = 'risk-safe';
   var exposureBadge = 'risk-badge-safe';
-  if (exposurePct > 50) {
+  if (exposurePct > 80) {
     exposureClass = 'risk-danger';
     exposureBadge = 'risk-badge-danger';
-  } else if (exposurePct > 30) {
+  } else if (exposurePct > 50) {
     exposureClass = 'risk-warn';
     exposureBadge = 'risk-badge-warn';
   }
@@ -90,7 +82,7 @@ function renderAccountOverview() {
   html += '<div class="risk-stat-row"><span class="risk-stat-label">总余额</span><span class="risk-stat-value">' + capital.toFixed(2) + ' USDT</span></div>';
   html += '<div class="risk-stat-row"><span class="risk-stat-label">已占用保证金</span><span class="risk-stat-value">' + usedMargin.toFixed(2) + ' USDT</span></div>';
   html += '<div class="risk-stat-row"><span class="risk-stat-label">可用余额</span><span class="risk-stat-value">' + available.toFixed(2) + ' USDT</span></div>';
-  html += '<div class="risk-stat-row"><span class="risk-stat-label">风险敞口</span><span class="risk-stat-value ' + exposureClass + '">' + exposurePct.toFixed(1) + '% <span class="' + exposureBadge + '">' + (exposurePct > 50 ? '危险' : (exposurePct > 30 ? '警惕' : '安全')) + '</span></span></div>';
+  html += '<div class="risk-stat-row"><span class="risk-stat-label">风险敞口</span><span class="risk-stat-value ' + exposureClass + '">' + exposurePct.toFixed(1) + '% <span class="' + exposureBadge + '">' + (exposurePct > 80 ? '危险' : (exposurePct > 50 ? '警惕' : '安全')) + '</span></span></div>';
 
   container.innerHTML = html;
 }
@@ -100,13 +92,16 @@ function renderDailyLoss() {
   var container = document.getElementById('riskDailyContent');
   if (!container) return;
 
-  var todayStart = getTodayStart();
+  var todayStr = window.utils.toLocalDateStr(new Date().toISOString());
   var todayPnl = 0;
 
   for (var i = 0; i < logs.length; i++) {
-    if (logs[i].closeType && logs[i].pnlAmount != null) {
-      var closeTime = logs[i].closeTime ? new Date(logs[i].closeTime) : null;
-      if (closeTime && closeTime >= todayStart) {
+    if (window.utils.isClosedTrade(logs[i])) {
+      var ct = logs[i].closeTime;
+      if (!ct) continue;
+      var closeDateStr = window.utils.toLocalDateStr(ct);
+      if (!closeDateStr) continue;
+      if (closeDateStr === todayStr) {
         todayPnl += parseFloat(logs[i].pnlAmount) || 0;
       }
     }
@@ -236,6 +231,7 @@ function renderLiqTable() {
   for (var i = 0; i < openPositions.length; i++) {
     var pos = openPositions[i];
     if (pos.leverage <= 0) continue; // 现货跳过
+    if (pos.stopLoss == null || pos.stopLoss === '' || isNaN(parseFloat(pos.stopLoss))) continue; // 无止损价，无法计算安全距离
 
     var entryPrice = pos.entryPrice;
     var stopLoss = pos.stopLoss;
@@ -322,15 +318,16 @@ function renderConcentration() {
   }
 
   var symbolRows = [];
-  var totalSymbolMargin = 0;
-  for (var sym in symbolMargin) {
-    totalSymbolMargin += symbolMargin[sym];
+  // 合并所有出现过的品种（包括仅有已平仓记录的品种）
+  var allSymbols = {};
+  for (var sym in symbolMargin) { allSymbols[sym] = true; }
+  for (var sym in symbolCount) { allSymbols[sym] = true; }
+  for (var sym2 in allSymbols) {
+    var margin = symbolMargin[sym2] || 0;
+    var pct = capital > 0 ? (margin / capital * 100) : 0;
+    symbolRows.push({ symbol: sym2, margin: margin, pct: pct, count: symbolCount[sym2] || 0 });
   }
-  for (var sym2 in symbolMargin) {
-    var pct = capital > 0 ? (symbolMargin[sym2] / capital * 100) : 0;
-    symbolRows.push({ symbol: sym2, margin: symbolMargin[sym2], pct: pct, count: symbolCount[sym2] });
-  }
-  symbolRows.sort(function(a, b) { return b.pct - a.pct; });
+  symbolRows.sort(function(a, b) { return b.pct - a.pct || b.count - a.count; });
 
   // 杠杆集中度
   var leverageBuckets = { '1x(现货)': 0, '5-20x': 0, '50x': 0, '100x': 0 };
@@ -345,17 +342,18 @@ function renderConcentration() {
   var html = '';
 
   // 品种集中度表格
-  html += '<table class="risk-liq-table" style="margin-bottom:16px;"><thead><tr><th>品种</th><th>保证金占用</th><th>占本金%</th><th>持仓笔数</th></tr></thead><tbody>';
+  html += '<div class="risk-concentration-wrap"><table class="risk-liq-table risk-conc-table" style="margin-bottom:16px;"><thead><tr><th>品种</th><th>保证金(USDT)</th><th>占本金%</th><th>持仓笔数</th></tr></thead><tbody>';
   if (symbolRows.length === 0) {
     html += '<tr><td colspan="4" style="text-align:center;color:var(--color-text-placeholder);padding:8px;">无持仓</td></tr>';
   } else {
     for (var sr = 0; sr < symbolRows.length; sr++) {
       var r = symbolRows[sr];
       var cls = r.pct > 50 ? 'liq-dist-danger' : (r.pct > 30 ? 'liq-dist-warn' : '');
-      html += '<tr><td>' + r.symbol + '</td><td>' + r.margin.toFixed(2) + ' U</td><td class="' + cls + '">' + r.pct.toFixed(1) + '%</td><td>' + r.count + '</td></tr>';
+      var marginDisplay = r.margin > 0 ? r.margin.toFixed(2) + ' USDT' : '<span style="color:var(--color-text-muted);">—</span>';
+      html += '<tr><td>' + r.symbol + '</td><td>' + marginDisplay + '</td><td class="' + cls + '">' + r.pct.toFixed(1) + '%</td><td>' + r.count + '</td></tr>';
     }
   }
-  html += '</tbody></table>';
+  html += '</tbody></table></div>';
 
   // 杠杆分布
   html += '<div style="font-size:12px;color:var(--color-text-muted);margin-bottom:4px;">杠杆分布（当前持仓）</div>';
