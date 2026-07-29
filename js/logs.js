@@ -31,7 +31,9 @@ function calcClosePnL(idx) {
     if (rMultipleEl) rMultipleEl.value = '';
     return;
   }
-  const entryPrice = parseFloat(item.entryPrice);
+  const entryPrice = (item.effectiveEntryPrice != null && !isNaN(parseFloat(item.effectiveEntryPrice)))
+    ? parseFloat(item.effectiveEntryPrice)
+    : parseFloat(item.entryPrice);
   const positionSize = parseFloat(item.positionSize);
   if (isNaN(entryPrice) || entryPrice <= 0 || isNaN(positionSize) || positionSize <= 0) return;
   if (item.direction !== 'long' && item.direction !== 'short') {

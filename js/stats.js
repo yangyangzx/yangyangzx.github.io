@@ -241,6 +241,7 @@ function updateStats() {
   // 权益曲线 & 策略拆解
   try { drawEquityCurve(closed); } catch(e) { console.error('[updateStats] drawEquityCurve error:', e); }
   try { renderStrategyBreakdown(closed); } catch(e) { console.error('[updateStats] renderStrategyBreakdown error:', e); }
+  try { renderOrderTypeDistribution(closed); } catch(e) { console.error('[updateStats] renderOrderTypeDistribution error:', e); }
   try { renderEmotionStats(closed); } catch(e) { console.error('[updateStats] renderEmotionStats error:', e); }
 }
 
@@ -248,8 +249,14 @@ function updateStats() {
 function drawEquityCurve(closed) {
   const card = document.getElementById('equity-card');
   if (!card) return;
-  if (!closed || closed.length < 2) { card.style.display = 'none'; return; }
+  const curve = window.utils.calcEquityCurve(closed);
+  if (!curve || curve.data.length < 2) { card.style.display = 'none'; return; }
   card.style.display = 'block';
+
+  // 保留排序后的原始日志用于 tooltip 展示
+  var sortedClosed = [].concat(closed).sort(function(a, b) {
+    return new Date(a.closeTime || a.time) - new Date(b.closeTime || b.time);
+  });
 
   const canvas = document.getElementById('equityCanvas');
   const tooltip = document.getElementById('equity-tooltip');
@@ -266,29 +273,9 @@ function drawEquityCurve(closed) {
   const ctx = canvas.getContext('2d');
   ctx.scale(dpr, dpr);
 
-  // 累积盈亏 & 摘要
-  const data = [];
-  // 先按平仓时间排序，确保时序正确
-  const sortedClosed = [...closed].sort(function(a, b) { return new Date(a.closeTime || a.time) - new Date(b.closeTime || b.time); });
-  // 初始权益：从首笔已平仓日志的 capital 取，无则从 settings.accountBalance 兜底
-  var _initCap = 0;
-  if (sortedClosed.length > 0 && sortedClosed[0].capital != null && !isNaN(sortedClosed[0].capital) && sortedClosed[0].capital > 0) {
-    _initCap = sortedClosed[0].capital;
-  } else {
-    try { var _s2 = loadSettings(); if (_s2.accountBalance > 0) _initCap = _s2.accountBalance; } catch(e) {}
-  }
-  let cum = _initCap, peakVal = _initCap, maxDD = 0;
-  for (const l of sortedClosed) {
-    // M5: 仅当 capital 变化时才视为存款/取款事件，否则累加 PnL
-    if (l.capital != null && !isNaN(l.capital) && l.capital !== cum) {
-      cum = l.capital;
-    } else {
-      cum += (parseFloat(l.pnlAmount) || 0);
-    }
-    data.push({ idx: data.length + 1, eq: cum, item: l, date: _getTradeDate(l) });
-    peakVal = Math.max(peakVal, cum);
-    maxDD = peakVal > 0 ? Math.max(maxDD, (peakVal - cum) / peakVal * 100) : maxDD;
-  }
+  const data = curve.data;
+  const peakVal = curve.peakVal;
+  const maxDD = curve.maxDDPercent;
 
   document.getElementById('equityPeak').textContent = (peakVal >= 0 ? '+' : '') + peakVal.toFixed(2) + ' USDT';
   const ddEl = document.getElementById('equityDrawdown');
@@ -338,7 +325,7 @@ function drawEquityCurve(closed) {
   const xSteps = Math.min(data.length, 8);
   const step = Math.max(Math.floor(data.length / xSteps), 1);
   for (let i = 0; i < data.length; i += step) {
-    ctx.fillText(data[i].date.slice(5), xScale(i), H - 4);
+    ctx.fillText(_getTradeDate(sortedClosed[i]).slice(5), xScale(i), H - 4);
   }
 
   // 曲线：分段着色
@@ -375,8 +362,9 @@ function drawEquityCurve(closed) {
     if (closest === null || closestDist > 30) { tooltip.style.display = 'none'; return; }
     const d = data[closest];
     const eq = d.eq >= 0 ? '+' + d.eq.toFixed(2) : d.eq.toFixed(2);
-    tooltip.innerHTML = '<b>#' + d.idx + ' ' + d.item.symbol + '</b><br>' +
-      d.date + '<br>' +
+    var sc = sortedClosed[closest];
+    tooltip.innerHTML = '<b>#' + (closest + 1) + ' ' + (sc.symbol || '') + '</b><br>' +
+      _getTradeDate(sc) + '<br>' +
       '盈亏: ' + eq + ' USDT<br>' +
       '累计: ' + (d.eq >= 0 ? '+' : '') + d.eq.toFixed(2) + ' USDT';
     tooltip.style.display = 'block';
@@ -455,6 +443,72 @@ function renderStrategyBreakdown(closed) {
       '<td>' + (r.wlR > 0 ? r.wlR.toFixed(2) + ':1' : '—') + '</td>' +
       '<td>' + (r.pf === Infinity ? '∞' : r.pf.toFixed(2)) + '</td>' +
       '<td>' + (r.avgMAE !== null ? r.avgMAE.toFixed(2) + '%' : '—') + '</td>' +
+      '</tr>';
+  }
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
+
+// ── 订单类型分布 ──
+function renderOrderTypeDistribution(closed) {
+  const card = document.getElementById('orderTypeCard');
+  const wrap = document.getElementById('orderTypeTableWrap');
+  if (!card || !wrap) return;
+  if (!closed || closed.length === 0) {
+    card.style.display = 'block';
+    wrap.innerHTML = '<div class="empty-hint">暂无平仓数据</div>';
+    return;
+  }
+
+  // 分组
+  const groups = {};
+  for (const l of closed) {
+    const key = l.orderType || 'market';
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(l);
+  }
+
+  const rows = [];
+  for (const [name, trades] of Object.entries(groups)) {
+    const cnt = trades.length;
+    const { wins, losses, grossProfit, grossLoss } = computeWinLoss(trades);
+    const decided = wins.length + losses.length;
+    const wr = decided > 0 ? (wins.length / decided * 100) : 0;
+    const tPnl = grossProfit - grossLoss;
+    const pf = grossLoss > 0 ? (grossProfit / grossLoss).toFixed(2) : (wins.length > 0 ? '∞' : '0');
+    const avgW = wins.length > 0 ? grossProfit / wins.length : 0;
+    const avgL = losses.length > 0 ? grossLoss / losses.length : 0;
+    const wlR = avgL > 0 ? (avgW / avgL).toFixed(2) + ':1' : '—';
+    const label = ORDER_TYPE_LABELS[name] || name;
+    const groupName = ORDER_TYPE_GROUP[name] || '';
+    rows.push({ name, label, groupName, cnt, wr, tPnl, pf, wlR, lowSample: cnt < 2 });
+  }
+
+  if (rows.length === 0) {
+    card.style.display = 'block';
+    wrap.innerHTML = '<div class="empty-hint">暂无订单类型数据</div>';
+    return;
+  }
+
+  rows.sort((a, b) => b.tPnl - a.tPnl);
+  card.style.display = 'block';
+
+  var html = '<table><thead><tr>' +
+    '<th>订单类型</th><th>分组</th><th>笔数</th><th>胜率</th><th>总盈亏</th>' +
+    '<th>盈亏比</th><th>利润因子</th>' +
+    '</tr></thead><tbody>';
+  for (var i = 0; i < rows.length; i++) {
+    var r = rows[i];
+    var cls = r.lowSample ? ' class="low-sample"' : '';
+    var pnlCls = r.tPnl > 0 ? 'positive' : r.tPnl < 0 ? 'negative' : '';
+    html += '<tr' + cls + '>' +
+      '<td>' + r.label + '</td>' +
+      '<td>' + r.groupName + '</td>' +
+      '<td>' + r.cnt + '</td>' +
+      '<td>' + r.wr.toFixed(1) + '%</td>' +
+      '<td class="' + pnlCls + '">' + (r.tPnl >= 0 ? '+' : '') + r.tPnl.toFixed(2) + '</td>' +
+      '<td>' + r.wlR + '</td>' +
+      '<td>' + r.pf + '</td>' +
       '</tr>';
   }
   html += '</tbody></table>';

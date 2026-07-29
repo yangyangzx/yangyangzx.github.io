@@ -48,6 +48,21 @@ function switchView(viewName) {
 
   _currentView = viewName;
 
+  // 从日志视图切出时退出批量模式
+  if (viewName !== 'journal' && window._batchMode) {
+    window._batchMode = false;
+    if (window._selectedIndices) window._selectedIndices.clear();
+    var batchBar = document.getElementById('batchBar');
+    if (batchBar) batchBar.classList.remove('show');
+    var checkboxes = document.querySelectorAll('.batch-checkbox');
+    for (var bi = 0; bi < checkboxes.length; bi++) checkboxes[bi].classList.remove('show');
+  }
+
+  // 切出非日志/统计视图时清除过滤器状态
+  if (viewName !== 'journal' && viewName !== 'stats') {
+    window._activeFilters = {};
+  }
+
   // 视图切换后的钩子：重新渲染该视图内的动态内容
   onViewActivated(viewName);
 }

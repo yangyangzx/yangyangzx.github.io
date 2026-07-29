@@ -9,7 +9,7 @@ function calcReverseTP() {
   var entryPrice, stopLoss, direction;
 
   if (calc && calc.entryPrice && calc.stopLoss) {
-    entryPrice = calc.entryPrice;
+    entryPrice = calc.effectiveEntryPrice || calc.entryPrice;
     stopLoss = calc.stopLoss;
     direction = calc.direction;
   } else {
@@ -442,6 +442,31 @@ function updateChecklist() {
     return { result: passed, message: '心态评分 ' + mindsetScore + '/5 ' + (passed ? '(平静/良好)' : '(需谨慎)') };
   });
 
+  // 【增强10】入场订单类型风险评估
+  updateCheckItemWithResult('checkOrderEntry', function() {
+    if (!calc || !calc.orderType) return null;
+    var ot = calc.orderType;
+    if (ot === 'limit') {
+      return { result: false, message: '限价单可能不成交，若行情反向运动可能错过入场' };
+    } else if (ot === 'stop') {
+      return { result: false, message: '止损入场单以突破价触发，实际成交价可能偏离，注意滑点风险' };
+    } else {
+      return { result: false, message: '市价单即刻成交但含滑点，高波动时段成交价可能偏差 0.1%+ ' };
+    }
+    // 所有订单类型都有风险，需要用户评估；统一标记为 fail 以引起注意
+  });
+
+  // 【增强11】止损执行类型风险评估
+  updateCheckItemWithResult('checkStopExec', function() {
+    if (!calc || !calc.stopType) return null;
+    var st = calc.stopType;
+    if (st === 'stop-market') {
+      return { result: false, message: '市价止损：极端行情下滑点可能远超预期，止损执行价可能严重偏离' };
+    } else {
+      return { result: false, message: '限价止损：价格快速穿透限价时止损不成交，风险敞口加大' };
+    }
+  });
+
   // ========== P1 修复：当 _lastCalc 为 null 时所有检查项均为 null，显示提示 ==========
   var hintEl = document.getElementById('checklistHint');
   if (!calc) {
@@ -515,6 +540,41 @@ function updateCheckItem(itemId, checkFn) {
     var _levEl = document.getElementById('leverage');
     if (_levEl && _levSettings && _levSettings.defaultLeverage != null) {
       _levEl.value = _levSettings.defaultLeverage;
+    }
+  } catch(e) {}
+})();
+
+// ===== 方向切换 → 订单类型 label 联动 =====
+function updateOrderTypeLabels() {
+  var dir = document.getElementById('direction');
+  var ot = document.getElementById('orderType');
+  if (!dir || !ot) return;
+
+  var isLong = dir.value === 'long';
+  // 保留当前选中值
+  var curVal = ot.value;
+  var options = ot.options;
+
+  if (isLong) {
+    // 做多：市价单 / Buy Limit / Buy Stop
+    options[0].text = '市价单';
+    options[1].text = '限价单 (Buy Limit)';
+    options[2].text = '止损单 (Buy Stop)';
+  } else {
+    // 做空：市价单 / Sell Limit / Sell Stop
+    options[0].text = '市价单';
+    options[1].text = '限价单 (Sell Limit)';
+    options[2].text = '止损单 (Sell Stop)';
+  }
+}
+
+(function _initOrderTypeLabels() {
+  try {
+    var _dirEl = document.getElementById('direction');
+    if (_dirEl) {
+      _dirEl.addEventListener('change', updateOrderTypeLabels);
+      // 初始同步
+      updateOrderTypeLabels();
     }
   } catch(e) {}
 })();

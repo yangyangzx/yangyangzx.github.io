@@ -154,6 +154,12 @@ function renderLogs() {
     const otName = ORDER_TYPE_LABELS[item.orderType] || (item.orderType || '—');
     const otLabel = otGroup ? otGroup + ' ' + otName : otName;
 
+    const stopTypeLabel = item.stopType === 'stop-limit' ? '限价止损 (Stop-Limit)' : item.stopType === 'stop-market' ? '市价止损 (Stop-Market)' : (item.stopType || '—');
+
+    const effEntryDisplay = item.effectiveEntryPrice != null
+      ? item.effectiveEntryPrice + (item.effectiveEntryPrice !== item.entryPrice ? ' <span style="font-size:11px;color:var(--color-warning);">(修正)</span>' : '')
+      : '—';
+
     let targetPriceDisplay = item.targetPrice != null ? item.targetPrice : '—';
 
     let closeNoteDisplay = '—';
@@ -202,6 +208,8 @@ function renderLogs() {
     if (isExpanded) {
       html += '<tr class="detail-row"><td colspan="9"><div class="detail-grid">' +
         '<div class="ditem"><span class="dlabel">订单类型</span><span class="dval">' + otLabel + '</span></div>' +
+        '<div class="ditem"><span class="dlabel">止损类型</span><span class="dval">' + stopTypeLabel + '</span></div>' +
+        '<div class="ditem"><span class="dlabel">实入场价</span><span class="dval">' + effEntryDisplay + '</span></div>' +
         '<div class="ditem"><span class="dlabel">止损价</span><span class="dval">' + (item.stopLoss != null ? item.stopLoss : '—') + '</span></div>' +
         '<div class="ditem"><span class="dlabel">目标价</span><span class="dval">' + targetPriceDisplay + '</span></div>' +
         '<div class="ditem"><span class="dlabel">仓位(USDT)</span><span class="dval">' + (item.positionSize != null ? Number(item.positionSize).toFixed(2) : '—') + '</span></div>' +
@@ -548,7 +556,10 @@ function renderLogs() {
     const idx = parseInt(cb.dataset.batchIdx, 10);
     cb.checked = _selectedIndices.has(idx);
   });
-  try { updateStats(); } catch(e) { console.error('[renderLogs] updateStats error:', e); }
+  // 仅在日志或统计视图可见时调用 updateStats（避免隐藏 DOM 上执行 Canvas 绘制）
+  if (_currentView === 'journal' || _currentView === 'stats') {
+    try { updateStats(); } catch(e) { console.error('[renderLogs] updateStats error:', e); }
+  }
   autoCountLossStreak();
   populateFilterOptions();
 }

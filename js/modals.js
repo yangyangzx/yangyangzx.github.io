@@ -63,6 +63,7 @@ function openEditModal(idx) {
         '<div class="fp"><label>品种</label><input type="text" id="emSymbol" value="' + esc(item.symbol || '') + '" /></div>' +
         '<div class="fp"><label>方向</label><select id="emDirection"><option value="long"' + (item.direction === 'long' ? ' selected' : '') + '>做多</option><option value="short"' + (item.direction === 'short' ? ' selected' : '') + '>做空</option></select></div>' +
         '<div class="fp"><label>订单类型</label><select id="emOrderType"><option value="market"' + (item.orderType === 'market' ? ' selected' : '') + '>市价单</option><option value="limitBuy"' + (item.orderType === 'limitBuy' ? ' selected' : '') + '>Buy Limit</option><option value="stopBuy"' + (item.orderType === 'stopBuy' ? ' selected' : '') + '>Buy Stop</option><option value="limitSell"' + (item.orderType === 'limitSell' ? ' selected' : '') + '>Sell Limit</option><option value="stopSell"' + (item.orderType === 'stopSell' ? ' selected' : '') + '>Sell Stop</option><option value="stopLimit"' + (item.orderType === 'stopLimit' ? ' selected' : '') + '>Stop Limit</option><option value="trailingStop"' + (item.orderType === 'trailingStop' ? ' selected' : '') + '>Trailing Stop</option></select></div>' +
+        '<div class="fp"><label>止损类型</label><select id="emStopType"><option value="stop-market"' + ((item.stopType || 'stop-market') === 'stop-market' ? ' selected' : '') + '>市价止损 (Stop-Market)</option><option value="stop-limit"' + (item.stopType === 'stop-limit' ? ' selected' : '') + '>限价止损 (Stop-Limit)</option></select></div>' +
         '<div class="fp"><label>入场价</label><input type="number" id="emEntryPrice" step="0.01" value="' + (item.entryPrice ?? '') + '" /></div>' +
         '<div class="fp"><label>止损价</label><input type="number" id="emStopLoss" step="0.01" value="' + (item.stopLoss ?? '') + '" /><span id="emStopDistPreview" style="display:none;font-size:11px;color:var(--color-text-muted);margin-top:2px;"></span></div>' +
         '<div class="fp"><label>目标价</label><input type="number" id="emTargetPrice" step="0.01" value="' + (item.targetPrice ?? '') + '" /></div>' +
@@ -322,12 +323,15 @@ function emRecalc(item) {
     // ===== 已平仓交易：PnL / PnL% / R倍数 自动重算 =====
     if (window._emPnlManual) return;  // 已手动覆盖，停止自动重算
     const closePrice = num('emClosePrice');
-    if (isNaN(entry) || isNaN(closePrice) || isNaN(pos) || entry === 0 || closePrice <= 0) return;
+    // 市价单使用 effectiveEntryPrice（含滑点修正），其他使用 entryPrice
+    const entryForPnl = (item.effectiveEntryPrice != null && !isNaN(item.effectiveEntryPrice))
+      ? item.effectiveEntryPrice : entry;
+    if (isNaN(entryForPnl) || isNaN(closePrice) || isNaN(pos) || entryForPnl === 0 || closePrice <= 0) return;
     let grossPnl;
     if (direction === 'short') {
-      grossPnl = (entry - closePrice) / entry * pos;
+      grossPnl = (entryForPnl - closePrice) / entryForPnl * pos;
     } else {
-      grossPnl = (closePrice - entry) / entry * pos;
+      grossPnl = (closePrice - entryForPnl) / entryForPnl * pos;
     }
     const netPnl = grossPnl - emFee - emSlippage;
     const lev2 = (!isNaN(lev) && lev > 0) ? lev : 1;
@@ -484,6 +488,7 @@ function saveEditLog(idx) {
   v = gv('emSymbol'); if (v !== undefined) item.symbol = v;
   v = gv('emDirection'); if (v !== undefined) item.direction = v;
   v = gv('emOrderType'); if (v !== undefined) item.orderType = v;
+  v = gv('emStopType'); if (v !== undefined) item.stopType = v;
   v = gn('emEntryPrice'); if (v !== undefined && v !== null) item.entryPrice = v;
   v = gn('emStopLoss'); if (v !== undefined && v !== null) item.stopLoss = v;
   v = gn('emTargetPrice'); if (v !== undefined && v !== null) item.targetPrice = v;
@@ -639,7 +644,9 @@ function doSaveSplit(calc, count) {
     symbol: calc.symbol,
     direction: calc.direction,
     orderType: document.getElementById('orderType').value || 'market',
+    stopType: calc.stopType || (document.getElementById('stopType')?.value || 'stop-market'),
     entryPrice: calc.entryPrice,
+    effectiveEntryPrice: calc.effectiveEntryPrice,
     stopLoss: calc.stopLoss,
     targetPrice: calc.targetPrice,
     positionSize: parseFloat(pos.toFixed(2)),

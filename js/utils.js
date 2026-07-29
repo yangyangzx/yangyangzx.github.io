@@ -147,6 +147,58 @@
       item.pnlAmount != null && !isNaN(parseFloat(item.pnlAmount));
   };
 
+  /**
+   * 计算权益曲线数据 — 供 stats.js / dashboard.js 统一调用
+   * @param {Array} closed - 已平仓日志（需已按 closeTime 排序）
+   * @param {Object} [settingsOverride] - 可选，覆盖 accountBalance
+   * @returns {{ data: Array<{eq:number, pnl:number, label:string}>,
+   *             initCap: number, peakVal: number, maxDDPercent: number,
+   *             finalEq: number, totalPnl: number }}
+   */
+  util.calcEquityCurve = function(closed, settingsOverride) {
+    if (!closed || closed.length === 0) {
+      return { data: [], initCap: 0, peakVal: 0, maxDDPercent: 0, finalEq: 0, totalPnl: 0 };
+    }
+
+    var sorted = [].concat(closed).sort(function(a, b) {
+      return new Date(a.closeTime || a.time) - new Date(b.closeTime || b.time);
+    });
+
+    var _initCap = 0;
+    if (sorted.length > 0 && sorted[0].capital != null && !isNaN(sorted[0].capital) && sorted[0].capital > 0) {
+      _initCap = sorted[0].capital;
+    } else {
+      var bal = (settingsOverride && settingsOverride.accountBalance > 0) ? settingsOverride.accountBalance : 0;
+      if (!bal) {
+        try { var _s = loadSettings(); if (_s.accountBalance > 0) bal = _s.accountBalance; } catch(e) {}
+      }
+      if (bal > 0) _initCap = bal;
+    }
+
+    var data = [], cum = _initCap, peakVal = _initCap, maxDD = 0;
+    for (var i = 0; i < sorted.length; i++) {
+      var l = sorted[i];
+      if (l.capital != null && !isNaN(l.capital) && l.capital !== cum) {
+        cum = l.capital;
+      } else {
+        cum += (parseFloat(l.pnlAmount) || 0);
+      }
+      data.push({ eq: cum, pnl: parseFloat(l.pnlAmount) || 0, idx: data.length + 1 });
+      peakVal = Math.max(peakVal, cum);
+      maxDD = peakVal > 0 ? Math.max(maxDD, (peakVal - cum) / peakVal * 100) : maxDD;
+    }
+
+    var totalPnl = cum - _initCap;
+    return {
+      data: data,
+      initCap: _initCap,
+      peakVal: peakVal,
+      maxDDPercent: maxDD,
+      finalEq: cum,
+      totalPnl: totalPnl
+    };
+  };
+
   // 挂载到全局
   window.utils = util;
 })();

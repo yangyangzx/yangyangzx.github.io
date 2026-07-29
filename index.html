@@ -195,9 +195,26 @@
               </select>
             </div>
             <div class="form-group">
+              <label><i class="fas fa-tag"></i> 入场订单类型</label>
+              <select id="orderType">
+                <option value="market">市价单</option>
+                <option value="limit">限价单 (Buy Limit)</option>
+                <option value="stop">止损单 (Buy Stop)</option>
+              </select>
+              <span class="field-tip">限价单成交价确定但可能不成交；市价/止损单即时成交但含滑点</span>
+            </div>
+            <div class="form-group">
               <label><i class="fas fa-stop-circle"></i> 止损价格<span class="required-star">*</span></label>
               <input type="number" id="stopLoss" value="" step="0.01" placeholder="止损价" />
               <span class="field-tip">触发止损的价位，用于计算风险敞口</span>
+            </div>
+            <div class="form-group">
+              <label><i class="fas fa-exclamation-triangle"></i> 止损执行类型</label>
+              <select id="stopType">
+                <option value="stop-market">市价止损 (Stop-Market)</option>
+                <option value="stop-limit">限价止损 (Stop-Limit)</option>
+              </select>
+              <span class="field-tip">市价止损确保成交但滑点风险高；限价止损价格确定但可能不成交</span>
             </div>
             <div class="form-group">
               <label><i class="fas fa-bullseye"></i> 目标价格<span class="optional-tag">（选填）</span></label>
@@ -242,25 +259,7 @@
             <span class="form-section-header-chevron"><i class="fas fa-chevron-right"></i></span>
           </div>
           <div class="form-section-content grid-2">
-            <div class="form-group">
-              <label><i class="fas fa-receipt"></i> 订单类型</label>
-              <select id="orderType">
-                <optgroup label="市价单">
-                  <option value="market">市价单 (Market Order)</option>
-                </optgroup>
-                <optgroup label="挂价单">
-                  <option value="limitBuy">Buy Limit</option>
-                  <option value="stopBuy">Buy Stop</option>
-                  <option value="limitSell">Sell Limit</option>
-                  <option value="stopSell">Sell Stop</option>
-                </optgroup>
-                <optgroup label="条件单">
-                  <option value="stopLimit">Stop Limit</option>
-                  <option value="trailingStop">Trailing Stop</option>
-                </optgroup>
-              </select>
-            </div>
-            <div class="form-group">
+            <div class="form-group" style="grid-column: 1 / -1;">
               <label><i class="fas fa-brain"></i> 入场心态</label>
               <div class="star-rating" id="mindsetStars" style="padding-top:4px;">
                 <span class="star active" data-val="1">★</span>
@@ -526,6 +525,14 @@
               <span class="check-icon pending">○</span>
               <span>心态评分 ≥ 3（平静/良好）</span>
             </div>
+            <div class="check-item" id="checkOrderEntry">
+              <span class="check-icon pending">○</span>
+              <span>入场订单：限价可能不成交 / 市价含滑点</span>
+            </div>
+            <div class="check-item" id="checkStopExec">
+              <span class="check-icon pending">○</span>
+              <span>止损执行：市价滑点风险 / 限价不成交风险已评估</span>
+            </div>
           </div>
         </div>
       </div>
@@ -583,6 +590,12 @@
         <span>最高: <b id="equityPeak">—</b></span>
         <span>回撤: <b id="equityDrawdown">—</b></span>
       </div>
+    </div>
+
+    <!-- 订单类型分布 -->
+    <div id="orderTypeCard" style="display:none;">
+      <div class="card-header">订单类型分布</div>
+      <div id="orderTypeTableWrap"></div>
     </div>
 
     <!-- 日志过滤栏 -->
@@ -782,6 +795,18 @@
             <canvas id="chartStrategyRank"></canvas>
           </div>
           <div class="review-content" id="strategyRankList"></div>
+        </div>
+      </div>
+      
+      <div class="review-card">
+        <div class="review-card-header">
+          <span class="review-card-icon"><i class="fas fa-tags"></i></span>
+          <span class="review-card-title">订单类型胜率分析</span>
+        </div>
+        <div class="review-card-body">
+          <div class="review-chart-container">
+            <canvas id="chartOrderType"></canvas>
+          </div>
         </div>
       </div>
       

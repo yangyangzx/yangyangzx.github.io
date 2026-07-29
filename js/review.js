@@ -10,6 +10,10 @@ function destroyReviewCharts() {
       _reviewCharts[ids[i]] = null;
     }
   }
+  if (window._reviewOrderTypeChart) {
+    window._reviewOrderTypeChart.destroy();
+    window._reviewOrderTypeChart = null;
+  }
 }
 
 // ==================== 数据辅助 ====================
@@ -48,6 +52,7 @@ function renderReview() {
   var closed = getClosedTrades();
   renderLossReasonPie(closed);
   renderStrategyRank(closed);
+  renderOrderTypeChart(closed);
   renderEmotionAnalysis(closed);
 }
 
@@ -250,6 +255,92 @@ function renderStrategyRank(closed) {
   }
   listHtml += '</div>';
   document.getElementById('strategyRankList').innerHTML = listHtml;
+}
+
+// ── 卡片 3a：订单类型胜率分析（柱状图）──
+function renderOrderTypeChart(closed) {
+  var canvas = document.getElementById('chartOrderType');
+  if (!canvas) return;
+
+  if (!closed || closed.length === 0) {
+    _setReviewEmpty(canvas, '暂无交易数据');
+    return;
+  }
+
+  // 按 orderType 分组
+  var groups = {};
+  for (var i = 0; i < closed.length; i++) {
+    var key = closed[i].orderType || 'market';
+    if (!groups[key]) groups[key] = { total: 0, wins: 0, pnlTotal: 0 };
+    groups[key].total++;
+    if (parseFloat(closed[i].pnlAmount) > 0) groups[key].wins++;
+    groups[key].pnlTotal += parseFloat(closed[i].pnlAmount) || 0;
+  }
+
+  var keys = Object.keys(groups);
+  if (keys.length === 0) {
+    _setReviewEmpty(canvas, '无订单类型数据');
+    return;
+  }
+
+  _clearReviewEmpty(canvas);
+
+  var labels = [], wrData = [], pnlData = [];
+  for (var j = 0; j < keys.length; j++) {
+    var g = groups[keys[j]];
+    var label = ORDER_TYPE_LABELS[keys[j]] || keys[j];
+    labels.push(label + ' (' + g.total + ')');
+    var wr = g.total > 0 ? parseFloat((g.wins / g.total * 100).toFixed(1)) : 0;
+    wrData.push(wr);
+    pnlData.push(parseFloat(g.pnlTotal.toFixed(2)));
+  }
+
+  // 销毁旧实例
+  if (window._reviewOrderTypeChart) {
+    window._reviewOrderTypeChart.destroy();
+    window._reviewOrderTypeChart = null;
+  }
+
+  // 胜率颜色：绿>50 红<50
+  var wrColors = wrData.map(function(v) { return v >= 50 ? 'rgba(16,185,129,0.8)' : 'rgba(239,68,68,0.8)'; });
+
+  window._reviewOrderTypeChart = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: '胜率 %',
+        data: wrData,
+        backgroundColor: wrColors,
+        borderColor: wrColors.map(function(c) { return c.replace('0.8', '1'); }),
+        borderWidth: 1,
+        yAxisID: 'y'
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        y: {
+          beginAtZero: true,
+          max: 100,
+          ticks: { callback: function(v) { return v + '%'; } },
+          title: { display: true, text: '胜率' }
+        }
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function(ctx) {
+              var idx = ctx.dataIndex;
+              return '胜率: ' + wrData[idx].toFixed(1) + '% | 盈亏: ' + (pnlData[idx] >= 0 ? '+' : '') + pnlData[idx].toFixed(2) + ' USDT';
+            }
+          }
+        }
+      }
+    }
+  });
 }
 
 // ==================== 卡片 3：交易情绪关联（分组柱状图 + 表格） ====================

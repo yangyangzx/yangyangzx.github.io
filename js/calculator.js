@@ -8,9 +8,19 @@ function calculate() {
   const riskInput = document.getElementById('riskInput').value.trim();
   const leverage = Math.max(0, parseFloat(document.getElementById('leverage').value) || 0);
   const direction = document.getElementById('direction').value;
+  const orderType = (document.getElementById('orderType')?.value) || 'market';
+  const stopType = (document.getElementById('stopType')?.value) || 'stop-market';
   const stopLoss = parseFloat(document.getElementById('stopLoss').value);
   const lossStreak = Math.max(0, parseInt(document.getElementById('lossStreak').value) || 0);
   const targetPrice = parseFloat(document.getElementById('targetPrice').value);
+
+  // ===== 订单类型入场价修正 =====
+  const directionSign = direction === 'long' ? 1 : -1;
+  let slippageRate = 0;
+  if (orderType === 'market') slippageRate = 0.001;   // 市价单千分之一滑点
+  else if (orderType === 'stop') slippageRate = 0.002; // 突破止损单千分之二滑点
+  // limit 类型滑点率保持 0
+  const effectiveEntryPrice = entryPrice * (1 + directionSign * slippageRate);
 
   const posD = document.getElementById('positionDisplay');
   const marginD = document.getElementById('marginDisplay');
@@ -135,27 +145,27 @@ function calculate() {
         weightedStopPct = 0; // 触发后续 fallback
       }
       if (totalAlloc > 0 && weightedStopPct > 0) {
-        stopDistance = (weightedStopPct / totalAlloc) * entryPrice;
-        positionSize = riskAmount * entryPrice / stopDistance;
+        stopDistance = (weightedStopPct / totalAlloc) * effectiveEntryPrice;
+        positionSize = riskAmount * effectiveEntryPrice / stopDistance;
         useWeightedStop = true;
       }
     }
   }
   if (!useWeightedStop) {
     if (direction==='long') {
-      if (stopLoss>=entryPrice) { err='做多止损价必须 < 入场价'; valid=false; }
-      else { stopDistance=Math.abs(entryPrice-stopLoss); positionSize=riskAmount*entryPrice/stopDistance; }
+      if (stopLoss>=effectiveEntryPrice) { err='做多止损价必须 < 入场价'; valid=false; }
+      else { stopDistance=Math.abs(effectiveEntryPrice-stopLoss); positionSize=riskAmount*effectiveEntryPrice/stopDistance; }
     } else {
-      if (stopLoss<=entryPrice) { err='做空止损价必须 > 入场价'; valid=false; }
-      else { stopDistance=Math.abs(stopLoss-entryPrice); positionSize=riskAmount*entryPrice/stopDistance; }
+      if (stopLoss<=effectiveEntryPrice) { err='做空止损价必须 > 入场价'; valid=false; }
+      else { stopDistance=Math.abs(stopLoss-effectiveEntryPrice); positionSize=riskAmount*effectiveEntryPrice/stopDistance; }
     }
   }
   if (!valid) { showCalcError(err, ''); return; }
 
   // 零止损距离警告（止损距离 < 入场价 0.1%）
-  if (stopDistance < entryPrice * 0.001) {
+  if (stopDistance < effectiveEntryPrice * 0.001) {
     showCalcError(
-      '止损距离极近（' + (stopDistance / entryPrice * 100).toFixed(3) + '%），仓位会被放大到极大值。建议增大止损距离或降低风险比例后再计算。',
+      '止损距离极近（' + (stopDistance / effectiveEntryPrice * 100).toFixed(3) + '%），仓位会被放大到极大值。建议增大止损距离或降低风险比例后再计算。',
       ''  // 不阻止计算
     );
   }
@@ -186,7 +196,7 @@ function calculate() {
     const marginLimitPos = availableCapital * leverage * 0.8;
     if (positionSize > marginLimitPos) {
       const origMargin = positionSize / leverage;
-      riskAmount = marginLimitPos * stopDistance / entryPrice;
+      riskAmount = marginLimitPos * stopDistance / effectiveEntryPrice;
       riskPercent = riskAmount / capital;
       capMsg = '<span class="warning-tag alert"><i class="fas fa-shield-alt"></i> 保证金触及 80% 上限：原需 ' + origMargin.toFixed(2) + ' USDT（' + (origMargin / capital * 100).toFixed(1) + '% 本金），已截断至 ' + (marginLimitPos / leverage).toFixed(2) + ' USDT（80% 本金）。实际风险额 ' + riskAmount.toFixed(2) + ' USDT。建议放宽止损距离或降低风险比例。</span>';
       positionSize = marginLimitPos;
@@ -198,7 +208,7 @@ function calculate() {
   if (!cappedByMargin && positionSize > maxPos) {
     cappedByMargin = true;
     capMsg = '<span class="warning-tag alert"><i class="fas fa-ban"></i> 仓位已触达交易所上限：计算仓位 ' + positionSize.toFixed(2) + ' 超过最大可开仓位 ' + maxPos.toFixed(2) + '（可用本金 ' + availableCapital.toFixed(2) + ' × ' + (leverage || 1) + 'x），已强制截断。请放宽止损距离或降低风险额。</span>';
-    riskAmount = maxPos * stopDistance / entryPrice;
+    riskAmount = maxPos * stopDistance / effectiveEntryPrice;
     riskPercent = riskAmount / capital;
     positionSize = maxPos;
   }
@@ -212,7 +222,7 @@ function calculate() {
       var maxNewMargin = aggregateLimit - usedMargin;
       if (maxNewMargin > 0) {
         var aggCappedPos = maxNewMargin * leverage;
-        riskAmount = aggCappedPos * stopDistance / entryPrice;
+        riskAmount = aggCappedPos * stopDistance / effectiveEntryPrice;
         riskPercent = riskAmount / capital;
         capMsg = (capMsg ? capMsg + ' ' : '') + '<span class="warning-tag alert"><i class="fas fa-layer-group"></i> 总保证金触及 90% 聚合上限：已有 ' + usedMargin.toFixed(2) + ' + 新增 ' + newMargin.toFixed(2) + ' = ' + totalMargin.toFixed(2) + ' USDT（' + (totalMargin / capital * 100).toFixed(1) + '% 本金），已截断新仓位保证金至 ' + maxNewMargin.toFixed(2) + ' USDT。</span>';
         positionSize = aggCappedPos;
@@ -266,7 +276,7 @@ function calculate() {
 
   const finalPos = lossStreak>=3 ? adjPos : positionSize;
   const finalMargin = lossStreak>=3 ? adjPos/(effLev||1) : actualMargin;
-  const stopPct = stopDistance/entryPrice*100;
+  const stopPct = stopDistance/effectiveEntryPrice*100;
 
   // ===== 止损距离色标 =====
   const isEth = symbol.toUpperCase().includes('ETH');
@@ -278,11 +288,21 @@ function calculate() {
   else if (stopPct < minStopPct) { stopTagClass = 'yellow'; stopTagLabel = '偏窄'; rw = '<span class="warning-tag"><i class="fas fa-bolt"></i> 止损距离 '+stopPct.toFixed(2)+'% 较窄，注意滑点</span>'; }
 
   // ===== 手续费与滑点（提前到盈亏比计算之前，供 targetRR 使用） =====
-  const feeRate = parseFloat(document.getElementById('feeRate').value) || 0;
+  let feeRate = parseFloat(document.getElementById('feeRate').value) || 0;
+  // 订单类型费率联动：market/stop 使用 Taker 费率，limit 使用 Maker 费率
+  if (orderType === 'limit') {
+    // Maker 费率默认 0.04%，若用户设置值更低则用设置值
+    const makerRate = 0.04;
+    feeRate = (feeRate > 0 && feeRate < makerRate) ? feeRate : makerRate;
+  } else {
+    // market / stop → Taker 费率默认 0.08%
+    const takerRate = 0.08;
+    feeRate = (feeRate > 0 && feeRate < takerRate) ? feeRate : takerRate;
+  }
   const slippageTicks = parseFloat(document.getElementById('slippage').value) || 0;
   const tickSize = getTickSize(symbol);
   const fee = feeRate > 0 ? (finalPos * feeRate / 100 * 2) : 0;
-  const slippageCost = slippageTicks > 0 ? (slippageTicks * tickSize * finalPos / entryPrice) : 0;
+  const slippageCost = slippageTicks > 0 ? (slippageTicks * tickSize * finalPos / effectiveEntryPrice) : 0;
   const totalCost = fee + slippageCost;
 
   // ===== 盈亏比预判（扣除手续费和滑点后的净盈亏比） =====
@@ -290,17 +310,17 @@ function calculate() {
   if (!isNaN(targetPrice) && targetPrice > 0) {
     let targetDistance;
     if (direction === 'long') {
-      targetDistance = targetPrice - entryPrice;
+      targetDistance = targetPrice - effectiveEntryPrice;
     } else {
-      targetDistance = entryPrice - targetPrice;
+      targetDistance = effectiveEntryPrice - targetPrice;
     }
     if (targetDistance > 0) {
-      targetPct = targetDistance / entryPrice * 100;
+      targetPct = targetDistance / effectiveEntryPrice * 100;
       // 毛 R:R
       var grossRR = targetDistance / stopDistance;
       // 净 R:R = (目标收益 - 手续费) / (止损损失 + 手续费)
-      var grossProfit = targetDistance * finalPos / entryPrice;
-      var grossLoss = stopDistance * finalPos / entryPrice;
+      var grossProfit = targetDistance * finalPos / effectiveEntryPrice;
+      var grossLoss = stopDistance * finalPos / effectiveEntryPrice;
       var netProfit = grossProfit - totalCost;
       var netLoss = grossLoss + totalCost;
       if (netLoss > 0) {
@@ -361,6 +381,10 @@ function calculate() {
   let costL2HTML = '<span class="stop-tag ' + stopTagClass + '">止损 ' + stopPct.toFixed(2) + '%</span>';
   costL2HTML += ' <span class="sep">·</span> ' + (direction === 'long' ? '做多' : '做空');
   costL2HTML += ' <span class="sep">·</span> ' + symbol;
+  // 若入场价有修正，显示修正后入场价
+  if (Math.abs(effectiveEntryPrice - entryPrice) > 0.0001) {
+    costL2HTML += ' <span class="sep">·</span> 修正入场≈' + effectiveEntryPrice.toFixed(2);
+  }
   if (targetPct !== null) {
     costL2HTML += ' <span class="sep">·</span> 目标 ' + targetPrice + ' (+' + targetPct.toFixed(2) + '%)';
   }
@@ -381,7 +405,7 @@ function calculate() {
         const bpos = finalPos * ba / 100;
         const bstopDist = direction === 'long' ? bp - bsl : bsl - bp;
         // 实际损失取风险额和计算值的较小者（考虑仓位被截断的情况）
-        const bloss = Math.min(bRisk, bstopDist > 0 ? (bstopDist * bpos / entryPrice) : bRisk);
+        const bloss = Math.min(bRisk, bstopDist > 0 ? (bstopDist * bpos / effectiveEntryPrice) : bRisk);
         const blossPct = capital > 0 ? (bloss / capital * 100) : 0;
         triggerHTML += '<div class="trigger-line"><span class="trigger-batch">#' + (i + 1) + '</span><span class="trigger-price">' + bsl.toFixed(2) + '</span><span class="trigger-arrow">→</span><span>损失</span><span class="trigger-loss">' + bloss.toFixed(2) + ' U (' + blossPct.toFixed(2) + '%)</span></div>';
       });
@@ -433,7 +457,7 @@ function calculate() {
     else { resultBox.classList.remove('warn'); }
   }
 
-  window._lastCalc={ symbol,entryPrice,capital,riskAmount,riskPercent,leverage:leverage,direction,stopLoss,lossStreak,targetPrice:isNaN(targetPrice)?null:targetPrice,positionSize:finalPos,stopDistance,stopPct,liquidationPrice,cappedByLiquidation,targetRR,targetPct,reason:getReason(),signals:getSignals(),actualMargin:finalMargin,fee:parseFloat(fee.toFixed(2)),slippageCost:parseFloat(slippageCost.toFixed(2)),totalCost:parseFloat(totalCost.toFixed(2)),splitMode:_splitMode,weightedStopDistance:useWeightedStop?stopDistance:null, mindsetScore: parseInt(document.getElementById('mindsetScore').value) || 3 };
+  window._lastCalc={ symbol,entryPrice,effectiveEntryPrice,capital,riskAmount,riskPercent,leverage:leverage,direction,orderType,stopType,stopLoss,lossStreak,targetPrice:isNaN(targetPrice)?null:targetPrice,positionSize:finalPos,stopDistance,stopPct,liquidationPrice,cappedByLiquidation,targetRR,targetPct,reason:getReason(),signals:getSignals(),actualMargin:finalMargin,fee:parseFloat(fee.toFixed(2)),slippageCost:parseFloat(slippageCost.toFixed(2)),totalCost:parseFloat(totalCost.toFixed(2)),splitMode:_splitMode,weightedStopDistance:useWeightedStop?stopDistance:null, mindsetScore: parseInt(document.getElementById('mindsetScore').value) || 3 };
   // 自动滚动到结果区
   if (resultBox) resultBox.scrollIntoView({behavior:'smooth'});
   if (typeof updateChecklist === 'function') updateChecklist();
@@ -508,7 +532,9 @@ function saveLog() {
     symbol: calc.symbol,
     direction: calc.direction,
     orderType: document.getElementById('orderType').value || 'market',
+    stopType: document.getElementById('stopType')?.value || 'stop-market',
     entryPrice: calc.entryPrice,
+    effectiveEntryPrice: calc.effectiveEntryPrice,
     stopLoss: calc.stopLoss,
     targetPrice: calc.targetPrice,
     positionSize: parseFloat(calc.positionSize.toFixed(2)),
@@ -729,13 +755,23 @@ function resetForm() {
   document.getElementById('riskHint').textContent = '';
   document.getElementById('leverage').value = '0';
   document.getElementById('direction').value = 'long';
-  filterOrderTypes('long');
+  // 同步订单类型标签为做多版本
+  (function() {
+    var ot = document.getElementById('orderType');
+    if (ot && ot.options.length >= 3) {
+      ot.options[0].text = '市价单';
+      ot.options[1].text = '限价单 (Buy Limit)';
+      ot.options[2].text = '止损单 (Buy Stop)';
+    }
+  })();
   document.getElementById('stopLoss').value = '';
   document.getElementById('targetPrice').value = '';
   document.getElementById('atrValue').value = '';
   document.getElementById('atrMultiplier').value = '1.5';
   document.getElementById('lossStreak').value = '0';
   document.getElementById('orderType').value = 'market';
+  var stEl = document.getElementById('stopType');
+  if (stEl) stEl.value = 'stop-market';
   document.getElementById('feeRate').value = '0.08';
   document.getElementById('slippage').value = '0';
 // 重置分批状态

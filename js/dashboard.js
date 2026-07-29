@@ -333,7 +333,7 @@ var _dashEquityChart = null;
 function _renderEquityChart() {
   var closed = _getClosedLogs();
 
-  // 按平仓时间升序
+  var curve = window.utils.calcEquityCurve(closed);
   var sorted = closed.slice().sort(function(a, b) {
     var ta = a.closeTime ? new Date(a.closeTime).getTime() : 0;
     var tb = b.closeTime ? new Date(b.closeTime).getTime() : 0;
@@ -374,30 +374,17 @@ function _renderEquityChart() {
     return;
   }
 
-  // 初始权益：取第一笔已平仓日志的 capital，无则从 settings.accountBalance 兜底
-  var equity = 0;
-  if (sorted.length > 0 && sorted[0].capital != null && !isNaN(sorted[0].capital) && sorted[0].capital > 0) {
-    equity = parseFloat(sorted[0].capital);
-  } else {
-    try { var _ds2 = loadSettings(); if (_ds2.accountBalance > 0) equity = parseFloat(_ds2.accountBalance); } catch(e) {}
-  }
+  // 使用统一权益曲线计算结果
   var labels = [];
   var data = [];
-
-  for (var i = 0; i < sorted.length; i++) {
-    // M5-b: 仅当 capital 变化时才视为存款/取款事件，否则累加 PnL
-    if (sorted[i].capital != null && !isNaN(sorted[i].capital) && sorted[i].capital !== equity) {
-      equity = parseFloat(sorted[i].capital);
-    } else {
-      equity += parseFloat(sorted[i].pnlAmount) || 0;
-    }
+  for (var i = 0; i < curve.data.length; i++) {
     var d = new Date(sorted[i].closeTime || sorted[i].time);
     labels.push(
       d.getFullYear() + '-' +
       ('0' + (d.getMonth() + 1)).slice(-2) + '-' +
       ('0' + d.getDate()).slice(-2)
     );
-    data.push(equity);
+    data.push(curve.data[i].eq);
   }
 
   // 正/负分段颜色
