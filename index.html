@@ -225,7 +225,7 @@
               <label><i class="fas fa-ruler"></i> ATR 止损辅助<span class="optional-tag">（选填）</span></label>
               <div class="flex-row" style="gap:8px;">
                 <input type="number" id="atrValue" value="" step="0.01" placeholder="ATR值" style="flex:1 1 80px;" />
-                <span style="color:#94a3b8;font-size:13px;">×</span>
+                <span style="color:var(--color-text-muted);font-size:13px;">×</span>
                 <input type="number" id="atrMultiplier" value="1.5" step="0.1" min="0.5" placeholder="倍数" style="flex:1 1 60px;" />
                 <button class="btn btn-ghost btn-sm" id="applyAtrBtn" style="flex:0 0 auto;padding:8px 14px;">应用</button>
               </div>
@@ -663,7 +663,7 @@
     </div>
     </div>
     <div style="margin-top:16px; display:flex; gap:12px; flex-wrap:wrap; align-items:center; justify-content:space-between;">
-      <span style="font-size:12px; color:#94a3b8; display:flex; align-items:center; gap:6px;">
+      <span style="font-size:12px; color:var(--color-text-muted); display:flex; align-items:center; gap:6px;">
         <i class="fas fa-database"></i> 数据存储在浏览器本地
       </span>
       <div class="backup-tools">
@@ -671,9 +671,9 @@
           <input type="checkbox" id="autoBackupCheck" checked /> 自动保存备份副本
         </label>
         <button class="btn btn-primary btn-sm" id="backupBtn" style="padding:5px 16px;"><i class="fas fa-download"></i> 立即备份</button>
-        <span style="font-size:11px; color:#94a3b8; white-space:nowrap;" id="lastBackupTime">尚未备份</span>
+        <span style="font-size:11px; color:var(--color-text-muted); white-space:nowrap;" id="lastBackupTime">尚未备份</span>
       </div>
-      <span style="font-size:12px; color:#94a3b8;" id="lastUpdate"></span>
+      <span style="font-size:12px; color:var(--color-text-muted);" id="lastUpdate"></span>
     </div>
   </div>
 
