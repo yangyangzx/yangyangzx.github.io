@@ -68,7 +68,7 @@ function _renderTodayPnl() {
   var subEl = document.getElementById('dashPnlSub');
 
   if (count === 0) {
-    valueEl.textContent = '—';
+    valueEl.textContent = '0.00';
     valueEl.className = 'dash-card-value pnl-neutral';
     subEl.textContent = '今日无交易';
     return;
@@ -123,7 +123,7 @@ function _renderWinRate() {
   if (count === 0) {
     valueEl.textContent = '—';
     valueEl.className = 'dash-card-value pnl-neutral';
-    subEl.textContent = '本周无交易';
+    subEl.textContent = '本周暂无交易';
     return;
   }
 
@@ -367,7 +367,8 @@ function _renderEquityChart() {
   if (sorted.length === 0) {
     // 绘制灰色占位文字（使用 CSS 像素坐标，因为 ctx 已缩放）
     ctx.clearRect(0, 0, rectWidth, rectHeight);
-    ctx.fillStyle = '#cbd5e1';
+    var canvasC = utils.getCanvasColors();
+    ctx.fillStyle = canvasC.text;
     ctx.font = '13px -apple-system, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('暂无交易数据', rectWidth / 2, rectHeight / 2);
@@ -388,9 +389,10 @@ function _renderEquityChart() {
   }
 
   // 正/负分段颜色
+  var cc = utils.getChartColors();
   var pointColors = [];
   for (var j = 0; j < sorted.length; j++) {
-    pointColors.push((sorted[j].pnlAmount || 0) >= 0 ? '#10b981' : '#ef4444');
+    pointColors.push((sorted[j].pnlAmount || 0) >= 0 ? cc.positivePoint : cc.negativePoint);
   }
 
   _dashEquityChart = new Chart(ctx, {
@@ -398,15 +400,23 @@ function _renderEquityChart() {
     data: {
       labels: labels,
       datasets: [{
+        label: '权益 (USDT)',
         data: data,
-        borderColor: '#3b82f6',
-        backgroundColor: 'rgba(59, 130, 246, 0.15)',
+        borderColor: cc.barBorder,
+        backgroundColor: function(context) {
+          var chart = context.chart;
+          var ctx2 = chart.ctx;
+          var gradient = ctx2.createLinearGradient(0, 0, 0, chart.height);
+          gradient.addColorStop(0, 'rgba(59, 130, 246, 0.25)');
+          gradient.addColorStop(1, 'rgba(59, 130, 246, 0.02)');
+          return gradient;
+        },
         borderWidth: 2.5,
-        pointRadius: 4,
-        pointHoverRadius: 8,
+        pointRadius: 3,
+        pointHoverRadius: 6,
         pointBackgroundColor: pointColors,
-        pointBorderColor: '#fff',
-        pointBorderWidth: 2,
+        pointBorderColor: 'rgba(255,255,255,0.6)',
+        pointBorderWidth: 1.5,
         fill: true,
         tension: 0.25
       }]
@@ -415,12 +425,23 @@ function _renderEquityChart() {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        legend: { display: false },
+        legend: {
+          display: true,
+          position: 'top',
+          align: 'end',
+          labels: {
+            color: cc.tickColor,
+            font: { size: 12 },
+            usePointStyle: true,
+            pointStyleWidth: 12,
+            padding: 12
+          }
+        },
         tooltip: {
-          backgroundColor: 'rgba(15, 23, 42, 0.95)',
-          titleColor: '#f1f5f9',
-          bodyColor: '#cbd5e1',
-          borderColor: 'rgba(148,163,184,0.12)',
+          backgroundColor: cc.tooltipBg,
+          titleColor: cc.tooltipTitle,
+          bodyColor: cc.tooltipBody,
+          borderColor: cc.gridColor,
           borderWidth: 1,
           padding: 12,
           callbacks: {
@@ -436,18 +457,19 @@ function _renderEquityChart() {
           grid: { display: false },
           ticks: {
             font: { size: 11 },
-            color: '#cbd5e1',
-            maxTicksLimit: 8
+            color: cc.tickColor,
+            maxTicksLimit: 8,
+            maxRotation: 0
           }
         },
         y: {
           display: true,
           grid: {
-            color: 'rgba(148,163,184,0.15)'
+            color: cc.gridColor
           },
           ticks: {
             font: { size: 11 },
-            color: '#cbd5e1',
+            color: cc.tickColor,
             callback: function(v) { return v.toFixed(0); }
           }
         }

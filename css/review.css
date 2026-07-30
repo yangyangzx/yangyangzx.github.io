@@ -20,7 +20,7 @@
 
 .review-card:hover {
   background: var(--glass-bg-heavy);
-  border-color: rgba(148, 163, 184, 0.2);
+  border-color: var(--color-border);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
   transform: translateY(-1px);
 }

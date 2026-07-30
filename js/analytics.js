@@ -112,7 +112,7 @@ function renderEquityChart(closed) {
       if (!_noteEl) {
         _noteEl = document.createElement('div');
         _noteEl.id = 'equityBalanceNote';
-        _noteEl.style.cssText = 'font-size:11px;color:#cbd5e1;margin-top:6px;text-align:right;';
+        _noteEl.style.cssText = 'font-size:11px;color:var(--chart-canvas-text);margin-top:6px;text-align:right;';
         canvas.parentElement.appendChild(_noteEl);
       }
       _noteEl.textContent = capital > 0 ? '设置中账户余额: ' + _abSettings.accountBalance.toFixed(2) + ' USDT（日志推算: ' + capital.toFixed(2) + ' USDT）' : '设置中账户余额: ' + _abSettings.accountBalance.toFixed(2) + ' USDT（日志中无 capital 数据，请在「系统设置」中保持一致）';
@@ -123,7 +123,7 @@ function renderEquityChart(closed) {
     if (!_noteEl) {
       _noteEl = document.createElement('div');
       _noteEl.id = 'equityBalanceNote';
-      _noteEl.style.cssText = 'font-size:11px;color:#cbd5e1;margin-top:6px;text-align:right;';
+      _noteEl.style.cssText = 'font-size:11px;color:var(--chart-canvas-text);margin-top:6px;text-align:right;';
       canvas.parentElement.appendChild(_noteEl);
     }
     _noteEl.textContent = '账户余额未设置，权益从 0 开始计算。请在「系统设置」中填写账户余额以获得准确资金曲线';
@@ -150,6 +150,8 @@ function renderEquityChart(closed) {
   ensureChartContainer(canvas);
 
   var ctx = canvas.getContext('2d');
+  var cc = utils.getChartColors();
+  var c = utils.getCanvasColors();
   _analyticsCharts['chartEquity'] = new Chart(ctx, {
     type: 'line',
     data: {
@@ -157,15 +159,22 @@ function renderEquityChart(closed) {
       datasets: [{
         label: '累计权益 (USDT)',
         data: data,
-        borderColor: '#3b82f6',
-        backgroundColor: 'rgba(59, 130, 246, 0.15)',
+        borderColor: cc.barBorder,
+        backgroundColor: function(context) {
+          var chart = context.chart;
+          var gctx = chart.ctx;
+          var gradient = gctx.createLinearGradient(0, 0, 0, chart.height);
+          gradient.addColorStop(0, 'rgba(59, 130, 246, 0.2)');
+          gradient.addColorStop(1, 'rgba(59, 130, 246, 0.02)');
+          return gradient;
+        },
         fill: true,
         tension: 0.25,
-        pointRadius: 4,
-        pointHoverRadius: 8,
+        pointRadius: 3,
+        pointHoverRadius: 5,
         pointBackgroundColor: '#3b82f6',
-        pointBorderColor: '#fff',
-        pointBorderWidth: 2,
+        pointBorderColor: 'rgba(255,255,255,0.6)',
+        pointBorderWidth: 1.5,
         borderWidth: 2.5
       }]
     },
@@ -173,12 +182,23 @@ function renderEquityChart(closed) {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        legend: { display: false },
+        legend: {
+          display: true,
+          position: 'top',
+          align: 'end',
+          labels: {
+            color: cc.tickColor,
+            font: { size: 12 },
+            usePointStyle: true,
+            pointStyleWidth: 12,
+            padding: 12
+          }
+        },
         tooltip: {
-          backgroundColor: 'rgba(15, 23, 42, 0.95)',
-          titleColor: '#f1f5f9',
-          bodyColor: '#cbd5e1',
-          borderColor: 'rgba(148,163,184,0.12)',
+          backgroundColor: cc.tooltipBg,
+          titleColor: cc.tooltipTitle,
+          bodyColor: cc.tooltipBody,
+          borderColor: cc.gridColor,
           borderWidth: 1,
           padding: 12,
           callbacks: {
@@ -188,13 +208,13 @@ function renderEquityChart(closed) {
       },
       scales: {
         x: {
-          grid: { color: 'rgba(148,163,184,0.15)' },
-          ticks: { color: '#cbd5e1', maxTicksLimit: 12, font: { size: 12 } }
+          grid: { color: cc.gridColor },
+          ticks: { color: cc.tickColor, maxTicksLimit: 12, font: { size: 12 }, maxRotation: 0 }
         },
         y: {
-          grid: { color: 'rgba(148,163,184,0.15)' },
+          grid: { color: cc.gridColor },
           ticks: {
-            color: '#cbd5e1',
+            color: cc.tickColor,
             font: { size: 12 },
             callback: function(v) { return v.toFixed(0); }
           }
@@ -288,12 +308,13 @@ function renderStrategyChart(closed) {
     labels.push(displayName.length > 12 ? displayName.substring(0, 11) + '…' : displayName);
     data.push(parseFloat(rows[i].avgPnl.toFixed(2)));
     var wr = rows[i].winRate;
-    if (wr >= 60) bgColors.push('rgba(34,197,94,0.7)');
-    else if (wr >= 40) bgColors.push('rgba(245,158,11,0.7)');
-    else bgColors.push('rgba(239,68,68,0.7)');
+    if (wr >= 60) bgColors.push(cc.barWin);
+    else if (wr >= 40) bgColors.push(cc.barWarn);
+    else bgColors.push(cc.barLoss);
   }
 
   var ctx = canvas.getContext('2d');
+  var cc = utils.getChartColors();
   _analyticsCharts['chartStrategy'] = new Chart(ctx, {
     type: 'bar',
     data: {
@@ -304,7 +325,7 @@ function renderStrategyChart(closed) {
         backgroundColor: bgColors,
         borderRadius: 6,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.1)'
+        borderColor: cc.barBorder,
       }]
     },
     options: {
@@ -313,10 +334,10 @@ function renderStrategyChart(closed) {
       plugins: {
         legend: { display: false },
         tooltip: {
-          backgroundColor: 'rgba(15, 23, 42, 0.95)',
-          titleColor: '#f1f5f9',
-          bodyColor: '#cbd5e1',
-          borderColor: 'rgba(148,163,184,0.12)',
+          backgroundColor: cc.tooltipBg,
+          titleColor: cc.tooltipTitle,
+          bodyColor: cc.tooltipBody,
+          borderColor: cc.gridColor,
           borderWidth: 1,
           padding: 12,
           callbacks: {
@@ -327,11 +348,11 @@ function renderStrategyChart(closed) {
       scales: {
         x: {
           grid: { display: false },
-          ticks: { color: '#cbd5e1', font: { size: 12 }, maxRotation: 45 }
+          ticks: { color: cc.tickColor, font: { size: 12 }, maxRotation: 45 }
         },
         y: {
-          grid: { color: 'rgba(148,163,184,0.15)' },
-          ticks: { color: '#cbd5e1', font: { size: 12 } }
+          grid: { color: cc.gridColor },
+          ticks: { color: cc.tickColor, font: { size: 12 } }
         }
       }
     }
@@ -512,12 +533,13 @@ function renderPatternChart(closed) {
     }
     data.push(parseFloat(rows[i].avgPnl.toFixed(2)));
     var wr = rows[i].winRate;
-    if (wr >= 60) bgColors.push('rgba(34,197,94,0.7)');
-    else if (wr >= 40) bgColors.push('rgba(245,158,11,0.7)');
-    else bgColors.push('rgba(239,68,68,0.7)');
+    if (wr >= 60) bgColors.push(cc.barWin);
+    else if (wr >= 40) bgColors.push(cc.barWarn);
+    else bgColors.push(cc.barLoss);
   }
 
   var ctx = canvas.getContext('2d');
+  var cc = utils.getChartColors();
   _analyticsCharts['chartPattern'] = new Chart(ctx, {
     type: 'bar',
     data: {
@@ -528,7 +550,7 @@ function renderPatternChart(closed) {
         backgroundColor: bgColors,
         borderRadius: 6,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.1)'
+        borderColor: cc.barBorder,
       }]
     },
     options: {
@@ -537,10 +559,10 @@ function renderPatternChart(closed) {
       plugins: {
         legend: { display: false },
         tooltip: {
-          backgroundColor: 'rgba(15, 23, 42, 0.95)',
-          titleColor: '#f1f5f9',
-          bodyColor: '#cbd5e1',
-          borderColor: 'rgba(148,163,184,0.12)',
+          backgroundColor: cc.tooltipBg,
+          titleColor: cc.tooltipTitle,
+          bodyColor: cc.tooltipBody,
+          borderColor: cc.gridColor,
           borderWidth: 1,
           padding: 12,
           callbacks: {
@@ -551,11 +573,11 @@ function renderPatternChart(closed) {
       scales: {
         x: {
           grid: { display: false },
-          ticks: { color: '#cbd5e1', font: { size: 12 }, maxRotation: 45 }
+          ticks: { color: cc.tickColor, font: { size: 12 }, maxRotation: 45 }
         },
         y: {
-          grid: { color: 'rgba(148,163,184,0.15)' },
-          ticks: { color: '#cbd5e1', font: { size: 12 } }
+          grid: { color: cc.gridColor },
+          ticks: { color: cc.tickColor, font: { size: 12 } }
         }
       }
     }
@@ -649,13 +671,14 @@ function renderSessionChart(closed) {
     }
     labels.push(sessionLabelMap[keys[j]] || keys[j]);
     data.push(parseFloat(totalPnl.toFixed(2)));
-    bgColors.push(totalPnl >= 0 ? 'rgba(34,197,94,0.7)' : 'rgba(239,68,68,0.7)');
+    bgColors.push(totalPnl >= 0 ? cc.barWin : cc.barLoss);
   }
 
   _clearCanvasEmpty(canvas);
   ensureChartContainer(canvas);
 
   var ctx = canvas.getContext('2d');
+  var cc = utils.getChartColors();
   _analyticsCharts['chartSession'] = new Chart(ctx, {
     type: 'bar',
     data: {
@@ -666,7 +689,7 @@ function renderSessionChart(closed) {
         backgroundColor: bgColors,
         borderRadius: 6,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.1)'
+        borderColor: cc.barBorder,
       }]
     },
     options: {
@@ -675,10 +698,10 @@ function renderSessionChart(closed) {
       plugins: {
         legend: { display: false },
         tooltip: {
-          backgroundColor: 'rgba(15, 23, 42, 0.95)',
-          titleColor: '#f1f5f9',
-          bodyColor: '#cbd5e1',
-          borderColor: 'rgba(148,163,184,0.12)',
+          backgroundColor: cc.tooltipBg,
+          titleColor: cc.tooltipTitle,
+          bodyColor: cc.tooltipBody,
+          borderColor: cc.gridColor,
           borderWidth: 1,
           padding: 12,
           callbacks: {
@@ -689,11 +712,11 @@ function renderSessionChart(closed) {
       scales: {
         x: {
           grid: { display: false },
-          ticks: { color: '#cbd5e1', font: { size: 12 } }
+          ticks: { color: cc.tickColor, font: { size: 12 } }
         },
         y: {
-          grid: { color: 'rgba(148,163,184,0.15)' },
-          ticks: { color: '#cbd5e1', font: { size: 12 } }
+          grid: { color: cc.gridColor },
+          ticks: { color: cc.tickColor, font: { size: 12 } }
         }
       }
     }
@@ -725,24 +748,25 @@ function renderMAEMFEScatter(closed) {
   ensureChartContainer(canvas);
 
   var ctx = canvas.getContext('2d');
+  var cc = utils.getChartColors();
   _analyticsCharts['chartMAEMFE'] = new Chart(ctx, {
     type: 'scatter',
     data: {
       datasets: [{
         label: '盈利单',
         data: points.filter(function(p) { return p.isWin; }),
-        backgroundColor: 'rgba(34,197,94,0.8)',
+        backgroundColor: cc.scatterWin,
         pointRadius: 5,
         pointHoverRadius: 10,
-        pointBorderColor: '#fff',
+        pointBorderColor: cc.legendText,
         pointBorderWidth: 2
       }, {
         label: '亏损单',
         data: points.filter(function(p) { return !p.isWin; }),
-        backgroundColor: 'rgba(239,68,68,0.8)',
+        backgroundColor: cc.scatterLoss,
         pointRadius: 5,
         pointHoverRadius: 10,
-        pointBorderColor: '#fff',
+        pointBorderColor: cc.legendText,
         pointBorderWidth: 2
       }]
     },
@@ -752,13 +776,13 @@ function renderMAEMFEScatter(closed) {
       plugins: {
         legend: {
           position: 'top',
-          labels: { color: '#cbd5e1', font: { size: 13 }, usePointStyle: true, padding: 16 }
+          labels: { color: cc.legendText, font: { size: 13 }, usePointStyle: true, padding: 16 }
         },
         tooltip: {
-          backgroundColor: 'rgba(15, 23, 42, 0.95)',
-          titleColor: '#f1f5f9',
-          bodyColor: '#cbd5e1',
-          borderColor: 'rgba(148,163,184,0.12)',
+          backgroundColor: cc.tooltipBg,
+          titleColor: cc.tooltipTitle,
+          bodyColor: cc.tooltipBody,
+          borderColor: cc.gridColor,
           borderWidth: 1,
           padding: 12,
           callbacks: {
@@ -768,14 +792,14 @@ function renderMAEMFEScatter(closed) {
       },
       scales: {
         x: {
-          title: { display: true, text: 'MAE %（绝对值）', color: '#cbd5e1' },
-          grid: { color: 'rgba(148,163,184,0.15)' },
-          ticks: { color: '#cbd5e1', font: { size: 12 } }
+          title: { display: true, text: 'MAE %（绝对值）', color: cc.tickColor },
+          grid: { color: cc.gridColor },
+          ticks: { color: cc.tickColor, font: { size: 12 } }
         },
         y: {
-          title: { display: true, text: 'MFE %', color: '#cbd5e1' },
-          grid: { color: 'rgba(148,163,184,0.15)' },
-          ticks: { color: '#cbd5e1', font: { size: 12 } }
+          title: { display: true, text: 'MFE %', color: cc.tickColor },
+          grid: { color: cc.gridColor },
+          ticks: { color: cc.tickColor, font: { size: 12 } }
         }
       }
     },
@@ -794,16 +818,16 @@ function renderMAEMFEScatter(closed) {
           var yMax = yAxis.getPixelForValue(yAxis.max);
 
           ctx2.save();
-          ctx2.fillStyle = 'rgba(34,197,94,0.06)';
+          ctx2.fillStyle = c.up.replace('0.95', '0.06');
           ctx2.fillRect(xMin, yMin, xMax - xMin, yMax - yMin);
-          ctx2.strokeStyle = 'rgba(34,197,94,0.2)';
+          ctx2.strokeStyle = c.up.replace('0.95', '0.2');
           ctx2.lineWidth = 1;
           ctx2.setLineDash([6, 4]);
           ctx2.strokeRect(xMin, yMin, xMax - xMin, yMax - yMin);
           ctx2.setLineDash([]);
 
           // 标签
-          ctx2.fillStyle = 'rgba(34,197,94,0.5)';
+          ctx2.fillStyle = c.up.replace('0.95', '0.5');
           ctx2.font = '11px sans-serif';
           ctx2.textAlign = 'left';
           ctx2.fillText('理想区域', xMin + 6, yMin + 16);
@@ -950,11 +974,11 @@ function renderCloseTypeChart(closed) {
     pcts.push((count / totalClosed * 100).toFixed(1));
 
     if (profitTypes.indexOf(k) !== -1) {
-      bgColors.push('rgba(34,197,94,0.7)');
+      bgColors.push(cc.barWin);
     } else if (lossTypes.indexOf(k) !== -1) {
-      bgColors.push('rgba(239,68,68,0.7)');
+      bgColors.push(cc.barLoss);
     } else {
-      bgColors.push('rgba(148,163,184,0.7)');
+      bgColors.push(cc.barNeutral);
     }
   }
 
@@ -962,6 +986,7 @@ function renderCloseTypeChart(closed) {
   ensureChartContainer(canvas);
 
   var ctx = canvas.getContext('2d');
+  var cc = utils.getChartColors();
   _analyticsCharts['closeTypeChart'] = new Chart(ctx, {
     type: 'bar',
     data: {
@@ -972,7 +997,7 @@ function renderCloseTypeChart(closed) {
         backgroundColor: bgColors,
         borderRadius: 6,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.1)'
+        borderColor: cc.barBorder,
       }]
     },
     options: {
@@ -981,10 +1006,10 @@ function renderCloseTypeChart(closed) {
       plugins: {
         legend: { display: false },
         tooltip: {
-          backgroundColor: 'rgba(15, 23, 42, 0.95)',
-          titleColor: '#f1f5f9',
-          bodyColor: '#cbd5e1',
-          borderColor: 'rgba(148,163,184,0.12)',
+          backgroundColor: cc.tooltipBg,
+          titleColor: cc.tooltipTitle,
+          bodyColor: cc.tooltipBody,
+          borderColor: cc.gridColor,
           borderWidth: 1,
           padding: 12,
           callbacks: {
@@ -995,12 +1020,12 @@ function renderCloseTypeChart(closed) {
       scales: {
         x: {
           grid: { display: false },
-          ticks: { color: '#cbd5e1', font: { size: 12 }, maxRotation: 45 }
+          ticks: { color: cc.tickColor, font: { size: 12 }, maxRotation: 45 }
         },
         y: {
-          grid: { color: 'rgba(148,163,184,0.15)' },
+          grid: { color: cc.gridColor },
           ticks: {
-            color: '#cbd5e1',
+            color: cc.tickColor,
             font: { size: 12 },
             stepSize: 1,
             callback: function(v) { return Number.isInteger(v) ? v : ''; }
@@ -1016,7 +1041,7 @@ function renderCloseTypeChart(closed) {
         ctx2.save();
         ctx2.font = '10px sans-serif';
         ctx2.textAlign = 'center';
-        ctx2.fillStyle = '#cbd5e1';
+        ctx2.fillStyle = cc.canvasText;
         for (var i = 0; i < meta.data.length; i++) {
           var bar = meta.data[i];
           ctx2.fillText(data[i] + '笔', bar.x, bar.y - 14);

@@ -110,7 +110,7 @@ function renderLossReasonPie(closed) {
     type: 'doughnut',
     data: {
       labels: labels,
-      datasets: [{ data: data, backgroundColor: bgColors, borderColor: '#0f172a', borderWidth: 3 }]
+      datasets: [{ data: data, backgroundColor: bgColors, borderColor: cc.barBorder, borderWidth: 3 }]
     },
     options: {
       responsive: true,
@@ -118,13 +118,13 @@ function renderLossReasonPie(closed) {
       plugins: {
         legend: {
           position: 'right',
-          labels: { color: '#cbd5e1', font: { size: 12 }, padding: 12, usePointStyle: true, pointStyleWidth: 10 }
+          labels: { color: cc.tickColor, font: { size: 12 }, padding: 12, usePointStyle: true, pointStyleWidth: 10 }
         },
         tooltip: {
-          backgroundColor: 'rgba(15, 23, 42, 0.95)',
-          titleColor: '#f1f5f9',
-          bodyColor: '#cbd5e1',
-          borderColor: 'rgba(148,163,184,0.12)',
+          backgroundColor: cc.tooltipBg,
+          titleColor: cc.tooltipTitle,
+          bodyColor: cc.tickColor,
+          borderColor: cc.gridColor,
           borderWidth: 1,
           padding: 12,
           callbacks: {
@@ -202,10 +202,11 @@ function renderStrategyRank(closed) {
   for (var r = 0; r < rows.length; r++) {
     labels.push(rows[r].name.length > 12 ? rows[r].name.substring(0, 11) + '…' : rows[r].name);
     data.push(parseFloat(rows[r].totalPnl.toFixed(2)));
-    bgColors.push(rows[r].totalPnl >= 0 ? 'rgba(34,197,94,0.7)' : 'rgba(239,68,68,0.7)');
+    bgColors.push(rows[r].totalPnl >= 0 ? cc.barWin : cc.barLoss);
   }
 
   var ctx = canvas.getContext('2d');
+  var cc = utils.getChartColors();
   _reviewCharts['chartStrategyRank'] = new Chart(ctx, {
     type: 'bar',
     data: {
@@ -216,7 +217,7 @@ function renderStrategyRank(closed) {
         backgroundColor: bgColors,
         borderRadius: 6,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.1)'
+        borderColor: cc.barBorder
       }]
     },
     options: {
@@ -225,18 +226,18 @@ function renderStrategyRank(closed) {
       plugins: {
         legend: { display: false },
         tooltip: {
-          backgroundColor: 'rgba(15, 23, 42, 0.95)',
-          titleColor: '#f1f5f9',
-          bodyColor: '#cbd5e1',
-          borderColor: 'rgba(148,163,184,0.12)',
+          backgroundColor: cc.tooltipBg,
+          titleColor: cc.tooltipTitle,
+          bodyColor: cc.tickColor,
+          borderColor: cc.gridColor,
           borderWidth: 1,
           padding: 12,
           callbacks: { label: function(ctx) { return '总盈亏 ' + ctx.parsed.y.toFixed(2) + ' USDT'; } }
         }
       },
       scales: {
-        x: { grid: { display: false }, ticks: { color: '#cbd5e1', font: { size: 12 }, maxRotation: 45 } },
-        y: { grid: { color: 'rgba(148,163,184,0.15)' }, ticks: { color: '#cbd5e1', font: { size: 12 } } }
+        x: { grid: { display: false }, ticks: { color: cc.tickColor, font: { size: 12 }, maxRotation: 45 } },
+        y: { grid: { color: cc.gridColor }, ticks: { color: cc.tickColor, font: { size: 12 } } }
       }
     }
   });
@@ -261,6 +262,8 @@ function renderStrategyRank(closed) {
 function renderOrderTypeChart(closed) {
   var canvas = document.getElementById('chartOrderType');
   if (!canvas) return;
+
+  var cc = utils.getChartColors();
 
   if (!closed || closed.length === 0) {
     _setReviewEmpty(canvas, '暂无交易数据');
@@ -302,7 +305,7 @@ function renderOrderTypeChart(closed) {
   }
 
   // 胜率颜色：绿>50 红<50
-  var wrColors = wrData.map(function(v) { return v >= 50 ? 'rgba(16,185,129,0.8)' : 'rgba(239,68,68,0.8)'; });
+  var wrColors = wrData.map(function(v) { return v >= 50 ? cc.barWin : cc.barLoss; });
 
   window._reviewOrderTypeChart = new Chart(canvas, {
     type: 'bar',
@@ -312,7 +315,7 @@ function renderOrderTypeChart(closed) {
         label: '胜率 %',
         data: wrData,
         backgroundColor: wrColors,
-        borderColor: wrColors.map(function(c) { return c.replace('0.8', '1'); }),
+        borderColor: wrColors.map(function(c) { return c.replace('0.7', '1'); }),
         borderWidth: 1,
         yAxisID: 'y'
       }]
@@ -396,13 +399,14 @@ function renderEmotionAnalysis(closed) {
   }
 
   var ctx = canvas.getContext('2d');
+  var cc = utils.getChartColors();
   _reviewCharts['chartEmotion'] = new Chart(ctx, {
     type: 'bar',
     data: {
       labels: labels,
       datasets: [
-        { label: '盈利笔数', data: winData, backgroundColor: 'rgba(34,197,94,0.8)', borderRadius: 6, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
-        { label: '亏损笔数', data: lossData, backgroundColor: 'rgba(239,68,68,0.8)', borderRadius: 6, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' }
+        { label: '盈利笔数', data: winData, backgroundColor: cc.barWin, borderRadius: 6, borderWidth: 1, borderColor: cc.barBorder },
+        { label: '亏损笔数', data: lossData, backgroundColor: cc.barLoss, borderRadius: 6, borderWidth: 1, borderColor: cc.barBorder }
       ]
     },
     options: {
@@ -411,13 +415,13 @@ function renderEmotionAnalysis(closed) {
       plugins: {
         legend: {
           position: 'top',
-          labels: { color: '#cbd5e1', font: { size: 12 }, usePointStyle: true, padding: 12 }
+          labels: { color: cc.tickColor, font: { size: 12 }, usePointStyle: true, padding: 12 }
         },
         tooltip: {
-          backgroundColor: 'rgba(15, 23, 42, 0.95)',
-          titleColor: '#f1f5f9',
-          bodyColor: '#cbd5e1',
-          borderColor: 'rgba(148,163,184,0.12)',
+          backgroundColor: cc.tooltipBg,
+          titleColor: cc.tooltipTitle,
+          bodyColor: cc.tickColor,
+          borderColor: cc.gridColor,
           borderWidth: 1,
           padding: 12,
           mode: 'index', 
@@ -425,8 +429,8 @@ function renderEmotionAnalysis(closed) {
         }
       },
       scales: {
-        x: { grid: { display: false }, ticks: { color: '#cbd5e1', font: { size: 12 }, maxRotation: 45 } },
-        y: { grid: { color: 'rgba(148,163,184,0.15)' }, ticks: { color: '#cbd5e1', font: { size: 12 }, stepSize: 1 } }
+        x: { grid: { display: false }, ticks: { color: cc.tickColor, font: { size: 12 }, maxRotation: 45 } },
+        y: { grid: { color: cc.gridColor }, ticks: { color: cc.tickColor, font: { size: 12 }, stepSize: 1 } }
       }
     }
   });

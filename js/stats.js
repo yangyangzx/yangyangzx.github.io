@@ -123,7 +123,8 @@ function updateStats() {
   const ddEl = document.getElementById('statMaxDD');
   if (maxDD > 0 || peak > 0) {
     ddEl.textContent = maxDD.toFixed(1) + '%';
-    ddEl.style.color = maxDD >= 20 ? '#f87171' : maxDD >= 10 ? '#fbbf24' : '#f1f5f9';
+    ddEl.classList.remove('dd-danger', 'dd-warn', 'dd-safe');
+    ddEl.classList.add(maxDD >= 20 ? 'dd-danger' : maxDD >= 10 ? 'dd-warn' : 'dd-safe');
   } else {
     ddEl.textContent = '—';
     ddEl.style.color = '';
@@ -280,7 +281,8 @@ function drawEquityCurve(closed) {
   document.getElementById('equityPeak').textContent = (peakVal >= 0 ? '+' : '') + peakVal.toFixed(2) + ' USDT';
   const ddEl = document.getElementById('equityDrawdown');
   ddEl.textContent = (maxDD > 0 ? '-' : '') + maxDD.toFixed(1) + '%';
-  ddEl.style.color = maxDD >= 20 ? '#f87171' : maxDD >= 10 ? '#fbbf24' : '#f1f5f9';
+  ddEl.classList.remove('dd-danger', 'dd-warn', 'dd-safe');
+  ddEl.classList.add(maxDD >= 20 ? 'dd-danger' : maxDD >= 10 ? 'dd-warn' : 'dd-safe');
 
   // 自适应 Y 轴
   const allVals = data.map(d => d.eq);
@@ -297,31 +299,32 @@ function drawEquityCurve(closed) {
 
   // 背景
   ctx.clearRect(0, 0, W, H);
-  ctx.fillStyle = 'rgba(255,255,255,0.03)';
+  var c = utils.getCanvasColors();
+  ctx.fillStyle = c.bg;
   ctx.fillRect(pad.left, pad.top, plotW, plotH);
 
   // 网格
-  ctx.strokeStyle = 'rgba(148, 163, 184, 0.2)'; ctx.lineWidth = 1;
+  ctx.strokeStyle = c.grid; ctx.lineWidth = 1;
   const ySteps = 4;
   for (let i = 0; i <= ySteps; i++) {
     const v = yMin + (yMax - yMin) * (i / ySteps);
     const y = yScale(v);
     ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + plotW, y); ctx.stroke();
-    ctx.fillStyle = '#cbd5e1'; ctx.font = '11px -apple-system, sans-serif'; ctx.textAlign = 'right';
+    ctx.fillStyle = c.text; ctx.font = '11px -apple-system, sans-serif'; ctx.textAlign = 'right';
     ctx.fillText(v.toFixed(0), pad.left - 6, y + 4);
   }
 
   // 零线
   if (yMin < 0 && yMax > 0) {
     const y0 = yScale(0);
-    ctx.strokeStyle = 'rgba(239, 68, 68, 0.4)'; ctx.lineWidth = 1.5;
+    ctx.strokeStyle = c.zero; ctx.lineWidth = 1.5;
     ctx.setLineDash([6, 4]);
     ctx.beginPath(); ctx.moveTo(pad.left, y0); ctx.lineTo(pad.left + plotW, y0); ctx.stroke();
     ctx.setLineDash([]);
   }
 
   // X 轴标签
-  ctx.fillStyle = '#cbd5e1'; ctx.font = '11px -apple-system, sans-serif'; ctx.textAlign = 'center';
+  ctx.fillStyle = c.text; ctx.font = '11px -apple-system, sans-serif'; ctx.textAlign = 'center';
   const xSteps = Math.min(data.length, 8);
   const step = Math.max(Math.floor(data.length / xSteps), 1);
   for (let i = 0; i < data.length; i += step) {
@@ -331,7 +334,7 @@ function drawEquityCurve(closed) {
   // 曲线：分段着色
   for (let i = 1; i < data.length; i++) {
     const up = data[i].eq >= data[i - 1].eq;
-    ctx.strokeStyle = up ? 'rgba(34, 197, 94, 0.95)' : 'rgba(239, 68, 68, 0.95)';
+    ctx.strokeStyle = up ? c.up : c.down;
     ctx.lineWidth = 3;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
@@ -345,9 +348,9 @@ function drawEquityCurve(closed) {
   for (let i = 0; i < data.length; i++) {
     const d = data[i];
     const up = i > 0 ? d.eq >= data[i - 1].eq : (d.eq >= 0);
-    ctx.fillStyle = up ? 'rgba(34, 197, 94, 0.95)' : 'rgba(239, 68, 68, 0.95)';
+    ctx.fillStyle = up ? c.up : c.down;
     ctx.beginPath(); ctx.arc(xScale(i), yScale(d.eq), 5, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = c.ptCenter;
     ctx.beginPath(); ctx.arc(xScale(i), yScale(d.eq), 2, 0, Math.PI * 2); ctx.fill();
   }
 

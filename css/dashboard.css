@@ -4,6 +4,7 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 16px;
+  align-items: stretch;
 }
 
 /* ==================== 仪表盘卡片 ==================== */
@@ -17,6 +18,7 @@
   box-shadow: var(--glass-shadow);
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: 8px;
   transition: all var(--transition-normal);
   animation: materialIn 0.45s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
@@ -26,8 +28,8 @@
 
 .dash-card:hover {
   background: var(--glass-bg-heavy);
-  border-color: rgba(148, 163, 184, 0.2);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(59, 130, 246, 0.1);
+  border-color: var(--color-border);
+  box-shadow: var(--shadow-lg), 0 0 0 1px rgba(59, 130, 246, 0.1);
 }
 
 /* §1: Instant :active — pointer-down scale */

@@ -1,13 +1,13 @@
 /* ==================== 编辑模态框 ==================== */
 .modal-overlay {
-  position: fixed; 
-  inset: 0; 
+  position: fixed;
+  inset: 0;
   z-index: 10000;
-  background: rgba(15, 23, 42, 0.6);
+  background: var(--modal-overlay-bg, rgba(15, 23, 42, 0.6));
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  display: flex; 
-  align-items: center; 
+  display: flex;
+  align-items: center;
   justify-content: center;
   padding: 20px;
 }
@@ -238,10 +238,11 @@
   border-color: var(--color-warning-border); 
 }
 
-.toast.info { 
-  background: var(--color-primary-bg); 
-  color: var(--color-primary-light); 
-  border-color: var(--color-primary-border); 
+.toast.info {
+  background: var(--color-primary-bg);
+  /* Theme-aware primary text — adapts to light/dark via CSS variable */
+  color: var(--color-primary);
+  border-color: var(--color-primary-border);
 }
 
 

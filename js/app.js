@@ -26,7 +26,7 @@ var ThemeManager = (function() {
         btn.title = '切换到深色模式';
       }
     } else {
-      document.documentElement.removeAttribute('data-theme');
+      document.documentElement.setAttribute('data-theme', 'dark');
       var btn = document.getElementById('themeToggleBtn');
       if (btn) {
         btn.innerHTML = '<i class="fas fa-moon"></i>';

@@ -76,7 +76,7 @@
 .switch .slider {
   position: absolute;
   inset: 0;
-  background: var(--color-border);
+  background: rgba(148, 163, 184, 0.4);  /* consistent contrast for knob in both themes */
   border-radius: 12px;
   transition: background 0.25s;
 }

@@ -199,6 +199,52 @@
     };
   };
 
+  // ======== 主题感知 Chart.js / Canvas 颜色桥接 ========
+  /**
+   * 从 CSS 变量读取当前主题的 Chart.js 配置颜色
+   * @returns {{tooltipBg, tooltipTitle, tooltipBody, gridColor, tickColor, axisTitle, legendText, barBorder, positivePoint, negativePoint}}
+   */
+  util.getChartColors = function() {
+    var style = getComputedStyle(document.documentElement);
+    return {
+      tooltipBg:     style.getPropertyValue('--chart-tooltip-bg').trim(),
+      tooltipTitle:  style.getPropertyValue('--chart-tooltip-title').trim(),
+      tooltipBody:   style.getPropertyValue('--chart-tooltip-body').trim(),
+      gridColor:     style.getPropertyValue('--chart-grid-color').trim(),
+      tickColor:     style.getPropertyValue('--chart-tick-color').trim(),
+      axisTitle:     style.getPropertyValue('--chart-axis-title').trim(),
+      legendText:    style.getPropertyValue('--chart-legend-text').trim(),
+      barBorder:     style.getPropertyValue('--chart-bar-border').trim(),
+      positivePoint: style.getPropertyValue('--chart-positive-point').trim(),
+      negativePoint: style.getPropertyValue('--chart-negative-point').trim(),
+      barWin:        style.getPropertyValue('--chart-bar-win').trim(),
+      barWarn:       style.getPropertyValue('--chart-bar-warn').trim(),
+      barLoss:       style.getPropertyValue('--chart-bar-loss').trim(),
+      barNeutral:    style.getPropertyValue('--chart-bar-neutral').trim(),
+      scatterWin:    style.getPropertyValue('--chart-scatter-win').trim(),
+      scatterLoss:   style.getPropertyValue('--chart-scatter-loss').trim(),
+      canvasText:    style.getPropertyValue('--chart-canvas-text').trim()
+    };
+  };
+
+  /**
+   * 从 CSS 变量读取当前主题的 Canvas 2D 绘制颜色
+   * @returns {{text, grid, fill}}
+   */
+  util.getCanvasColors = function() {
+    var style = getComputedStyle(document.documentElement);
+    return {
+      text:     style.getPropertyValue('--chart-canvas-text').trim(),
+      grid:     style.getPropertyValue('--chart-canvas-grid').trim(),
+      fill:     style.getPropertyValue('--chart-canvas-fill').trim(),
+      bg:       style.getPropertyValue('--chart-canvas-bg').trim(),
+      zero:     style.getPropertyValue('--chart-canvas-zero').trim(),
+      up:       style.getPropertyValue('--chart-canvas-up').trim(),
+      down:     style.getPropertyValue('--chart-canvas-down').trim(),
+      ptCenter: style.getPropertyValue('--chart-canvas-ptcenter').trim()
+    };
+  };
+
   // 挂载到全局
   window.utils = util;
 })();
