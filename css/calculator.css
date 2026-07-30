@@ -92,7 +92,7 @@
 
     .result-card.margin-danger {
       border-color: var(--color-danger);
-      box-shadow: 0 0 12px rgba(239,68,68,0.15);
+      box-shadow: 0 0 12px var(--color-danger-bg);
       animation: marginPulse 1.5s infinite;
     }
 
@@ -294,7 +294,7 @@
     }
 
     .result-split-table tbody tr:nth-child(even) td {
-      background: rgba(255,255,255,0.03);
+      background: var(--color-surface-hover);
     }
 
 

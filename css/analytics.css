@@ -86,11 +86,11 @@
 }
 
 .analytics-table tr.row-best td {
-  background: rgba(34, 197, 94, 0.08);
+  background: var(--color-success-bg);
 }
 
 .analytics-table tr.row-worst td {
-  background: rgba(239, 68, 68, 0.08);
+  background: var(--color-danger-bg);
 }
 
 .analytics-table .col-num {
