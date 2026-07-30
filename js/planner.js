@@ -473,8 +473,8 @@ function updateChecklist() {
         var icon = el.querySelector('.check-icon');
         if (icon) {
           var className = icon.className;
-          if (className && className.contains('pass')) checklistResults[id] = 'pass';
-          else if (className && className.contains('fail')) checklistResults[id] = 'fail';
+          if (className && className.indexOf('pass') !== -1) checklistResults[id] = 'pass';
+          else if (className && className.indexOf('fail') !== -1) checklistResults[id] = 'fail';
           else checklistResults[id] = 'pending';
         }
       }
