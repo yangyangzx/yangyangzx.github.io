@@ -94,16 +94,15 @@ function renderDailyLoss() {
 
   var todayStr = window.utils.toLocalDateStr(new Date().toISOString());
   var todayPnl = 0;
+  var closed = getClosedSorted();
 
-  for (var i = 0; i < logs.length; i++) {
-    if (window.utils.isClosedTrade(logs[i])) {
-      var ct = logs[i].closeTime;
-      if (!ct) continue;
-      var closeDateStr = window.utils.toLocalDateStr(ct);
-      if (!closeDateStr) continue;
-      if (closeDateStr === todayStr) {
-        todayPnl += parseFloat(logs[i].pnlAmount) || 0;
-      }
+  for (var i = 0; i < closed.length; i++) {
+    var ct = closed[i].closeTime;
+    if (!ct) continue;
+    var closeDateStr = window.utils.toLocalDateStr(ct);
+    if (!closeDateStr) continue;
+    if (closeDateStr === todayStr) {
+      todayPnl += parseFloat(closed[i].pnlAmount) || 0;
     }
   }
 
@@ -417,7 +416,7 @@ function renderFrequency() {
   var avgDaily = (closed.length / daysRange).toFixed(1);
 
   // 今日交易次数
-  var todayStr = new Date().toISOString().slice(0, 10);
+  var todayStr = window.utils.toLocalDateStr(new Date().toISOString());
   var todayCount = dailyStats[todayStr] ? dailyStats[todayStr].count : 0;
   var todayPnl = dailyStats[todayStr] ? dailyStats[todayStr].pnl : 0;
 

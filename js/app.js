@@ -18,20 +18,11 @@ var ThemeManager = (function() {
   }
 
   function applyTheme(theme) {
-    if (theme === 'light') {
-      document.documentElement.setAttribute('data-theme', 'light');
-      var btn = document.getElementById('themeToggleBtn');
-      if (btn) {
-        btn.innerHTML = '<i class="fas fa-sun"></i>';
-        btn.title = '切换到深色模式';
-      }
-    } else {
-      document.documentElement.setAttribute('data-theme', 'dark');
-      var btn = document.getElementById('themeToggleBtn');
-      if (btn) {
-        btn.innerHTML = '<i class="fas fa-moon"></i>';
-        btn.title = '切换到浅色模式';
-      }
+    var isDark = theme === 'dark';
+    document.documentElement.setAttribute('data-theme', theme);
+    var checkbox = document.getElementById('themeToggleCheckbox');
+    if (checkbox) {
+      checkbox.checked = isDark;
     }
     localStorage.setItem(THEME_KEY, theme);
   }
@@ -43,19 +34,18 @@ var ThemeManager = (function() {
     return newTheme;
   }
 
-  // 初始化：应用保存的主题或绑定按钮
+  // 初始化：应用保存的主题并绑定滑动开关
   function init() {
     var preferred = loadPreferredTheme();
     applyTheme(preferred);
 
-    // 绑定切换按钮（只绑定一次）
-    var btn = document.getElementById('themeToggleBtn');
-    if (btn && !btn._themeListenerBound) {
-      btn.addEventListener('click', function(e) {
-        e.preventDefault();
-        toggle();
+    // 绑定滑动开关复选框（只绑定一次）
+    var checkbox = document.getElementById('themeToggleCheckbox');
+    if (checkbox && !checkbox._themeListenerBound) {
+      checkbox.addEventListener('change', function() {
+        applyTheme(this.checked ? 'dark' : 'light');
       });
-      btn._themeListenerBound = true;
+      checkbox._themeListenerBound = true;
     }
   }
 

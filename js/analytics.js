@@ -70,13 +70,22 @@ function renderAnalytics() {
   destroyAnalyticsCharts();
 
   var closed = getClosedSorted();
-  renderEquityChart(closed);
-  renderStrategyChart(closed);
-  renderPatternChart(closed);
-  renderSessionChart(closed);
-  renderMAEMFEScatter(closed);
-  renderCloseTypeChart(closed);
-  renderDimensionBreakdown(closed);
+
+  var fns = [
+    ['renderEquityChart',       function() { renderEquityChart(closed); }],
+    ['renderStrategyChart',     function() { renderStrategyChart(closed); }],
+    ['renderPatternChart',      function() { renderPatternChart(closed); }],
+    ['renderSessionChart',      function() { renderSessionChart(closed); }],
+    ['renderMAEMFEScatter',     function() { renderMAEMFEScatter(closed); }],
+    ['renderCloseTypeChart',    function() { renderCloseTypeChart(closed); }],
+    ['renderDimensionBreakdown',function() { renderDimensionBreakdown(closed); }]
+  ];
+
+  for (var i = 0; i < fns.length; i++) {
+    try { fns[i][1](); } catch(e) {
+      console.error('[analytics] ' + fns[i][0] + ' failed:', e);
+    }
+  }
 }
 
 // ==================== 图表 1：资金曲线 ====================
@@ -172,7 +181,7 @@ function renderEquityChart(closed) {
         tension: 0.25,
         pointRadius: 3,
         pointHoverRadius: 5,
-        pointBackgroundColor: '#3b82f6',
+        pointBackgroundColor: cc.positivePoint,
         pointBorderColor: 'rgba(255,255,255,0.6)',
         pointBorderWidth: 1.5,
         borderWidth: 2.5
@@ -300,6 +309,7 @@ function renderStrategyChart(closed) {
   _clearCanvasEmpty(canvas);
   ensureChartContainer(canvas);
 
+  var cc = utils.getChartColors();
   var labels = [], data = [], bgColors = [];
   for (var i = 0; i < rows.length; i++) {
     var displayName = rows[i].patternName !== '未标记' 
@@ -314,7 +324,6 @@ function renderStrategyChart(closed) {
   }
 
   var ctx = canvas.getContext('2d');
-  var cc = utils.getChartColors();
   _analyticsCharts['chartStrategy'] = new Chart(ctx, {
     type: 'bar',
     data: {
@@ -524,6 +533,7 @@ function renderPatternChart(closed) {
   ensureChartContainer(canvas);
 
   var labels = [], data = [], bgColors = [];
+  var cc = utils.getChartColors();
   for (var i = 0; i < rows.length; i++) {
     var name = rows[i].name;
     if (name === '其他 (单笔形态)') {
@@ -539,7 +549,6 @@ function renderPatternChart(closed) {
   }
 
   var ctx = canvas.getContext('2d');
-  var cc = utils.getChartColors();
   _analyticsCharts['chartPattern'] = new Chart(ctx, {
     type: 'bar',
     data: {
@@ -660,6 +669,7 @@ function renderSessionChart(closed) {
     'overlap': '重叠时段', 'allday': '全天', '未标记': '未标记'
   };
 
+  var cc = utils.getChartColors();
   var labels = [], data = [], bgColors = [];
   for (var j = 0; j < keys.length; j++) {
     var trades = groups[keys[j]];
@@ -678,7 +688,6 @@ function renderSessionChart(closed) {
   ensureChartContainer(canvas);
 
   var ctx = canvas.getContext('2d');
-  var cc = utils.getChartColors();
   _analyticsCharts['chartSession'] = new Chart(ctx, {
     type: 'bar',
     data: {
@@ -749,6 +758,7 @@ function renderMAEMFEScatter(closed) {
 
   var ctx = canvas.getContext('2d');
   var cc = utils.getChartColors();
+  var c = utils.getCanvasColors();
   _analyticsCharts['chartMAEMFE'] = new Chart(ctx, {
     type: 'scatter',
     data: {
@@ -960,6 +970,7 @@ function renderCloseTypeChart(closed) {
   var profitTypes = ['initialTP', 'manualWin', 'partialTP'];
   var lossTypes = ['initialSL', 'trailingSL', 'manualLoss', 'liquidation', 'timeStop'];
 
+  var cc = utils.getChartColors();
   var labels = [], data = [], bgColors = [], pcts = [];
   var keys = Object.keys(groups);
 
@@ -986,7 +997,6 @@ function renderCloseTypeChart(closed) {
   ensureChartContainer(canvas);
 
   var ctx = canvas.getContext('2d');
-  var cc = utils.getChartColors();
   _analyticsCharts['closeTypeChart'] = new Chart(ctx, {
     type: 'bar',
     data: {

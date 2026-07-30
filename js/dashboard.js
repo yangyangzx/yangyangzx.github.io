@@ -332,6 +332,7 @@ var _dashEquityChart = null;
 
 function _renderEquityChart() {
   var closed = _getClosedLogs();
+  var canvasC;
 
   var curve = window.utils.calcEquityCurve(closed);
   var sorted = closed.slice().sort(function(a, b) {
@@ -367,7 +368,7 @@ function _renderEquityChart() {
   if (sorted.length === 0) {
     // 绘制灰色占位文字（使用 CSS 像素坐标，因为 ctx 已缩放）
     ctx.clearRect(0, 0, rectWidth, rectHeight);
-    var canvasC = utils.getCanvasColors();
+    canvasC = utils.getCanvasColors();
     ctx.fillStyle = canvasC.text;
     ctx.font = '13px -apple-system, sans-serif';
     ctx.textAlign = 'center';

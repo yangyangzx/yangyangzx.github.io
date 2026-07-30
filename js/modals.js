@@ -71,7 +71,7 @@ function openEditModal(idx) {
         '<div class="fp"><label>杠杆</label><input type="number" id="emLeverage" step="0.5" min="0" value="' + (item.leverage ?? 0) + '" /><span id="emMarginPreview" style="display:none;font-size:11px;color:var(--color-text-muted);margin-top:2px;"></span></div>' +
         '<div class="fp"><label>风险额</label><input type="number" id="emRiskAmount" step="0.01" value="' + (item.riskAmount ?? '') + '" /><span id="emRiskPreview" style="display:none;font-size:11px;color:var(--color-text-muted);margin-top:2px;"></span></div>' +
         '<div class="fp"><label>心态评分</label>' + starsHTML + '</div>' +
-        '<div class="fp"><label>策略框架</label><input type="text" id="emStrategyFramework" value="' + esc(sfVal) + '" /></div>' +
+        '<div class="fp"><label>策略框架</label><input type="text" id="emStrategyFramework" list="emStrategyList" value="' + esc(sfVal) + '" /><datalist id="emStrategyList"><option value="4H+1H支撑压力区"><option value="4H+15M FVG"><option value="1M移动平均+EMA100"><option value="Kill Zones支撑压力区"></datalist></div>' +
         '<div class="fp"><label>策略形态</label><select id="emStrategyPattern">' + patternOptions + '</select></div>' +
         '<div class="fp span-2"><label>信号K线确认</label>' + signalsHTML + '</div>' +
         splitDetailHTML +

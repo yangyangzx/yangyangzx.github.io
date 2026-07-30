@@ -1,5 +1,6 @@
 // ==================== 导入导出模块 ====================
 // 为 index.html 和 trading.html 提供统一的 I/O 函数
+var fmtTime = window.utils.fmtTime;
 
 function exportCSV() {
   if (!logs.length) { showToast('暂无日志','info'); return; }

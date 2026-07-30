@@ -92,6 +92,8 @@ function renderLossReasonPie(closed) {
     return;
   }
 
+  var cc = utils.getChartColors();
+
   // 红色系配色（硬编码，Chart.js 不支持 CSS 变量）
   var redPalette = ['rgba(239,68,68,0.9)', 'rgba(239,68,68,0.8)', 'rgba(239,68,68,0.65)', 'rgba(239,68,68,0.5)', 'rgba(239,68,68,0.35)',
                     'rgba(220,38,38,0.9)', 'rgba(185,28,28,0.9)', 'rgba(153,27,27,0.9)', 'rgba(127,29,29,0.9)', 'rgba(249,115,22,0.7)'];
@@ -198,6 +200,7 @@ function renderStrategyRank(closed) {
   _clearReviewEmpty(canvas);
   ensureReviewChartWrap(canvas);
 
+  var cc = utils.getChartColors();
   var labels = [], data = [], bgColors = [];
   for (var r = 0; r < rows.length; r++) {
     labels.push(rows[r].name.length > 12 ? rows[r].name.substring(0, 11) + '…' : rows[r].name);
@@ -206,7 +209,6 @@ function renderStrategyRank(closed) {
   }
 
   var ctx = canvas.getContext('2d');
-  var cc = utils.getChartColors();
   _reviewCharts['chartStrategyRank'] = new Chart(ctx, {
     type: 'bar',
     data: {
