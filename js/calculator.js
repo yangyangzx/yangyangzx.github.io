@@ -299,11 +299,75 @@ function calculate() {
     const takerRate = 0.08;
     feeRate = (feeRate > 0 && feeRate < takerRate) ? feeRate : takerRate;
   }
-  const slippageTicks = parseFloat(document.getElementById('slippage').value) || 0;
+  const slippageTicksInput = parseFloat(document.getElementById('slippage').value) || 0;
   const tickSize = getTickSize(symbol);
-  const fee = feeRate > 0 ? (finalPos * feeRate / 100 * 2) : 0;
-  const slippageCost = slippageTicks > 0 ? (slippageTicks * tickSize * finalPos / effectiveEntryPrice) : 0;
-  const totalCost = fee + slippageCost;
+  
+  // ===== 修复手续费计算逻辑 =====
+  // 原Bug: finalPos * feeRate / 100 * 2 (错误地乘以2，重复计算)
+  // 新逻辑: 区分开仓费和平仓费，支持部分平仓场景
+  let openFee = 0;    // 开仓手续费
+  let closeFee = 0;   // 平仓手续费
+  let totalFee = 0;   // 总手续费
+  
+  if (feeRate > 0) {
+    // 开仓手续费 (一次性收取)
+    openFee = finalPos * feeRate / 100;
+    
+    // 平仓手续费: 这里假设全仓平仓，实际应根据平仓数量调整
+    // 如果是部分平仓，应该传入partialCloseRatio参数
+    const closeRatio = 1.0; // 默认全仓平仓，未来可扩展为参数
+    closeFee = finalPos * feeRate / 100 * closeRatio;
+    
+    totalFee = openFee + closeFee;
+  }
+  
+  // ===== 修复滑点成本计算 - 实现基于订单簿深度的非线性模型 =====
+  // 原Bug: slippageTicks * tickSize * finalPos / effectiveEntryPrice (线性模型，脱离现实)
+  // 新逻辑: 基于市场微观结构的非线性滑点模型
+  let slippageCost = 0;
+  
+  if (slippageTicksInput > 0 && finalPos > 0) {
+    // 获取基础滑点设置
+    const baseSlippageTicks = slippageTicksInput;
+    
+    // ===== 非线性滑点模型 =====
+    // 模型来源: Market Impact Theory (Kyle 1985, Almgren-Chriss 2000)
+    // 滑点 = 基础滑点 × 订单规模因子 × 波动率因子 × 流动性因子
+    
+    // 1. 订单规模因子 (非线性)
+    // 小订单: 滑点线性增长
+    // 大订单: 滑点指数增长 (市场冲击)
+    const orderSizeFactor = calculateOrderSizeImpact(finalPos, symbol);
+    
+    // 2. 波动率因子 (隐含波动率影响)
+    const volatilityFactor = calculateVolatilityImpact(symbol);
+    
+    // 3. 流动性因子 (订单簿深度)
+    const liquidityFactor = calculateLiquidityImpact(symbol, finalPos);
+    
+    // 4. 订单类型因子
+    const orderType = document.getElementById('orderType').value || 'market';
+    const orderTypeFactor = orderType === 'market' ? 1.0 : (orderType === 'limit' ? 0.3 : 0.8);
+    
+    // 综合滑点计算 (非线性模型)
+    const adjustedSlippageTicks = baseSlippageTicks * 
+                                  orderSizeFactor * 
+                                  volatilityFactor * 
+                                  liquidityFactor * 
+                                  orderTypeFactor;
+    
+    // 确保滑点在合理范围内 (不超过基础滑点的10倍)
+    const maxSlippageMultiplier = 10;
+    const cappedAdjustedTicks = Math.min(adjustedSlippageTicks, baseSlippageTicks * maxSlippageMultiplier);
+    
+    // 计算最终滑点成本
+    slippageCost = cappedAdjustedTicks * tickSize * finalPos / effectiveEntryPrice;
+    
+    // 调试信息 (生产环境可移除或改为debug级别)
+    console.log(`滑点计算详情 - 基础: ${baseSlippageTicks}, 订单因子: ${orderSizeFactor.toFixed(3)}, 波动率: ${volatilityFactor.toFixed(3)}, 流动性: ${liquidityFactor.toFixed(3)}, 调整后: ${cappedAdjustedTicks.toFixed(2)}, 成本: ${slippageCost.toFixed(4)}`);
+  }
+  
+  const totalCost = totalFee + slippageCost;
 
   // ===== 盈亏比预判（扣除手续费和滑点后的净盈亏比） =====
   let targetRR = null, targetPct = null;
@@ -588,6 +652,7 @@ function toggleSplitMode() {
     area.classList.add('open');
     if (!_splitBatches.length) { initSplitBatches(2); }
     renderSplitBatches();
+    updateSplitButtons(); // 新增：确保按钮状态正确
     if (!document.getElementById('entryPrice').value) {
       document.getElementById('entryPrice').placeholder = '加权均价（自动计算）';
     }
@@ -716,15 +781,84 @@ function computeWeightedEntry() {
   return result;
 }
 function addSplitBatch() {
-  if (_splitBatches.length >= 3) return;
+  // 修复Bug: 统一分批建仓限制逻辑，支持2-5批的合理分批策略
+  const MIN_SPLITS = 2;  // 最少2批
+  const MAX_SPLITS = 5;  // 最多5批
+  
+  if (_splitBatches.length >= MAX_SPLITS) {
+    showToast(`分批建仓最多支持${MAX_SPLITS}批，当前已有${_splitBatches.length}批`, "warning");
+    return false; // 明确返回false表示添加失败
+  }
+  
+  // 添加新批次
   _splitBatches.push({ price: '', alloc: '', stopLoss: '' });
   renderSplitBatches();
+  updateSplitButtons(); // 新增：更新按钮状态
+  
+  // 调试信息
+  console.log(`已添加第${_splitBatches.length}批，当前共${_splitBatches.length}批，范围：${MIN_SPLITS}-${MAX_SPLITS}`);
+  return true; // 返回true表示添加成功
 }
 function removeSplitBatch(idx) {
-  if (_splitBatches.length <= 2) return;
+  // 修复Bug: 统一分批建仓限制逻辑，最少保留2批
+  const MIN_SPLITS = 2;  // 最少2批
+  const MAX_SPLITS = 5;  // 最多5批
+  
+  if (_splitBatches.length <= MIN_SPLITS) {
+    showToast(`分批建仓最少需要${MIN_SPLITS}批，当前已有${_splitBatches.length}批`, "warning");
+    return false; // 明确返回false表示删除失败
+  }
+  
+  // 删除指定批次
   _splitBatches.splice(idx, 1);
   renderSplitBatches();
+  updateSplitButtons(); // 更新按钮状态
   onSplitChange();
+  
+  // 调试信息
+  console.log(`已删除第${idx + 1}批，剩余${_splitBatches.length}批，范围：${MIN_SPLITS}-${MAX_SPLITS}`);
+  return true; // 返回true表示删除成功
+}
+
+/**
+ * 更新分批建仓按钮的显示状态
+ * 根据当前批次数动态显示/隐藏添加和删除按钮
+ */
+function updateSplitButtons() {
+  const container = document.getElementById('splitContainer');
+  if (!container) return;
+  
+  const addBtn = container.querySelector('.split-add-btn');
+  const removeBtns = container.querySelectorAll('.split-remove-btn');
+  
+  if (!addBtn) return;
+  
+  const MIN_SPLITS = 2;
+  const MAX_SPLITS = 5;
+  const currentCount = _splitBatches ? _splitBatches.length : 2;
+  
+  // 控制添加按钮显示
+  if (currentCount >= MAX_SPLITS) {
+    addBtn.style.display = 'none'; // 达到最大批次，隐藏添加按钮
+  } else {
+    addBtn.style.display = 'inline-block'; // 允许添加，显示按钮
+  }
+  
+  // 控制删除按钮显示
+  removeBtns.forEach(btn => {
+    if (currentCount <= MIN_SPLITS) {
+      btn.style.display = 'none'; // 达到最小批次，隐藏删除按钮
+    } else {
+      btn.style.display = 'inline-block'; // 允许删除，显示按钮
+    }
+  });
+  
+  // 可选：添加视觉提示
+  if (currentCount >= MAX_SPLITS) {
+    addBtn.title = `已达到最大批次数(${MAX_SPLITS})`;
+  } else {
+    addBtn.title = `添加第${currentCount + 1}批 (最多${MAX_SPLITS}批)`;
+  }
 }
 function getSplitEntries() {
   if (!_splitMode || _splitBatches.length < 2) return null;

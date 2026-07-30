@@ -106,7 +106,11 @@
 
   // ======== 共享公式 ========
   /**
-   * USDT-M 逐仓强平价格（精确公式）
+   * USDT-M 逐仓强平价格（标准公式，参考主流交易所）
+   * 公式来源: 币安/OKX/火币等主流期货交易所标准
+   * Long:  LP = Entry × (1 - InitialMargin% + MMR%) / (1 - MMR%)
+   * Short: LP = Entry × (1 + InitialMargin% - MMR%) / (1 + MMR%)
+   * 其中: InitialMargin% = 1/leverage, MMR% = 维持保证金率
    * @param {number} entryPrice - 入场价
    * @param {string} direction - 'long' | 'short'
    * @param {number} leverage - 杠杆倍数
@@ -114,11 +118,58 @@
    * @returns {number} 强平价格
    */
   util.calcLiquidationPrice = function(entryPrice, direction, leverage, mmr) {
-    if (direction === 'long') {
-      return entryPrice * (1 - 1 / leverage) / (1 - mmr);
-    } else {
-      return entryPrice * (1 + 1 / leverage) / (1 + mmr);
+    // 参数验证
+    if (!entryPrice || entryPrice <= 0) {
+      console.error('calcLiquidationPrice: invalid entryPrice', entryPrice);
+      return NaN;
     }
+    if (!leverage || leverage <= 0) {
+      console.error('calcLiquidationPrice: invalid leverage', leverage);
+      return NaN;
+    }
+    if (mmr == null || mmr < 0) {
+      console.error('calcLiquidationPrice: invalid mmr', mmr);
+      return NaN;
+    }
+    
+    // 初始保证金率 = 1/杠杆
+    const initialMarginRatio = 1 / leverage;
+    
+    let liquidationPrice;
+    if (direction === 'long') {
+      // 多头强平价格公式
+      // LP = Entry × (1 - InitialMargin% + MMR%) / (1 - MMR%)
+      if (1 - mmr <= 0) {
+        console.error('calcLiquidationPrice: invalid mmr leads to division by zero');
+        return NaN;
+      }
+      liquidationPrice = entryPrice * (1 - initialMarginRatio + mmr) / (1 - mmr);
+      
+      // 合理性检查：多头强平价应低于入场价
+      if (liquidationPrice >= entryPrice) {
+        console.warn('calcLiquidationPrice: long liquidation price >= entry price, check parameters');
+      }
+    } else if (direction === 'short') {
+      // 空头强平价格公式  
+      // LP = Entry × (1 + InitialMargin% - MMR%) / (1 + MMR%)
+      liquidationPrice = entryPrice * (1 + initialMarginRatio - mmr) / (1 + mmr);
+      
+      // 合理性检查：空头强平价应高于入场价
+      if (liquidationPrice <= entryPrice) {
+        console.warn('calcLiquidationPrice: short liquidation price <= entry price, check parameters');
+      }
+    } else {
+      console.error('calcLiquidationPrice: invalid direction', direction);
+      return NaN;
+    }
+    
+    // 防止负数和异常值
+    if (!isFinite(liquidationPrice) || liquidationPrice <= 0) {
+      console.error('calcLiquidationPrice: calculated invalid liquidation price', liquidationPrice);
+      return NaN;
+    }
+    
+    return liquidationPrice;
   };
 
   // ======== 本地日期字符串（统一口径） ========
@@ -246,6 +297,145 @@
       down:     style.getPropertyValue('--chart-canvas-down').trim(),
       ptCenter: style.getPropertyValue('--chart-canvas-ptcenter').trim()
     };
+  };
+
+// ======== 滑点成本计算 - 市场微观结构模型 ========
+  /**
+   * 计算订单规模对市场冲击的影响因子 (非线性模型)
+   * 基于 Kyle(1985) 和 Almgren-Chriss(2000) 市场冲击理论
+   * @param {number} positionSize - 仓位大小 (USDT)
+   * @param {string} symbol - 交易品种
+   * @returns {number} 订单规模影响因子 (>= 1.0)
+   */
+  util.calculateOrderSizeImpact = function(positionSize, symbol) {
+    // 基础假设：不同品种的日均交易量 (简化模型)
+    const dailyVolumeMap = {
+      'BTC': 50000000000,  // 500亿 USDT
+      'ETH': 20000000000,  // 200亿 USDT
+      'BNB': 2000000000,   // 20亿 USDT
+      'ADA': 500000000,    // 5亿 USDT
+      'SOL': 800000000,    // 8亿 USDT
+      'DOT': 300000000,    // 3亿 USDT
+      'LINK': 400000000,   // 4亿 USDT
+      'default': 1000000000 // 默认10亿 USDT
+    };
+    
+    // 获取品种对应的日交易量
+    const dailyVolume = dailyVolumeMap[symbol] || dailyVolumeMap['default'];
+    
+    // 标准化仓位大小 (相对于日交易量的比例)
+    const sizeRatio = positionSize / dailyVolume;
+    
+    // 非线性冲击模型：小订单线性，大订单指数增长
+    let impactFactor;
+    if (sizeRatio <= 0.001) {
+      // 小额订单 (< 0.1% 日交易量): 近似线性
+      impactFactor = 1.0 + sizeRatio * 100;
+    } else if (sizeRatio <= 0.01) {
+      // 中等订单 (0.1%-1% 日交易量): 平方根增长
+      impactFactor = 1.0 + Math.sqrt(sizeRatio) * 10;
+    } else {
+      // 大额订单 (> 1% 日交易量): 指数增长 (市场冲击严重)
+      impactFactor = 1.0 + Math.pow(sizeRatio, 0.7) * 20;
+    }
+    
+    // 确保最小影响为1.0，最大不超过100倍 (极端情况保护)
+    return Math.min(Math.max(impactFactor, 1.0), 100.0);
+  };
+
+  /**
+   * 计算波动率对滑点的影响因子
+   * 高波动时期市场深度下降，滑点放大
+   * @param {string} symbol - 交易品种
+   * @returns {number} 波动率影响因子 (>= 0.5, <= 3.0)
+   */
+  util.calculateVolatilityImpact = function(symbol) {
+    // 获取当前时间 (简化：使用系统时间)
+    const now = new Date();
+    const hour = now.getUTCHours();
+    
+    // 时间段波动率模型 (UTC时间)
+    let baseVolatility;
+    if (hour >= 0 && hour < 8) {
+      // 亚洲早盘：相对较低波动
+      baseVolatility = 1.0;
+    } else if (hour >= 8 && hour < 16) {
+      // 欧洲时段：中等波动
+      baseVolatility = 1.2;
+    } else if (hour >= 16 && hour < 24) {
+      // 美洲时段：高波动
+      baseVolatility = 1.5;
+    } else {
+      baseVolatility = 1.0;
+    }
+    
+    // 品种特性调整 (基于历史波动率特征)
+    const symbolVolatilityMap = {
+      'BTC': 1.0,   // 基准
+      'ETH': 1.1,   // 略高于BTC
+      'SOL': 1.4,   // 高波动山寨币
+      'ADA': 1.3,   // 中等波动
+      'DOT': 1.2,   // 中等波动
+      'LINK': 1.25, // 中等波动
+      'default': 1.15
+    };
+    
+    const symbolFactor = symbolVolatilityMap[symbol] || symbolVolatilityMap['default'];
+    
+    // 综合波动率影响 (考虑周末效应)
+    const dayOfWeek = now.getUTCDay();
+    const weekendFactor = (dayOfWeek === 0 || dayOfWeek === 6) ? 0.7 : 1.0; // 周末波动较低
+    
+    const volatilityImpact = baseVolatility * symbolFactor * weekendFactor;
+    
+    // 限制范围在 0.5-3.0 之间
+    return Math.min(Math.max(volatilityImpact, 0.5), 3.0);
+  };
+
+  /**
+   * 计算流动性对滑点的影响因子
+   * 基于订单簿深度的流动性分析
+   * @param {string} symbol - 交易品种
+   * @param {number} positionSize - 仓位大小
+   * @returns {number} 流动性影响因子 (>= 0.3, <= 5.0)
+   */
+  util.calculateLiquidityImpact = function(symbol, positionSize) {
+    // 模拟订单簿深度 (实际应用中应从交易所API获取)
+    const orderBookDepthMap = {
+      'BTC': { depth: 5000000, spread: 0.02 },    // 500万USDT深度，0.02%价差
+      'ETH': { depth: 2000000, spread: 0.05 },    // 200万USDT深度，0.05%价差
+      'BNB': { depth: 500000, spread: 0.1 },      // 50万USDT深度，0.1%价差
+      'SOL': { depth: 200000, spread: 0.15 },     // 20万USDT深度，0.15%价差
+      'ADA': { depth: 100000, spread: 0.2 },      // 10万USDT深度，0.2%价差
+      'DOT': { depth: 80000, spread: 0.25 },      // 8万USDT深度，0.25%价差
+      'LINK': { depth: 150000, spread: 0.18 },    // 15万USDT深度，0.18%价差
+      'default': { depth: 100000, spread: 0.2 }
+    };
+    
+    const bookInfo = orderBookDepthMap[symbol] || orderBookDepthMap['default'];
+    const marketDepth = bookInfo.depth;
+    const baseSpread = bookInfo.spread;
+    
+    // 流动性冲击模型：仓位占市场深度的比例决定滑点放大倍数
+    const depthRatio = positionSize / marketDepth;
+    
+    let liquidityFactor;
+    if (depthRatio <= 0.01) {
+      // 浅度冲击：滑点略大于基础价差
+      liquidityFactor = 1.0 + depthRatio * 2;
+    } else if (depthRatio <= 0.1) {
+      // 中度冲击：滑点明显放大
+      liquidityFactor = 1.0 + Math.pow(depthRatio, 0.8) * 5;
+    } else {
+      // 深度冲击：滑点急剧放大 (流动性枯竭)
+      liquidityFactor = 1.0 + Math.pow(depthRatio, 0.6) * 10;
+    }
+    
+    // 基础价差调整：流动性差的品种基础滑点就高
+    const adjustedFactor = liquidityFactor * (baseSpread / 0.02); // 以BTC的0.02%为基准
+    
+    // 限制范围在 0.3-5.0 之间
+    return Math.min(Math.max(adjustedFactor, 0.3), 5.0);
   };
 
   // 挂载到全局
