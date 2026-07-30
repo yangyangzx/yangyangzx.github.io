@@ -155,7 +155,8 @@
    *             initCap: number, peakVal: number, maxDDPercent: number,
    *             finalEq: number, totalPnl: number }}
    */
-  util.calcEquityCurve = function(closed, settingsOverride) {
+  util.calcEquityCurve = function(closed, settingsOverride, opts) {
+    opts = opts || {};
     if (!closed || closed.length === 0) {
       return { data: [], initCap: 0, peakVal: 0, maxDDPercent: 0, finalEq: 0, totalPnl: 0 };
     }
@@ -165,7 +166,9 @@
     });
 
     var _initCap = 0;
-    if (sorted.length > 0 && sorted[0].capital != null && !isNaN(sorted[0].capital) && sorted[0].capital > 0) {
+    if (opts.purePnl) {
+      _initCap = 0;
+    } else if (sorted.length > 0 && sorted[0].capital != null && !isNaN(sorted[0].capital) && sorted[0].capital > 0) {
       _initCap = sorted[0].capital;
     } else {
       var bal = (settingsOverride && settingsOverride.accountBalance > 0) ? settingsOverride.accountBalance : 0;
@@ -178,7 +181,7 @@
     var data = [], cum = _initCap, peakVal = _initCap, maxDD = 0;
     for (var i = 0; i < sorted.length; i++) {
       var l = sorted[i];
-      if (l.capital != null && !isNaN(l.capital) && l.capital !== cum) {
+      if (!opts.purePnl && l.capital != null && !isNaN(l.capital) && l.capital !== cum) {
         cum = l.capital;
       } else {
         cum += (parseFloat(l.pnlAmount) || 0);

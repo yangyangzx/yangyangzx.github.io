@@ -250,7 +250,7 @@ function updateStats() {
 function drawEquityCurve(closed) {
   const card = document.getElementById('equity-card');
   if (!card) return;
-  const curve = window.utils.calcEquityCurve(closed);
+  const curve = window.utils.calcEquityCurve(closed, null, { purePnl: true });
   if (!curve || curve.data.length < 2) { card.style.display = 'none'; return; }
   card.style.display = 'block';
 
@@ -364,11 +364,10 @@ function drawEquityCurve(closed) {
     }
     if (closest === null || closestDist > 30) { tooltip.style.display = 'none'; return; }
     const d = data[closest];
-    const eq = d.eq >= 0 ? '+' + d.eq.toFixed(2) : d.eq.toFixed(2);
     var sc = sortedClosed[closest];
     tooltip.innerHTML = '<b>#' + (closest + 1) + ' ' + (sc.symbol || '') + '</b><br>' +
       _getTradeDate(sc) + '<br>' +
-      '盈亏: ' + eq + ' USDT<br>' +
+      '盈亏: ' + (d.pnl >= 0 ? '+' : '') + d.pnl.toFixed(2) + ' USDT<br>' +
       '累计: ' + (d.eq >= 0 ? '+' : '') + d.eq.toFixed(2) + ' USDT';
     tooltip.style.display = 'block';
     const tx = xScale(closest) + 12;
