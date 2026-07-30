@@ -505,7 +505,7 @@ function groupByPattern(closed) {
       wins: oWins,
       winRate: oWinRate,
       totalPnl: oPnl,
-      avgPnl: othersList.length > 0 ? oPnl / othersList.length : 0,
+      avgPnl: oDecidedCnt > 0 ? oPnl / oDecidedCnt : 0,
       avgRR: oRRc > 0 ? oRR / oRRc : null,
       avgMAE: oMAEc > 0 ? oMAE / oMAEc : null,
       avgMFE: oMFEc > 0 ? oMFE / oMFEc : null
