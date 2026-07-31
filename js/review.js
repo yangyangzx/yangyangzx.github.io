@@ -1,18 +1,26 @@
 // ==================== 复盘中心 ====================
+// 基于全局 logs 数据，对亏损订单进行多维度分析与可视化展示
 
 var _reviewCharts = {};
 
+/**
+ * 销毁复盘页面的所有图表实例
+ */
 function destroyReviewCharts() {
-  var ids = ['chartLossReason', 'chartStrategyRank', 'chartEmotion'];
+  var ids = ['chartLossReason', 'chartStrategyRank', 'chartOrderType', 'chartEmotion'];
   for (var i = 0; i < ids.length; i++) {
     if (_reviewCharts[ids[i]]) {
       _reviewCharts[ids[i]].destroy();
       _reviewCharts[ids[i]] = null;
     }
   }
-  if (window._reviewOrderTypeChart) {
-    window._reviewOrderTypeChart.destroy();
-    window._reviewOrderTypeChart = null;
+  // 额外清理：通过 Chart.getChart 查找残留
+  for (var j = 0; j < ids.length; j++) {
+    var canvas = document.getElementById(ids[j]);
+    if (canvas) {
+      var existing = Chart.getChart(canvas);
+      if (existing) existing.destroy();
+    }
   }
 }
 
@@ -23,7 +31,7 @@ function getClosedTrades() {
 }
 
 /**
- * 空状态降级辅助：隐藏 canvas 并插入空状态 div（避免 canvas 脱离 DOM）
+ * 空状态降级：隐藏 canvas 并插入空状态提示
  */
 function _setReviewEmpty(canvas, message) {
   canvas.style.display = 'none';
@@ -32,7 +40,7 @@ function _setReviewEmpty(canvas, message) {
   if (!empty) {
     empty = document.createElement('div');
     empty.id = emptyId;
-    empty.className = 'review-empty review-empty-temp';
+    empty.className = 'review-empty';
     empty.innerHTML = '<div class="review-empty-icon"><i class="fas fa-clipboard-check"></i></div><div>' + message + '</div>';
     canvas.parentElement.appendChild(empty);
   }
@@ -56,7 +64,7 @@ function renderReview() {
   renderEmotionAnalysis(closed);
 }
 
-// ==================== 卡片 1：亏损原因分布（饼图） ====================
+// ==================== 卡片 1：亏损原因分布（环形图） ====================
 
 function renderLossReasonPie(closed) {
   var canvas = document.getElementById('chartLossReason');
@@ -72,17 +80,20 @@ function renderLossReasonPie(closed) {
     return;
   }
 
-  // 按 lossReason 展开统计
+  // 按 lossReason 展开统计（一笔交易可能有多个原因）
   var reasonCount = {};
+  var reasonPnl = {};
   for (var j = 0; j < losses.length; j++) {
     var reasons = losses[j].lossReason;
     if (Array.isArray(reasons) && reasons.length > 0) {
       for (var k = 0; k < reasons.length; k++) {
         var r = reasons[k];
         reasonCount[r] = (reasonCount[r] || 0) + 1;
+        reasonPnl[r] = (reasonPnl[r] || 0) + losses[j].pnlAmount;
       }
     } else {
       reasonCount['未标记'] = (reasonCount['未标记'] || 0) + 1;
+      reasonPnl['未标记'] = (reasonPnl['未标记'] || 0) + losses[j].pnlAmount;
     }
   }
 
@@ -92,11 +103,16 @@ function renderLossReasonPie(closed) {
     return;
   }
 
-  var cc = utils.getChartColors();
+  _clearReviewEmpty(canvas);
 
-  // 红色系配色（硬编码，Chart.js 不支持 CSS 变量）
-  var redPalette = ['rgba(239,68,68,0.9)', 'rgba(239,68,68,0.8)', 'rgba(239,68,68,0.65)', 'rgba(239,68,68,0.5)', 'rgba(239,68,68,0.35)',
-                    'rgba(220,38,38,0.9)', 'rgba(185,28,28,0.9)', 'rgba(153,27,27,0.9)', 'rgba(127,29,29,0.9)', 'rgba(249,115,22,0.7)'];
+  var cc = utils.getChartColors();
+  var redPalette = [
+    'rgba(239,68,68,0.9)', 'rgba(239,68,68,0.75)', 'rgba(239,68,68,0.6)',
+    'rgba(220,38,38,0.9)', 'rgba(185,28,28,0.85)', 'rgba(153,27,27,0.8)',
+    'rgba(127,29,29,0.75)', 'rgba(249,115,22,0.7)', 'rgba(234,88,12,0.65)',
+    'rgba(194,65,12,0.6)'
+  ];
+
   var labels = [], data = [], bgColors = [];
   for (var m = 0; m < keys.length; m++) {
     labels.push(keys[m]);
@@ -104,15 +120,17 @@ function renderLossReasonPie(closed) {
     bgColors.push(redPalette[m % redPalette.length]);
   }
 
-  _clearReviewEmpty(canvas);
-  ensureReviewChartWrap(canvas);
-
   var ctx = canvas.getContext('2d');
   _reviewCharts['chartLossReason'] = new Chart(ctx, {
     type: 'doughnut',
     data: {
       labels: labels,
-      datasets: [{ data: data, backgroundColor: bgColors, borderColor: cc.barBorder, borderWidth: 3 }]
+      datasets: [{
+        data: data,
+        backgroundColor: bgColors,
+        borderColor: cc.barBorder,
+        borderWidth: 3
+      }]
     },
     options: {
       responsive: true,
@@ -120,7 +138,13 @@ function renderLossReasonPie(closed) {
       plugins: {
         legend: {
           position: 'right',
-          labels: { color: cc.tickColor, font: { size: 12 }, padding: 12, usePointStyle: true, pointStyleWidth: 10 }
+          labels: {
+            color: cc.tickColor,
+            font: { size: 12 },
+            padding: 12,
+            usePointStyle: true,
+            pointStyleWidth: 10
+          }
         },
         tooltip: {
           backgroundColor: cc.tooltipBg,
@@ -133,7 +157,8 @@ function renderLossReasonPie(closed) {
             label: function(ctx) {
               var total = ctx.dataset.data.reduce(function(a, b) { return a + b; }, 0);
               var pct = ((ctx.parsed / total) * 100).toFixed(1);
-              return ctx.label + ': ' + ctx.parsed + ' 次 (' + pct + '%，含重复计数)';
+              var pnl = reasonPnl[ctx.label] || 0;
+              return ctx.label + ': ' + ctx.parsed + ' 次 (' + pct + '%)  累计 ' + pnl.toFixed(0) + ' USDT';
             }
           }
         }
@@ -148,16 +173,18 @@ function renderLossReasonPie(closed) {
 function renderStrategyRank(closed) {
   var canvas = document.getElementById('chartStrategyRank');
   if (!canvas) return;
+  var listEl = document.getElementById('strategyRankList');
 
   if (closed.length === 0) {
     _setReviewEmpty(canvas, '暂无已平仓交易');
-    document.getElementById('strategyRankList').innerHTML = '';
+    if (listEl) listEl.innerHTML = '';
     return;
   }
 
   var groups = {};
   for (var i = 0; i < closed.length; i++) {
-    var key = closed[i].strategyFramework || '未分类';
+    var key = closed[i].strategyFramework && closed[i].strategyFramework.trim() !== '' ?
+      closed[i].strategyFramework : '未分类';
     if (!groups[key]) groups[key] = [];
     groups[key].push(closed[i]);
   }
@@ -170,35 +197,25 @@ function renderStrategyRank(closed) {
     for (var t = 0; t < trades.length; t++) {
       var pnl = trades[t].pnlAmount;
       totalPnl += pnl;
-      if (pnl > 0) {
-        wins++;
-        winSum += pnl;
-      } else if (pnl < 0) {
-        losses++;
-        lossSum += Math.abs(pnl);
-      }
+      if (pnl > 0) { wins++; winSum += pnl; }
+      else if (pnl < 0) { losses++; lossSum += Math.abs(pnl); }
     }
     var decidedCnt = wins + losses;
-    var winRate = decidedCnt > 0 ? (wins / decidedCnt * 100) : 0;
-    var avgWin = wins > 0 ? winSum / wins : 0;
-    var avgLoss = losses > 0 ? lossSum / losses : 0;
-    var wlRatio = avgLoss > 0 ? avgWin / avgLoss : 0;
-
     rows.push({
       name: keys[j],
       count: trades.length,
       wins: wins,
-      winRate: winRate,
+      losses: losses,
+      winRate: decidedCnt > 0 ? (wins / decidedCnt * 100) : 0,
       totalPnl: totalPnl,
-      wlRatio: wlRatio
+      avgWin: wins > 0 ? winSum / wins : 0,
+      avgLoss: losses > 0 ? lossSum / losses : 0
     });
   }
 
-  // 按总盈亏降序
   rows.sort(function(a, b) { return b.totalPnl - a.totalPnl; });
 
   _clearReviewEmpty(canvas);
-  ensureReviewChartWrap(canvas);
 
   var cc = utils.getChartColors();
   var labels = [], data = [], bgColors = [];
@@ -234,7 +251,11 @@ function renderStrategyRank(closed) {
           borderColor: cc.gridColor,
           borderWidth: 1,
           padding: 12,
-          callbacks: { label: function(ctx) { return '总盈亏 ' + ctx.parsed.y.toFixed(2) + ' USDT'; } }
+          callbacks: {
+            label: function(ctx) {
+              return '总盈亏 ' + ctx.parsed.y.toFixed(2) + ' USDT';
+            }
+          }
         }
       },
       scales: {
@@ -245,41 +266,48 @@ function renderStrategyRank(closed) {
   });
 
   // 渲染排名榜
+  if (!listEl) return;
   var listHtml = '<div class="strategy-rank-list">';
   for (var rd = 0; rd < rows.length; rd++) {
     var row = rows[rd];
     var rankClass = (rd === 0) ? ' rank-1' : '';
     listHtml += '<div class="strategy-rank-item' + rankClass + '">';
     listHtml += '<span class="strategy-rank-badge">' + (rd + 1) + '</span>';
-    listHtml += '<span class="strategy-rank-name" title="' + row.name + '">' + row.name + (row.count < 3 ? ' <span style="font-size:10px;color:var(--color-text-muted);">(样本不足)</span>' : '') + '</span>';
-    listHtml += '<span class="strategy-rank-pnl ' + (row.totalPnl >= 0 ? 'risk-safe' : 'risk-danger') + '">' + (row.totalPnl >= 0 ? '+' : '') + row.totalPnl.toFixed(0) + ' USDT</span>';
+    listHtml += '<span class="strategy-rank-name" title="' + row.name + '">' + row.name;
+    if (row.count < 3) listHtml += ' <span style="font-size:10px;color:var(--color-text-muted);">(样本不足)</span>';
+    listHtml += '</span>';
+    listHtml += '<span class="strategy-rank-pnl ' + (row.totalPnl >= 0 ? 'risk-safe' : 'risk-danger') + '">' +
+      (row.totalPnl >= 0 ? '+' : '') + row.totalPnl.toFixed(0) + ' USDT</span>';
     listHtml += '<span class="strategy-rank-meta">胜率 ' + row.winRate.toFixed(0) + '% · ' + row.count + '笔</span>';
     listHtml += '</div>';
   }
   listHtml += '</div>';
-  document.getElementById('strategyRankList').innerHTML = listHtml;
+  listEl.innerHTML = listHtml;
 }
 
-// ── 卡片 3a：订单类型胜率分析（柱状图）──
+// ==================== 卡片 3：订单类型胜率分析（柱状图） ====================
+
 function renderOrderTypeChart(closed) {
   var canvas = document.getElementById('chartOrderType');
   if (!canvas) return;
-
-  var cc = utils.getChartColors();
 
   if (!closed || closed.length === 0) {
     _setReviewEmpty(canvas, '暂无交易数据');
     return;
   }
 
-  // 按 orderType 分组
+  // 按 direction + orderType 分组
   var groups = {};
   for (var i = 0; i < closed.length; i++) {
-    var key = closed[i].orderType || 'market';
-    if (!groups[key]) groups[key] = { total: 0, wins: 0, pnlTotal: 0 };
+    var dir = (closed[i].direction || 'unknown').toUpperCase();
+    var ot = closed[i].orderType || 'market';
+    var key = dir + ' ' + ot;
+    if (!groups[key]) groups[key] = { total: 0, wins: 0, losses: 0, pnlTotal: 0 };
     groups[key].total++;
-    if (parseFloat(closed[i].pnlAmount) > 0) groups[key].wins++;
-    groups[key].pnlTotal += parseFloat(closed[i].pnlAmount) || 0;
+    var pnl = parseFloat(closed[i].pnlAmount) || 0;
+    if (pnl > 0) groups[key].wins++;
+    else if (pnl < 0) groups[key].losses++;
+    groups[key].pnlTotal += pnl;
   }
 
   var keys = Object.keys(groups);
@@ -290,26 +318,19 @@ function renderOrderTypeChart(closed) {
 
   _clearReviewEmpty(canvas);
 
+  var cc = utils.getChartColors();
   var labels = [], wrData = [], pnlData = [];
   for (var j = 0; j < keys.length; j++) {
     var g = groups[keys[j]];
-    var label = ORDER_TYPE_LABELS[keys[j]] || keys[j];
-    labels.push(label + ' (' + g.total + ')');
-    var wr = g.total > 0 ? parseFloat((g.wins / g.total * 100).toFixed(1)) : 0;
-    wrData.push(wr);
+    labels.push(keys[j] + ' (' + g.total + ')');
+    wrData.push(g.total > 0 ? parseFloat((g.wins / g.total * 100).toFixed(1)) : 0);
     pnlData.push(parseFloat(g.pnlTotal.toFixed(2)));
   }
 
-  // 销毁旧实例
-  if (window._reviewOrderTypeChart) {
-    window._reviewOrderTypeChart.destroy();
-    window._reviewOrderTypeChart = null;
-  }
-
-  // 胜率颜色：绿>50 红<50
   var wrColors = wrData.map(function(v) { return v >= 50 ? cc.barWin : cc.barLoss; });
 
-  window._reviewOrderTypeChart = new Chart(canvas, {
+  var ctx = canvas.getContext('2d');
+  _reviewCharts['chartOrderType'] = new Chart(ctx, {
     type: 'bar',
     data: {
       labels: labels,
@@ -317,7 +338,6 @@ function renderOrderTypeChart(closed) {
         label: '胜率 %',
         data: wrData,
         backgroundColor: wrColors,
-        borderColor: wrColors.map(function(c) { return c.replace('0.7', '1'); }),
         borderWidth: 1,
         yAxisID: 'y'
       }]
@@ -325,83 +345,104 @@ function renderOrderTypeChart(closed) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      scales: {
-        y: {
-          beginAtZero: true,
-          max: 100,
-          ticks: { callback: function(v) { return v + '%'; } },
-          title: { display: true, text: '胜率' }
-        }
-      },
       plugins: {
         legend: { display: false },
         tooltip: {
+          backgroundColor: cc.tooltipBg,
+          titleColor: cc.tooltipTitle,
+          bodyColor: cc.tickColor,
+          borderColor: cc.gridColor,
+          borderWidth: 1,
+          padding: 12,
           callbacks: {
             label: function(ctx) {
               var idx = ctx.dataIndex;
-              return '胜率: ' + wrData[idx].toFixed(1) + '% | 盈亏: ' + (pnlData[idx] >= 0 ? '+' : '') + pnlData[idx].toFixed(2) + ' USDT';
+              return '胜率: ' + wrData[idx].toFixed(1) + '% | 盈亏: ' +
+                (pnlData[idx] >= 0 ? '+' : '') + pnlData[idx].toFixed(2) + ' USDT';
             }
           }
+        }
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: cc.tickColor, font: { size: 12 } } },
+        y: {
+          beginAtZero: true,
+          max: 100,
+          grid: { color: cc.gridColor },
+          ticks: { color: cc.tickColor, font: { size: 12 }, callback: function(v) { return v + '%'; } }
         }
       }
     }
   });
 }
 
-// ==================== 卡片 3：交易情绪关联（分组柱状图 + 表格） ====================
+// ==================== 卡片 4：交易情绪关联（分组柱状图 + 表格） ====================
 
 function renderEmotionAnalysis(closed) {
   var canvas = document.getElementById('chartEmotion');
   if (!canvas) return;
+  var tableEl = document.getElementById('emotionTableWrap');
 
-  // 按情绪展开统计（区分盈利和亏损）
-  var emotionData = {};
+  // 收集每个情绪标签对应的盈亏数据
+  var emotionStats = {};
   for (var i = 0; i < closed.length; i++) {
     var emotions = closed[i].emotions;
     var pnl = safeParseNum(closed[i].pnlAmount);
-    var isWin = pnl > 0;
-    var isLoss = pnl < 0;
+    if (pnl == null || !isFinite(pnl)) continue;
+
     if (Array.isArray(emotions) && emotions.length > 0) {
       for (var j = 0; j < emotions.length; j++) {
         var em = emotions[j];
-        if (!emotionData[em]) {
-          emotionData[em] = { count: 0, winCount: 0, lossCount: 0, totalPnl: 0 };
-        }
-        emotionData[em].count++;
-        emotionData[em].totalPnl += pnl || 0;
-        if (isWin) emotionData[em].winCount++;
-        else if (isLoss) emotionData[em].lossCount++;
+        if (!emotionStats[em]) emotionStats[em] = { count: 0, wins: 0, losses: 0, totalPnl: 0 };
+        emotionStats[em].count++;
+        emotionStats[em].totalPnl += pnl;
+        if (pnl > 0) emotionStats[em].wins++;
+        else if (pnl < 0) emotionStats[em].losses++;
       }
     } else {
-      if (!emotionData['未标记']) {
-        emotionData['未标记'] = { count: 0, winCount: 0, lossCount: 0, totalPnl: 0 };
-      }
-      emotionData['未标记'].count++;
-      emotionData['未标记'].totalPnl += pnl || 0;
-      if (isWin) emotionData['未标记'].winCount++;
-      else if (isLoss) emotionData['未标记'].lossCount++;
+      if (!emotionStats['未标记']) emotionStats['未标记'] = { count: 0, wins: 0, losses: 0, totalPnl: 0 };
+      emotionStats['未标记'].count++;
+      emotionStats['未标记'].totalPnl += pnl;
+      if (pnl > 0) emotionStats['未标记'].wins++;
+      else if (pnl < 0) emotionStats['未标记'].losses++;
     }
   }
 
-  var keys = Object.keys(emotionData);
+  var keys = Object.keys(emotionStats);
   if (keys.length === 0 || (keys.length === 1 && keys[0] === '未标记')) {
     _setReviewEmpty(canvas, '暂无情绪标签数据');
-    document.getElementById('emotionTableWrap').innerHTML = '';
+    if (tableEl) tableEl.innerHTML = '';
     return;
   }
 
-  _clearReviewEmpty(canvas);
-  ensureReviewChartWrap(canvas);
+  // 计算整体胜率作为基准
+  var overallWins = 0, overallTotal = 0;
+  for (var k = 0; k < closed.length; k++) {
+    var p = safeParseNum(closed[k].pnlAmount);
+    if (p != null && isFinite(p)) {
+      overallTotal++;
+      if (p > 0) overallWins++;
+    }
+  }
+  var overallWinRate = overallTotal > 0 ? (overallWins / overallTotal * 100) : 0;
 
+  // 按亏损次数降序排序（亏损关联最强的在前）
+  keys.sort(function(a, b) {
+    return emotionStats[b].losses - emotionStats[a].losses;
+  });
+
+  _clearReviewEmpty(canvas);
+
+  var cc = utils.getChartColors();
   var labels = [], winData = [], lossData = [];
-  for (var k = 0; k < keys.length; k++) {
-    labels.push(keys[k]);
-    winData.push(emotionData[keys[k]].winCount);
-    lossData.push(emotionData[keys[k]].lossCount);
+  for (var m = 0; m < keys.length; m++) {
+    var s = emotionStats[keys[m]];
+    labels.push(keys[m]);
+    winData.push(s.wins);
+    lossData.push(s.losses);
   }
 
   var ctx = canvas.getContext('2d');
-  var cc = utils.getChartColors();
   _reviewCharts['chartEmotion'] = new Chart(ctx, {
     type: 'bar',
     data: {
@@ -426,7 +467,7 @@ function renderEmotionAnalysis(closed) {
           borderColor: cc.gridColor,
           borderWidth: 1,
           padding: 12,
-          mode: 'index', 
+          mode: 'index',
           intersect: false
         }
       },
@@ -437,33 +478,41 @@ function renderEmotionAnalysis(closed) {
     }
   });
 
-  // 渲染表格
+  // 渲染情绪关联表格
+  if (!tableEl) return;
   var tHtml = '<div class="emotion-table-wrap"><table class="emotion-table"><thead><tr>';
-  tHtml += '<th>情绪</th><th>出现次数</th><th>盈利笔数</th><th>亏损笔数</th><th>总盈亏</th><th>均盈亏</th>';
+  tHtml += '<th>情绪标签</th><th>出现次数</th><th>盈利/亏损</th><th>胜率(%)</th><th>平均盈亏</th><th>vs整体胜率</th>';
   tHtml += '</tr></thead><tbody>';
   for (var e = 0; e < keys.length; e++) {
-    var ed = emotionData[keys[e]];
-    var avgPnl = ed.count > 0 ? ed.totalPnl / ed.count : 0;
+    var em = keys[e];
+    var stats = emotionStats[em];
+    var decided = stats.wins + stats.losses;
+    var winRate = decided > 0 ? (stats.wins / decided * 100) : 0;
+    var avgPnl = stats.count > 0 ? (stats.totalPnl / stats.count) : 0;
+    var deviation = winRate - overallWinRate;
+
+    var corrDesc = '';
+    if (stats.count < 2) {
+      corrDesc = '<span style="color:var(--color-text-muted);">样本不足</span>';
+    } else if (Math.abs(deviation) < 5) {
+      corrDesc = '<span style="color:var(--color-text-muted);">无明显关联</span>';
+    } else if (deviation > 0) {
+      corrDesc = '<span style="color:var(--color-pnl-positive);">正向 (+' + deviation.toFixed(1) + '%)</span>';
+    } else {
+      corrDesc = '<span style="color:var(--color-pnl-negative);">负向 (' + deviation.toFixed(1) + '%)</span>';
+    }
+
     tHtml += '<tr>';
-    tHtml += '<td>' + keys[e] + '</td>';
-    tHtml += '<td class="col-num">' + ed.count + '</td>';
-    tHtml += '<td class="col-num risk-safe">' + ed.winCount + '</td>';
-    tHtml += '<td class="col-num risk-danger">' + ed.lossCount + '</td>';
-    tHtml += '<td class="' + (ed.totalPnl >= 0 ? 'col-pnl-pos' : 'col-pnl-neg') + '">' + (ed.totalPnl >= 0 ? '+' : '') + ed.totalPnl.toFixed(2) + '</td>';
-    tHtml += '<td class="' + (avgPnl >= 0 ? 'col-pnl-pos' : 'col-pnl-neg') + '">' + (avgPnl >= 0 ? '+' : '') + avgPnl.toFixed(2) + '</td>';
+    tHtml += '<td>' + em + '</td>';
+    tHtml += '<td class="col-num">' + stats.count + '</td>';
+    tHtml += '<td class="col-num">' + stats.wins + '/' + stats.losses + '</td>';
+    tHtml += '<td>' + (decided > 0 ? winRate.toFixed(1) : '-') + '</td>';
+    tHtml += '<td class="' + (avgPnl >= 0 ? 'col-pnl-pos' : 'col-pnl-neg') + '">' +
+      (avgPnl >= 0 ? '+' : '') + avgPnl.toFixed(2) + '</td>';
+    tHtml += '<td>' + corrDesc + '</td>';
     tHtml += '</tr>';
   }
   tHtml += '</tbody></table></div>';
-  document.getElementById('emotionTableWrap').innerHTML = tHtml;
-}
-
-// ==================== 辅助 ====================
-
-function ensureReviewChartWrap(canvas) {
-  if (!canvas.parentElement || !canvas.parentElement.classList.contains('review-chart-container')) {
-    var wrap = document.createElement('div');
-    wrap.className = 'review-chart-container';
-    canvas.parentNode.insertBefore(wrap, canvas);
-    wrap.appendChild(canvas);
-  }
+  tHtml += '<p style="font-size:11px;color:var(--color-text-muted);margin-top:8px;">注：负向关联表示该情绪出现时胜率低于整体水平，值得关注。</p>';
+  tableEl.innerHTML = tHtml;
 }

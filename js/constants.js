@@ -70,17 +70,23 @@ const PATTERN_GROUP_LABELS = {
   'bullish-reversal':'看涨反转', 'bearish-reversal':'看跌反转'
 };
 
-const ORDER_TYPES_LONG  = ['market','limitBuy','stopBuy'];
-const ORDER_TYPES_SHORT = ['market','limitSell','stopSell'];
-const ORDER_TYPES_DISABLED_ON_LONG  = ['limitSell','stopSell'];
-const ORDER_TYPES_DISABLED_ON_SHORT = ['limitBuy','stopBuy'];
+const ORDER_TYPES_LONG  = ['market','limit','stop'];
+const ORDER_TYPES_SHORT = ['market','limit','stop'];
+const ORDER_TYPES_DISABLED_ON_LONG  = [];  // HTML 使用三值方案（limit/stop 通用，方向仅影响 label）
+const ORDER_TYPES_DISABLED_ON_SHORT = [];
 const ORDER_TYPE_LABELS = {
-  market:'市价单 (Market Order)', limitBuy:'Buy Limit', stopBuy:'Buy Stop',
-  limitSell:'Sell Limit', stopSell:'Sell Stop',
+  // HTML 三值方案（当前使用）
+  market:'市价单 (Market Order)',
+  limit:'限价单 (Limit Order)',
+  stop:'止损单 (Stop Order)',
+  // 兼容旧数据（历史日志中可能出现的 limitBuy 等扩展值）
+  limitBuy:'Buy Limit', stopBuy:'Buy Stop',
+   limitSell:'Sell Limit', stopSell:'Sell Stop',
   stopLimit:'Stop Limit', trailingStop:'Trailing Stop'
 };
 const ORDER_TYPE_GROUP = {
-  market:'市价单', limitBuy:'挂价单', stopBuy:'挂价单',
+  market:'市价单', limit:'挂价单', stop:'挂价单',
+  limitBuy:'挂价单', stopBuy:'挂价单',
   limitSell:'挂价单', stopSell:'挂价单',
   stopLimit:'条件单', trailingStop:'条件单'
 };
@@ -142,5 +148,30 @@ function getTickSize(symbol) {
   }
   return 0.1;
 }
+
+// ======== 计算配置常量（从硬编码中提取） ========
+
+/**
+ * 滑点率配置（不同订单类型的预估滑点）
+ * - MARKET: 市价单千分之一
+ * - STOP: 止损单千分之二（突破时滑点更大）
+ * - LIMIT: 限价单无滑点
+ */
+const SLIPPAGE_RATE = {
+  market: 0.001,
+  stop: 0.002,
+  limit: 0
+};
+
+/**
+ * 默认维持保证金率（USDT-M 期货强平阈值）
+ * 主流交易所默认 0.5%
+ */
+const DEFAULT_MMR = 0.005;
+
+/**
+ * 默认杠杆倍数
+ */
+const DEFAULT_LEVERAGE = 10;
 
 function esc(s) { return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }

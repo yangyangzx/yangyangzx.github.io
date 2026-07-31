@@ -270,16 +270,17 @@ function _renderLiqWarn() {
 
     var entry = log.entryPrice;
     var sl = log.stopLoss;
-    if (sl == null || isNaN(sl)) continue; // 无止损的仓位跳过
+    if (sl == null || isNaN(sl) || sl <= 0) continue; // 无止损或止损≤0的仓位跳过，防止除零
     var dir = log.direction;
 
     // 强平价：统一使用 utils.calcLiquidationPrice
-    var mmr = 0.005;
+    var mmr = DEFAULT_MMR;
     try {
       var raw = localStorage.getItem('trade_settings_v1');
       if (raw) { var s = JSON.parse(raw); if (s.mmr != null) mmr = s.mmr / 100; }
     } catch(e) {}
     var liqPrice = window.utils.calcLiquidationPrice(entry, dir, lev, mmr);
+    if (isNaN(liqPrice) || liqPrice <= 0) continue; // 强平价无效跳过
 
     // 检查止损是否在强平价之外（安全方向）
     var isSafe;
@@ -316,9 +317,11 @@ function _renderLiqWarn() {
   var html = '';
   for (var j = 0; j < warnings.length; j++) {
     var w = warnings[j];
+    // 额外防御：NaN 值不直接显示
+    if (isNaN(w.stopLoss) || isNaN(w.liqPrice) || isNaN(w.distance)) continue;
     html += '<div class="liq-item">' +
       '<span class="liq-item-symbol">' + w.symbol + ' (' + (w.direction === 'long' ? '多' : '空') + ')</span>' +
-      '<span class="liq-item-distance">止损 ' + w.stopLoss.toFixed(2) + ' / 强平 ' + w.liqPrice.toFixed(2) + ' (' + w.distance.toFixed(1) + '%)</span>' +
+      '<span class="liq-item-distance">止损 ' + Number(w.stopLoss).toFixed(2) + ' / 强平 ' + Number(w.liqPrice).toFixed(2) + ' (' + Number(w.distance).toFixed(1) + '%)</span>' +
     '</div>';
   }
   listEl.innerHTML = html;
@@ -328,24 +331,20 @@ function _renderLiqWarn() {
 }
 
 // ==================== 卡片 6：资金曲线缩略图 ====================
-var _dashEquityChart = null;
 
 function _renderEquityChart() {
-  var closed = _getClosedLogs();
-  var canvasC;
-
-  var curve = window.utils.calcEquityCurve(closed);
-  var sorted = closed.slice().sort(function(a, b) {
-    var ta = a.closeTime ? new Date(a.closeTime).getTime() : 0;
-    var tb = b.closeTime ? new Date(b.closeTime).getTime() : 0;
-    return ta - tb;
-  });
-
-  var canvas = document.getElementById('dashEquityChart');
-  var ctx = canvas.getContext('2d');
+  const closed = _getClosedLogs();
+  const canvas = document.getElementById('dashEquityChart');
+  
+  if (!canvas) {
+    console.warn('资金曲线图表Canvas元素未找到');
+    return;
+  }
+  
+  const ctx = canvas.getContext('2d');
   // 处理 DPR 保证 Retina 屏幕清晰度
   const dpr = window.devicePixelRatio || 1;
-
+  
   // FIX #10: Use reasonable dimensions even when hidden/initially zero width
   let rectWidth = 600, rectHeight = 200;
   if (canvas.parentElement) {
@@ -359,28 +358,42 @@ function _renderEquityChart() {
   canvas.height = rectHeight * dpr;
   ctx.scale(dpr, dpr);
 
-  // 销毁旧实例
-  if (_dashEquityChart) {
-    _dashEquityChart.destroy();
-    _dashEquityChart = null;
+  // ===== 使用ChartManager进行专业生命周期管理 =====
+  const CHART_KEY = 'dashboard_equity_chart';
+  
+  // 预先注销可能存在的旧实例（防止内存泄漏）
+  if (window.ChartManager) {
+    window.ChartManager.unregister(CHART_KEY);
   }
 
+  const curve = window.utils.calcEquityCurve(closed);
+  const sorted = closed.slice().sort(function(a, b) {
+    const ta = a.closeTime ? new Date(a.closeTime).getTime() : 0;
+    const tb = b.closeTime ? new Date(b.closeTime).getTime() : 0;
+    return ta - tb;
+  });
+
   if (sorted.length === 0) {
-    // 绘制灰色占位文字（使用 CSS 像素坐标，因为 ctx 已缩放）
+    // 绘制占位文字（使用 CSS 像素坐标，因为 ctx 已缩放）
     ctx.clearRect(0, 0, rectWidth, rectHeight);
-    canvasC = utils.getCanvasColors();
+    const canvasC = utils.getCanvasColors();
     ctx.fillStyle = canvasC.text;
     ctx.font = '13px -apple-system, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('暂无交易数据', rectWidth / 2, rectHeight / 2);
+    
+    // 确保清理任何可能的残留实例
+    if (window.ChartManager) {
+      window.ChartManager.unregister(CHART_KEY, true);
+    }
     return;
   }
 
   // 使用统一权益曲线计算结果
-  var labels = [];
-  var data = [];
-  for (var i = 0; i < curve.data.length; i++) {
-    var d = new Date(sorted[i].closeTime || sorted[i].time);
+  const labels = [];
+  const data = [];
+  for (let i = 0; i < curve.data.length; i++) {
+    const d = new Date(sorted[i].closeTime || sorted[i].time);
     labels.push(
       d.getFullYear() + '-' +
       ('0' + (d.getMonth() + 1)).slice(-2) + '-' +
@@ -390,13 +403,15 @@ function _renderEquityChart() {
   }
 
   // 正/负分段颜色
-  var cc = utils.getChartColors();
-  var pointColors = [];
-  for (var j = 0; j < sorted.length; j++) {
+  const cc = utils.getChartColors();
+  const pointColors = [];
+  for (let j = 0; j < sorted.length; j++) {
     pointColors.push((sorted[j].pnlAmount || 0) >= 0 ? cc.positivePoint : cc.negativePoint);
   }
 
-  _dashEquityChart = new Chart(ctx, {
+  try {
+    // 创建新的Chart实例
+    const chartInstance = new Chart(ctx, {
     type: 'line',
     data: {
       labels: labels,
@@ -481,6 +496,44 @@ function _renderEquityChart() {
       }
     }
   });
+  
+  // 使用ChartManager注册实例，确保正确的生命周期管理
+  if (window.ChartManager) {
+    const registerSuccess = window.ChartManager.register(
+      'dashboard_equity_chart', 
+      chartInstance, 
+      canvas,
+      {
+        type: 'equity_curve',
+        page: 'dashboard',
+        dataPoints: sorted.length,
+        createdBy: '_renderEquityChart'
+      }
+    );
+    
+    if (!registerSuccess) {
+      console.error('资金曲线图表注册失败，执行紧急销毁');
+      chartInstance.destroy();
+    }
+  } else {
+    console.warn('ChartManager不可用，使用传统方式管理图表实例');
+    // 降级方案：传统的全局变量管理
+    window._dashEquityChart = chartInstance;
+  }
+  
+  } catch (error) {
+    console.error('创建资金曲线图表失败:', error);
+    
+    // 错误情况下确保清理
+    if (window.ChartManager) {
+      window.ChartManager.unregister('dashboard_equity_chart', true);
+    }
+    
+    // 绘制错误提示
+    ctx.fillStyle = '#ff4444'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = '14px sans-serif';
+    ctx.fillText('图表创建失败', rectWidth/2, rectHeight/2);
+  }
 }
 
 // ==================== 主导出函数 ====================

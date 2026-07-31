@@ -768,6 +768,10 @@
   <section id="view-review" class="view">
     <h2 class="view-title">复盘中心</h2>
     
+    <div class="review-header-note">
+      <i class="fas fa-chart-line"></i> 基于本地交易日志的自动数据分析与可视化
+    </div>
+    
     <div class="review-section">
       <div class="review-card">
         <div class="review-card-header">
@@ -820,7 +824,133 @@
       </div>
     </div>
   </section>
-
+  
+  <!-- 初始化脚本 -->
+  <script>
+    // 等待DOM加载完成后初始化各模块
+    document.addEventListener('DOMContentLoaded', function() {
+      console.log('Initializing TradingDiscipline modules...');
+      
+      // 初始化Calculator
+      if (typeof Calculator !== 'undefined') {
+        Calculator.init({
+          form: document.getElementById('calcForm'),
+          inputs: {
+            symbol: document.getElementById('symbol'),
+            entryPrice: document.getElementById('entryPrice'),
+            stopLossPrice: document.getElementById('stopLossPrice'),
+            leverage: document.getElementById('leverage'),
+            accountBalance: document.getElementById('accountBalance'),
+            riskPercent: document.getElementById('riskPercent'),
+            positionSize: document.getElementById('positionSize'),
+            splitInputs: document.querySelectorAll('.split-input'),
+            feeInputs: document.querySelectorAll('.fee-input'),
+            emotionScore: document.getElementById('emotionScore'),
+            mindsetReminder: document.getElementById('mindsetReminder'),
+            calcSummary: document.getElementById('calcSummary'),
+            submitBtn: document.getElementById('submitPlanBtn')
+          }
+        });
+        console.log('Calculator initialized');
+      }
+      
+      // 初始化Journal
+      if (typeof Journal !== 'undefined') {
+        Journal.init({
+          tableBody: document.querySelector('#tradeTable tbody'),
+          totalTradesEl: document.getElementById('totalTrades'),
+          winRateEl: document.getElementById('winRate'),
+          totalPnlEl: document.getElementById('totalPnl'),
+          avgPnlEl: document.getElementById('avgPnl'),
+          exportBtn: document.getElementById('exportBtn'),
+          importBtn: document.getElementById('importBtn')
+        });
+        console.log('Journal initialized');
+      }
+      
+      // 初始化Dashboard
+      if (typeof Dashboard !== 'undefined') {
+        Dashboard.init({
+          pnlValue: document.getElementById('dashPnlValue'),
+          pnlSub: document.getElementById('dashPnlSub'),
+          winRateValue: document.getElementById('dashWinRateValue'),
+          winRateSub: document.getElementById('dashWinRateSub'),
+          riskRows: document.getElementById('dashRiskRows'),
+          streakValue: document.getElementById('dashStreakValue'),
+          streakSub: document.getElementById('dashStreakSub'),
+          liqList: document.getElementById('dashLiqList'),
+          equityChart: document.getElementById('dashEquityChart')
+        });
+        console.log('Dashboard initialized');
+      }
+      
+      // 初始化Planner
+      if (typeof Planner !== 'undefined') {
+        Planner.init({
+          form: document.getElementById('planForm'),
+          inputs: {
+            planDate: document.getElementById('planDate'),
+            planSymbol: document.getElementById('planSymbol'),
+            planEntry: document.getElementById('planEntry'),
+            planSl: document.getElementById('planSl'),
+            planTp: document.getElementById('planTp'),
+            planLeverage: document.getElementById('planLeverage'),
+            planSize: document.getElementById('planSize'),
+            planEmotion: document.getElementById('planEmotion'),
+            planNotes: document.getElementById('planNotes'),
+            planList: document.getElementById('planList'),
+            planCount: document.getElementById('planCount')
+          }
+        });
+        console.log('Planner initialized');
+      }
+      
+      // 初始化RiskCenter
+      if (typeof RiskCenter !== 'undefined') {
+        RiskCenter.init({
+          accountBalanceInput: document.getElementById('riskAccountBalance'),
+          positionsTableBody: document.querySelector('#positionsTable tbody'),
+          liquidationList: document.getElementById('liquidationList'),
+          exposureChart: document.getElementById('exposureChart'),
+          heatmapContainer: document.getElementById('heatmapContainer')
+        });
+        console.log('RiskCenter initialized');
+      }
+      
+      // 初始化Analytics
+      if (typeof Analytics !== 'undefined') {
+        Analytics.init({
+          ctxTrend: document.getElementById('pnlTrendChart'),
+          ctxDist: document.getElementById('pnlDistChart'),
+          ctxHeatmap: document.getElementById('heatmapChart'),
+          ctxScatter: document.getElementById('scatterChart'),
+          ctxCorrelation: document.getElementById('correlationChart'),
+          kpiContainer: document.getElementById('kpiContainer'),
+          correlationTable: document.getElementById('correlationTable')
+        });
+        console.log('Analytics initialized');
+      }
+      
+      // 初始化Review（全局函数模式，由 navigation.js 在切换视图时调用 renderReview()）
+      console.log('Review module ready (global function mode)');
+      
+      // 初始化Settings
+      if (typeof Settings !== 'undefined') {
+        Settings.init({
+          accountBalanceInput: document.getElementById('setAccountBalance'),
+          riskPercentInput: document.getElementById('setRiskPercent'),
+          dailyLossLimitInput: document.getElementById('setDailyLossLimit'),
+          maxDrawdownAlertInput: document.getElementById('setMaxDrawdownAlert'),
+          mindsetMinScoreInput: document.getElementById('setMindsetMinScore'),
+          customStopLimitInput: document.getElementById('setCustomStopLimit')
+        });
+        console.log('Settings initialized');
+      }
+      
+      console.log('All modules initialized successfully');
+    });
+  </script>
+  
   <!-- ====== 系统设置 ====== -->
   <section id="view-settings" class="view">
     <h2 class="view-title">系统设置</h2>

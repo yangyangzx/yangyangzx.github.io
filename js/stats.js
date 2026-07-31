@@ -16,7 +16,7 @@ function updateStats() {
   // --- 基础数据 ---
   var totalLogs = logs.length;
   var allClosed = logs.filter(function(l) { return window.utils.isClosedTrade(l); });
-  var allClosedPnl = allClosed.reduce(function(s, l) { return s + parseFloat(l.pnlAmount); }, 0);
+  var allClosedPnl = allClosed.reduce(function(s, l) { return s + (parseFloat(l.pnlAmount) || 0); }, 0);
   var openLogs = totalLogs - allClosed.length;
 
   // --- 过滤逻辑 ---
@@ -29,7 +29,7 @@ function updateStats() {
   var displayClosed = hasAnyFilter ? closed.length : allClosed.length;
   var displayOpen = hasAnyFilter ? (displayTotal - displayClosed) : openLogs;
   var displayPnl = hasAnyFilter
-    ? closed.reduce(function(s, l) { return s + parseFloat(l.pnlAmount); }, 0)
+    ? closed.reduce(function(s, l) { return s + (parseFloat(l.pnlAmount) || 0); }, 0)
     : allClosedPnl;
 
   var summaryBar = document.getElementById('summaryBar');
@@ -111,8 +111,9 @@ function updateStats() {
   let runningEquity = initialCapital;
   for (const l of sortedClosed) {
     // M5: 仅当 capital 变化时才视为存款/取款事件，否则累加 PnL
-    if (l.capital != null && !isNaN(l.capital) && l.capital !== runningEquity) {
-      runningEquity = l.capital;
+    var capVal = parseFloat(l.capital);
+    if (!isNaN(capVal) && capVal > 0 && capVal !== runningEquity) {
+      runningEquity = capVal;
     } else {
       runningEquity += (parseFloat(l.pnlAmount) || 0);
     }

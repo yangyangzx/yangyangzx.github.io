@@ -510,11 +510,15 @@ function saveEditLog(idx) {
   // 编辑平仓数据时，若尚未有 closeTime 则自动写入
   if (item.closeType && !item.closeTime) {
     item.closeTime = new Date().toISOString();
-    if (item.time) item.holdDuration = Math.round((new Date(item.closeTime) - new Date(item.time)) / 60000);
+    // holdDuration 计算防御：time 无效时不写入
+    if (item.time && !isNaN(new Date(item.time).getTime()) && !isNaN(new Date(item.closeTime).getTime())) {
+      var durMin = Math.round((new Date(item.closeTime) - new Date(item.time)) / 60000);
+      item.holdDuration = durMin >= 0 ? durMin : null;
+    }
   }
   v = gv('emRMultiple'); if (v !== undefined && v !== '') item.rMultiple = v;
-  v = gv('emPnlAmount'); if (v !== undefined && v !== '') item.pnlAmount = parseFloat(v); else if (document.getElementById('emPnlAmount')?.value === '') item.pnlAmount = null;
-  v = gv('emPnlPercent'); if (v !== undefined && v !== '') item.pnlPercent = parseFloat(v); else if (document.getElementById('emPnlPercent')?.value === '') item.pnlPercent = null;
+  v = gv('emPnlAmount'); if (v !== undefined && v !== '') { var pnlVal = parseFloat(v); item.pnlAmount = isNaN(pnlVal) ? null : pnlVal; } else if (document.getElementById('emPnlAmount')?.value === '') item.pnlAmount = null;
+  v = gv('emPnlPercent'); if (v !== undefined && v !== '') { var pnlPct = parseFloat(v); item.pnlPercent = isNaN(pnlPct) ? null : pnlPct; } else if (document.getElementById('emPnlPercent')?.value === '') item.pnlPercent = null;
   v = gn('emFee'); if (v !== undefined && v !== null) item.fee = v;
   v = gn('emSlippageCost'); if (v !== undefined && v !== null) item.slippageCost = v;
   v = gv('emCloseNote'); if (v !== undefined) item.closeNote = v;
@@ -558,7 +562,11 @@ function saveEditLog(idx) {
     return;
   }
   // 亏损单必须选择亏损原因（扩展：pnlAmount<0 || manualLoss || 实时 netPnl<0）
-  const entryPrice = gn('emEntryPrice');
+  // 市价单使用 effectiveEntryPrice（含滑点修正），与 emRecalc 实时预览口径一致
+  const rawEntryPrice = gn('emEntryPrice');
+  const entryForPnl = (item.effectiveEntryPrice != null && !isNaN(parseFloat(item.effectiveEntryPrice)))
+    ? parseFloat(item.effectiveEntryPrice)
+    : rawEntryPrice;
   const closePrice = gn('emClosePrice');
   const positionSize = parseFloat(document.getElementById('emPositionSize')?.value) || 0;
   const direction = document.getElementById('emDirection')?.value || item.direction;
@@ -566,10 +574,10 @@ function saveEditLog(idx) {
   const slippageCost = gn('emSlippageCost') || 0;
 
   let realTimeNetPnl = null;
-  if (closePrice != null && entryPrice != null && entryPrice > 0) {
+  if (closePrice != null && entryForPnl != null && entryForPnl > 0) {
     let grossPnl;
-    if (direction === 'short') grossPnl = (entryPrice - closePrice) / entryPrice * positionSize;
-    else grossPnl = (closePrice - entryPrice) / entryPrice * positionSize;
+    if (direction === 'short') grossPnl = (entryForPnl - closePrice) / entryForPnl * positionSize;
+    else grossPnl = (closePrice - entryForPnl) / entryForPnl * positionSize;
     realTimeNetPnl = grossPnl - fee - slippageCost;
   }
   const isLoss = item.closeType && (

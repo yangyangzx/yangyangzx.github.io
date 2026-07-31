@@ -145,10 +145,11 @@ function renderEquityChart(closed) {
   var equity = capital;
   for (var j = 0; j < sortedClosed.length; j++) {
     // M5: 仅当 capital 变化时才视为存款/取款事件，否则累加 PnL
-    if (sortedClosed[j].capital != null && !isNaN(sortedClosed[j].capital) && sortedClosed[j].capital !== equity) {
-      equity = sortedClosed[j].capital;
+    var capVal = parseFloat(sortedClosed[j].capital);
+    if (!isNaN(capVal) && capVal > 0 && capVal !== equity) {
+      equity = capVal;
     } else {
-      equity += sortedClosed[j].pnlAmount || 0;
+      equity += parseFloat(sortedClosed[j].pnlAmount) || 0;
     }
     labels.push(fmtDate(sortedClosed[j].closeTime));
     data.push(parseFloat(equity.toFixed(2)));

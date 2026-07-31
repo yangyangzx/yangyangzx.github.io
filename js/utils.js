@@ -137,23 +137,20 @@
     
     let liquidationPrice;
     if (direction === 'long') {
-      // 多头强平价格公式
-      // LP = Entry × (1 - InitialMargin% + MMR%) / (1 - MMR%)
-      if (1 - mmr <= 0) {
-        console.error('calcLiquidationPrice: invalid mmr leads to division by zero');
-        return NaN;
-      }
-      liquidationPrice = entryPrice * (1 - initialMarginRatio + mmr) / (1 - mmr);
-      
+      // 多头强平价格公式（USDT-M 逐仓，行业标准）
+      // LP = Entry × (1 - InitialMargin%) / (1 - MMR%)
+      // 其中 InitialMargin% = 1/Leverage
+      liquidationPrice = entryPrice * (1 - initialMarginRatio) / (1 - mmr);
+
       // 合理性检查：多头强平价应低于入场价
       if (liquidationPrice >= entryPrice) {
         console.warn('calcLiquidationPrice: long liquidation price >= entry price, check parameters');
       }
     } else if (direction === 'short') {
-      // 空头强平价格公式  
-      // LP = Entry × (1 + InitialMargin% - MMR%) / (1 + MMR%)
-      liquidationPrice = entryPrice * (1 + initialMarginRatio - mmr) / (1 + mmr);
-      
+      // 空头强平价格公式（USDT-M 逐仓，行业标准）
+      // LP = Entry × (1 + InitialMargin%) / (1 + MMR%)
+      liquidationPrice = entryPrice * (1 + initialMarginRatio) / (1 + mmr);
+
       // 合理性检查：空头强平价应高于入场价
       if (liquidationPrice <= entryPrice) {
         console.warn('calcLiquidationPrice: short liquidation price <= entry price, check parameters');
@@ -232,8 +229,9 @@
     var data = [], cum = _initCap, peakVal = _initCap, maxDD = 0;
     for (var i = 0; i < sorted.length; i++) {
       var l = sorted[i];
-      if (!opts.purePnl && l.capital != null && !isNaN(l.capital) && l.capital !== cum) {
-        cum = l.capital;
+      var capVal = parseFloat(l.capital);
+      if (!opts.purePnl && !isNaN(capVal) && capVal > 0 && capVal !== cum) {
+        cum = capVal;
       } else {
         cum += (parseFloat(l.pnlAmount) || 0);
       }
@@ -438,6 +436,339 @@
     return Math.min(Math.max(adjustedFactor, 0.3), 5.0);
   };
 
-  // 挂载到全局
-  window.utils = util;
+// ======== Chart.js 生命周期管理系统 ========
+/**
+ * ChartManager - Chart.js实例生命周期管理器
+ * 解决内存泄漏问题，确保所有Chart实例正确销毁和重用
+ * 基于专业前端性能优化最佳实践设计
+ */
+const ChartManager = {
+  // 注册表：跟踪所有活跃的Chart实例
+  instances: new Map(),
+  
+  // 配置常量
+  CONFIG: {
+    maxInstances: 20,        // 最大实例数限制
+    cleanupThreshold: 15,    // 触发清理的阈值
+    destroyTimeout: 1000,    // 销毁超时时间(ms)
+    memoryCheckInterval: 30000 // 内存检查间隔(ms)
+  },
+  
+  /**
+   * 注册Chart实例
+   * @param {string} key - 实例唯一标识
+   * @param {Chart} chartInstance - Chart.js实例
+   * @param {HTMLElement} canvasElement - Canvas DOM元素
+   * @param {Object} metadata - 元数据（可选）
+   * @returns {boolean} 注册是否成功
+   */
+  register(key, chartInstance, canvasElement, metadata = {}) {
+    try {
+      // 参数验证
+      if (!key || typeof key !== 'string') {
+        console.error('ChartManager.register: 无效的key参数');
+        return false;
+      }
+      
+      if (!chartInstance || typeof chartInstance.destroy !== 'function') {
+        console.error('ChartManager.register: 无效的chartInstance参数');
+        return false;
+      }
+      
+      if (!canvasElement || !(canvasElement instanceof HTMLElement)) {
+        console.error('ChartManager.register: 无效的canvasElement参数');
+        return false;
+      }
+      
+      // 检查实例数量限制
+      if (this.instances.size >= this.CONFIG.maxInstances) {
+        console.warn(`Chart实例数量已达上限(${this.CONFIG.maxInstances})，触发清理`);
+        this.cleanup();
+      }
+      
+      // 如果key已存在，先销毁旧实例
+      if (this.instances.has(key)) {
+        console.warn(`Chart实例key冲突: ${key}，销毁旧实例`);
+        this.unregister(key);
+      }
+      
+      // 注册新实例
+      const instanceInfo = {
+        chart: chartInstance,
+        canvas: canvasElement,
+        createdAt: Date.now(),
+        lastUsed: Date.now(),
+        metadata: metadata,
+        destroyed: false
+      };
+      
+      this.instances.set(key, instanceInfo);
+      
+      // 设置DOM元素引用，便于垃圾回收
+      instanceInfo.canvas.__chartKey = key;
+      
+      console.log(`Chart实例已注册: ${key}, 当前总数: ${this.instances.size}`);
+      return true;
+      
+    } catch (error) {
+      console.error('ChartManager.register失败:', error);
+      return false;
+    }
+  },
+  
+  /**
+   * 注销Chart实例
+   * @param {string} key - 实例唯一标识
+   * @param {boolean} immediate - 是否立即销毁（默认延迟销毁）
+   * @returns {boolean} 注销是否成功
+   */
+  unregister(key, immediate = false) {
+    try {
+      if (!this.instances.has(key)) {
+        console.warn(`Chart实例不存在: ${key}`);
+        return false;
+      }
+      
+      const instanceInfo = this.instances.get(key);
+      
+      // 防止重复销毁
+      if (instanceInfo.destroyed) {
+        console.warn(`Chart实例已被销毁: ${key}`);
+        this.instances.delete(key);
+        return true;
+      }
+      
+      // 标记为销毁中
+      instanceInfo.destroyed = true;
+      instanceInfo.destroyStarted = Date.now();
+      
+      if (immediate) {
+        // 立即销毁
+        return this._destroyInstance(instanceInfo, key);
+      } else {
+        // 延迟销毁，避免频繁操作导致的闪烁
+        setTimeout(() => {
+          this._destroyInstance(instanceInfo, key);
+        }, this.CONFIG.destroyTimeout);
+        
+        // 立即从注册表中移除，但保留销毁过程
+        this.instances.delete(key);
+        console.log(`Chart实例已安排销毁: ${key}`);
+        return true;
+      }
+      
+    } catch (error) {
+      console.error(`ChartManager.unregister失败 (${key}):`, error);
+      return false;
+    }
+  },
+  
+  /**
+   * 内部方法：销毁单个实例
+   * @param {Object} instanceInfo - 实例信息
+   * @param {string} key - 实例key
+   * @returns {boolean} 销毁是否成功
+   */
+  _destroyInstance(instanceInfo, key) {
+    try {
+      // 销毁Chart实例
+      if (instanceInfo.chart && typeof instanceInfo.chart.destroy === 'function') {
+        instanceInfo.chart.destroy();
+        instanceInfo.chart = null;
+      }
+      
+      // 清理DOM引用
+      if (instanceInfo.canvas) {
+        instanceInfo.canvas.__chartKey = undefined;
+        // 移除resize监听器（如果存在）
+        if (instanceInfo.canvas.resizeHandler) {
+          window.removeEventListener('resize', instanceInfo.canvas.resizeHandler);
+          instanceInfo.canvas.resizeHandler = null;
+        }
+      }
+      
+      // 强制垃圾回收提示（仅作提醒，实际GC由浏览器控制）
+      if (typeof window.gc === 'function') {
+        try { window.gc(); } catch (e) { /* 忽略错误 */ }
+      }
+      
+      const destroyTime = Date.now() - instanceInfo.destroyStarted;
+      console.log(`Chart实例已销毁: ${key}, 耗时: ${destroyTime}ms`);
+      return true;
+      
+    } catch (error) {
+      console.error(`ChartManager._destroyInstance失败 (${key}):`, error);
+      return false;
+    }
+  },
+  
+  /**
+   * 获取Chart实例
+   * @param {string} key - 实例唯一标识
+   * @returns {Chart|null} Chart实例或null
+   */
+  getInstance(key) {
+    const instanceInfo = this.instances.get(key);
+    if (instanceInfo && !instanceInfo.destroyed) {
+      instanceInfo.lastUsed = Date.now(); // 更新使用时间
+      return instanceInfo.chart;
+    }
+    return null;
+  },
+  
+  /**
+   * 清理所有实例
+   * @param {boolean} force - 是否强制清理（包括活跃实例）
+   */
+  cleanup(force = false) {
+    console.log(`开始Chart实例清理，当前总数: ${this.instances.size}, force: ${force}`);
+    
+    const now = Date.now();
+    const instancesToDestroy = [];
+    
+    // 收集需要销毁的实例
+    for (const [key, instanceInfo] of this.instances.entries()) {
+      // 强制清理或实例已标记为销毁
+      if (force || instanceInfo.destroyed) {
+        instancesToDestroy.push(key);
+        continue;
+      }
+      
+      // 长时间未使用的实例（超过5分钟）
+      if (now - instanceInfo.lastUsed > 5 * 60 * 1000) {
+        console.log(`清理长时间未使用的Chart实例: ${key}`);
+        instancesToDestroy.push(key);
+      }
+    }
+    
+    // 执行销毁
+    let destroyedCount = 0;
+    instancesToDestroy.forEach(key => {
+      if (this.unregister(key, true)) {
+        destroyedCount++;
+      }
+    });
+    
+    console.log(`Chart实例清理完成，销毁: ${destroyedCount}/${instancesToDestroy.length}个`);
+  },
+  
+  /**
+   * 页面卸载时的清理
+   */
+  cleanupOnUnload() {
+    console.log('页面卸载，执行Chart实例完整清理');
+    
+    // 立即销毁所有实例
+    for (const key of this.instances.keys()) {
+      this.unregister(key, true);
+    }
+    
+    // 清空注册表
+    this.instances.clear();
+  },
+  
+  /**
+   * 获取统计信息
+   * @returns {Object} 统计信息
+   */
+  getStats() {
+    const stats = {
+      totalInstances: this.instances.size,
+      activeInstances: 0,
+      destroyedInstances: 0,
+      oldestInstance: null,
+      newestInstance: null
+    };
+    
+    const now = Date.now();
+    let oldestTime = now;
+    let newestTime = 0;
+    
+    for (const [key, instanceInfo] of this.instances.entries()) {
+      if (instanceInfo.destroyed) {
+        stats.destroyedInstances++;
+      } else {
+        stats.activeInstances++;
+        
+        if (instanceInfo.createdAt < oldestTime) {
+          oldestTime = instanceInfo.createdAt;
+          stats.oldestInstance = {
+            key: key,
+            age: Math.round((now - instanceInfo.createdAt) / 1000)
+          };
+        }
+        
+        if (instanceInfo.createdAt > newestTime) {
+          newestTime = instanceInfo.createdAt;
+          stats.newestInstance = {
+            key: key,
+            age: Math.round((now - instanceInfo.createdAt) / 1000)
+          };
+        }
+      }
+    }
+    
+    return stats;
+  }
+};
+
+// 页面卸载时自动清理
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', () => {
+    ChartManager.cleanupOnUnload();
+  });
+  
+  // 定期检查内存使用情况
+  setInterval(() => {
+    const stats = ChartManager.getStats();
+    if (stats.totalInstances >= ChartManager.CONFIG.cleanupThreshold) {
+      console.log('Chart实例数量较高，执行预防性清理:', stats);
+      ChartManager.cleanup();
+    }
+  }, ChartManager.CONFIG.memoryCheckInterval);
+}
+
+// 挂载到全局
+window.utils = util;
+window.ChartManager = ChartManager; // 暴露给全局使用
 })();
+
+// ======== Chart.js 页面级清理方法 ========
+/**
+ * 清理指定页面的所有图表实例
+ * @param {string} page - 页面标识符
+ */
+ChartManager.cleanupPage = function(page) {
+  if (!page || typeof page !== 'string') {
+    console.error('ChartManager.cleanupPage: 无效的page参数');
+    return;
+  }
+  
+  console.log(`开始清理页面 "${page}" 的所有图表实例`);
+  
+  const keysToRemove = [];
+  
+  // 查找该页面的所有实例
+  for (const [key, instanceInfo] of this.instances.entries()) {
+    if (instanceInfo.metadata && instanceInfo.metadata.page === page) {
+      keysToRemove.push(key);
+    }
+  }
+  
+  // 清理找到的实例
+  let cleanedCount = 0;
+  keysToRemove.forEach(key => {
+    if (this.unregister(key, true)) {
+      cleanedCount++;
+    }
+  });
+  
+  console.log(`页面 "${page}" 清理完成，共清理 ${cleanedCount} 个图表实例`);
+  
+  // 如果还有很多实例，执行全局清理
+  const stats = this.getStats();
+  if (stats.totalInstances > this.CONFIG.cleanupThreshold) {
+    console.log('页面清理后实例数量仍然较多，执行全局清理');
+    this.cleanup();
+  }
+};

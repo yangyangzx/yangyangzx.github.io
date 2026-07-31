@@ -66,7 +66,7 @@ function calcReverseSL() {
   var entryPrice, direction;
 
   if (calc && calc.entryPrice) {
-    entryPrice = calc.entryPrice;
+    entryPrice = calc.effectiveEntryPrice || calc.entryPrice;
     direction = calc.direction;
   } else {
     entryPrice = parseFloat(document.getElementById('entryPrice').value);

@@ -211,7 +211,7 @@ function batchSelectAll(checked) {
 
 function batchDelete() {
   if (_pendingDelete) {
-    clearTimeout(_pendingDelete.timeoutId);
+    if (window._undoToastTimer) { clearTimeout(window._undoToastTimer); window._undoToastTimer = null; }
     _commitPendingDelete();
   }
   if (_selectedIndices.size === 0) { showToast('请先勾选要删除的日志','warn'); return; }

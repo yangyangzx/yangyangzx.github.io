@@ -17,8 +17,8 @@ function calculate() {
   // ===== 订单类型入场价修正 =====
   const directionSign = direction === 'long' ? 1 : -1;
   let slippageRate = 0;
-  if (orderType === 'market') slippageRate = 0.001;   // 市价单千分之一滑点
-  else if (orderType === 'stop') slippageRate = 0.002; // 突破止损单千分之二滑点
+  if (orderType === 'market') slippageRate = SLIPPAGE_RATE.market;
+  else if (orderType === 'stop') slippageRate = SLIPPAGE_RATE.stop;
   // limit 类型滑点率保持 0
   const effectiveEntryPrice = entryPrice * (1 + directionSign * slippageRate);
 
@@ -436,7 +436,7 @@ function calculate() {
   // ===== 风险与成本行 L1：最大亏损 + 预估成本 =====
   let riskClass = (riskPercent*100) <= 2 ? 'low' : ((riskPercent*100) <= 5 ? 'mid' : 'high');
   let costL1HTML = '<span>最大亏损 <span class="cost-loss ' + riskClass + '">' + riskAmount.toFixed(2) + ' USDT (' + (riskPercent*100).toFixed(2) + '%)</span></span>';
-  if (fee > 0 || slippageCost > 0) {
+  if (totalFee > 0 || slippageCost > 0) {
     costL1HTML += '<span>费用 ' + totalCost.toFixed(2) + ' USDT</span>';
   }
   costL1.innerHTML = costL1HTML;
@@ -521,7 +521,7 @@ function calculate() {
     else { resultBox.classList.remove('warn'); }
   }
 
-  window._lastCalc={ symbol,entryPrice,effectiveEntryPrice,capital,riskAmount,riskPercent,leverage:leverage,direction,orderType,stopType,stopLoss,lossStreak,targetPrice:isNaN(targetPrice)?null:targetPrice,positionSize:finalPos,stopDistance,stopPct,liquidationPrice,cappedByLiquidation,targetRR,targetPct,reason:getReason(),signals:getSignals(),actualMargin:finalMargin,fee:parseFloat(fee.toFixed(2)),slippageCost:parseFloat(slippageCost.toFixed(2)),totalCost:parseFloat(totalCost.toFixed(2)),splitMode:_splitMode,weightedStopDistance:useWeightedStop?stopDistance:null, mindsetScore: parseInt(document.getElementById('mindsetScore').value) || 3 };
+  window._lastCalc={ symbol,entryPrice,effectiveEntryPrice,capital,riskAmount,riskPercent,leverage:leverage,direction,orderType,stopType,stopLoss,lossStreak,targetPrice:isNaN(targetPrice)?null:targetPrice,positionSize:finalPos,stopDistance,stopPct,liquidationPrice,cappedByLiquidation,targetRR,targetPct,reason:getReason(),signals:getSignals(),actualMargin:finalMargin,fee:parseFloat(totalFee.toFixed(2)),slippageCost:parseFloat(slippageCost.toFixed(2)),totalCost:parseFloat(totalCost.toFixed(2)),splitMode:_splitMode,weightedStopDistance:useWeightedStop?stopDistance:null, mindsetScore: parseInt(document.getElementById('mindsetScore').value) || 3 };
   // 自动滚动到结果区
   if (resultBox) resultBox.scrollIntoView({behavior:'smooth'});
   try { if (typeof updateChecklist === 'function') updateChecklist(); } catch(e) { console.error('[calculate] updateChecklist error:', e); }

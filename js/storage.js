@@ -3,6 +3,94 @@
 // showToast / showUndoToast 已提取到 toast.js，由外部脚本加载
 // _pendingDelete / _undoToastEl / _undoToastTimer / _commitPendingDelete 已提取到 toast.js
 
+// 存储安全增强配置
+const STORAGE_CONFIG = {
+  maxSizeBytes: 4 * 1024 * 1024, // 4MB安全限制（浏览器通常5-10MB）
+  warningThreshold: 3 * 1024 * 1024, // 3MB警告阈值
+  emergencyBackupKey: 'trade_logs_emergency_backup',
+  compressionEnabled: false // 暂不启用压缩，避免复杂性
+};
+
+// 存储容量检查和备份工具
+const StorageSecurity = {
+  /**
+   * 检查存储容量是否充足
+   * @param {number} additionalBytes 预计要添加的字节数
+   * @returns {Object} {canWrite: boolean, available: number, recommendation: string}
+   */
+  checkCapacity(additionalBytes = 0) {
+    try {
+      const currentUsage = JSON.stringify(logs).length;
+      const available = STORAGE_CONFIG.maxSizeBytes - currentUsage - additionalBytes;
+      
+      if (available < 0) {
+        return {
+          canWrite: false,
+          available: available,
+          recommendation: '存储空间不足，需要清理历史数据'
+        };
+      }
+      
+      if (currentUsage > STORAGE_CONFIG.warningThreshold) {
+        return {
+          canWrite: true,
+          available: available,
+          recommendation: '存储使用率较高，建议备份重要数据'
+        };
+      }
+      
+      return {
+        canWrite: true,
+        available: available,
+        recommendation: '存储容量正常'
+      };
+    } catch (error) {
+      console.error('StorageSecurity.checkCapacity失败:', error);
+      return { canWrite: false, available: 0, recommendation: '无法检查存储容量' };
+    }
+  },
+  
+  /**
+   * 创建紧急备份
+   */
+  createEmergencyBackup() {
+    try {
+      const backup = {
+        timestamp: new Date().toISOString(),
+        data: JSON.parse(JSON.stringify(logs)), // 深拷贝
+        version: 'emergency_backup_v1'
+      };
+      localStorage.setItem(STORAGE_CONFIG.emergencyBackupKey, JSON.stringify(backup));
+      console.log('紧急备份已创建:', backup.timestamp);
+      return true;
+    } catch (error) {
+      console.error('创建紧急备份失败:', error);
+      return false;
+    }
+  },
+  
+  /**
+   * 下载备份文件
+   */
+  downloadBackup() {
+    try {
+      const dataStr = JSON.stringify(logs, null, 2);
+      const dataBlob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(dataBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `trade_logs_backup_${new Date().toISOString().slice(0, 10)}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      console.log('备份文件下载已开始');
+      return true;
+    } catch (error) {
+      console.error('下载备份失败:', error);
+      return false;
+    }
+  }
+};
+
 // ── 工具：旧版 zh-CN locale 时间 → ISO 字符串（委托给 utils.js） ──
 function _localeToISO(t) {
   return window.utils._localeToISO(t);
@@ -101,28 +189,30 @@ function loadLogs() {
 function saveLogs(skipBackup) {
   const jsonStr = JSON.stringify(logs);
   const sizeBytes = jsonStr.length;
-  const sizeMB = sizeBytes / (1024 * 1024);
   
-  // ===== 修复数据持久化风险：提前容量检查和优雅降级 =====
-  // 原Bug: 只在>4MB时警告，但localStorage通常只有5-10MB，为时已晚
-  // 新逻辑: 提前在3MB时警告，2.5MB时开始保护模式
+  // ===== 使用StorageSecurity进行专业的容量检查和备份 =====
+  const capacityCheck = StorageSecurity.checkCapacity(sizeBytes);
   
-  const WARNING_THRESHOLD_MB = 3.0;    // 3MB开始警告
-  const PROTECTION_THRESHOLD_MB = 2.5; // 2.5MB进入保护模式
-  const CRITICAL_THRESHOLD_BYTES = 5 * 1024 * 1024; // 5MB临界值
-  
-  if (sizeMB >= CRITICAL_THRESHOLD_BYTES / (1024 * 1024)) {
-    showToast('存储空间严重不足！(' + sizeMB.toFixed(1) + 'MB)，立即停止写入以防数据丢失', 'error');
-    // 紧急情况下强制触发完整备份下载
-    emergencyBackupAndCleanup();
+  if (!capacityCheck.canWrite) {
+    showToast('存储空间不足: ' + capacityCheck.recommendation, 'error');
+    // 尝试创建紧急备份
+    if (StorageSecurity.createEmergencyBackup()) {
+      showToast('已创建紧急备份，请及时下载保存', 'warn');
+    }
     return false;
-  } else if (sizeMB >= WARNING_THRESHOLD_MB) {
-    showToast('存储空间紧张（' + sizeMB.toFixed(1) + 'MB/' + (CRITICAL_THRESHOLD_BYTES/(1024*1024)).toFixed(1) + 'MB），建议立即导出备份', 'warn');
-    
-    if (sizeMB >= PROTECTION_THRESHOLD_MB) {
-      // 保护模式：启用数据压缩和清理
-      console.warn('进入存储保护模式，启用数据优化...');
-      enableStorageProtectionMode();
+  }
+  
+  if (capacityCheck.recommendation.includes('较高')) {
+    showToast('存储使用率较高: ' + capacityCheck.recommendation, 'warn');
+    // 自动创建备份以防万一
+    StorageSecurity.createEmergencyBackup();
+  }
+  
+  // 大容量数据时提醒用户备份
+  if (sizeBytes > STORAGE_CONFIG.warningThreshold) {
+    console.warn('大额数据存储:', Math.round(sizeBytes/1024/1024*10)/10 + 'MB');
+    if (confirm('当前数据量较大(' + Math.round(sizeBytes/1024/1024*10)/10 + 'MB)，建议先备份再继续操作。是否立即下载备份？')) {
+      StorageSecurity.downloadBackup();
     }
   }
   
@@ -353,158 +443,6 @@ function estimateLocalStorageCapacity() {
   } catch (e) {
     console.warn('无法估算localStorage容量:', e);
     return -1; // 无法确定
-  }
-}
-
-/**
- * 紧急备份并清理数据
- */
-function emergencyBackupAndCleanup() {
-  try {
-    console.error('触发紧急备份和清理程序！');
-    
-    // 1. 立即创建完整备份
-    const emergencyBackup = JSON.stringify(logs);
-    const blob = new Blob([emergencyBackup], {type: 'application/json'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `EMERGENCY_BACKUP_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`;
-    
-    // 自动触发下载
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    
-    showToast('紧急备份已下载！请立即保存文件以防数据丢失', 'error');
-    
-    // 2. 清理旧备份释放空间（保留最近3个）
-    cleanupOldBackups(3);
-    
-    // 3. 提示用户手动清理
-    setTimeout(() => {
-      if (confirm('存储空间严重不足！\n\n建议立即：\n1. 导出所有交易记录\n2. 清理浏览器数据\n3. 重启浏览器\n\n是否现在清理旧备份？')) {
-        cleanupAllBackups();
-      }
-    }, 2000);
-    
-  } catch (cleanupError) {
-    console.error('紧急备份清理失败:', cleanupError);
-    showToast('紧急备份失败！请立即手动导出数据', 'error');
-  }
-}
-
-/**
- * 启用存储保护模式
- */
-function enableStorageProtectionMode() {
-  try {
-    // 启用数据压缩（移除不必要字段）
-    const originalLength = JSON.stringify(logs).length;
-    const optimizedLogs = optimizeLogData(logs);
-    const optimizedLength = JSON.stringify(optimizedLogs).length;
-    
-    const savedBytes = originalLength - optimizedLength;
-    console.log(`存储保护模式：优化节省 ${savedBytes} 字节 (${(savedBytes/originalLength*100).toFixed(1)}%)`);
-    
-    // 临时替换为优化后的数据
-    const tempOriginalLogs = [...logs];
-    logs = optimizedLogs;
-    
-    // 尝试保存优化后的数据
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(logs));
-      showToast(`存储保护模式已启用，节省 ${(savedBytes/1024).toFixed(1)}KB 空间`, 'info');
-    } catch (saveError) {
-      // 优化后仍无法保存，恢复原数据
-      logs = tempOriginalLogs;
-      console.error('优化后仍无法保存，恢复原数据');
-    }
-    
-  } catch (protectionError) {
-    console.error('启用存储保护模式失败:', protectionError);
-  }
-}
-
-/**
- * 优化日志数据大小
- * @param {Array} logArray - 原始日志数组
- * @returns {Array} 优化后的日志数组
- */
-function optimizeLogData(logArray) {
-  return logArray.map(log => {
-    const optimized = {...log};
-    
-    // 移除调试字段
-    delete optimized._debug;
-    delete optimized._temp;
-    
-    // 压缩备注字段（如果过长）
-    if (optimized.note && optimized.note.length > 500) {
-      optimized.note = optimized.note.substring(0, 500) + '...(已截断)';
-    }
-    
-    // 移除空的自定义字段
-    Object.keys(optimized).forEach(key => {
-      if (optimized[key] === '' || optimized[key] === null || optimized[key] === undefined) {
-        if (key !== 'id' && key !== 'time' && key !== 'symbol' && key !== 'direction') {
-          delete optimized[key];
-        }
-      }
-    });
-    
-    return optimized;
-  });
-}
-
-/**
- * 清理旧备份文件
- * @param {number} keepCount - 保留的备份数量
- */
-function cleanupOldBackups(keepCount = 5) {
-  try {
-    const backupKeys = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith('trade_auto_backup_')) {
-        backupKeys.push(key);
-      }
-    }
-    
-    if (backupKeys.length > keepCount) {
-      // 按时间排序，删除最旧的
-      backupKeys.sort();
-      const keysToRemove = backupKeys.slice(0, backupKeys.length - keepCount);
-      
-      keysToRemove.forEach(key => {
-        localStorage.removeItem(key);
-        console.log(`已清理旧备份: ${key}`);
-      });
-      
-      showToast(`已清理 ${keysToRemove.length} 个旧备份文件`, 'info');
-    }
-  } catch (cleanupError) {
-    console.error('清理旧备份失败:', cleanupError);
-  }
-}
-
-/**
- * 清理所有备份文件
- */
-function cleanupAllBackups() {
-  try {
-    let removedCount = 0;
-    for (let i = localStorage.length - 1; i >= 0; i--) {
-      const key = localStorage.key(i);
-      if (key && (key.startsWith('trade_auto_backup_') || key.startsWith('trade_backup_'))) {
-        localStorage.removeItem(key);
-        removedCount++;
-      }
-    }
-    showToast(`已清理 ${removedCount} 个备份文件`, 'info');
-  } catch (cleanupError) {
-    console.error('清理所有备份失败:', cleanupError);
   }
 }
 

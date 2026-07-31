@@ -31,7 +31,20 @@ function getOpenPositions() {
  * 委托给 utils.js
  */
 function getClosedSorted() {
-  return window.utils.getClosedSorted();
+  var closed = [];
+  for (var i = 0; i < logs.length; i++) {
+    if (logs[i].closeType && logs[i].pnlAmount != null && !isNaN(parseFloat(logs[i].pnlAmount))) {
+      var item = Object.assign({}, logs[i]);
+      item.pnlAmount = parseFloat(item.pnlAmount);
+      closed.push(item);
+    }
+  }
+  closed.sort(function(a, b) {
+    var ta = a.closeTime ? new Date(a.closeTime).getTime() : 0;
+    var tb = b.closeTime ? new Date(b.closeTime).getTime() : 0;
+    return ta - tb;
+  });
+  return closed;
 }
 
 // ==================== 卡片渲染 ====================
@@ -162,10 +175,11 @@ function renderDrawdown() {
   var peak = capital;
   for (var i = 0; i < closed.length; i++) {
     // M5: 仅当 capital 变化时才视为存款/取款事件，否则累加 PnL
-    if (closed[i].capital != null && !isNaN(closed[i].capital) && closed[i].capital !== equity) {
-      equity = closed[i].capital;
+    var capVal = parseFloat(closed[i].capital);
+    if (!isNaN(capVal) && capVal > 0 && capVal !== equity) {
+      equity = capVal;
     } else {
-      equity += closed[i].pnlAmount || 0;
+      equity += parseFloat(closed[i].pnlAmount) || 0;
     }
     if (equity > peak) peak = equity;
   }

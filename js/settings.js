@@ -242,7 +242,8 @@ function parseCSVImport(csvText) {
         if (h === 'rMultiple' && typeof v === 'string') parsed = parseFloat(v.replace(/R$/g, ''));
         obj[h] = isNaN(parsed) ? null : parsed;
       } else if (h === 'mindsetScore' || h === 'executionScore') {
-        obj[h] = parseInt(v) || null;
+        var parsedInt = parseInt(v);
+        obj[h] = isNaN(parsedInt) ? null : parsedInt;
       } else {
         obj[h] = v;
       }
