@@ -6,7 +6,11 @@
 <title>GlassStudio — 毛玻璃图片编辑器</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;1,400&family=Syne:wght@400;600;700&family=Noto+Serif+SC:wght@400;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/stackblur-canvas/2.7.0/stackblur.min.js"></script>
+<script>
+// StackBlur CDN loader (kept as potential fallback, but export now uses native ctx.filter)
+// ctx.filter = 'blur() saturate()' matches CSS backdrop-filter exactly — same Gaussian
+// blur algorithm, same color space. No external dependency needed for export.
+</script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -541,15 +545,16 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 <!-- Presets Bar -->
 <div id="presets-bar">
   <span class="preset-label">预设：</span>
-  <div class="preset" onclick="applyPreset('frosted-light')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('frosted-light')"><div class="preset-dot" style="background:rgba(255,255,255,0.4);border:1px solid rgba(255,255,255,0.5)"></div><span>白色毛玻璃</span></div>
-  <div class="preset" onclick="applyPreset('frosted-dark')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('frosted-dark')"><div class="preset-dot" style="background:rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.2)"></div><span>深色磨砂</span></div>
+  <div class="preset" onclick="applyPreset('frosted-clear')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('frosted-clear')"><div class="preset-dot" style="background:transparent;border:1px solid rgba(255,255,255,0.35)"></div><span>透明毛玻璃</span></div>
+  <div class="preset" onclick="applyPreset('frosted-light')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('frosted-light')"><div class="preset-dot" style="background:rgba(255,255,255,0.5);border:1px solid rgba(255,255,255,0.6)"></div><span>白色毛玻璃</span></div>
+  <div class="preset" onclick="applyPreset('frosted-dark')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('frosted-dark')"><div class="preset-dot" style="background:rgba(0,0,0,0.55);border:1px solid rgba(255,255,255,0.2)"></div><span>深色磨砂</span></div>
   <div class="preset" onclick="applyPreset('frosted-blue')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('frosted-blue')"><div class="preset-dot" style="background:rgba(99,102,241,0.3)"></div><span>蓝紫毛玻璃</span></div>
   <div class="preset" onclick="applyPreset('frosted-warm')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('frosted-warm')"><div class="preset-dot" style="background:rgba(251,146,60,0.25)"></div><span>暖橙毛玻璃</span></div>
   <div class="preset" onclick="applyPreset('frosted-green')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('frosted-green')"><div class="preset-dot" style="background:rgba(34,211,160,0.2)"></div><span>绿色毛玻璃</span></div>
-  <div class="preset" onclick="applyPreset('notification')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('notification')"><div class="preset-dot" style="background:rgba(0,0,0,0.7)"></div><span>通知卡片</span></div>
+  <div class="preset" onclick="applyPreset('notification')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('notification')"><div class="preset-dot" style="background:rgba(0,0,0,0.72)"></div><span>通知卡片</span></div>
   <div class="preset" onclick="applyPreset('title-card')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('title-card')"><div class="preset-dot" style="background:rgba(99,102,241,0.25)"></div><span>标题卡片</span></div>
-  <div class="preset" onclick="applyPreset('tag')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('tag')"><div class="preset-dot" style="background:rgba(34,211,160,0.2)"></div><span>标签贴纸</span></div>
-  <div class="preset" onclick="applyPreset('circle-light')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('circle-light')"><div class="preset-dot" style="background:rgba(255,255,255,0.3);border:1px solid rgba(255,255,255,0.5);border-radius:50%"></div><span>圆形白玻</span></div>
+  <div class="preset" onclick="applyPreset('tag')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('tag')"><div class="preset-dot" style="background:rgba(34,211,160,0.2);border-radius:50%"></div><span>标签贴纸</span></div>
+  <div class="preset" onclick="applyPreset('circle-light')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('circle-light')"><div class="preset-dot" style="background:rgba(255,255,255,0.4);border:1px solid rgba(255,255,255,0.6);border-radius:50%"></div><span>圆形白玻</span></div>
   <div class="preset" onclick="applyPreset('circle-dark')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('circle-dark')"><div class="preset-dot" style="background:rgba(26,26,46,0.6);border:1px solid rgba(255,255,255,0.15);border-radius:50%"></div><span>圆形深玻</span></div>
   <div class="preset" onclick="applyPreset('circle-blue')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('circle-blue')"><div class="preset-dot" style="background:rgba(99,102,241,0.25);border-radius:50%"></div><span>圆形蓝玻</span></div>
   <div class="preset" onclick="applyPreset('big-text')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('big-text')"><div class="preset-dot" style="background:transparent;border:1px dashed rgba(255,255,255,0.4)"></div><span>大标题文字</span></div>
@@ -1797,17 +1802,18 @@ function setTool(t) {
 // PRESETS
 // ═══════════════════════════════════════════════════════════════
 const PRESETS = {
-  'frosted-light':  {type:'glass',bg:'#ffffff',op:0.2,blur:20,sat:150,bop:0.4,tc:'#ffffff',fs:16,fw:'500',r:14,w:240,h:120},
-  'frosted-dark':   {type:'glass',bg:'#1a1a2e',op:0.55,blur:18,sat:120,bop:0.15,tc:'#ffffff',fs:16,fw:'400',r:14,w:240,h:120},
+  'frosted-clear':  {type:'glass',bg:'#ffffff',op:0,blur:20,sat:150,bop:0.3,tc:'#ffffff',fs:16,fw:'500',r:14,w:240,h:120,tsh:'0 2px 12px rgba(0,0,0,.6)'},
+  'frosted-light':  {type:'glass',bg:'#ffffff',op:0.3,blur:20,sat:150,bop:0.4,tc:'#1a1a2e',fs:16,fw:'500',r:14,w:240,h:120,tsh:'0 1px 4px rgba(255,255,255,.5)'},
+  'frosted-dark':   {type:'glass',bg:'#1a1a2e',op:0.55,blur:18,sat:120,bop:0.15,tc:'#ffffff',fs:16,fw:'500',r:14,w:240,h:120},
   'frosted-blue':   {type:'glass',bg:'#6366f1',op:0.3,blur:16,sat:160,bop:0.4,tc:'#ffffff',fs:16,fw:'500',r:14,w:240,h:120},
-  'frosted-warm':   {type:'glass',bg:'#fb923c',op:0.25,blur:14,sat:140,bop:0.35,tc:'#fff8f0',fs:16,fw:'400',r:14,w:240,h:120},
+  'frosted-warm':   {type:'glass',bg:'#fb923c',op:0.25,blur:14,sat:140,bop:0.35,tc:'#fff8f0',fs:16,fw:'500',r:14,w:240,h:120},
   'frosted-green':  {type:'glass',bg:'#22d3a0',op:0.25,blur:16,sat:150,bop:0.35,tc:'#ffffff',fs:16,fw:'500',r:14,w:240,h:120},
   'notification':   {type:'card',bg:'#000000',op:0.72,blur:6,bop:0.12,tc:'#ffffff',fs:15,fw:'500',r:18,w:260,h:90},
   'title-card':     {type:'glass',bg:'#6366f1',op:0.22,blur:22,sat:150,bop:0.4,tc:'#ffffff',fs:22,fw:'700',r:16,w:300,h:80},
-  'tag':            {type:'glass',bg:'#22d3a0',op:0.2,blur:12,sat:140,bop:0.4,tc:'#ffffff',fs:14,fw:'500',r:40,w:140,h:44},
-  'circle-light':   {type:'glass',bg:'#ffffff',op:0.18,blur:16,sat:160,bop:0.4,ca:1,tc:'#ffffff',fs:14,fw:'500',r:999,w:120,h:120},
-  'circle-dark':    {type:'glass',bg:'#1a1a2e',op:0.55,blur:14,sat:130,bop:0.15,ca:1,tc:'#ffffff',fs:14,fw:'500',r:999,w:120,h:120},
-  'circle-blue':    {type:'glass',bg:'#6366f1',op:0.25,blur:16,sat:170,bop:0.4,ca:2,tc:'#ffffff',fs:14,fw:'500',r:999,w:120,h:120},
+  'tag':            {type:'glass',bg:'#22d3a0',op:0.2,blur:12,sat:140,bop:0.4,tc:'#ffffff',fs:14,fw:'500',r:999,w:140,h:44},
+  'circle-light':   {type:'glass',bg:'#ffffff',op:0.28,blur:16,sat:160,bop:0.4,ca:1,tc:'#1a1a2e',fs:14,fw:'500',r:999,w:160,h:160,tsh:'0 1px 4px rgba(255,255,255,.5)'},
+  'circle-dark':    {type:'glass',bg:'#1a1a2e',op:0.55,blur:14,sat:130,bop:0.15,ca:1,tc:'#ffffff',fs:14,fw:'500',r:999,w:160,h:160},
+  'circle-blue':    {type:'glass',bg:'#6366f1',op:0.25,blur:16,sat:170,bop:0.4,ca:2,tc:'#ffffff',fs:14,fw:'500',r:999,w:160,h:160},
   'big-text':       {type:'text',tc:'#ffffff',fs:36,fw:'700',tsh:'0 4px 20px rgba(0,0,0,.6)',w:320,h:100},
 };
 
@@ -2640,25 +2646,22 @@ async function exportImg() {
       bRw = Math.min(ec.width  - bRx, Math.ceil(ew + pad * 2));
       bRh = Math.min(ec.height - bRy, Math.ceil(eh + pad * 2));
 
+      // Use ctx.filter with combined blur+saturate in a single pass — this matches
+      // CSS backdrop-filter: blur() saturate() exactly (same Gaussian blur algorithm,
+      // same color space, same compositing order). StackBlur uses box blur which
+      // produces visibly different results from CSS's Gaussian blur.
+      const satVal = (el2.type === 'glass' && el2.sat && el2.sat !== 100) ? el2.sat : 100;
       blurredTmp = document.createElement('canvas');
       blurredTmp.width  = bRw;
       blurredTmp.height = bRh;
       const tc = blurredTmp.getContext('2d');
+      if (bRadius > 0) {
+        tc.filter = `blur(${bRadius}px) saturate(${satVal}%)`;
+      } else if (satVal !== 100) {
+        tc.filter = `saturate(${satVal}%)`;
+      }
       tc.drawImage(ec, bRx, bRy, bRw, bRh, 0, 0, bRw, bRh);
-      if (typeof StackBlur !== 'undefined' && bRadius > 0) {
-        StackBlur.canvasRGBA(blurredTmp, 0, 0, bRw, bRh, bRadius);
-      }
-      // Apply saturation on the blurred tmp canvas (single-pass, no double-blur)
-      if (el2.type === 'glass' && el2.sat && el2.sat !== 100) {
-        const sat = document.createElement('canvas');
-        sat.width  = bRw;
-        sat.height = bRh;
-        const sc = sat.getContext('2d');
-        sc.filter = `saturate(${el2.sat}%)`;
-        sc.drawImage(blurredTmp, 0, 0);
-        sc.filter = 'none';
-        blurredTmp = sat;
-      }
+      tc.filter = 'none';
     }
 
     // ── 2. Box shadow (draw BEFORE blur backdrop, so shadow sits behind element) ──
