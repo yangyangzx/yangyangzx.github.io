@@ -266,6 +266,15 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 .csw{width:28px;height:26px;border-radius:var(--radius-sm);border:1px solid var(--border2);overflow:hidden;flex-shrink:0;cursor:pointer;position:relative}
 .csw input{position:absolute;inset:0;width:130%;height:130%;opacity:0;cursor:pointer;margin:-15%}
 .divider{height:1px;background:var(--border);margin:10px 0}
+
+/* ── Collapsible Sections ── */
+.sec{margin-bottom:2px;border-radius:6px;background:rgba(255,255,255,0.025)}
+.sec-hd{display:flex;align-items:center;gap:6px;padding:7px 10px;cursor:pointer;font-size:11px;font-weight:600;color:var(--text);user-select:none;border-radius:6px;transition:background 120ms}
+.sec-hd:hover{background:rgba(255,255,255,0.06)}
+.sec-arrow{font-size:7px;opacity:.4;transition:transform 0.2s ease}
+.sec.collapsed .sec-arrow{transform:rotate(-90deg)}
+.sec-bd{padding:2px 10px 6px;transition:opacity 0.15s}
+.sec.collapsed .sec-bd{display:none}
 .mini-btns{display:flex;gap:4px}
 .mini-btn{
   flex:1;padding:var(--space-xs);background:var(--surface2);border:1px solid var(--border2);
@@ -1853,6 +1862,23 @@ function renderLayers() {
 // ═══════════════════════════════════════════════════════════════
 // PROPS PANEL
 // ═══════════════════════════════════════════════════════════════
+// Collapsible section state (persists across renderProps rebuilds)
+const _secState = { text: true, colors: true, appearance: false, position: false, actions: false };
+function toggleSec(key) {
+  _secState[key] = !_secState[key];
+  const sec = el.pscroll.querySelector(`[data-sec="${key}"]`);
+  if (sec) sec.classList.toggle('collapsed', !_secState[key]);
+}
+function _sec(key, label, tooltip, content) {
+  const collapsed = _secState[key] === false ? ' collapsed' : '';
+  return `<div class="sec${collapsed}" data-sec="${key}">
+    <div class="sec-hd" onclick="toggleSec('${key}')" title="${tooltip}">
+      <span class="sec-arrow">▼</span>${label}
+    </div>
+    <div class="sec-bd">${content}</div>
+  </div>`;
+}
+
 function _renderPropsImpl() {
   const pscrollTop = el.pscroll.scrollTop;
   if (!S.sel) {
@@ -1864,44 +1890,43 @@ function _renderPropsImpl() {
   if (!el2) return;
 
   const typeLbl = el2.type === 'glass' ? '毛玻璃框' : el2.type === 'card' ? '深色卡片' : '文字框';
-  let h = `<div style="font-size:11px;color:var(--accent2);margin-bottom:11px;font-weight:500;display:flex;align-items:center;justify-content:space-between">
+  let h = `<div style="font-size:11px;color:var(--accent2);margin-bottom:8px;font-weight:500;display:flex;align-items:center;justify-content:space-between">
     ${typeLbl} <span style="color:var(--text-hint)">#${el2.id}</span>
   </div>`;
 
-  // Text content
-  h += `<div class="pg"><div class="pl">文字内容</div>
-    <textarea class="pi" rows="2" style="resize:vertical;line-height:1.5"
+  // ── Section: Text ──
+  let st = '';
+  st += `<div class="pg"><div class="pl">文字内容</div>
+    <textarea class="pi" rows="2" style="resize:vertical;line-height:1.5" title="输入要显示的文字内容"
       oninput="sp(${el2.id},'text',this.value,true)"
       onchange="sp(${el2.id},'text',this.value)">${(el2.text||'').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</textarea>
   </div>`;
 
-  // Font + local font button
   const fontOpts = [...FONTS, ...S.localFonts.map(f => ({label: f.name, value: f.family}))];
   const curFontVal = el2.fontFamily || "'DM Sans',sans-serif";
   const cleanPreviewFont = curFontVal.replace(/'([^']+)'/g, '$1');
-  h += `<div class="pg"><div class="pl">字体</div>
+  st += `<div class="pg"><div class="pl">字体</div>
     <div style="display:flex;gap:5px">
-      <select class="psel" style="flex:1;font-family:${cleanPreviewFont}" onchange="sp(${el2.id},'fontFamily',this.value);saveHist();this.style.fontFamily=this.value.replace(/'([^']+)'/g,'$1');renderProps()">
+      <select class="psel" style="flex:1;font-family:${cleanPreviewFont}" title="选择文字字体"
+        onchange="sp(${el2.id},'fontFamily',this.value);saveHist();this.style.fontFamily=this.value.replace(/'([^']+)'/g,'$1');renderProps()">
         ${fontOpts.map(f => `<option value="${f.value}" ${el2.fontFamily === f.value ? 'selected' : ''} style="font-family:${f.value.replace(/'([^']+)'/g,'$1')}">${f.label}</option>`).join('')}
       </select>
-      <label class="hb" style="padding:5px 8px;cursor:pointer" title="添加本地字体" aria-label="添加本地字体">+
+      <label class="hb" style="padding:5px 8px;cursor:pointer" title="添加本地字体文件（ttf/otf/woff）" aria-label="添加本地字体">+
         <input type="file" accept=".ttf,.otf,.woff,.woff2" multiple style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none" onchange="loadLocalFonts(this)">
       </label>
     </div>
   </div>`;
 
-  // Style row (I U only — fw handled by weight select below)
-  h += `<div class="pg"><div class="pl">样式</div>
+  st += `<div class="pg"><div class="pl">样式</div>
     <div class="mini-btns">
-      <button class="mini-btn ${el2.fw==='700'?'on':''}" onclick="sp(${el2.id},'fw','${el2.fw==='700'?'500':'700'}');renderProps()"><b>B</b></button>
-      <button class="mini-btn ${el2.italic?'on':''}" onclick="tp(${el2.id},'italic')"><i>I</i></button>
-      <button class="mini-btn ${el2.underline?'on':''}" onclick="tp(${el2.id},'underline')"><u>U</u></button>
+      <button class="mini-btn ${el2.fw==='700'?'on':''}" onclick="sp(${el2.id},'fw','${el2.fw==='700'?'500':'700'}');renderProps()" title="加粗"><b>B</b></button>
+      <button class="mini-btn ${el2.italic?'on':''}" onclick="tp(${el2.id},'italic')" title="斜体"><i>I</i></button>
+      <button class="mini-btn ${el2.underline?'on':''}" onclick="tp(${el2.id},'underline')" title="下划线"><u>U</u></button>
     </div>
   </div>`;
 
-  // Font weight
-  h += `<div class="pg"><div class="pl">字重</div>
-    <select class="psel" onchange="sp(${el2.id},'fw',this.value);renderProps()">
+  st += `<div class="pg"><div class="pl">字重</div>
+    <select class="psel" title="选择字体粗细" onchange="sp(${el2.id},'fw',this.value);renderProps()">
       <option value="300" ${el2.fw==='300'?'selected':''}>300 细体</option>
       <option value="400" ${el2.fw==='400'?'selected':''}>400 常规</option>
       <option value="500" ${el2.fw==='500'?'selected':''}>500 中等</option>
@@ -1909,84 +1934,80 @@ function _renderPropsImpl() {
     </select>
   </div>`;
 
-  // Align
-  h += `<div class="pg"><div class="pl">水平对齐</div>
+  st += `<div class="pg"><div class="pl">水平对齐</div>
     <div class="mini-btns">
-      <button class="mini-btn ${el2.align==='left'?'on':''}" onclick="sp(${el2.id},'align','left');renderProps()">左</button>
-      <button class="mini-btn ${(el2.align||'center')==='center'?'on':''}" onclick="sp(${el2.id},'align','center');renderProps()">中</button>
-      <button class="mini-btn ${el2.align==='right'?'on':''}" onclick="sp(${el2.id},'align','right');renderProps()">右</button>
+      <button class="mini-btn ${el2.align==='left'?'on':''}" onclick="sp(${el2.id},'align','left');renderProps()" title="左对齐">左</button>
+      <button class="mini-btn ${(el2.align||'center')==='center'?'on':''}" onclick="sp(${el2.id},'align','center');renderProps()" title="居中对齐">中</button>
+      <button class="mini-btn ${el2.align==='right'?'on':''}" onclick="sp(${el2.id},'align','right');renderProps()" title="右对齐">右</button>
     </div>
   </div>`;
-  h += `<div class="pg"><div class="pl">垂直对齐</div>
+  st += `<div class="pg"><div class="pl">垂直对齐</div>
     <div class="mini-btns">
-      <button class="mini-btn ${(el2.valign||'center')==='top'?'on':''}" onclick="sp(${el2.id},'valign','top');renderProps()">上</button>
-      <button class="mini-btn ${(el2.valign||'center')==='center'?'on':''}" onclick="sp(${el2.id},'valign','center');renderProps()">中</button>
-      <button class="mini-btn ${(el2.valign||'center')==='bottom'?'on':''}" onclick="sp(${el2.id},'valign','bottom');renderProps()">下</button>
+      <button class="mini-btn ${(el2.valign||'center')==='top'?'on':''}" onclick="sp(${el2.id},'valign','top');renderProps()" title="顶部对齐">上</button>
+      <button class="mini-btn ${(el2.valign||'center')==='center'?'on':''}" onclick="sp(${el2.id},'valign','center');renderProps()" title="垂直居中">中</button>
+      <button class="mini-btn ${(el2.valign||'center')==='bottom'?'on':''}" onclick="sp(${el2.id},'valign','bottom');renderProps()" title="底部对齐">下</button>
     </div>
   </div>`;
 
-  h += rng(el2.id,'字体大小','fs', el2.fs  ?? 16, 8, 120, 'px');
-  h += rng(el2.id,'行高',    'lh', Math.round((el2.lh ?? 1.45) * 100), 80, 250, '%');
-  h += rng(el2.id,'字间距',  'ls', el2.ls  ?? 0, -2, 20, 'px');
+  st += rng(el2.id,'字体大小','fs', el2.fs  ?? 16, 8, 120, 'px');
+  st += rng(el2.id,'行高',    'lh', Math.round((el2.lh ?? 1.45) * 100), 80, 250, '%');
+  st += rng(el2.id,'字间距',  'ls', el2.ls  ?? 0, -2, 20, 'px');
+  h += _sec('text', '📝 文字', '文字内容、字体、样式、对齐', st);
 
-  h += `<div class="divider"></div>`;
-
-  // Colors
-  h += clr(el2.id,'文字颜色', 'tc', el2.tc||'#ffffff');
-  // Text shadow (moved after text color)
-  h += shd(el2.id, '文字阴影', 'tsh', '0 1px 6px rgba(0,0,0,.4)');
-
+  // ── Section: Colors & Shadows ──
+  let sc = '';
+  sc += clr(el2.id,'文字颜色', 'tc', el2.tc||'#ffffff');
+  sc += shd(el2.id, '文字阴影', 'tsh', '0 1px 6px rgba(0,0,0,.4)');
   if (el2.type !== 'text') {
-    h += clr(el2.id, el2.type==='glass' ? '玻璃背景' : '卡片背景', 'bg', el2.bg||'#ffffff');
+    sc += clr(el2.id, el2.type==='glass' ? '玻璃背景' : '卡片背景', 'bg', el2.bg||'#ffffff');
   }
+  h += _sec('colors', '🎨 颜色与阴影', '文字颜色、文字阴影、背景颜色', sc);
 
-
-
-  // Glass/card appearance
+  // ── Section: Glass/Card Appearance ──
   if (el2.type !== 'text') {
-    h += rng(el2.id,'透明度',   'op',   Math.round((el2.op  ?? 0.25) * 100), 0, 100, '%');
-    h += rng(el2.id,'背景模糊', 'blur', el2.blur ?? 18, 0, 40, 'px');
+    let sa = '';
+    sa += rng(el2.id,'透明度',   'op',   Math.round((el2.op  ?? 0.25) * 100), 0, 100, '%');
+    sa += rng(el2.id,'背景模糊', 'blur', el2.blur ?? 18, 0, 40, 'px');
     if (el2.type === 'glass') {
-      h += rng(el2.id,'饱和度',  'sat',  el2.sat  ?? 140, 80, 220, '%');
-      h += rng(el2.id,'边框亮度','bop',  Math.round((el2.bop ?? 0.35) * 100), 0, 100, '%');
+      sa += rng(el2.id,'饱和度',  'sat',  el2.sat  ?? 140, 80, 220, '%');
+      sa += rng(el2.id,'边框亮度','bop',  Math.round((el2.bop ?? 0.35) * 100), 0, 100, '%');
     }
-    h += shd(el2.id, '元素阴影', 'bs', el2.type==='glass' ? '0 8px 32px rgba(0,0,0,.2)' : '0 4px 24px rgba(0,0,0,.3)');
-    // Rounding & padding moved into appearance section
-    h += rng(el2.id,'圆角',  'r',   el2.r   ?? 12,  0, 60, 'px');
-    h += rng(el2.id,'内边距','pad', el2.pad ?? 12, 4, 40, 'px');
-    h += `<div class="divider"></div>`;
+    sa += shd(el2.id, '元素阴影', 'bs', el2.type==='glass' ? '0 8px 32px rgba(0,0,0,.2)' : '0 4px 24px rgba(0,0,0,.3)');
+    sa += rng(el2.id,'圆角',  'r',   el2.r   ?? 12,  0, 60, 'px');
+    sa += rng(el2.id,'内边距','pad', el2.pad ?? 12, 4, 40, 'px');
+    h += _sec('appearance', '✨ 玻璃外观', '透明度、模糊、饱和度、边框、阴影、圆角', sa);
   }
 
-
-  h += `<div class="prop-grid">
-    <div class="pg"><div class="pl">宽</div><input class="pi" type="number" value="${Math.round(el2.w)}" min="20" onchange="sp(${el2.id},'w',+this.value);renderProps()"></div>
-    <div class="pg"><div class="pl">高</div><input class="pi" type="number" value="${Math.round(el2.h)}" min="20" onchange="sp(${el2.id},'h',+this.value);renderProps()"></div>
-    <div class="pg"><div class="pl">X</div><input class="pi" type="number" value="${Math.round(el2.x)}" onchange="sp(${el2.id},'x',+this.value)"></div>
-    <div class="pg"><div class="pl">Y</div><input class="pi" type="number" value="${Math.round(el2.y)}" onchange="sp(${el2.id},'y',+this.value)"></div>
+  // ── Section: Position & Size ──
+  let sp_html = '';
+  sp_html += `<div class="prop-grid">
+    <div class="pg"><div class="pl">宽</div><input class="pi" type="number" value="${Math.round(el2.w)}" min="20" title="宽度（像素）" onchange="sp(${el2.id},'w',+this.value);renderProps()"></div>
+    <div class="pg"><div class="pl">高</div><input class="pi" type="number" value="${Math.round(el2.h)}" min="20" title="高度（像素）" onchange="sp(${el2.id},'h',+this.value);renderProps()"></div>
+    <div class="pg"><div class="pl">X</div><input class="pi" type="number" value="${Math.round(el2.x)}" title="水平坐标（像素）" onchange="sp(${el2.id},'x',+this.value)"></div>
+    <div class="pg"><div class="pl">Y</div><input class="pi" type="number" value="${Math.round(el2.y)}" title="垂直坐标（像素）" onchange="sp(${el2.id},'y',+this.value)"></div>
   </div>`;
-
-  h += `<div class="divider"></div>`;
-
-  // Canvas alignment
-  h += `<div class="pg"><div class="pl">对齐到画布</div>
+  sp_html += `<div class="pg"><div class="pl">对齐到画布</div>
     <div class="align-btns">
-      <div class="align-btn" onclick="alignSel('left')" tabindex="0" role="button" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();alignSel('left')}">⬅</div>
-      <div class="align-btn" onclick="alignSel('hcenter')" tabindex="0" role="button" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();alignSel('hcenter')}">⊕</div>
-      <div class="align-btn" onclick="alignSel('right')" tabindex="0" role="button" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();alignSel('right')}">➡</div>
-      <div class="align-btn" onclick="alignSel('top')" tabindex="0" role="button" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();alignSel('top')}">⬆</div>
-      <div class="align-btn" onclick="alignSel('vcenter')" tabindex="0" role="button" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();alignSel('vcenter')}">⊕</div>
-      <div class="align-btn" onclick="alignSel('bottom')" tabindex="0" role="button" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();alignSel('bottom')}">⬇</div>
+      <div class="align-btn" onclick="alignSel('left')" tabindex="0" role="button" title="左对齐到画布" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();alignSel('left')}">⬅</div>
+      <div class="align-btn" onclick="alignSel('hcenter')" tabindex="0" role="button" title="水平居中到画布" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();alignSel('hcenter')}">⊕</div>
+      <div class="align-btn" onclick="alignSel('right')" tabindex="0" role="button" title="右对齐到画布" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();alignSel('right')}">➡</div>
+      <div class="align-btn" onclick="alignSel('top')" tabindex="0" role="button" title="顶对齐到画布" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();alignSel('top')}">⬆</div>
+      <div class="align-btn" onclick="alignSel('vcenter')" tabindex="0" role="button" title="垂直居中到画布" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();alignSel('vcenter')}">⊕</div>
+      <div class="align-btn" onclick="alignSel('bottom')" tabindex="0" role="button" title="底对齐到画布" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();alignSel('bottom')}">⬇</div>
     </div>
   </div>`;
+  h += _sec('position', '📐 尺寸与位置', '宽高、坐标、画布对齐', sp_html);
 
-  // Lock toggle
-  h += `<div class="pg"><div class="pl">操作</div>
+  // ── Section: Actions ──
+  let sa2 = '';
+  sa2 += `<div class="pg"><div class="pl">操作</div>
     <div class="mini-btns">
-      <button class="mini-btn ${el2.locked?'on':''}" onclick="toggleLock();renderProps()" title="锁定元素">🔒 锁定</button>
-      <button class="mini-btn" onclick="dupSel()">📋 复制</button>
-      <button class="mini-btn" style="color:var(--danger)" onclick="delSel()">🗑 删除</button>
+      <button class="mini-btn ${el2.locked?'on':''}" onclick="toggleLock();renderProps()" title="锁定后不可拖动或调整">🔒 锁定</button>
+      <button class="mini-btn" onclick="dupSel()" title="复制选中元素（Ctrl+D）">📋 复制</button>
+      <button class="mini-btn" style="color:var(--danger)" onclick="delSel()" title="删除选中元素（Del）">🗑 删除</button>
     </div>
   </div>`;
+  h += _sec('actions', '🔧 操作', '锁定、复制、删除', sa2);
 
   el.pscroll.innerHTML = h;
   el.pscroll.scrollTop = pscrollTop;
