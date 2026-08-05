@@ -1,126 +1,160 @@
-/* ==================== CSS 变量体系 ==================== */
+/* ==================== CSS 变量体系 — Hallmark 重构版 ==================== */
+/* OKLCH 色板 · 命名时长 · 命名 z-index · 统一 spacing */
 
 /* prefers-color-scheme 兜底：JS 加载前使用深色主题默认值 */
 @media (prefers-color-scheme: light) {
   :root:not([data-theme]) {
-    --color-bg:             #ffffff;
+    --color-bg:             oklch(97% 0.008 250);
     --color-surface:        rgba(255, 255, 255, 0.9);
-    --color-text:           #1e293b;
-    --color-text-secondary: #64748b;
-    --color-text-muted:     #5c6e80;
-    --color-text-inverse:   #ffffff;
+    --color-text:           oklch(22% 0.012 250);
+    --color-text-secondary: oklch(42% 0.015 250);
+    --color-text-muted:     oklch(50% 0.012 250);
+    --color-text-inverse:   oklch(97% 0.008 250);
   }
 }
 
 :root, [data-theme="dark"] {
-  /* 主色板 */
-  --color-primary:        #3b82f6;
-  --color-primary-dark:   #3b82f6;
-  --color-primary-light:  #60a5fa;
-  --color-primary-bg:     rgba(59, 130, 246, 0.08);
-  --color-primary-border: rgba(59, 130, 246, 0.2);
+  /* ═══════════════════════════════════════
+     锚点色相：hue 220（深蓝），所有中性色微调至同一色相
+     ═══════════════════════════════════════ */
 
-  /* 语义色 */
-  --color-success:        #10b981;
-  --color-success-dark:   #10b981;
-  --color-success-light:  #34d399;
-  --color-success-bg:     rgba(16, 185, 129, 0.08);
-  --color-success-border: rgba(16, 185, 129, 0.2);
+  /* ——— 主色板（OKLCH） ——— */
+  --color-primary:        oklch(58% 0.18 248);
+  --color-primary-dark:   oklch(48% 0.17 248);
+  --color-primary-light:  oklch(68% 0.16 248);
+  --color-primary-bg:     oklch(58% 0.18 248 / 0.10);
+  --color-primary-border: oklch(58% 0.18 248 / 0.25);
 
-  --color-danger:         #ef4444;
-  --color-danger-dark:    #ef4444;
-  --color-danger-bg:      rgba(239, 68, 68, 0.08);
-  --color-danger-border:  rgba(239, 68, 68, 0.2);
+  /* ——— 语义色（OKLCH） ——— */
+  --color-success:        oklch(62% 0.16 158);
+  --color-success-dark:   oklch(50% 0.14 158);
+  --color-success-light:  oklch(72% 0.14 158);
+  --color-success-bg:     oklch(62% 0.16 158 / 0.10);
+  --color-success-border: oklch(62% 0.16 158 / 0.25);
 
-  --color-warning:        #f59e0b;
-  --color-warning-dark:   #d97706;
-  --color-warning-bg:     rgba(245, 158, 11, 0.08);
-  --color-warning-border: rgba(245, 158, 11, 0.2);
+  --color-danger:         oklch(58% 0.20 25);
+  --color-danger-dark:    oklch(48% 0.18 25);
+  --color-danger-bg:      oklch(58% 0.20 25 / 0.10);
+  --color-danger-border:  oklch(58% 0.20 25 / 0.25);
 
-  --color-dd-danger: #f87171;
-  --color-dd-warn:   #fbbf24;
-  --color-dd-safe:   #f1f5f9;
+  --color-warning:        oklch(65% 0.18 80);
+  --color-warning-dark:   oklch(52% 0.16 80);
+  --color-warning-bg:     oklch(65% 0.18 80 / 0.10);
+  --color-warning-border: oklch(65% 0.18 80 / 0.25);
 
-  --color-gold:           #fbbf24;
-  --color-gold-dark:      #f59e0b;
-  --color-gold-bg:        rgba(251, 191, 36, 0.08);
+  /* 回撤专用色 */
+  --color-dd-danger: oklch(60% 0.18 25);
+  --color-dd-warn:   oklch(72% 0.16 80);
+  --color-dd-safe:   oklch(90% 0.006 250);
 
-  /* PnL 专用色（正/负盈亏，深色模式亮色、浅色模式深色以保证对比度） */
-  --color-pnl-positive:   #4ade80;
-  --color-pnl-negative:   #f87171;
+  /* 金色 */
+  --color-gold:           oklch(72% 0.17 78);
+  --color-gold-dark:      oklch(58% 0.15 78);
+  --color-gold-bg:        oklch(72% 0.17 78 / 0.10);
 
-  /* ———— 深色主题（默认） ———— */
-  --color-bg:             #0f172a;
-  --color-bg-gradient:    linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
-  --color-surface:        rgba(30, 41, 59, 0.7);
-  --color-surface-hover:  rgba(51, 65, 85, 0.6);
-  --color-surface-raised: rgba(51, 65, 85, 0.8);
-  --color-border:         rgba(148, 163, 184, 0.12);
-  --color-border-light:   rgba(148, 163, 184, 0.08);
+  /* PnL 专用色 */
+  --color-pnl-positive:   oklch(70% 0.15 158);
+  --color-pnl-negative:   oklch(65% 0.18 25);
 
-  /* 文字色 — 深色模式提亮以保证对比度 ≥ 4.5:1 */
-  --color-text:           #f1f5f9;
-  --color-text-secondary: #e2e8f0;
-  --color-text-muted:     #cbd5e1;
-  --color-text-placeholder: #a0aec0;
-  --color-text-inverse:   #0f172a;
+  /* ═══════════════════════════════════════
+     表面色（OKLCH 层次系统）
+     Paper: L14 → Surface: L18 → Surface-raised: L21
+     ═══════════════════════════════════════ */
+  --color-bg:             oklch(14% 0.010 250);
+  --color-surface:        oklch(18% 0.011 250 / 0.75);
+  --color-surface-hover:  oklch(21% 0.012 250 / 0.75);
+  --color-surface-raised: oklch(24% 0.013 250);
 
-  /* 毛玻璃效果（深色） */
-  --glass-bg:           rgba(30, 41, 59, 0.6);
-  --glass-bg-light:     rgba(51, 65, 85, 0.4);
-  --glass-bg-heavy:     rgba(30, 41, 59, 0.85);
-  --glass-border:       rgba(148, 163, 184, 0.1);
-  --glass-border-light: rgba(255, 255, 255, 0.05);
+  /* 边框 — 始终使用 alpha OKLCH */
+  --color-border:         oklch(60% 0.015 250 / 0.12);
+  --color-border-light:   oklch(60% 0.015 250 / 0.08);
+
+  /* 文字色 — L94 深底色上 ≥ 10:1 对比 */
+  --color-text:           oklch(94% 0.006 250);
+  --color-text-secondary: oklch(85% 0.008 250);
+  --color-text-muted:     oklch(72% 0.010 250);
+  --color-text-placeholder: oklch(60% 0.010 250);
+  --color-text-inverse:   oklch(14% 0.010 250);
+
+  /* ═══════════════════════════════════════
+     毛玻璃效果（深色）
+     ═══════════════════════════════════════ */
+  --glass-bg:           oklch(18% 0.011 250 / 0.60);
+  --glass-bg-light:     oklch(21% 0.012 250 / 0.45);
+  --glass-bg-heavy:     oklch(18% 0.011 250 / 0.88);
+  --glass-border:       oklch(60% 0.015 250 / 0.12);
+  --glass-border-light: oklch(94% 0.006 250 / 0.06);
   --glass-blur:         blur(18px);
   --glass-blur-light:   blur(12px);
   --glass-blur-heavy:   blur(28px);
-  --glass-shadow:       0 8px 32px rgba(0, 0, 0, 0.3);
+  --glass-shadow:       0 8px 32px oklch(0% 0 0 / 0.35);
 
   /* 导航背景 */
-  --nav-bg:               rgba(30, 41, 59, 0.8);
-  --nav-border:           rgba(148, 163, 184, 0.1);
+  --nav-bg:         oklch(18% 0.011 250 / 0.88);
+  --nav-border:     oklch(60% 0.015 250 / 0.12);
 
-  /* Chart.js / Canvas 主题变量（深色默认） */
-  --chart-tooltip-bg:      rgba(15, 23, 42, 0.95);
-  --chart-tooltip-title:   #f1f5f9;
-  --chart-tooltip-body:    #e2e8f0;
-  --chart-grid-color:      rgba(148, 163, 184, 0.22);
-  --chart-tick-color:      #e2e8f0;
-  --chart-axis-title:      #e2e8f0;
-  --chart-legend-text:     #e2e8f0;
-  --chart-canvas-text:     #e2e8f0;
-  --chart-canvas-grid:     rgba(148, 163, 184, 0.28);
-  --chart-canvas-fill:     #e2e8f0;
-  --chart-canvas-bg:       rgba(255, 255, 255, 0.03);
-  --chart-canvas-zero:     rgba(239, 68, 68, 0.4);
-  --chart-canvas-up:       rgba(34, 197, 94, 0.95);
-  --chart-canvas-down:     rgba(239, 68, 68, 0.95);
-  --chart-canvas-ptcenter: #ffffff;
-  --chart-bar-border:      rgba(255, 255, 255, 0.1);
-  --chart-positive-point:  #10b981;
-  --chart-negative-point:  #ef4444;
-  --chart-bar-win:          rgba(34,197,94,0.7);
-  --chart-bar-warn:         rgba(245,158,11,0.7);
-  --chart-bar-loss:         rgba(239,68,68,0.7);
-  --chart-bar-neutral:      rgba(148,163,184,0.7);
-  --chart-scatter-win:      rgba(34,197,94,0.8);
-  --chart-scatter-loss:     rgba(239,68,68,0.8);
+  /* ═══════════════════════════════════════
+     命名过渡时长 — 替代硬编码 0.15s/0.2s/0.3s
+     ═══════════════════════════════════════ */
+  --dur-fast:    100ms;
+  --dur-short:   140ms;
+  --dur-normal:  200ms;
+  --dur-slow:    300ms;
 
-  /* 圆角系统 */
-  --radius-xs:  6px;
-  --radius-sm:  10px;
-  --radius-md:  14px;
-  --radius-lg:  18px;
+  /* ═══════════════════════════════════════
+     命名缓动 — 替代浏览器默认 ease
+     ═══════════════════════════════════════ */
+  --ease-out:      cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in:       cubic-bezier(0.55, 0.06, 0.68, 0.19);
+  --ease-in-out:   cubic-bezier(0.55, 0.06, 0.68, 0.19);
+
+  /* 过渡 — 指定属性，不 animating visibility 等 */
+  --transition-fast:   background-color var(--dur-fast) var(--ease-out),
+                       border-color var(--dur-fast) var(--ease-out),
+                       color var(--dur-fast) var(--ease-out),
+                       transform var(--dur-fast) var(--ease-out),
+                       opacity var(--dur-fast) var(--ease-out);
+  --transition-normal: background-color var(--dur-normal) var(--ease-out),
+                       border-color var(--dur-normal) var(--ease-out),
+                       color var(--dur-normal) var(--ease-out),
+                       transform var(--dur-normal) var(--ease-out),
+                       box-shadow var(--dur-normal) var(--ease-out);
+  --transition-slow:   background-color var(--dur-slow) var(--ease-out),
+                       border-color var(--dur-slow) var(--ease-out),
+                       transform var(--dur-slow) var(--ease-out),
+                       opacity var(--dur-slow) var(--ease-out);
+
+  /* ═══════════════════════════════════════
+     命名 z-index scale
+     ═══════════════════════════════════════ */
+  --z-dropdown:   200;
+  --z-modal:      300;
+  --z-toast:      400;
+  --z-overlay:    500;
+  --z-popover:    600;
+  --z-tooltip:    700;
+
+  /* ═══════════════════════════════════════
+     圆角系统（4pt 倍数）
+     ═══════════════════════════════════════ */
+  --radius-xs:  4px;
+  --radius-sm:  8px;
+  --radius-md:  12px;
+  --radius-lg:  16px;
   --radius-xl:  24px;
   --radius-full: 9999px;
 
-  /* 阴影系统 */
-  --shadow-sm:  0 1px 2px rgba(0,0,0,0.15);
-  --shadow-md:  0 4px 16px rgba(0,0,0,0.2), 0 1px 2px rgba(0,0,0,0.1);
-  --shadow-lg:  0 12px 40px rgba(0,0,0,0.25), 0 4px 12px rgba(0,0,0,0.15);
-  --shadow-xl:  0 20px 60px rgba(0,0,0,0.3), 0 8px 20px rgba(0,0,0,0.2);
+  /* ═══════════════════════════════════════
+     阴影系统 — OKLCH 黑色，非硬编码 rgba
+     ═══════════════════════════════════════ */
+  --shadow-sm:  0 1px 2px oklch(0% 0 0 / 0.20);
+  --shadow-md:  0 4px 16px oklch(0% 0 0 / 0.25), 0 1px 2px oklch(0% 0 0 / 0.12);
+  --shadow-lg:  0 12px 40px oklch(0% 0 0 / 0.30), 0 4px 12px oklch(0% 0 0 / 0.15);
+  --shadow-xl:  0 20px 60px oklch(0% 0 0 / 0.35), 0 8px 20px oklch(0% 0 0 / 0.20);
 
-  /* 排版 */
+  /* ═══════════════════════════════════════
+     排版系统
+     ═══════════════════════════════════════ */
   --font-xs:    11px;
   --font-sm:    12.5px;
   --font-base:  14px;
@@ -129,129 +163,150 @@
   --font-xl:    23px;
   --font-2xl:   29px;
   --font-3xl:   35px;
-  --font-weight-normal:  400;
-  --font-weight-medium:  500;
-  --font-weight-semibold:600;
-  --font-weight-bold:    700;
+  --font-weight-normal:   400;
+  --font-weight-medium:   500;
+  --font-weight-semibold: 600;
+  --font-weight-bold:     700;
 
-  /* 间距 */
+  /* ═══════════════════════════════════════
+     间距系统（4pt 倍数）
+     ═══════════════════════════════════════ */
   --space-xs:  4px;
   --space-sm:  8px;
   --space-md:  12px;
-  --space-lg:  18px;
+  --space-lg:  16px;
   --space-xl:  24px;
   --space-2xl: 32px;
+  --space-3xl: 48px;
 
-  /* 过渡 */
-  --transition-fast:   0.15s ease;
-  --transition-normal: 0.2s cubic-bezier(0.4,0,0.2,1);
-  --transition-slow:   0.3s ease;
+  /* ═══════════════════════════════════════
+     Chart.js / Canvas 主题变量（OKLCH）
+     ═══════════════════════════════════════ */
+  --chart-tooltip-bg:      oklch(14% 0.010 250 / 0.95);
+  --chart-tooltip-title:   oklch(94% 0.006 250);
+  --chart-tooltip-body:    oklch(85% 0.008 250);
+  --chart-grid-color:      oklch(60% 0.015 250 / 0.22);
+  --chart-tick-color:      oklch(85% 0.008 250);
+  --chart-axis-title:      oklch(85% 0.008 250);
+  --chart-legend-text:     oklch(85% 0.008 250);
+  --chart-canvas-text:     oklch(85% 0.008 250);
+  --chart-canvas-grid:     oklch(60% 0.015 250 / 0.28);
+  --chart-canvas-fill:     oklch(85% 0.008 250);
+  --chart-canvas-bg:       oklch(94% 0.006 250 / 0.03);
+  --chart-canvas-zero:     oklch(58% 0.20 25 / 0.40);
+  --chart-canvas-up:       oklch(62% 0.16 158 / 0.95);
+  --chart-canvas-down:     oklch(58% 0.20 25 / 0.95);
+  --chart-canvas-ptcenter: oklch(94% 0.006 250);
+  --chart-bar-border:      oklch(94% 0.006 250 / 0.10);
+  --chart-positive-point:  oklch(62% 0.16 158);
+  --chart-negative-point:  oklch(58% 0.20 25);
+  --chart-bar-win:         oklch(62% 0.16 158 / 0.70);
+  --chart-bar-warn:        oklch(65% 0.18 80 / 0.70);
+  --chart-bar-loss:        oklch(58% 0.20 25 / 0.70);
+  --chart-bar-neutral:     oklch(60% 0.015 250 / 0.70);
+  --chart-scatter-win:     oklch(62% 0.16 158 / 0.80);
+  --chart-scatter-loss:    oklch(58% 0.20 25 / 0.80);
 }
 
 /* ———— 浅色主题模式 ———— */
 [data-theme="light"] {
-  /* 主色板（浅色模式下加深以保证对比度≥4.5:1） */
-  --color-primary:        #2563eb;
-  --color-primary-dark:   #1d4ed8;
-  --color-primary-light:  #3b82f6;
-  --color-primary-bg:     rgba(37, 99, 235, 0.08);
-  --color-primary-border: rgba(59, 130, 246, 0.2);
+  --color-primary:        oklch(52% 0.18 250);
+  --color-primary-dark:   oklch(44% 0.17 250);
+  --color-primary-light:  oklch(60% 0.16 250);
+  --color-primary-bg:     oklch(52% 0.18 250 / 0.08);
+  --color-primary-border: oklch(52% 0.18 250 / 0.25);
 
-  --color-success:        #059669;
-  --color-success-dark:   #047857;
-  --color-success-light:  #10b981;
-  --color-success-bg:     rgba(5, 150, 105, 0.08);
-  --color-success-border: rgba(5, 150, 105, 0.2);
+  --color-success:        oklch(48% 0.14 158);
+  --color-success-dark:   oklch(38% 0.12 158);
+  --color-success-light:  oklch(58% 0.14 158);
+  --color-success-bg:     oklch(48% 0.14 158 / 0.08);
+  --color-success-border: oklch(48% 0.14 158 / 0.25);
 
-  --color-danger:         #dc2626;
-  --color-danger-dark:    #b91c1c;
-  --color-danger-bg:      rgba(220, 38, 38, 0.08);
-  --color-danger-border:  rgba(220, 38, 38, 0.2);
+  --color-danger:         oklch(52% 0.18 25);
+  --color-danger-dark:    oklch(42% 0.16 25);
+  --color-danger-bg:      oklch(52% 0.18 25 / 0.08);
+  --color-danger-border:  oklch(52% 0.18 25 / 0.25);
 
-  --color-warning:        #b45309;
-  --color-warning-dark:   #92400e;
-  --color-warning-bg:     rgba(180, 83, 9, 0.08);
-  --color-warning-border: rgba(180, 83, 9, 0.2);
+  --color-warning:        oklch(50% 0.16 80);
+  --color-warning-dark:   oklch(40% 0.14 80);
+  --color-warning-bg:     oklch(50% 0.16 80 / 0.08);
+  --color-warning-border: oklch(50% 0.16 80 / 0.25);
 
-  --color-dd-danger: #dc2626;
-  --color-dd-warn:   #b45309;
-  --color-dd-safe:   #64748b;
+  --color-dd-danger: oklch(52% 0.18 25);
+  --color-dd-warn:   oklch(50% 0.16 80);
+  --color-dd-safe:   oklch(42% 0.015 250);
 
-  --color-gold:           #b45309;
-  --color-gold-dark:      #92400e;
-  --color-gold-bg:        rgba(251, 191, 36, 0.08);
+  --color-gold:           oklch(50% 0.16 78);
+  --color-gold-dark:      oklch(40% 0.14 78);
+  --color-gold-bg:        oklch(50% 0.16 78 / 0.08);
 
-  /* PnL 专用色（浅色模式加深以保证对比度≥4.5:1） */
-  --color-pnl-positive:   #059669;
-  --color-pnl-negative:   #dc2626;
+  --color-pnl-positive:   oklch(48% 0.14 158);
+  --color-pnl-negative:   oklch(52% 0.18 25);
 
-  /* ———— 浅色主题背景 ———— */
-  --color-bg:             #ffffff;
-  --color-bg-gradient:    linear-gradient(135deg, #ffffff 0%, #f8fafc 50%, #e2e8f0 100%);
-  --color-surface:        rgba(255, 255, 255, 0.9);
-  --color-surface-hover:  rgba(248, 250, 252, 0.9);
-  --color-surface-raised: rgba(255, 255, 255, 0.95);
-  --color-border:         rgba(148, 163, 184, 0.2);
-  --color-border-light:   rgba(148, 163, 184, 0.15);
+  /* 浅色纸色：oklch(97% 0.008 250) — 非纯白 */
+  --color-bg:             oklch(97% 0.008 250);
+  --color-surface:        oklch(100% 0.003 250 / 0.92);
+  --color-surface-hover:  oklch(98% 0.006 250 / 0.92);
+  --color-surface-raised: oklch(100% 0.003 250);
 
-  /* 文字色（反转） */
-  --color-text:           #1e293b;
-  --color-text-secondary: #64748b;
-  --color-text-muted:     #5c6e80;
-  --color-text-placeholder: #64748b;
-  --color-text-inverse:   #ffffff;
+  --color-border:         oklch(70% 0.012 250 / 0.20);
+  --color-border-light:   oklch(70% 0.012 250 / 0.12);
 
-  /* 毛玻璃效果（浅色）- 增强层次确保圆角可见 */
-  --glass-bg:           rgba(255, 255, 255, 0.88);      /* 更高透明度保证背景可见 */
-  --glass-bg-light:     rgba(255, 255, 255, 0.78);
-  --glass-bg-heavy:     rgba(248, 250, 252, 0.96);      /* 导航用浅灰非纯白 */
-  --glass-border:       rgba(148, 163, 184, 0.38);      /* 稍深边框显圆角 */
-  --glass-border-light: rgba(148, 163, 184, 0.28);
+  --color-text:           oklch(22% 0.012 250);
+  --color-text-secondary: oklch(38% 0.014 250);
+  --color-text-muted:     oklch(50% 0.012 250);
+  --color-text-placeholder: oklch(58% 0.012 250);
+  --color-text-inverse:   oklch(97% 0.008 250);
+
+  /* 浅色毛玻璃 */
+  --glass-bg:           oklch(100% 0.003 250 / 0.88);
+  --glass-bg-light:     oklch(100% 0.003 250 / 0.75);
+  --glass-bg-heavy:     oklch(98% 0.006 250 / 0.96);
+  --glass-border:       oklch(70% 0.012 250 / 0.35);
+  --glass-border-light: oklch(70% 0.012 250 / 0.25);
   --glass-blur:         blur(12px);
   --glass-blur-light:   blur(8px);
   --glass-blur-heavy:   blur(20px);
-  --glass-shadow:       0 4px 12px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0,0,0,0.04);
+  --glass-shadow:       0 4px 12px oklch(0% 0 0 / 0.08), 0 2px 4px oklch(0% 0 0 / 0.04);
 
-  /* 导航背景（浅色） */
-  --nav-bg:               rgba(248, 250, 252, 0.95);      /* 浅灰底色而非纯白，增加层次感 */
-  --nav-border:           rgba(148, 163, 184, 0.2);
+  --nav-bg:         oklch(98% 0.006 250 / 0.95);
+  --nav-border:     oklch(70% 0.012 250 / 0.20);
 
-  /* 浅色主题更轻的阴影 */
-  --shadow-sm:  0 1px 3px rgba(0,0,0,0.06);
-  --shadow-md:  0 2px 8px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
-  --shadow-lg:  0 6px 20px rgba(0,0,0,0.1), 0 2px 6px rgba(0,0,0,0.06);
-  --shadow-xl:  0 10px 30px rgba(0,0,0,0.12), 0 4px 10px rgba(0,0,0,0.08);
+  --shadow-sm:  0 1px 3px oklch(0% 0 0 / 0.06);
+  --shadow-md:  0 2px 8px oklch(0% 0 0 / 0.08), 0 1px 2px oklch(0% 0 0 / 0.04);
+  --shadow-lg:  0 6px 20px oklch(0% 0 0 / 0.10), 0 2px 6px oklch(0% 0 0 / 0.06);
+  --shadow-xl:  0 10px 30px oklch(0% 0 0 / 0.12), 0 4px 10px oklch(0% 0 0 / 0.08);
 
-  /* Chart.js / Canvas 主题变量（浅色） */
-  --chart-tooltip-bg:      rgba(255, 255, 255, 0.95);
-  --chart-tooltip-title:   #1e293b;
-  --chart-tooltip-body:    #475569;
-  --chart-grid-color:      rgba(148, 163, 184, 0.2);
-  --chart-tick-color:      #475569;
-  --chart-axis-title:      #475569;
-  --chart-legend-text:     #475569;
-  --chart-canvas-text:     #475569;
-  --chart-canvas-grid:     rgba(148, 163, 184, 0.25);
-  --chart-canvas-fill:     #475569;
-  --chart-canvas-bg:       rgba(0, 0, 0, 0.03);
-  --chart-canvas-zero:     rgba(220, 38, 38, 0.4);
-  --chart-canvas-up:       rgba(5, 150, 105, 0.95);
-  --chart-canvas-down:     rgba(220, 38, 38, 0.95);
-  --chart-canvas-ptcenter: #ffffff;
-  --chart-bar-border:      rgba(15, 23, 42, 0.08);
-  --chart-positive-point:  #059669;
-  --chart-negative-point:  #dc2626;
-  --chart-bar-win:          rgba(5,150,105,0.7);
-  --chart-bar-warn:         rgba(180,83,9,0.7);
-  --chart-bar-loss:         rgba(220,38,38,0.7);
-  --chart-bar-neutral:      rgba(100,116,139,0.7);
-  --chart-scatter-win:      rgba(5,150,105,0.8);
-  --chart-scatter-loss:     rgba(220,38,38,0.8);
+  /* Chart.js 浅色 */
+  --chart-tooltip-bg:      oklch(100% 0.003 250 / 0.95);
+  --chart-tooltip-title:   oklch(22% 0.012 250);
+  --chart-tooltip-body:    oklch(38% 0.014 250);
+  --chart-grid-color:      oklch(70% 0.012 250 / 0.20);
+  --chart-tick-color:      oklch(38% 0.014 250);
+  --chart-axis-title:      oklch(38% 0.014 250);
+  --chart-legend-text:     oklch(38% 0.014 250);
+  --chart-canvas-text:     oklch(38% 0.014 250);
+  --chart-canvas-grid:     oklch(70% 0.012 250 / 0.25);
+  --chart-canvas-fill:     oklch(38% 0.014 250);
+  --chart-canvas-bg:       oklch(0% 0 0 / 0.03);
+  --chart-canvas-zero:     oklch(52% 0.18 25 / 0.40);
+  --chart-canvas-up:       oklch(48% 0.14 158 / 0.95);
+  --chart-canvas-down:     oklch(52% 0.18 25 / 0.95);
+  --chart-canvas-ptcenter: oklch(100% 0.003 250);
+  --chart-bar-border:      oklch(22% 0.012 250 / 0.08);
+  --chart-positive-point:  oklch(48% 0.14 158);
+  --chart-negative-point:  oklch(52% 0.18 25);
+  --chart-bar-win:         oklch(48% 0.14 158 / 0.70);
+  --chart-bar-warn:        oklch(50% 0.16 80 / 0.70);
+  --chart-bar-loss:        oklch(52% 0.18 25 / 0.70);
+  --chart-bar-neutral:     oklch(50% 0.012 250 / 0.70);
+  --chart-scatter-win:     oklch(48% 0.14 158 / 0.80);
+  --chart-scatter-loss:    oklch(52% 0.18 25 / 0.80);
 }
 
-/* Overlay bg for light theme - ensures proper contrast in light mode */
+/* Overlay bg for light theme */
 [data-theme="light"] .modal-overlay {
-  --modal-overlay-bg: rgba(0, 0, 0, 0.4);
+  --modal-overlay-bg: oklch(14% 0.010 250 / 0.40);
 }
 
 /* ─── 浅色主题动画切换：@keyframes 内不支持 var()，改用同名 Light 变体 ─── */
@@ -278,7 +333,6 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
-  /* Replace spring/scale animations with short opacity cross-fade */
   .modal-content,
   .view.active,
   .dash-card,
@@ -288,8 +342,9 @@
   .toast,
   .result-card.margin-danger,
   .mindset-reminder,
-  .close-panel-row {
-    animation: reducedFadeIn 200ms ease forwards !important;
+  .close-panel-row,
+  .detail-row {
+    animation: reducedFadeIn 150ms linear forwards !important;
   }
   @keyframes reducedFadeIn {
     from { opacity: 0; }
@@ -318,107 +373,81 @@
     -webkit-backdrop-filter: none !important;
   }
   .modal-overlay {
-    background: rgba(15, 23, 42, 0.85) !important;
+    background: var(--modal-overlay-bg, oklch(14% 0.010 250 / 0.85)) !important;
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
   }
 }
 
 
+/* ─── 过渡动画关键帧 ─── */
 @keyframes flashBorder {
-  0%   { border-color: var(--color-warning); box-shadow: 0 0 0 4px rgba(245,158,11,0.2); }
+  0%   { border-color: var(--color-warning); box-shadow: 0 0 0 4px var(--color-warning-bg); }
   100% { border-color: var(--color-border); box-shadow: none; }
 }
 
-
+/* marginPulse: 单次触发，warning 状态脉冲一次后停止 */
 @keyframes marginPulse {
-  0%, 100% { box-shadow: 0 0 12px rgba(239,68,68,0.3); }
-  50%      { box-shadow: 0 0 24px rgba(239,68,68,0.5); }
+  0%, 100% { box-shadow: 0 0 12px var(--color-danger-bg); }
+  50%      { box-shadow: 0 0 24px var(--color-danger-bg); }
 }
 
-@keyframes modalIn { from { opacity:0; transform:translateY(-16px) scale(0.97); } to { opacity:1; transform:translateY(0) scale(1); } }
-
-@keyframes toastIn  { from { opacity:0; transform:translateX(40px); } to { opacity:1; transform:translateX(0); } }
-
-@keyframes toastOut { from { opacity:1; } to { opacity:0; transform:translateX(40px); } }
-
-@keyframes detailSlideIn {
-  from { opacity: 0; transform: translateY(-8px); }
-  to   { opacity: 1; transform: translateY(0); }
+@keyframes modalIn {
+  from { opacity: 0; transform: translateY(-16px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-@keyframes panelSlideIn {
-  from { opacity: 0; max-height: 0; }
-  to   { opacity: 1; max-height: 500px; }
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(40px); }
+  to   { opacity: 1; transform: translateX(0); }
 }
 
+@keyframes toastOut {
+  from { opacity: 1; }
+  to   { opacity: 0; transform: translateX(40px); }
+}
 
+/* mindsetGlow: 单次入场，非无限循环 */
 @keyframes mindsetGlow {
-  0%, 100% {
-    background: rgba(59,130,246,0.08);
+  0%   {
+    background: var(--color-primary-bg);
     border-left-color: var(--color-primary-light);
     box-shadow: none;
   }
-  50% {
-    background: rgba(59,130,246,0.18);
-    border-left-color: var(--color-primary);
-    box-shadow: 0 0 12px rgba(59,130,246,0.2);
+  100% {
+    background: var(--color-primary-bg);
+    border-left-color: var(--color-primary-light);
+    box-shadow: none;
   }
 }
 
-
-@keyframes glassFloat {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-2px); }
-}
-
-@keyframes gradientShift {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
-}
-
-/* ─── Apple Design §3/§4: Spring Animations ─── */
-/* Critically damped (damping ratio 1.0, response 0.4s) — no overshoot */
+/* ─── 临界阻尼弹簧入场（无过冲） — 替代 springBounceIn ─── */
 @keyframes springIn {
   0%   { transform: scale(0.92); opacity: 0; }
-  50%  { transform: scale(1.004); }
-  70%  { transform: scale(0.998); }
-  85%  { transform: scale(1.001); }
+  60%  { transform: scale(1.002); }
+  80%  { transform: scale(0.999); }
   100% { transform: scale(1); opacity: 1; }
 }
 
 @keyframes springOut {
   0%   { transform: scale(1); opacity: 1; }
-  30%  { transform: scale(0.996); }
   100% { transform: scale(0.92); opacity: 0; }
 }
 
-/* Bouncy spring for momentum-driven interactions (damping ~0.8, response 0.4s) */
-@keyframes springBounceIn {
-  0%   { transform: scale(0.88); opacity: 0; }
-  40%  { transform: scale(1.025); }
-  60%  { transform: scale(0.985); }
-  78%  { transform: scale(1.008); }
-  90%  { transform: scale(0.997); }
-  100% { transform: scale(1); opacity: 1; }
-}
-
-/* ─── Apple Design §12: Material Entrance — scale + blur ─── */
+/* ─── Material Entrance — scale + blur ─── */
 @keyframes materialIn {
   0%   { transform: scale(0.97); filter: blur(4px); opacity: 0; }
   60%  { filter: blur(0px); }
   100% { transform: scale(1); filter: blur(0px); opacity: 1; }
 }
 
-/* Larger surface = deeper shadow + stronger blur on entrance */
 @keyframes materialInLarge {
   0%   { transform: scale(0.96); filter: blur(6px); opacity: 0; }
   50%  { filter: blur(1px); }
   100% { transform: scale(1); filter: blur(0px); opacity: 1; }
 }
 
-/* ─── Apple Design §1: Instant response (reusable) ─── */
+/* ─── Instant tap feedback ─── */
 @keyframes tapShrink {
   0%   { transform: scale(1); }
   100% { transform: scale(0.97); }
@@ -426,22 +455,22 @@
 
 /* ─── 浅色主题 @keyframes（适配浅色背景的发光色） ─── */
 @keyframes flashBorderLight {
-  0%   { border-color: var(--color-warning); box-shadow: 0 0 0 4px rgba(180,83,9,0.15); }
+  0%   { border-color: var(--color-warning); box-shadow: 0 0 0 4px var(--color-warning-bg); }
   100% { border-color: var(--color-border); box-shadow: none; }
 }
 @keyframes marginPulseLight {
-  0%, 100% { box-shadow: 0 0 12px rgba(220,38,38,0.15); }
-  50%      { box-shadow: 0 0 24px rgba(220,38,38,0.25); }
+  0%, 100% { box-shadow: 0 0 12px var(--color-danger-bg); }
+  50%      { box-shadow: 0 0 24px var(--color-danger-bg); }
 }
 @keyframes mindsetGlowLight {
   0%, 100% {
-    background: rgba(37,99,235,0.06);
+    background: var(--color-primary-bg);
     border-left-color: var(--color-primary-light);
     box-shadow: none;
   }
   50% {
-    background: rgba(37,99,235,0.12);
+    background: oklch(52% 0.18 250 / 0.12);
     border-left-color: var(--color-primary);
-    box-shadow: 0 0 12px rgba(37,99,235,0.12);
+    box-shadow: 0 0 12px oklch(52% 0.18 250 / 0.12);
   }
 }

@@ -70,7 +70,7 @@ tbody tr:hover > td {
   display: block;
   width: 100%;
   height: 4px;
-  background: linear-gradient(to bottom, rgba(0,0,0,0.06), transparent);
+  background: linear-gradient(to bottom, oklch(0% 0 0 / 0.06), transparent);
   pointer-events: none;
   z-index: 2;
 }
@@ -274,7 +274,7 @@ tbody tr:hover > td {
 
 /* 表头滚动阴影 */
 .table-wrap.scrolled th {
-  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  box-shadow: 0 2px 8px oklch(0% 0 0 / 0.06);
 }
 
 
@@ -330,7 +330,7 @@ tbody tr:hover > td {
   font-size: var(--font-sm);
   padding: 2px var(--radius-xs);
   border-radius: var(--radius-xs);
-  transition: all var(--transition-fast);
+  transition: color var(--transition-fast), background-color var(--transition-fast);
 }
 
 .btn-expand:hover { 
@@ -400,16 +400,17 @@ tbody tr:hover > td {
   text-align: left; 
 }
 
-.action-col .btn { 
-  display: inline-flex; 
-  align-items: center; 
-  justify-content: center; 
-  vertical-align: middle; 
-  margin-right: 3px; 
-  padding: 3px 8px; 
-  font-size: 11px; 
-  border-radius: var(--radius-full); 
-  transition: transform 0.12s ease, opacity 0.12s ease; 
+.action-col .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  margin-right: 3px;
+  padding: 6px 10px;
+  font-size: 11px;
+  border-radius: var(--radius-full);
+  min-height: 44px;
+  transition: transform var(--dur-fast) var(--ease-out), opacity var(--dur-fast) var(--ease-out); 
 }
 
 .action-col .btn:last-child { 
@@ -449,13 +450,13 @@ tbody tr:hover > td {
   border: none;
   font-weight: var(--font-weight-semibold);
   padding: 3px 10px;
-  box-shadow: 0 1px 4px rgba(16,185,129,0.22);
-  transition: all var(--transition-normal);
+  box-shadow: 0 1px 4px oklch(62% 0.16 158 / 0.22);
+  transition: background-color var(--transition-normal), border-color var(--transition-normal), color var(--transition-normal), transform var(--transition-fast), box-shadow var(--transition-normal);
 }
 
 .btn-close-action:hover {
-  background: linear-gradient(135deg, var(--color-success-dark), rgba(4, 120, 87, 0.9));
-  box-shadow: 0 2px 10px rgba(16,185,129,0.32);
+  background: linear-gradient(135deg, var(--color-success-dark), oklch(50% 0.14 158 / 0.9));
+  box-shadow: 0 2px 10px oklch(62% 0.16 158 / 0.32);
   color: var(--color-text-inverse);
   transform: translateY(-1px);
 }
@@ -468,13 +469,13 @@ tbody tr:hover > td {
   border: none;
   font-weight: var(--font-weight-semibold);
   padding: 3px 10px;
-  box-shadow: 0 1px 4px rgba(245,158,11,0.22);
-  transition: all var(--transition-normal);
+  box-shadow: 0 1px 4px oklch(65% 0.18 80 / 0.22);
+  transition: background-color var(--transition-normal), border-color var(--transition-normal), color var(--transition-normal), transform var(--transition-fast), box-shadow var(--transition-normal);
 }
 
 .btn-modify-action:hover {
-  background: linear-gradient(135deg, var(--color-warning-dark), rgba(180, 83, 9, 0.9));
-  box-shadow: 0 2px 10px rgba(245,158,11,0.32);
+  background: linear-gradient(135deg, var(--color-warning-dark), oklch(50% 0.16 80 / 0.9));
+  box-shadow: 0 2px 10px oklch(65% 0.18 80 / 0.32);
   color: var(--color-text-inverse);
   transform: translateY(-1px);
 }
@@ -491,7 +492,7 @@ tbody tr:hover > td {
   /* Theme-aware primary text — adapts to light/dark via CSS variable */
   color: var(--color-primary);
   font-weight: 550;
-  transition: all var(--transition-normal);
+  transition: background-color var(--transition-normal), border-color var(--transition-normal), color var(--transition-normal), transform var(--transition-fast), box-shadow var(--transition-normal);
 }
 
 
@@ -584,7 +585,8 @@ tbody tr:hover > td {
   height: 100%;
   border-radius: var(--radius-full);
   background: linear-gradient(90deg, var(--color-primary), var(--color-success));
-  transition: width 0.4s ease;
+  transform-origin: left;
+  transition: transform var(--dur-normal) var(--ease-out);
 }
 
 
@@ -731,14 +733,34 @@ tbody tr:hover > td {
 
 
 /* ==================== 展开/折叠动画 ==================== */
+/* detail-row: table tr 元素必须用 max-height（grid-template-rows 不支持 tr） */
+/* 默认展开状态（行在 DOM 中时），折叠由 JS 添加 .collapsed 类控制 */
 .detail-row {
-  animation: detailSlideIn 0.25s ease-out;
+  max-height: 600px;
   overflow: hidden;
+  opacity: 1;
+  transition: max-height var(--dur-normal) var(--ease-out),
+              opacity var(--dur-short) var(--ease-out);
+}
+.detail-row.collapsed {
+  max-height: 0;
+  opacity: 0;
+}
+.detail-row > td {
+  padding: 0 !important;
 }
 
-
+/* close-panel-row: 同 detail-row，table tr 元素用 max-height */
 .close-panel-row {
-  animation: panelSlideIn 0.25s ease-out;
+  max-height: 600px;
+  overflow: hidden;
+  opacity: 1;
+  transition: max-height var(--dur-normal) var(--ease-out),
+              opacity var(--dur-short) var(--ease-out);
+}
+.close-panel-row.collapsed {
+  max-height: 0;
+  opacity: 0;
 }
 
 
@@ -810,13 +832,13 @@ tbody tr:hover > td {
   cursor: pointer; 
   font-size: 13px; 
   font-weight: var(--font-weight-medium); 
-  transition: all var(--transition-fast); 
+  transition: color var(--transition-fast), background-color var(--transition-fast); 
 }
 
 /* §1: Instant :active */
 .batch-bar .batch-btn:active {
   transform: scale(0.97);
-  transition: transform 100ms ease-out;
+  transition: transform var(--dur-fast) var(--ease-out);
 }
 
 .batch-bar .batch-btn-danger { 
@@ -1199,7 +1221,7 @@ tbody tr:hover > td {
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: color var(--transition-fast), background-color var(--transition-fast);
   white-space: nowrap;
 }
 
@@ -1213,7 +1235,7 @@ tbody tr:hover > td {
 /* §1: Instant :active */
 .preset-tag:active {
   transform: scale(0.97);
-  transition: transform 100ms ease-out;
+  transition: transform var(--dur-fast) var(--ease-out);
 }
 
 .preset-tag.preset-clear {
@@ -1229,9 +1251,9 @@ tbody tr:hover > td {
 
 
 /* 星星点击反馈 */
-.star-rating-modal .star:active { 
-  transform: scale(1.2); 
-  transition: transform 0.1s ease; 
+.star-rating-modal .star:active {
+  transform: scale(1.2);
+  transition: transform var(--dur-fast) var(--ease-out);
 }
 
 /* 亏损原因必填提示闪烁 */
@@ -1240,7 +1262,7 @@ tbody tr:hover > td {
   50% { border-color: transparent; } 
 }
 .loss-reason-flash {
-  animation: lossFlash 0.5s ease 2;
+  animation: lossFlash var(--dur-slow) var(--ease-out) 2;
   border: 1px solid var(--color-danger);
   border-radius: 4px;
   padding: 4px;

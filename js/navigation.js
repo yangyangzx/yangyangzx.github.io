@@ -170,4 +170,41 @@ document.addEventListener('DOMContentLoaded', function() {
       switchView(newHash);
     }
   });
+
+  // ==================== 移动端汉堡菜单 ====================
+  var toggle = document.getElementById('navMobileToggle');
+  var nav = document.getElementById('mainNav');
+  var overlay = document.getElementById('navMobileOverlay');
+  function openMobileNav() {
+    if (!toggle || !nav) return;
+    toggle.classList.add('open');
+    nav.classList.add('open');
+    if (overlay) overlay.classList.add('show');
+    document.body.style.overflow = 'hidden';
+  }
+  function closeMobileNav() {
+    if (!toggle || !nav) return;
+    toggle.classList.remove('open');
+    nav.classList.remove('open');
+    if (overlay) overlay.classList.remove('show');
+    document.body.style.overflow = '';
+  }
+  if (toggle) {
+    toggle.addEventListener('click', function() {
+      nav.classList.contains('open') ? closeMobileNav() : openMobileNav();
+    });
+  }
+  if (overlay) {
+    overlay.addEventListener('click', closeMobileNav);
+  }
+  // 切换视图后关闭移动端菜单
+  var _origSwitchView = switchView;
+  window.switchView = function(viewName) {
+    _origSwitchView(viewName);
+    if (window.innerWidth <= 768) closeMobileNav();
+  };
+  // 窗口放大回桌面时重置状态
+  window.addEventListener('resize', function() {
+    if (window.innerWidth > 768) closeMobileNav();
+  });
 });

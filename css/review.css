@@ -1,12 +1,12 @@
 /* ==================== 复盘中心视图 ==================== */
+/* Hallmark 重构：transition 指定属性，间距 4pt */
 
 .review-section {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: var(--space-xl);
 }
 
-/* ——— 卡片基础样式 ——— */
 .review-card {
   background: var(--glass-bg);
   backdrop-filter: var(--glass-blur);
@@ -14,26 +14,28 @@
   border-radius: var(--radius-lg);
   border: 1px solid var(--glass-border);
   overflow: hidden;
-  transition: all var(--transition-normal);
+  /* 指定 transition 属性 — gate 10 */
+  transition: background-color var(--dur-short) var(--ease-out),
+              border-color var(--dur-short) var(--ease-out),
+              box-shadow var(--dur-short) var(--ease-out),
+              transform var(--dur-fast) var(--ease-out);
   box-shadow: var(--glass-shadow);
+  animation: materialIn var(--dur-normal) var(--ease-out) forwards;
 }
 
-.review-card:hover {
-  background: var(--glass-bg-heavy);
-  border-color: var(--color-border);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
-  transform: translateY(-1px);
+/* hover 仅桌面 */
+@media (hover: hover) and (pointer: fine) {
+  .review-card:hover {
+    background: var(--glass-bg-heavy);
+    border-color: var(--color-border);
+    box-shadow: 0 12px 40px oklch(0% 0 0 / 0.30);
+    transform: translateY(-1px);
+  }
 }
 
-/* §1: Instant :active */
 .review-card:active {
   transform: scale(0.98);
-  transition: transform 100ms ease-out;
-}
-
-/* §12: Material entrance — card arrives with scale+blur */
-.review-card {
-  animation: materialIn 0.45s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+  transition: transform var(--dur-fast) var(--ease-out);
 }
 
 .review-card-header {
@@ -48,7 +50,7 @@
 .review-card-icon {
   width: 32px;
   height: 32px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -64,15 +66,17 @@
 }
 
 .review-card-body {
-  padding: 16px;
+  padding: var(--space-lg);
 }
 
-/* ——— 图表容器 ——— */
+/* ═══════════════════════════════════════
+   图表容器
+   ═══════════════════════════════════════ */
 .review-chart-container {
   position: relative;
   width: 100%;
   height: 260px;
-  margin-bottom: 16px;
+  margin-bottom: var(--space-lg);
 }
 
 .review-chart-container canvas {
@@ -80,17 +84,18 @@
   height: 100% !important;
 }
 
-/* ——— 卡片内容区域 ——— */
 .review-content {
-  padding-top: 12px;
+  padding-top: var(--space-md);
   border-top: 1px solid var(--glass-border);
 }
 
-/* ——— 策略排名榜 ——— */
+/* ═══════════════════════════════════════
+   策略排名榜
+   ═══════════════════════════════════════ */
 .strategy-rank-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-sm);
 }
 
 .strategy-rank-item {
@@ -102,18 +107,22 @@
   background: var(--glass-bg-light);
   font-size: 13px;
   color: var(--color-text);
-  transition: all var(--transition-fast);
+  transition: background-color var(--dur-fast) var(--ease-out),
+              border-color var(--dur-fast) var(--ease-out);
   border: 1px solid transparent;
 }
 
-.strategy-rank-item:hover {
-  background: var(--glass-bg);
-  border-color: var(--glass-border);
+/* hover 仅桌面 */
+@media (hover: hover) and (pointer: fine) {
+  .strategy-rank-item:hover {
+    background: var(--glass-bg);
+    border-color: var(--glass-border);
+  }
 }
 
 .strategy-rank-item.rank-1 {
   background: var(--color-gold-bg);
-  border: 1px solid rgba(251, 191, 36, 0.2);
+  border: 1px solid oklch(72% 0.17 78 / 0.20);
 }
 
 .strategy-rank-badge {
@@ -174,10 +183,12 @@
   white-space: nowrap;
 }
 
-/* ——— 情绪关联表格 ——— */
+/* ═══════════════════════════════════════
+   情绪关联表格
+   ═══════════════════════════════════════ */
 .emotion-table-wrap {
   overflow-x: auto;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .emotion-table {
@@ -241,7 +252,9 @@
   text-align: right;
 }
 
-/* ——— 空状态 ——— */
+/* ═══════════════════════════════════════
+   空状态
+   ═══════════════════════════════════════ */
 .review-empty {
   display: flex;
   flex-direction: column;
@@ -258,64 +271,57 @@
   opacity: 0.25;
 }
 
-/* ——— 响应式设计 ——— */
-@media (max-width: 950px) {
+/* ═══════════════════════════════════════
+   响应式
+   ═══════════════════════════════════════ */
+@media (max-width: 60rem) {
   .review-section {
-    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 48rem) {
   .review-section {
     grid-template-columns: 1fr;
+    gap: var(--space-lg);
   }
-  
   .review-card-body {
-    padding: 12px;
+    padding: var(--space-md);
   }
-  
   .review-chart-container {
     height: 220px;
   }
-  
   .strategy-rank-item {
     padding: 8px 10px;
     gap: 10px;
   }
-  
   .strategy-rank-badge {
     width: 22px;
     height: 22px;
   }
-  
   .strategy-rank-item.rank-1 .strategy-rank-badge {
     width: 24px;
     height: 24px;
   }
 }
 
-@media (max-width: 480px) {
+@media (max-width: 30rem) {
   .review-section {
-    gap: 12px;
+    gap: var(--space-md);
   }
-  
   .review-card-header {
     padding: 12px;
   }
-  
   .review-card-body {
-    padding: 10px;
+    padding: var(--space-md);
   }
-  
   .review-chart-container {
     height: 200px;
   }
-  
   .strategy-rank-item {
     flex-wrap: wrap;
     row-gap: 4px;
   }
-  
   .strategy-rank-meta {
     order: 3;
     width: 100%;

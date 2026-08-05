@@ -1,9 +1,11 @@
 /* ==================== 编辑模态框 ==================== */
+/* Hallmark 重构：z-index 命名，transition 指定属性 */
+
 .modal-overlay {
   position: fixed;
   inset: 0;
-  z-index: 10000;
-  background: var(--modal-overlay-bg, rgba(15, 23, 42, 0.6));
+  z-index: var(--z-overlay);
+  background: var(--modal-overlay-bg, oklch(14% 0.010 250 / 0.60));
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   display: flex;
@@ -13,13 +15,13 @@
 }
 
 .modal-content {
-  width: 100%; 
-  max-width: 620px; 
+  width: 100%;
+  max-width: 620px;
   max-height: 88vh;
-  display: flex; 
+  display: flex;
   flex-direction: column;
   box-shadow: var(--shadow-xl);
-  animation: materialIn 0.45s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+  animation: modalIn var(--dur-normal) var(--ease-out) forwards;
   background: var(--glass-bg-heavy);
   border-radius: var(--radius-lg);
   border: 1px solid var(--glass-border);
@@ -27,24 +29,23 @@
   -webkit-backdrop-filter: var(--glass-blur-heavy);
 }
 
-/* §7: Exit path mirrors entrance — spring scale-down + fade */
 .modal-overlay.closing .modal-content {
-  animation: springOut 0.3s cubic-bezier(0.55, 0.06, 0.68, 0.19) forwards;
+  animation: springOut var(--dur-normal) var(--ease-out) forwards;
 }
 
 .modal-header {
-  display: flex; 
-  align-items: center; 
+  display: flex;
+  align-items: center;
   justify-content: space-between;
-  padding: var(--space-lg) var(--space-xl); 
+  padding: var(--space-lg) var(--space-xl);
   border-bottom: 1px solid var(--glass-border);
 }
 
-.modal-header h3 { 
-  margin: 0; 
-  font-size: 17px; 
-  font-weight: var(--font-weight-bold); 
-  color: var(--color-text); 
+.modal-header h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
 }
 
 /* 编辑弹窗 Tab 导航 */
@@ -65,7 +66,10 @@
   background: none;
   border: none;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  /* 指定 transition 属性 */
+  transition: color var(--dur-fast) var(--ease-out),
+              background-color var(--dur-fast) var(--ease-out),
+              border-color var(--dur-fast) var(--ease-out);
   border-bottom: 2px solid transparent;
 }
 
@@ -74,10 +78,9 @@
   background: var(--glass-bg);
 }
 
-/* §1: Instant :active */
 .modal-tab:active {
   transform: scale(0.97);
-  transition: transform 100ms ease-out;
+  transition: transform var(--dur-fast) var(--ease-out);
 }
 
 .modal-tab:focus-visible {
@@ -95,7 +98,7 @@
 .modal-tab-panel {
   display: none;
   grid-template-columns: 1fr 1fr;
-  gap: var(--space-md) 28px;
+  gap: var(--space-md) 24px;
 }
 
 .modal-tab-panel.active {
@@ -107,111 +110,123 @@
   grid-column: span 2;
 }
 
-
 .modal-close {
-  background: none; 
-  border: none; 
-  font-size: 20px; 
+  background: none;
+  border: none;
+  font-size: 20px;
   cursor: pointer;
-  color: var(--color-text-placeholder); 
-  width: var(--space-2xl); 
-  height: var(--space-2xl); 
+  color: var(--color-text-placeholder);
+  width: var(--space-2xl);
+  height: var(--space-2xl);
   border-radius: var(--radius-sm);
-  display: flex; 
-  align-items: center; 
-  justify-content: center; 
-  transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color var(--dur-fast) var(--ease-out),
+              color var(--dur-fast) var(--ease-out);
 }
 
-.modal-close:hover { 
-  background: var(--glass-bg-light); 
-  color: var(--color-text); 
+.modal-close:hover {
+  background: var(--glass-bg-light);
+  color: var(--color-text);
+}
+
+.modal-close:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 .modal-body {
-  padding: var(--space-xl) var(--space-xl); 
-  overflow-y: auto; 
+  padding: var(--space-xl);
+  overflow-y: auto;
   flex: 1;
-  display: grid; 
-  grid-template-columns: 1fr 1fr; 
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: var(--space-md) 16px;
 }
 
-.modal-body .fp.span-2 { 
-  grid-column: span 2; 
+.modal-body .fp.span-2 {
+  grid-column: span 2;
 }
 
-.modal-body .fp { 
-  display: flex; 
-  flex-direction: column; 
-  gap: var(--space-xs); 
+.modal-body .fp {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
 }
 
-.modal-body .fp label { 
-  font-size: var(--font-sm); 
-  color: var(--color-text-muted); 
-  font-weight: var(--font-weight-semibold); 
+.modal-body .fp label {
+  font-size: var(--font-sm);
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-semibold);
 }
 
 .modal-body .fp input,
 .modal-body .fp select,
 .modal-body .fp textarea {
-  padding: var(--space-sm) 10px; 
-  border: 1px solid var(--glass-border); 
+  padding: var(--space-sm) 10px;
+  border: 1px solid var(--glass-border);
   border-radius: var(--radius-sm);
-  font-size: 13px; 
-  background: var(--glass-bg-light); 
-  outline: none; 
-  transition: all var(--transition-fast);
+  font-size: 13px;
+  background: var(--glass-bg-light);
+  outline: 1px solid transparent;
+  outline-offset: 2px;
+  border-width: 1px;
+  transition: border-color var(--dur-short) var(--ease-out),
+              background-color var(--dur-short) var(--ease-out),
+              box-shadow var(--dur-short) var(--ease-out);
   color: var(--color-text);
 }
 
 .modal-body .fp input:focus,
-.modal-body .fp select:focus { 
-  border-color: var(--color-primary); 
-  box-shadow: 0 0 0 3px var(--color-primary-bg); 
-  background: var(--glass-bg); 
+.modal-body .fp select:focus {
+  border-color: var(--color-primary);
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+  border-width: 1px;
+  background: var(--glass-bg);
 }
 
-.modal-body .fp textarea { 
-  resize: vertical; 
-  min-height: 56px; 
+.modal-body .fp textarea {
+  resize: vertical;
+  min-height: 56px;
 }
 
-.star-rating-modal { 
-  display: flex; 
-  gap: var(--space-xs); 
+.star-rating-modal {
+  display: flex;
+  gap: var(--space-xs);
 }
 
 .star-rating-modal .star {
-  cursor: pointer; 
-  font-size: 20px; 
-  color: var(--color-text-muted); 
-  transition: color var(--transition-fast);
+  cursor: pointer;
+  font-size: 20px;
+  color: var(--color-text-muted);
+  transition: color var(--dur-fast) var(--ease-out);
 }
 
-.star-rating-modal .star.active { 
-  color: var(--color-warning); 
+.star-rating-modal .star.active {
+  color: var(--color-warning);
 }
 
 .modal-footer {
-  display: flex; 
-  gap: 10px; 
+  display: flex;
+  gap: 10px;
   justify-content: flex-end;
-  padding: 16px var(--space-xl); 
+  padding: 16px var(--space-xl);
   border-top: 1px solid var(--glass-border);
   background: var(--glass-bg-light);
 }
 
-
-/* ==================== Toast 通知 ==================== */
+/* ═══════════════════════════════════════
+   Toast 通知 — z-index 命名
+   ═══════════════════════════════════════ */
 .toast {
   padding: var(--space-md) 20px;
   border-radius: var(--radius-md);
-  font-size: 13px; 
+  font-size: 13px;
   font-weight: 550;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.2);
-  animation: toastIn var(--transition-slow), toastOut 0.25s ease 2.5s forwards;
+  box-shadow: var(--shadow-lg);
+  animation: toastIn var(--dur-normal), toastOut var(--dur-normal) 2.5s forwards;
   max-width: 360px;
   pointer-events: auto;
   background: var(--glass-bg-heavy);
@@ -220,33 +235,31 @@
   border: 1px solid var(--glass-border);
 }
 
-.toast.success { 
-  background: var(--color-success-bg); 
-  color: var(--color-success); 
-  border-color: var(--color-success-border); 
+.toast.success {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+  border-color: var(--color-success-border);
 }
 
-.toast.error { 
-  background: var(--color-danger-bg); 
-  color: var(--color-danger); 
-  border-color: var(--color-danger-border); 
+.toast.error {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+  border-color: var(--color-danger-border);
 }
 
-.toast.warn { 
-  background: var(--color-warning-bg); 
-  color: var(--color-warning); 
-  border-color: var(--color-warning-border); 
+.toast.warn {
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+  border-color: var(--color-warning-border);
 }
 
 .toast.info {
   background: var(--color-primary-bg);
-  /* Theme-aware primary text — adapts to light/dark via CSS variable */
   color: var(--color-primary);
   border-color: var(--color-primary-border);
 }
 
-
-@keyframes toastIn { 
-  from { opacity: 0; transform: translateX(40px); } 
-  to { opacity: 1; transform: translateX(0); } 
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(40px); }
+  to   { opacity: 1; transform: translateX(0); }
 }

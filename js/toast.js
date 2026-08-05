@@ -4,6 +4,9 @@
 
 (function() {
 
+  var TOAST_DEFAULT_DURATION = 4000; // 4s — WCAG 建议可交互通知 ≥ 4s
+  var TOAST_UNDO_DURATION = 5000;    // 5s — undo toast 更长时间让用户有操作空间
+
   // ── 待删除状态（由 storage.js 中 delete 逻辑设置） ──
   window._pendingDelete = null;
   window._undoToastEl = null;
@@ -11,17 +14,12 @@
 
   /**
    * 提交待删除的日志项（超时或手动触发）
-   * Supports two formats:
-   * 1. Single deletion: { idx: number, timeoutId: Timer } - from rendering.js
-   * 2. Batch deletion: { idx: -1, logs: Array } - from logs.js (items already removed from logs)
    */
   window._commitPendingDelete = function() {
     if (!window._pendingDelete) return;
 
     // Handle batch deletion format
     if (_pendingDelete && Array.isArray(_pendingDelete.logs)) {
-      // For batch delete, items are already removed from logs in batchDelete()
-      // Just clear indices and toast state
       if (window._pendingDeleteIndices) window._pendingDeleteIndices.clear();
       window._pendingDelete = null;
       if (window.saveLogs) saveLogs(true);
@@ -29,7 +27,7 @@
       return;
     }
 
-    // Single deletion format: { idx: number, timeoutId: ... }
+    // Single deletion format
     var idx = window._pendingDelete.idx;
     if (window.logs && idx >= 0 && idx < window.logs.length) {
       window.logs.splice(idx, 1);
@@ -39,6 +37,28 @@
     if (window.saveLogs) window.saveLogs(true);
     if (window._undoToastEl) { window._undoToastEl.remove(); window._undoToastEl = null; }
   };
+
+  /**
+   * 清除定时器（由 pause-on-hover/focus 使用）
+   */
+  function _clearToastTimer(el) {
+    if (window._undoToastTimer) {
+      clearTimeout(window._undoToastTimer);
+      window._undoToastTimer = null;
+    }
+  }
+
+  /**
+   * 重新计时的定时器（用户交互后重置）
+   */
+  function _restartToastTimer(el, onDismiss, duration) {
+    if (window._undoToastTimer) clearTimeout(window._undoToastTimer);
+    window._undoToastTimer = setTimeout(function() {
+      if (window._undoToastEl === el) { el.remove(); window._undoToastEl = null; }
+      window._undoToastTimer = null;
+      if (onDismiss) onDismiss();
+    }, duration);
+  }
 
   /**
    * 显示 Toast 通知
@@ -55,7 +75,17 @@
     el.className = 'toast ' + type;
     el.textContent = msg;
     container.appendChild(el);
-    setTimeout(function() { el.remove(); }, 2800);
+    // 4s 自动消失
+    var timer = setTimeout(function() { el.remove(); }, TOAST_DEFAULT_DURATION);
+    // pause-on-hover / pause-on-focus — WCAG 2.2.2
+    el.addEventListener('mouseenter', function() { clearTimeout(timer); });
+    el.addEventListener('focus', function() { clearTimeout(timer); });
+    el.addEventListener('mouseleave', function() {
+      timer = setTimeout(function() { el.remove(); }, 1500); // 重新计时 1.5s
+    });
+    el.addEventListener('blur', function() {
+      timer = setTimeout(function() { el.remove(); }, 1500);
+    });
   };
 
   /**
@@ -63,7 +93,7 @@
    * @param {string} msg - 消息内容
    * @param {Function} onUndo - 点击撤销时的回调
    * @param {Function} onDismiss - 超时关闭时的回调
-   * @param {number} [timeoutMs=3000] - 自动关闭时间
+   * @param {number} [timeoutMs] - 自动关闭时间
    */
   window.showUndoToast = function(msg, onUndo, onDismiss, timeoutMs) {
     if (window._undoToastEl) { window._undoToastEl.remove(); window._undoToastEl = null; }
@@ -72,25 +102,36 @@
     if (!container) return;
     var el = document.createElement('div');
     el.className = 'toast info';
-    el.style.cursor = 'default';
+    el.setAttribute('role', 'alert');
     el.innerHTML = '<span style="flex:1;">' + msg + '</span>' +
-      '<button class="toast-undo-btn" style="background:none;border:1px solid var(--color-primary);color:var(--color-primary);border-radius:4px;padding:2px 10px;cursor:pointer;font-size:12px;margin-left:8px;">撤销</button>';
+      '<button class="toast-undo-btn" aria-label="撤销操作">撤销</button>';
     var undoBtn = el.querySelector('.toast-undo-btn');
     if (undoBtn) {
       undoBtn.addEventListener('click', function(e) {
         e.stopPropagation();
-        if (window._undoToastTimer) { clearTimeout(window._undoToastTimer); window._undoToastTimer = null; }
-        el.remove(); window._undoToastEl = null;
+        _clearToastTimer(el);
+        el.remove();
+        window._undoToastEl = null;
         if (onUndo) onUndo();
       });
     }
     container.appendChild(el);
     window._undoToastEl = el;
+    var duration = timeoutMs || TOAST_UNDO_DURATION;
     window._undoToastTimer = setTimeout(function() {
       if (window._undoToastEl === el) { el.remove(); window._undoToastEl = null; }
       window._undoToastTimer = null;
       if (onDismiss) onDismiss();
-    }, timeoutMs || 3000);
+    }, duration);
+    // pause-on-hover / pause-on-focus
+    el.addEventListener('mouseenter', function() { _clearToastTimer(el); });
+    el.addEventListener('focus', function() { _clearToastTimer(el); });
+    el.addEventListener('mouseleave', function() {
+      _restartToastTimer(el, onDismiss, 2000);
+    });
+    el.addEventListener('blur', function() {
+      _restartToastTimer(el, onDismiss, 2000);
+    });
   };
 
 })();

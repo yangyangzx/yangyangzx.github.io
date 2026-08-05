@@ -66,7 +66,7 @@
 /* §1: Instant :active */
 .analytics-table th:active {
   transform: scale(0.97);
-  transition: transform 100ms ease-out;
+  transition: transform var(--dur-fast) var(--ease-out);
 }
 
 .analytics-table th .sort-arrow {

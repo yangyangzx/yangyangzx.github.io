@@ -48,13 +48,13 @@
   font-size: 13px;
   text-align: right;
   font-variant-numeric: tabular-nums;
-  transition: border-color 0.2s;
+  transition: border-color var(--dur-short);
 }
 
 .setting-row input[type="number"]:focus {
   outline: none;
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px rgba(99,102,241,0.2);
+  box-shadow: 0 0 0 2px var(--color-primary-bg);
 }
 
 /* ——— Toggle Switch ——— */
@@ -76,15 +76,15 @@
 .switch .slider {
   position: absolute;
   inset: 0;
-  background: rgba(148, 163, 184, 0.4);  /* consistent contrast for knob in both themes */
+  background: oklch(60% 0.015 250 / 0.40);
   border-radius: 12px;
-  transition: background 0.25s;
+  transition: background var(--dur-normal);
 }
 
 /* §1: Instant :active */
 .switch:active .slider {
   transform: scale(0.95);
-  transition: transform 100ms ease-out;
+  transition: transform var(--dur-fast) var(--ease-out);
 }
 
 .switch .slider::after {
@@ -94,9 +94,9 @@
   height: 18px;
   left: 3px;
   top: 3px;
-  background: #fff;
+  background: var(--color-text-inverse);
   border-radius: 50%;
-  transition: transform 0.25s;
+  transition: transform var(--dur-normal);
 }
 
 .switch input:checked + .slider {
@@ -133,7 +133,10 @@
   color: var(--color-text);
   border-radius: var(--radius-full);
   cursor: pointer;
-  transition: all 0.2s;
+  /* 指定 transition — gate 10 */
+  transition: background-color var(--dur-short) var(--ease-out),
+              border-color var(--dur-short) var(--ease-out),
+              color var(--dur-short) var(--ease-out);
 }
 
 .btn-outline:hover {
@@ -141,10 +144,9 @@
   color: var(--color-primary);
 }
 
-/* §1: Instant :active */
 .btn-outline:active {
   transform: scale(0.97);
-  transition: transform 100ms ease-out;
+  transition: transform var(--dur-fast) var(--ease-out);
 }
 
 /* ——— 响应式 ——— */

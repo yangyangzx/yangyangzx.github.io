@@ -1,89 +1,267 @@
+/* ==================== 响应式 — 统一断点系统 ==================== */
+/* Hallmark 重构：48rem (768px) = 平板/手机分界，移除碎片化断点 */
 
+/* ═══════════════════════════════════════
+   手机 (≤ 48rem / 768px)
+   表单单列 · 表格卡片化 · 筛选器可滚动
+   ═══════════════════════════════════════ */
+@media (max-width: 48rem) {
+  /* 双列表单 → 单列 */
+  .grid-2 {
+    grid-template-columns: 1fr;
+    gap: var(--space-md);
+  }
+  .row-2 {
+    grid-column: 1;
+  }
+  .section-title {
+    grid-column: 1;
+  }
 
-    /* 移动端：三卡片竖排 */
-    @media (max-width: 600px) {
-      .result-box { padding: 16px; gap: 12px; }
-      .result-cards { flex-direction: column; gap: 10px; }
-      .result-card { padding: 14px 12px; }
-      .result-card-value.amount { font-size: 28px; }
-      .result-card-value.margin,
-      .result-card-value.rr { font-size: 24px; }
-      .result-cost-row { padding: 10px 12px; }
-      .result-cost-line1 { font-size: var(--font-base); }
-      .result-cost-line2 { font-size: var(--font-sm); }
-      .result-trigger-row { padding: 10px 12px; }
-      .result-trigger-row .trigger-line { font-size: var(--font-sm); }
-      .result-trigger-row .trigger-price { font-size: var(--font-xs); }
-      .result-split-table { font-size: 12px; min-width: auto; }
-      .result-split-table th,
-      .result-split-table td { padding: 6px 8px; font-size: 11px; }
-      .result-split-summary { font-size: var(--font-base); }
-    }
+  /* 按钮尺寸 */
+  .btn {
+    padding: 9px 16px;
+    font-size: var(--font-sm);
+  }
+  .card-header h2 {
+    font-size: var(--font-lg);
+  }
 
+  /* 复选框组紧凑 */
+  .checkbox-group {
+    gap: 4px var(--space-sm);
+  }
+  .checkbox-group label {
+    font-size: var(--font-sm);
+    padding: 4px 10px;
+  }
 
-    @media (max-width: 740px) {
-      body { padding: 16px var(--space-md); }
-      .card { padding: var(--space-xl) var(--space-lg); border-radius: var(--radius-lg); }
-      .grid-2 { grid-template-columns: 1fr; gap: var(--space-md); }
-      .row-2 { grid-column: 1; }
-      .section-title { grid-column: 1; }
-      .btn { padding: 9px 16px; font-size: 13px; }
-      .card-header h2 { font-size: var(--font-lg); }
-      .checkbox-group { gap: 6px var(--space-sm); }
-      .checkbox-group label { font-size: var(--font-sm); padding: 5px 10px; }
+  /* ——— 表格移动端卡片转换（CSS-only 兜底）——— */
+  /* gate 34: 无横向滚动；即使 JS 未注入 data-label 也保持可用 */
+  .table-wrap {
+    overflow-x: auto;
+  }
+  table {
+    min-width: auto;  /* 移除 820px 硬下限 */
+    font-size: 13px;
+  }
+  thead tr {
+    display: none;
+  }
+  tbody tr {
+    display: block;
+    margin-bottom: var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+    background: var(--color-surface);
+  }
+  tbody tr:nth-child(even) > td {
+    background: transparent;
+  }
+  td {
+    display: flex;
+    justify-content: space-between;
+    padding: var(--space-xs) 6px;
+    border: none;
+    white-space: normal;
+    align-items: center;
+  }
+  /* 详情行和平仓面板保留正常表格布局，不被卡片转换覆盖 */
+  .detail-row td,
+  .close-panel-row td {
+    display: table-cell;
+  }
+  /* 每个 td 通过 data-label 显示字段名（HTML 中已预埋） */
+  td::before {
+    content: attr(data-label);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-muted);
+    font-size: 11px;
+    flex-shrink: 0;
+    margin-right: var(--space-sm);
+  }
 
-      /* 移动端隐藏批量选择列和展开按钮列 */
-      .batch-col { display: none !important; }
+  /* 隐藏批量选择列（移动端无批量操作意义） */
+  .batch-col-th,
+  .batch-col {
+    display: none !important;
+  }
 
-      /* 移动端表格卡片布局 */
-      table, thead, tbody, th, td, tr { display: block; }
-      thead tr { display: none; }
-      table { min-width: auto; }
-      tbody tr {
-        margin-bottom: 10px;
-        border: 1px solid var(--color-border);
-        border-radius: var(--radius-md);
-        padding: var(--space-md);
-        background: var(--color-surface);
-      }
-      td {
-        display: flex;
-        justify-content: space-between;
-        padding: var(--space-xs) 6px;
-        border: none;
-        white-space: normal;
-      }
-      tbody tr:nth-child(even) > td { background: transparent; }
-      td::before {
-        content: attr(data-label);
-        font-weight: var(--font-weight-semibold);
-        color: var(--color-text-muted);
-        font-size: 11px;
-        flex-shrink: 0;
-        margin-right: var(--space-sm);
-      }
+  /* 平仓面板单列 */
+  .close-panel {
+    grid-template-columns: 1fr;
+    gap: var(--space-md);
+    padding: var(--space-lg);
+  }
+  .close-panel .close-actions {
+    flex-direction: column;
+  }
+  .close-panel .close-actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
 
-      /* 平仓面板移动端单列 */
-      .close-panel { grid-template-columns: 1fr; gap: var(--space-sm); }
-      .close-panel .close-actions { flex-direction: column; }
-      .close-panel .close-actions .btn { width: 100%; justify-content: center; }
-    }
+  /* ——— 筛选器 → 可横向滚动行 ——— */
+  .filter-row {
+    overflow-x: auto;
+    white-space: nowrap;
+    padding-bottom: var(--space-xs);
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .filter-row::-webkit-scrollbar {
+    display: none;
+  }
+  .filter-row select {
+    flex-shrink: 0;
+    min-width: 100px;
+  }
 
+  /* ——— 统计面板 → 2 列网格 ——— */
+  .stats-panel {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-sm);
+    padding: var(--space-md);
+  }
+  .stat-group-divider {
+    display: none;
+  }
+  .stat-item {
+    min-width: 0;
+  }
+  .stat-value {
+    min-width: 36px;
+  }
 
-    /* 平板横屏适配 (741-1024px) */
-    @media (max-width: 1024px) and (min-width: 741px) {
-      .grid-2 { gap: var(--space-md) 16px; }
-      .form-group input, .form-group select { font-size: 13px; padding: 9px var(--space-md); }
-    }
+  /* ——— 汇总条 → 可滚动 ——— */
+  .summary-bar {
+    overflow-x: auto;
+    white-space: nowrap;
+    flex-wrap: nowrap;
+    padding: 8px 12px;
+  }
+  .summary-item {
+    display: inline-flex;
+    margin-right: var(--space-lg);
+  }
 
+  /* ——— 结果卡片 → 竖排 ——— */
+  .result-box {
+    padding: var(--space-lg);
+    gap: var(--space-md);
+  }
+  .result-cards {
+    flex-direction: column;
+    gap: var(--space-sm);
+  }
+  .result-card {
+    padding: 14px 12px;
+  }
+  .result-card-value.amount {
+    font-size: var(--font-3xl);
+  }
+  .result-card-value.margin,
+  .result-card-value.rr {
+    font-size: var(--font-2xl);
+  }
+  .result-cost-row {
+    padding: 10px 12px;
+  }
+  .result-cost-line1 {
+    font-size: var(--font-base);
+  }
+  .result-cost-line2 {
+    font-size: var(--font-sm);
+  }
+  .result-trigger-row {
+    padding: 10px 12px;
+  }
+  .result-trigger-row .trigger-line {
+    font-size: var(--font-sm);
+  }
+  .result-trigger-row .trigger-price {
+    font-size: var(--font-xs);
+  }
+  .result-split-table {
+    font-size: 12px;
+    min-width: auto;
+  }
+  .result-split-table th,
+  .result-split-table td {
+    padding: 6px 8px;
+    font-size: 11px;
+  }
+  .result-split-summary {
+    font-size: var(--font-base);
+  }
 
-    /* 大屏优化 (>1600px) */
-    @media (min-width: 1600px) {
-      .container { max-width: 1480px; }
-      #mainContent { max-width: 1400px; margin: 0 auto; }
-    }
+  /* ——— 分批布局 → 单列 ——— */
+  .split-row {
+    grid-template-columns: 1fr;
+    gap: var(--space-sm);
+  }
 
-    /* batch-bar 超小屏保护 */
-    @media (max-width: 400px) {
-      .batch-bar { gap: 8px; }
-    }
+  /* ——— 批量操作栏紧凑 ——— */
+  .batch-bar {
+    gap: var(--space-sm);
+    padding: 8px 12px;
+  }
+  .batch-bar .batch-btn {
+    padding: 6px 12px;
+    font-size: 12px;
+  }
+
+  /* ——— 备份工具紧凑 ——— */
+  .backup-tools {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-sm);
+  }
+}
+
+/* ═══════════════════════════════════════
+   平板 (48rem – 64rem / 768–1024px)
+   部分双列保留，间距收紧
+   ═══════════════════════════════════════ */
+@media (min-width: 48rem) and (max-width: 64rem) {
+  .grid-2 {
+    gap: var(--space-md) 16px;
+  }
+  .form-group input,
+  .form-group select {
+    font-size: 13px;
+    padding: 9px var(--space-md);
+  }
+}
+
+/* ═══════════════════════════════════════
+   大屏 (> 100rem / 1600px)
+   ═══════════════════════════════════════ */
+@media (min-width: 100rem) {
+  .container {
+    max-width: 1480px;
+  }
+  #mainContent {
+    max-width: 1400px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+}
+
+/* ═══════════════════════════════════════
+   超小屏保护 (≤ 25rem / 400px)
+   ═══════════════════════════════════════ */
+@media (max-width: 25rem) {
+  .batch-bar {
+    gap: 6px;
+  }
+  .btn {
+    padding: 8px 14px;
+    font-size: var(--font-sm);
+  }
+  .card {
+    padding: var(--space-lg);
+  }
+}

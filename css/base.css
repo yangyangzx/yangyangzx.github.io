@@ -1,27 +1,42 @@
-* {
+/* ==================== Reset + 通用样式 ==================== */
+/* Hallmark · trading discipline · utilitarian · cool-blue anchor */
+
+*, *::before, *::after {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 }
 
+:root {
+  /* 根 overflow-x clip — gate 34 防御横向溢出 */
+  overflow-x: clip;
+}
+
+html, body {
+  height: 100%;
+  overflow-x: clip;
+  overflow-y: auto;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* 显示标题长词自动换行 — gate 51 */
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
 
 ::selection {
   background: var(--color-primary-bg);
   color: var(--color-primary-light);
 }
 
-
-body {
-  background: var(--color-bg);
-  color: var(--color-text);
-  min-height: 100vh;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-
-/* 卡片 */
+/* ═══════════════════════════════════════
+   卡片
+   ═══════════════════════════════════════ */
 .card {
   background: var(--glass-bg);
   backdrop-filter: var(--glass-blur);
@@ -29,19 +44,18 @@ body {
   border-radius: var(--radius-lg);
   border: 1px solid var(--glass-border);
   box-shadow: var(--glass-shadow);
-  padding: var(--space-xl) 28px;
+  padding: var(--space-xl);
   margin-bottom: var(--space-lg);
-  transition: all var(--transition-normal);
+  transition: var(--transition-normal);
   position: relative;
   overflow: hidden;
   will-change: transform;
 }
 
 [data-theme="light"] .card {
-  /* 浅色主题下增强卡片层次：微渐变 + 略深边框 */
-  background: linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(249,250,251,0.9) 100%);
-  border: 1px solid rgba(148, 163, 184, 0.35);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0,0,0,0.03);
+  background: linear-gradient(135deg, oklch(100% 0.003 250 / 0.95) 0%, oklch(98% 0.006 250 / 0.90) 100%);
+  border: 1px solid oklch(70% 0.012 250 / 0.35);
+  box-shadow: var(--shadow-md);
 }
 
 .card::before {
@@ -54,16 +68,18 @@ body {
   background: linear-gradient(90deg, transparent, var(--color-primary-border), transparent);
 }
 
-.card:hover {
-  background: var(--glass-bg-heavy);
-  border-color: var(--color-border);
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(59, 130, 246, 0.08);
-  transition: box-shadow 0.3s ease,
-              background 0.3s ease,
-              border-color 0.3s ease;
+/* hover 效果仅在支持悬停的设备上生效 — gate: no hover-only affordances */
+@media (hover: hover) and (pointer: fine) {
+  .card:hover {
+    background: var(--glass-bg-heavy);
+    border-color: var(--color-border);
+    box-shadow: var(--shadow-lg), 0 0 0 1px var(--color-primary-border);
+  }
+  .card:hover::after {
+    opacity: 1;
+  }
 }
 
-/* §16: Subtle bright top edge — light catching the material */
 .card::after {
   content: '';
   position: absolute;
@@ -71,33 +87,30 @@ body {
   left: 8px;
   right: 8px;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent);
+  background: linear-gradient(90deg, transparent, oklch(94% 0.006 250 / 0.06), transparent);
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.3s ease;
+  transition: opacity var(--dur-short) var(--ease-out);
 }
 
-/* 浅色模式下的高光修正：使用更明显的颜色 */
 [data-theme="light"] .card::after {
-  background: linear-gradient(90deg, transparent, rgba(0,0,0,0.08), transparent);
+  background: linear-gradient(90deg, transparent, oklch(22% 0.012 250 / 0.08), transparent);
 }
 
-.card:hover::after {
-  opacity: 1;
-}
-
-
+/* ═══════════════════════════════════════
+   卡片头部
+   ═══════════════════════════════════════ */
 .card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
+  gap: var(--space-sm);
   margin-bottom: var(--space-xl);
   font-weight: var(--font-weight-bold);
   font-size: var(--font-lg);
   color: var(--color-text);
 }
-
 
 .card-header h2 {
   font-weight: var(--font-weight-bold);
@@ -109,12 +122,10 @@ body {
   color: var(--color-text);
 }
 
-
 .card-header h2 i {
   color: var(--color-primary);
   font-size: var(--font-xl);
 }
-
 
 .badge-soft {
   background: var(--color-primary-bg);
@@ -123,36 +134,41 @@ body {
   border-radius: var(--radius-full);
   font-size: var(--font-sm);
   font-weight: var(--font-weight-medium);
-  /* Theme-aware primary text — adapts to light/dark via CSS variable */
   color: var(--color-primary);
   letter-spacing: 0.2px;
-  transition: all var(--transition-normal);
+  transition: var(--transition-fast);
+  /* 可点击文字不换行 — gate 49 */
+  white-space: nowrap;
 }
 
-.badge-soft:hover {
-  background: rgba(59, 130, 246, 0.15);
-  border-color: var(--color-primary);
+@media (hover: hover) and (pointer: fine) {
+  .badge-soft:hover {
+    background: oklch(58% 0.18 248 / 0.15);
+    border-color: var(--color-primary);
+  }
 }
 
-
+/* ═══════════════════════════════════════
+   网格布局
+   ═══════════════════════════════════════ */
 .grid-2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--space-lg) 28px;
+  gap: var(--space-lg) 24px;
 }
 
 .row-2 {
   grid-column: span 2;
 }
 
-
-/* 表单 */
+/* ═══════════════════════════════════════
+   表单
+   ═══════════════════════════════════════ */
 .form-group {
   display: flex;
   flex-direction: column;
   gap: 5px;
 }
-
 
 .form-group label {
   font-weight: var(--font-weight-semibold);
@@ -163,13 +179,11 @@ body {
   gap: 6px;
 }
 
-
 .form-group label i {
   color: var(--color-primary-light);
   font-size: 13px;
   width: 16px;
 }
-
 
 .form-group .hint {
   font-size: var(--font-xs);
@@ -196,9 +210,11 @@ body {
   color: var(--color-text-placeholder);
   line-height: 1.4;
   margin-top: 0;
+  /* 辅助文本保留最小高度，避免错误文本出现时布局跳动 — gate 39 */
+  min-height: 1.4em;
 }
 
-
+/* 输入框 — gate 39 状态纪律 */
 .form-group input,
 .form-group select {
   background: var(--glass-bg-light);
@@ -208,36 +224,43 @@ body {
   border-radius: var(--radius-md);
   padding: 11px 16px;
   font-size: 14px;
-  transition: all var(--transition-normal);
+  transition: border-color var(--dur-short) var(--ease-out),
+              background-color var(--dur-short) var(--ease-out),
+              box-shadow var(--dur-short) var(--ease-out),
+              color var(--dur-short) var(--ease-out);
   color: var(--color-text);
   font-weight: var(--font-weight-normal);
   position: relative;
   z-index: 1;
+  /* 固定边框宽度，状态变化只改颜色/阴影 — gate 39 */
+  border-width: 1.5px;
+  /* 预留 outline 空间，避免几何偏移 */
+  outline: 1.5px solid transparent;
+  outline-offset: 2px;
+  /* 44px 最小触摸目标 — gate 39 */
+  min-height: 44px;
 }
-
 
 .form-group input:focus,
 .form-group select:focus {
-  outline: none;
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 4px var(--color-primary-bg);
   background: var(--glass-bg);
   z-index: 2;
+  /* 移除 box-shadow ring，改用 outline — gate 39 */
+  box-shadow: none;
 }
 
-/* Only visible outline for keyboard navigation */
 .form-group input:focus-visible,
 .form-group select:focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
+  border-color: transparent;
 }
-
 
 .form-group select:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
-
 
 .form-group input.valid,
 .form-group select.valid {
@@ -251,12 +274,10 @@ body {
   background: var(--color-danger-bg);
 }
 
-
 .form-group input::placeholder {
   color: var(--color-text-placeholder);
   font-weight: var(--font-weight-normal);
 }
-
 
 .form-group textarea {
   background: var(--glass-bg-light);
@@ -266,29 +287,37 @@ body {
   border-radius: var(--radius-md);
   padding: 11px 16px;
   font-size: 14px;
-  transition: all var(--transition-normal);
+  transition: border-color var(--dur-short) var(--ease-out),
+              background-color var(--dur-short) var(--ease-out),
+              box-shadow var(--dur-short) var(--ease-out);
   color: var(--color-text);
   font-weight: var(--font-weight-normal);
   resize: vertical;
   min-height: 60px;
+  border-width: 1.5px;
+  outline: 1.5px solid transparent;
+  outline-offset: 2px;
 }
 
-
 .form-group textarea:focus {
-  outline: none;
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 4px var(--color-primary-bg);
   background: var(--glass-bg);
+  box-shadow: none;
+}
+
+.form-group textarea:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-color: transparent;
 }
 
 .flash-highlight {
-  animation: flashBorder 2s ease-out;
+  animation: flashBorder var(--dur-slow) ease-out forwards;
 }
 
-
-/* .row-2 defined at line 110 — duplicate removed */
-
-
+/* ═══════════════════════════════════════
+   Flex 工具类
+   ═══════════════════════════════════════ */
 .flex-row {
   display: flex;
   flex-wrap: wrap;
@@ -296,16 +325,13 @@ body {
   gap: var(--space-md);
 }
 
-
 .flex-row select {
   flex: 2 1 160px;
 }
 
-
 .flex-row input {
   flex: 3 1 180px;
 }
-
 
 .section-title {
   grid-column: span 2;
@@ -321,8 +347,9 @@ body {
   text-transform: uppercase;
 }
 
-
-/* 星级评分 */
+/* ═══════════════════════════════════════
+   星级评分
+   ═══════════════════════════════════════ */
 .star-rating {
   display: flex;
   gap: 5px;
@@ -333,7 +360,8 @@ body {
   font-size: 28px;
   cursor: pointer;
   color: var(--color-text-muted);
-  transition: color var(--transition-fast), transform var(--transition-fast);
+  transition: color var(--dur-fast) var(--ease-out),
+              transform var(--dur-fast) var(--ease-out);
   user-select: none;
   line-height: 1;
 }
@@ -342,15 +370,17 @@ body {
   color: var(--color-warning);
 }
 
-.star-rating .star:hover {
-  transform: scale(1.2);
-  color: var(--color-warning);
+/* hover 缩放仅桌面 */
+@media (hover: hover) and (pointer: fine) {
+  .star-rating .star:hover {
+    transform: scale(1.2);
+    color: var(--color-warning);
+  }
 }
 
-/* §1: Instant :active */
 .star-rating .star:active {
   transform: scale(1.35);
-  transition: transform 80ms ease-out;
+  transition: transform var(--dur-fast) var(--ease-out);
 }
 
 .star-label {
@@ -360,8 +390,9 @@ body {
   font-weight: var(--font-weight-medium);
 }
 
-
-/* 复选框组 */
+/* ═══════════════════════════════════════
+   复选框组
+   ═══════════════════════════════════════ */
 .checkbox-group {
   display: flex;
   flex-wrap: wrap;
@@ -381,22 +412,24 @@ body {
   border-radius: var(--radius-full);
   background: var(--glass-bg-light);
   border: 1.5px solid var(--glass-border);
-  transition: all var(--transition-normal);
+  transition: var(--transition-fast);
   user-select: none;
+  /* 可点击文字不换行 — gate 49 */
+  white-space: nowrap;
 }
 
-.checkbox-group label:hover {
-  background: var(--color-primary-bg);
-  border-color: var(--color-primary-border);
-  /* Theme-aware primary text — adapts to light/dark via CSS variable */
-  color: var(--color-primary);
-  transform: translateY(-1px);
+@media (hover: hover) and (pointer: fine) {
+  .checkbox-group label:hover {
+    background: var(--color-primary-bg);
+    border-color: var(--color-primary-border);
+    color: var(--color-primary);
+    transform: translateY(-1px);
+  }
 }
 
-/* §1: Instant :active */
 .checkbox-group label:active {
   transform: scale(0.97);
-  transition: transform 100ms ease-out;
+  transition: transform var(--dur-fast) var(--ease-out);
 }
 
 .checkbox-group input[type="checkbox"] {
@@ -408,13 +441,13 @@ body {
 .checkbox-group label.checked {
   background: var(--color-primary-bg);
   border-color: var(--color-primary);
-  /* Theme-aware primary text — adapts to light/dark via CSS variable */
   color: var(--color-primary);
-  box-shadow: 0 1px 3px rgba(59,130,246,0.08);
+  box-shadow: 0 1px 3px oklch(58% 0.18 248 / 0.08);
 }
 
-
-/* 按钮 */
+/* ═══════════════════════════════════════
+   按钮 — 指定 transition 属性，不用 all
+   ═══════════════════════════════════════ */
 .actions {
   display: flex;
   flex-wrap: wrap;
@@ -423,7 +456,6 @@ body {
   align-items: center;
   padding-top: var(--space-xs);
 }
-
 
 .btn {
   border: none;
@@ -435,24 +467,29 @@ body {
   align-items: center;
   gap: 7px;
   cursor: pointer;
-  transition: all var(--transition-normal);
+  /* 指定 transition 属性，不 animating 几何属性 */
+  transition: background-color var(--dur-short) var(--ease-out),
+              border-color var(--dur-short) var(--ease-out),
+              color var(--dur-short) var(--ease-out),
+              transform var(--dur-fast) var(--ease-out),
+              box-shadow var(--dur-short) var(--ease-out);
   background: var(--glass-bg-light);
   backdrop-filter: var(--glass-blur-light);
   -webkit-backdrop-filter: var(--glass-blur-light);
   color: var(--color-text-secondary);
   letter-spacing: 0.1px;
   border: 1px solid var(--glass-border);
+  /* 可点击文字不换行 — gate 49 */
+  white-space: nowrap;
+  /* 44px 最小触摸目标 */
+  min-height: 44px;
 }
 
-/* §1: Instant :active — pointer-down, not click */
 .btn:active {
   transform: scale(0.97);
-  transition: transform 100ms ease-out;
+  transition: transform var(--dur-fast) var(--ease-out);
 }
 
-
-
-/* Visible outline for keyboard navigation on all buttons */
 .btn:focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
@@ -460,23 +497,29 @@ body {
 
 .btn i { font-size: 14px; }
 
-
 .btn-primary {
   background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
   color: var(--color-text-inverse);
-  box-shadow: 0 2px 12px rgba(59,130,246,0.3);
+  box-shadow: 0 2px 12px oklch(58% 0.18 248 / 0.30);
   border: none;
 }
 
-.btn-primary:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 24px rgba(59,130,246,0.4);
+/* hover lift 仅桌面 */
+@media (hover: hover) and (pointer: fine) {
+  .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 24px oklch(58% 0.18 248 / 0.40);
+  }
+  .btn-primary:hover:active {
+    transform: translateY(0);
+  }
 }
 
 .btn-primary:active {
-  transform: translateY(0);
-  box-shadow: 0 1px 6px rgba(59,130,246,0.3);
-  animation: springBounceIn 0.35s ease-out;
+  transform: translateY(0) scale(0.97);
+  box-shadow: 0 1px 6px oklch(58% 0.18 248 / 0.30);
+  transition: transform var(--dur-fast) var(--ease-out),
+              box-shadow var(--dur-fast) var(--ease-out);
 }
 
 .btn-primary.blocked {
@@ -492,6 +535,38 @@ body {
   box-shadow: none;
 }
 
+/* ─── 按钮 loading / success 状态 ─── */
+.btn[data-state="loading"] {
+  pointer-events: none;
+  opacity: 0.7;
+  cursor: wait;
+}
+.btn[data-state="loading"]::after {
+  content: '';
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  display: inline-block;
+  margin-left: 6px;
+  animation: btnSpin var(--dur-normal) linear infinite;
+  vertical-align: middle;
+}
+@keyframes btnSpin {
+  to { transform: rotate(360deg); }
+}
+
+.btn[data-state="success"] {
+  pointer-events: none;
+  opacity: 0.85;
+  cursor: default;
+}
+.btn[data-state="success"]::after {
+  content: '✓';
+  margin-left: 6px;
+  font-size: 14px;
+}
 
 .btn-danger {
   background: var(--color-danger-bg);
@@ -504,30 +579,28 @@ body {
   border-color: var(--color-danger);
 }
 
-
 .btn-success {
   background: linear-gradient(135deg, var(--color-success), var(--color-success-dark));
   color: var(--color-text-inverse);
   font-weight: var(--font-weight-semibold);
-  box-shadow: 0 2px 8px rgba(16,185,129,0.3);
+  box-shadow: 0 2px 8px oklch(62% 0.16 158 / 0.30);
   border: none;
   padding: 10px 26px;
   border-radius: var(--radius-full);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: var(--transition-fast);
 }
 
 .btn-success:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 16px rgba(16,185,129,0.4);
+  box-shadow: 0 4px 16px oklch(62% 0.16 158 / 0.40);
 }
 
 .btn-success:active {
   transform: translateY(0) scale(0.97);
-  transition: transform 100ms ease-out;
-  box-shadow: 0 1px 4px rgba(16,185,129,0.3);
+  transition: transform var(--dur-fast) var(--ease-out);
+  box-shadow: 0 1px 4px oklch(62% 0.16 158 / 0.30);
 }
-
 
 .btn-danger-outline {
   background: transparent;
@@ -537,7 +610,7 @@ body {
   padding: 10px 26px;
   border-radius: var(--radius-full);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: var(--transition-fast);
 }
 
 .btn-danger-outline:hover {
@@ -547,15 +620,13 @@ body {
 
 .btn-danger-outline:active {
   transform: scale(0.97);
-  transition: transform 100ms ease-out;
+  transition: transform var(--dur-fast) var(--ease-out);
 }
-
 
 .btn-sm {
   padding: 6px 16px;
   font-size: var(--font-sm);
 }
-
 
 .btn-ghost {
   background: transparent;
@@ -564,7 +635,8 @@ body {
   padding: 6px 10px;
   border-radius: var(--radius-sm);
   font-size: 14px;
-  transition: all 0.2s ease;
+  transition: background-color var(--dur-fast) var(--ease-out),
+              color var(--dur-fast) var(--ease-out);
 }
 
 .btn-ghost:hover {
@@ -572,17 +644,16 @@ body {
   color: var(--color-text);
 }
 
-/* 浅色主题下主题切换按钮更易见 */
 [data-theme="light"] .btn-ghost {
   color: var(--color-text-secondary);
 }
 
 [data-theme="light"] .btn-ghost:hover {
-  background: rgba(148, 163, 184, 0.15);
+  background: oklch(70% 0.012 250 / 0.15);
   color: var(--color-text);
 }
 
-
+/* 涟漪效果 — 仅视觉反馈，不影响布局 */
 .btn-ripple {
   position: relative;
   overflow: hidden;
@@ -593,28 +664,24 @@ body {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 0;
-  height: 0;
-  background: rgba(255, 255, 255, 0.3);
+  width: 300px;
+  height: 300px;
+  background: oklch(94% 0.006 250 / 0.30);
   border-radius: 50%;
-  transform: translate(-50%, -50%);
-  transition: width 0.6s ease, height 0.6s ease, opacity 0.6s ease;
+  transform: translate(-50%, -50%) scale(0);
+  transition: transform var(--dur-slow) var(--ease-out),
+              opacity var(--dur-slow) var(--ease-out);
   opacity: 0;
 }
 
 .btn-ripple:active::after {
-  width: 300px;
-  height: 300px;
+  transform: translate(-50%, -50%) scale(1);
   opacity: 1;
 }
 
-.btn-ghost:hover {
-  background: var(--glass-bg-light);
-  color: var(--color-text);
-}
-
-
-/* ====== 主题切换滑动开关 ====== */
+/* ═══════════════════════════════════════
+   主题切换开关
+   ═══════════════════════════════════════ */
 .theme-toggle-switch {
   display: inline-flex;
   align-items: center;
@@ -626,20 +693,18 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* 太阳/月亮图标 */
 .theme-toggle-switch .fa-sun {
   font-size: 13px;
   color: var(--color-warning);
-  transition: color 0.3s;
+  transition: color var(--dur-short) var(--ease-out);
 }
 
 .theme-toggle-switch .fa-moon {
   font-size: 13px;
   color: var(--color-text-muted);
-  transition: color 0.3s;
+  transition: color var(--dur-short) var(--ease-out);
 }
 
-/* 隐藏原生 checkbox */
 .theme-toggle-switch input[type="checkbox"] {
   position: absolute;
   opacity: 0;
@@ -647,7 +712,6 @@ body {
   height: 0;
 }
 
-/* 滑块轨道 */
 .theme-toggle-switch .slider {
   position: relative;
   width: 40px;
@@ -655,11 +719,11 @@ body {
   background: var(--glass-bg-light);
   border: 1.5px solid var(--color-primary-border);
   border-radius: 22px;
-  transition: background 0.3s, border-color 0.3s;
+  transition: background var(--dur-short) var(--ease-out),
+              border-color var(--dur-short) var(--ease-out);
   flex-shrink: 0;
 }
 
-/* 滑块圆点 */
 .theme-toggle-switch .slider::before {
   content: '';
   position: absolute;
@@ -669,13 +733,13 @@ body {
   height: 16px;
   background: var(--color-warning);
   border-radius: 50%;
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), background 0.3s;
+  transition: transform var(--dur-short) var(--ease-out),
+              background var(--dur-short) var(--ease-out);
 }
 
-/* 选中态（深色模式）：滑块右移，圆点变蓝紫色 */
 .theme-toggle-switch input:checked + .slider {
-  background: rgba(59, 130, 246, 0.2);
-  border-color: rgba(96, 165, 250, 0.5);
+  background: var(--color-primary-bg);
+  border-color: var(--color-primary-border);
 }
 
 .theme-toggle-switch input:checked + .slider::before {
@@ -683,7 +747,6 @@ body {
   background: var(--color-primary-light);
 }
 
-/* 选中态图标高亮 */
 .theme-toggle-switch input:checked ~ .fa-moon {
   color: var(--color-primary-light);
 }
@@ -692,33 +755,21 @@ body {
   color: var(--color-text-muted);
 }
 
-
-/* ====== 骨架屏加载动画 ====== */
-@keyframes skeletonShimmer {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
-  }
-}
-
-/* Dead CSS removed: .skeleton, .skeleton-text, .skeleton-title, .skeleton-row, .skeleton-cell, .skeleton-avatar, .skeleton-card — unused in HTML */
-
-
-/* 结果展示 */
+/* ═══════════════════════════════════════
+   结果展示
+   ═══════════════════════════════════════ */
 .result-box {
   margin-top: var(--space-2xl);
-  padding: var(--space-xl);
+  padding: var(--space-xl) 24px;
   background: var(--glass-bg);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
   border-radius: var(--radius-lg);
   border: 1px solid var(--glass-border);
   box-shadow: var(--glass-shadow);
+  transition: box-shadow var(--dur-slow) var(--ease-out);
 }
 
-/* Calculator-specific result-box styles — scoped to avoid conflicts */
 #resultCard .result-box,
 .calculator-result .result-box {
   display: flex;
@@ -765,8 +816,9 @@ body {
   color: var(--color-danger);
 }
 
-
-/* 警告条 */
+/* ═══════════════════════════════════════
+   警告条
+   ═══════════════════════════════════════ */
 .warning-bar {
   padding: 12px 16px;
   background: var(--color-warning-bg);
@@ -786,8 +838,9 @@ body {
   flex-shrink: 0;
 }
 
-
-/* 表单折叠区域 */
+/* ═══════════════════════════════════════
+   表单折叠区域
+   ═══════════════════════════════════════ */
 .form-section {
   margin-bottom: var(--space-lg);
 }
@@ -804,7 +857,8 @@ body {
   border-radius: var(--radius-md);
   border: 1px solid var(--glass-border);
   cursor: pointer;
-  transition: all var(--transition-normal);
+  transition: background-color var(--dur-short) var(--ease-out),
+              border-color var(--dur-short) var(--ease-out);
   margin-bottom: 0;
 }
 
@@ -814,11 +868,10 @@ body {
   border-color: var(--color-primary-border);
 }
 
-/* §1: Instant :active */
 .form-section-header:active,
 .section-header:active {
   transform: scale(0.99);
-  transition: transform 100ms ease-out;
+  transition: transform var(--dur-fast) var(--ease-out);
 }
 
 .form-section-header.active,
@@ -837,7 +890,6 @@ body {
 
 .form-section-header.active .form-section-header-title,
 .section-header.active .section-title-text {
-  /* Theme-aware primary text — adapts to light/dark via CSS variable */
   color: var(--color-primary);
 }
 
@@ -845,7 +897,7 @@ body {
 .section-header .section-icon {
   font-size: 16px;
   color: var(--color-text-muted);
-  transition: transform var(--transition-normal);
+  transition: transform var(--dur-short) var(--ease-out);
 }
 
 .form-section-header-chevron.rotated,
@@ -858,7 +910,8 @@ body {
 .section-content {
   max-height: 0;
   overflow: hidden;
-  transition: max-height var(--transition-slow), opacity var(--transition-normal);
+  transition: max-height var(--dur-slow) var(--ease-out),
+              opacity var(--dur-short) var(--ease-out);
   opacity: 0;
   border-left: 1px solid var(--glass-border);
   border-right: 1px solid var(--glass-border);

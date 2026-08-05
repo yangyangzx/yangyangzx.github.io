@@ -66,6 +66,13 @@
     </label>
   </div>
 </nav>
+<!-- 移动端汉堡按钮 + 遮罩 -->
+<button class="nav-mobile-toggle" id="navMobileToggle" aria-label="打开导航菜单" type="button">
+  <span></span>
+  <span></span>
+  <span></span>
+</button>
+<div class="nav-mobile-overlay" id="navMobileOverlay"></div>
 <main id="mainContent">
 
   <!-- ====== 仪表盘 ====== -->
@@ -648,9 +655,9 @@
           <tr>
             <th class="batch-col-th"><input type="checkbox" id="batchSelectAll" class="batch-checkbox" title="全选" /></th>
             <th style="width:32px;"></th>
-            <th>时间</th><th>品种</th><th>方向/状态</th>
-            <th>入场价</th><th>平仓价</th><th style="min-width:100px;">盈亏</th>
-            <th>操作</th>
+      <th data-label="时间">时间</th><th data-label="品种">品种</th><th data-label="方向/状态">方向/状态</th>
+            <th data-label="入场价">入场价</th><th data-label="平仓价">平仓价</th><th style="min-width:100px;" data-label="盈亏">盈亏</th>
+            <th data-label="操作">操作</th>
           </tr>
         </thead>
         <tbody id="logBody">
@@ -1061,7 +1068,7 @@
   <script src="js/io.js"></script>
   <script src="js/app.js"></script>
 
-  <div id="toastContainer" style="position:fixed;top:20px;right:20px;z-index:99999;display:flex;flex-direction:column;gap:8px;pointer-events:none;"></div>
+  <div id="toastContainer" style="position:fixed;top:20px;right:20px;z-index:400;display:flex;flex-direction:column;gap:8px;pointer-events:none;"></div>
 
 
 </html>
