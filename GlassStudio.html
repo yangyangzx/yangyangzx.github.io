@@ -25,6 +25,15 @@
   --font-ui:'DM Sans',sans-serif;--font-display:'Syne',sans-serif;
   --radius-sm:6px;--radius-md:8px;--radius-lg:12px;--radius-xl:16px;
   --glass-icon-bg:rgba(34,211,160,.12);--card-icon-bg:rgba(70,39,30,.4);--text-icon-bg:rgba(9,119,87,.15);
+  --color-accent-ink:#F9F6ED;
+  --accent-hover:#0db578;
+  --danger-hover:rgba(248,113,113,0.10);--danger-border:rgba(248,113,113,0.30);
+  --warn-hover:rgba(251,191,36,0.10);--warn-border:rgba(251,191,36,0.30);
+  --guide-accent:rgba(9,119,87,0.70);
+  --accent-border:rgba(9,119,87,0.40);--accent-border-hover:rgba(9,119,87,0.45);
+  --empty-icon-color:rgba(249,246,237,0.21);
+  --overlay-bg:rgba(15,15,15,0.60);
+  --font-mono:'JetBrains Mono','Fira Code',monospace;
   /* Stronger, more intentional easing curves — plain ease/ease-out are too weak */
   --ease-out:cubic-bezier(0.23,1,0.32,1);
   --ease-in-out:cubic-bezier(0.77,0,0.175,1);
@@ -37,7 +46,7 @@
 @media (prefers-reduced-motion: reduce){
   *,*::before,*::after{animation-duration:0.01ms!important;animation-iteration-count:1!important;transition-duration:0.01ms!important}
 }
-html,body{height:100%;background:var(--bg);font-family:var(--font-ui);color:var(--text);overflow:hidden;-webkit-font-smoothing:antialiased}
+html,body{height:100%;background:var(--bg);font-family:var(--font-ui);color:var(--text);overflow:hidden;overscroll-behavior:contain;-webkit-font-smoothing:antialiased}
 button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:var(--radius-sm)}
 .preset:focus-visible,.li:focus-visible,.ldel:focus-visible,.ctx-item:focus-visible,.font-item:focus-visible,.align-btn:focus-visible,.mini-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:var(--radius-sm)}
 
@@ -73,10 +82,10 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 }
 .hb:hover{background:var(--surface2);color:var(--text);box-shadow:0 0 0 3px var(--accent-glow)}
 .hb:active{transform:scale(0.97);transition-duration:60ms}
-.hb.primary{background:var(--accent);color:#fff;border-color:transparent;transition:background 160ms var(--ease-out),transform 120ms var(--ease-out),box-shadow 160ms var(--ease-out)}
-.hb.primary:hover{background:var(--accent2);box-shadow:0 0 0 3px rgba(9,119,87,0.25)}
-.hb.danger-btn:hover{background:color-mix(in srgb,var(--danger) 10%,transparent);color:var(--danger);border-color:color-mix(in srgb,var(--danger) 30%,transparent)}
-.hb.warn-btn:hover{background:color-mix(in srgb,var(--warn) 10%,transparent);color:var(--warn);border-color:color-mix(in srgb,var(--warn) 30%,transparent)}
+.hb.primary{background:var(--accent);color:var(--color-accent-ink);border-color:transparent;transition:var(--tr)}
+.hb.primary:hover{background:var(--accent-hover);box-shadow:0 0 0 3px rgba(9,119,87,0.25)}
+.hb.danger-btn:hover{background:var(--danger-hover);color:var(--danger);border-color:var(--danger-border)}
+.hb.warn-btn:hover{background:var(--warn-hover);color:var(--warn);border-color:var(--warn-border)}
 .spacer{flex:1}
 .undo-info{font-size:11px;color:var(--text-hint);white-space:nowrap}
 
@@ -128,7 +137,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 }
 .tb:hover{background:var(--surface2);color:var(--text);border-color:var(--border2);box-shadow:0 0 0 3px var(--accent-glow)}
 .tb:active{transform:scale(0.93)}
-.tb.active{background:var(--accent-glow);color:var(--accent2);border-color:color-mix(in srgb,var(--accent) 40%,transparent);box-shadow:0 0 0 3px rgba(9,119,87,0.15)}
+.tb.active{background:var(--accent-glow);color:var(--accent2);border-color:var(--accent-border);box-shadow:0 0 0 3px rgba(9,119,87,0.15)}
 .tsep{width:22px;height:1px;background:linear-gradient(90deg,transparent,var(--border2),transparent);margin:3px 0}
 .tip{
   position:absolute;left:42px;background:var(--surface2);
@@ -152,6 +161,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   background:rgba(20,20,24,.8);border-bottom:1px solid var(--border);
   flex-shrink:0;backdrop-filter:blur(8px)
 }
+#canvas-toolbar.hidden{display:none}
 #canvas-toolbar .label{font-size:11px;color:var(--text-hint);flex-shrink:0}
 .zoom-btn{
   padding:3px 8px;background:var(--surface2);border:1px solid var(--border2);
@@ -169,7 +179,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   padding:3px 8px;background:var(--surface2);border:1px solid var(--border2);
   border-radius:var(--radius-sm);color:var(--text-muted);cursor:pointer;font-size:11px;transition:var(--tr)
 }
-.zoom-fit-btn:hover{background:var(--accent-glow);color:var(--accent2);border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+.zoom-fit-btn:hover{background:var(--accent-glow);color:var(--accent2);border-color:var(--accent-border-hover)}
 #exp-scale-sel{
   -webkit-appearance:none;appearance:none;font-family:var(--font-ui);
   background-image:linear-gradient(45deg,transparent 50%,var(--text-muted) 50%),linear-gradient(135deg,var(--text-muted) 50%,transparent 50%);
@@ -213,26 +223,26 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 #dz p{font-size:13.5px;color:var(--text-muted)}
 #dz small{font-size:11.5px;color:var(--accent2)}
 #ubm{
-  padding:var(--space-sm) var(--space-xl);background:var(--accent);color:#fff;border:none;
+  padding:var(--space-sm) var(--space-xl);background:var(--accent);color:var(--color-accent-ink);border:none;
   border-radius:8px;cursor:pointer;font-size:13px;
   font-family:var(--font-ui);transition:var(--tr)
 }
-#ubm:hover{background:#0db578}
+#ubm:hover{background:var(--accent-hover)}
 #ubm:active{transform:scale(0.97)}
 
 /* ── Guide Lines ── */
 .guide{position:absolute;pointer-events:none;z-index:1000;opacity:0;transition:opacity 140ms var(--ease-out)}
-.guide.h{height:1px;left:0;right:0;background:color-mix(in srgb,var(--accent) 70%,transparent);box-shadow:0 0 4px rgba(9,119,87,0.3)}
-.guide.v{width:1px;top:0;bottom:0;background:color-mix(in srgb,var(--accent) 70%,transparent);box-shadow:0 0 4px rgba(9,119,87,0.3)}
+.guide.h{height:1px;left:0;right:0;background:var(--guide-accent);box-shadow:0 0 4px rgba(9,119,87,0.3)}
+.guide.v{width:1px;top:0;bottom:0;background:var(--guide-accent);box-shadow:0 0 4px rgba(9,119,87,0.3)}
 .guide.show{opacity:1}
 
 /* ── Spacing Labels ── */
-.sp-label{position:absolute;pointer-events:none;z-index:1001;font-size:10px;font-family:monospace;color:var(--accent2);background:var(--surface);border:1px solid var(--accent);border-radius:3px;padding:1px 4px;white-space:nowrap;opacity:0;transition:opacity 120ms var(--ease-out),transform 120ms var(--ease-out),box-shadow 120ms var(--ease-out)}
+.sp-label{position:absolute;pointer-events:none;z-index:1001;font-size:10px;font-family:var(--font-mono);color:var(--accent2);background:var(--surface);border:1px solid var(--accent);border-radius:3px;padding:1px 4px;white-space:nowrap;opacity:0;transition:opacity 120ms var(--ease-out),transform 120ms var(--ease-out),box-shadow 120ms var(--ease-out)}
 .sp-label.show{opacity:1;box-shadow:0 2px 8px rgba(0,0,0,.3)}
 
 /* ── Context Menu ── */
 /* Context menu styles are defined below under #ctx-menu (lines 354+) */
-.ctx-kb{margin-left:auto;font-size:10px;opacity:.5;font-family:monospace}
+.ctx-kb{margin-left:auto;font-size:10px;opacity:.5;font-family:var(--font-mono)}
 
 /* ── Right Panel ── */
 #rp{width:238px;background:var(--surface);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0}
@@ -289,7 +299,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 
 /* ── Collapsible Sections ── */
 .sec{margin-bottom:2px;border-radius:6px;background:rgba(249,246,237,0.025)}
-.sec-hd{display:flex;align-items:center;gap:6px;padding:7px 10px;cursor:pointer;font-size:11px;font-weight:600;color:var(--text);user-select:none;border-radius:6px;transition:background 120ms}
+.sec-hd{display:flex;align-items:center;gap:6px;padding:7px 10px;cursor:pointer;font-size:11px;font-weight:600;color:var(--text);user-select:none;border-radius:6px;transition:background 120ms var(--ease-out)}
 .sec-hd:hover{background:rgba(249,246,237,0.06)}
 .sec-arrow{font-size:7px;opacity:.4;transition:transform 0.2s var(--ease-out)}
 .sec.collapsed .sec-arrow{transform:rotate(-90deg)}
@@ -304,7 +314,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
   font-size:11px;font-family:var(--font-ui);transition:var(--tr);text-align:center
 }
 .mini-btn:hover{background:var(--surface3);color:var(--text)}
-.mini-btn.on{background:var(--accent-glow);border-color:color-mix(in srgb,var(--accent) 45%,transparent);color:var(--accent2);box-shadow:0 0 0 2px var(--accent-glow)}
+.mini-btn.on{background:var(--accent-glow);border-color:var(--accent-border-hover);color:var(--accent2);box-shadow:0 0 0 2px var(--accent-glow)}
 .align-btns{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-bottom:8px}
 .align-btn{
   padding:var(--space-xs);background:var(--surface2);border:1px solid var(--border2);
@@ -322,7 +332,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
   display:flex;flex-direction:column;align-items:center;gap:8px;
   padding:20px 10px
 }
-.empty-st svg{opacity:.3;color:color-mix(in srgb,var(--text-hint) 60%,transparent)}
+.empty-st svg{opacity:.3;color:var(--empty-icon-color)}
 .empty-st p{font-size:11px;color:var(--text-muted);text-align:center;line-height:1.5}
 
 /* ── Elements ── */
@@ -424,7 +434,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
   display:flex;align-items:center;gap:8px
 }
 .font-item:hover{background:var(--surface2)}
-.font-item.active{background:var(--accent-glow);border-color:color-mix(in srgb,var(--accent) 45%,transparent);color:var(--accent2)}
+.font-item.active{background:var(--accent-glow);border-color:var(--accent-border-hover);color:var(--accent2)}
 .font-item-dot{width:8px;height:8px;border-radius:50%;background:var(--success);flex-shrink:0}
 
 /* ── Status Bar ── */
@@ -450,10 +460,10 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 #shortcuts-panel .sc-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 16px}
 #shortcuts-panel .sc-item{display:flex;justify-content:space-between;align-items:center;font-size:11.5px;padding:5px 0;border-bottom:1px solid var(--border)}
 #shortcuts-panel .sc-item:last-child{border-bottom:none}
-#shortcuts-panel .sc-key{background:var(--surface2);border:1px solid var(--border2);border-radius:4px;padding:2px 6px;font-size:10px;color:var(--accent2);font-family:monospace;white-space:nowrap}
+#shortcuts-panel .sc-key{background:var(--surface2);border:1px solid var(--border2);border-radius:4px;padding:2px 6px;font-size:10px;color:var(--accent2);font-family:var(--font-mono);white-space:nowrap}
 #shortcuts-panel .sc-close{position:absolute;top:12px;right:14px;background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:16px}
 #shortcuts-panel .sc-close:hover{color:var(--text)}
-#shortcuts-overlay{position:fixed;inset:0;background:color-mix(in srgb,var(--bg) 60%,transparent);z-index:10000;opacity:0;visibility:hidden;pointer-events:none;transition:opacity 160ms var(--ease-out),visibility 160ms}
+#shortcuts-overlay{position:fixed;inset:0;background:var(--overlay-bg);z-index:10000;opacity:0;visibility:hidden;pointer-events:none;transition:opacity 160ms var(--ease-out),visibility 160ms}
 #shortcuts-overlay.show{opacity:1;visibility:visible;pointer-events:auto}
 
 /* ── Toast ── */
@@ -488,7 +498,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 #exp-overlay.show #exp-box{transform:scale(1)}
 #exp-msg{font-size:14px;color:var(--text)}
 #exp-bar-wrap{width:240px;height:5px;background:var(--surface2);border-radius:4px;overflow:hidden}
-#exp-bar{height:100%;background:linear-gradient(90deg,var(--accent),#0db578);border-radius:4px;width:0%;transition:width 300ms var(--ease-out)}
+#exp-bar{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent-hover));border-radius:4px;width:0%;transition:width 300ms var(--ease-out)}
 #exp-cancel:hover{background:var(--surface3);color:var(--text)}
 
 /* ── Scrollbar Global ── */
@@ -561,8 +571,14 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
   #canvas-toolbar{
     position:fixed;top:0;left:0;right:0;z-index:100;
     background:rgba(20,20,24,.92);
+    overflow-x:auto;overflow-y:visible;white-space:nowrap;
   }
-  #canvas-scroll{padding:16px;padding-top:calc(48px + 16px)}
+  #canvas-toolbar::-webkit-scrollbar{height:0}
+  #canvas-toolbar .label{font-size:11px;color:var(--text-hint);flex-shrink:0}
+  #canvas-toolbar .hg{gap:3px}
+  #canvas-toolbar .zoom-btn,#canvas-toolbar .zoom-fit-btn{padding:3px 6px;font-size:11px}
+  #zoom-slider{width:60px;flex-shrink:0}
+  #canvas-scroll{padding:16px;padding-top:calc(var(--m-toolbar-h,48px) + 16px)}
   /* Right panel → slide-up sheet */
   #rp{
     position:fixed;bottom:0;left:0;right:0;
@@ -583,6 +599,16 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
     position:absolute;top:8px;left:50%;
     transform:translateX(-50%);flex-shrink:0;
   }
+  /* Mobile panel overlay — full-screen dim layer behind slide-up panel.
+     z-index 150 keeps it below the fixed canvas-toolbar (z:100) so toolbar
+     buttons remain clickable when the panel is open. */
+  #panel-overlay{
+    position:fixed;inset:0;z-index:150;
+    background:rgba(0,0,0,.45);
+    opacity:0;visibility:hidden;pointer-events:none;
+    transition:opacity 280ms var(--ease-out),visibility 280ms;
+  }
+  #panel-overlay.show{opacity:1;visibility:visible;pointer-events:auto}
   #rp-layers{
     padding-top:20px;
     max-height:160px;
@@ -615,6 +641,14 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
   .rh.bm{bottom:-6px;left:calc(50% - 6px)}
   .rh.ml{top:calc(50% - 6px);left:-6px}
   .rh.mr{top:calc(50% - 6px);right:-6px}
+  /* Scale up drop zone for mobile */
+  #dz-inner{width:85vw!important;max-width:360px;height:240px!important}
+  #dz p{font-size:13px}
+  /* Context menu touch-friendly */
+  #ctx-menu{min-width:calc(100vw - 24px)!important;max-width:300px!important}
+  .ctx-item{padding:10px 14px;font-size:13px}
+  /* Disable pointer events on resize handles when not selected on mobile */
+  .rh{touch-action:none}
   /* Hide scrollbars on touch devices (native scroll is smoother) */
   #presets-bar, #header, #ll, #pscroll, #canvas-scroll{
     -ms-overflow-style:auto;
@@ -666,14 +700,26 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
   </div>
   <div class="h-sep"></div>
   <div class="hg">
-    <button class="hb" onclick="undo()" aria-label="撤销" title="撤销 (Ctrl+Z)">↩ 撤销</button>
-    <button class="hb" onclick="redo()" aria-label="重做" title="重做 (Ctrl+Shift+Z)">↪ 重做</button>
+    <button class="hb" onclick="undo()" aria-label="撤销" title="撤销 (Ctrl+Z)">
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 6H2a4 4 0 014-4h4M2 6l4-4M2 6l4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      撤销
+    </button>
+    <button class="hb" onclick="redo()" aria-label="重做" title="重做 (Ctrl+Shift+Z)">
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M12 6h2a4 4 0 00-4-4H6M14 6l-4-4M14 6l-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      重做
+    </button>
     <div class="undo-info" id="undo-info"></div>
   </div>
   <div class="spacer"></div>
   <div class="hg">
-    <button class="hb" onclick="saveProject()" aria-label="保存项目" title="保存项目 (Ctrl+S)">💾 保存</button>
-    <button class="hb" onclick="loadProject()" aria-label="加载项目">📂 加载</button>
+    <button class="hb" onclick="saveProject()" aria-label="保存项目" title="保存项目 (Ctrl+S)">
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2M8 2v8M5 5l3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      保存
+    </button>
+    <button class="hb" onclick="loadProject()" aria-label="加载项目">
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M2 4h4l2 2h6v7H2V4z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M2 6h12" stroke="currentColor" stroke-width="1.4"/></svg>
+      加载
+    </button>
     <input type="file" id="proj-fi" accept=".glassproj,.json" style="display:none" onchange="loadProjectFile(this)">
     <select id="exp-scale-sel" class="zoom-btn" title="导出分辨率倍数" aria-label="导出分辨率倍数" onchange="S.exportScale=parseFloat(this.value)" style="padding:4px 18px 4px 6px;flex-shrink:0">
       <option value="1">1×</option>
@@ -766,14 +812,25 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 
   <!-- Canvas Area -->
   <div id="canvas-area">
-    <!-- Canvas Toolbar -->
-    <div id="canvas-toolbar" style="display:none">
-      <span class="label">缩放：</span>
-      <button class="zoom-btn" onclick="zoomCanvas(-10)">−</button>
+    <!-- Canvas Toolbar — always rendered; JS toggles visibility -->
+    <div id="canvas-toolbar">
+      <span class="label">缩放</span>
+      <button class="zoom-btn" onclick="zoomCanvas(-10)" aria-label="缩小">−</button>
       <input type="range" id="zoom-slider" min="20" max="300" value="100" oninput="setZoom(+this.value)" aria-label="画布缩放" aria-valuemin="20" aria-valuemax="300" aria-valuenow="100">
-      <button class="zoom-btn" onclick="zoomCanvas(10)">+</button>
+      <button class="zoom-btn" onclick="zoomCanvas(10)" aria-label="放大">+</button>
       <span id="zoom-val">100%</span>
-      <button class="zoom-fit-btn" onclick="fitCanvas()">适应</button>
+      <button class="zoom-fit-btn" onclick="fitCanvas()" aria-label="适应画布">适应</button>
+      <div style="flex:1"></div>
+      <button class="zoom-btn" onclick="document.getElementById('fi').click()" aria-label="上传图片" title="上传图片">
+        <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2M8 2v8M5 5l3-3 3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <button class="zoom-btn" onclick="saveProject()" aria-label="保存项目" title="保存">
+        <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2M8 2v8M5 5l3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <button class="zoom-btn primary" onclick="showExportPanel()" aria-label="导出高清图片" title="导出">
+        <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M8 2v8M5 7l3 3 3-3M3 13h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        导出
+      </button>
     </div>
 
     <!-- Canvas Scroll -->
@@ -856,6 +913,23 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M12 6h2a4 4 0 00-4-4H6M14 6l-4-4M14 6l-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
       <div class="tip">重做</div>
     </button>
+    <div style="width:1px;height:24px;background:var(--border2);margin:0 2px;flex-shrink:0"></div>
+    <button class="tb" onclick="document.getElementById('fi').click()" aria-label="上传图片" title="上传图片">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2M8 2v8M5 5l3-3 3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <div class="tip">上传</div>
+    </button>
+    <button class="tb" onclick="saveProject()" aria-label="保存项目" title="保存">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2M8 2v8M5 5l3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <div class="tip">保存</div>
+    </button>
+    <button class="tb" onclick="clearAll()" aria-label="清空全部" title="清空全部" style="color:var(--warn)">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 5h10M6 5V3h4v2M5 5l.6 8h4.8L11 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+      <div class="tip">清空</div>
+    </button>
+    <button class="tb" onclick="showExportPanel()" aria-label="导出高清图片" title="导出" style="color:var(--success)">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2v8M5 7l3 3 3-3M3 13h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <div class="tip">导出</div>
+    </button>
     <div style="flex:1"></div>
     <button class="tb" onclick="fitCanvas()" aria-label="适应画布">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -877,6 +951,9 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
     <span id="sb-mob-hint" style="flex:1;color:var(--text-hint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">上传图片开始创作</span>
     <span id="sb-mob-cnt" style="color:var(--text-muted)">0</span>
   </div>
+
+  <!-- Mobile panel overlay -->
+  <div id="panel-overlay" onclick="togglePanel()"></div>
 <div id="sb">
   <div class="sbi">图片：<b id="sb-dim">—</b></div>
   <div class="sbi">位置：<b id="sb-pos">—</b></div>
@@ -1158,12 +1235,12 @@ function loadFile(file) {
       el.dz.style.display    = 'none';
       el.cv.style.display    = 'block';
       el.cv.classList.add('loaded');
-      el.cvToolbar.style.display = 'flex';
-      applyZoom(S.zoom, false);
+      el.cvToolbar.style.display = '';
+      // fitCanvas() internally calls setZoom() → applyZoom() — no need to call applyZoom separately
       fitCanvas();
 
       el.sbDim.textContent  = `${img.width} × ${img.height}`;
-      el.sbHint.textContent  = '双击元素编辑文字 · 右键更多操作 · Ctrl+Z撤销';
+      el.sbHint.textContent  = '双击元素编辑文字 · 长按更多操作 · 单点选中';
       // Clamp elements to new canvas bounds
       S.els.forEach(el2 => {
         el2.x = Math.max(-el2.w + 20, Math.min(S.imgW - 20, el2.x));
@@ -1320,7 +1397,10 @@ function render() {
   renderLayers();
   clearTimeout(_layersTimer);
   _renderLayersPending = false;
-  renderProps();
+  // renderProps() is already debounced via _propsTimer — only call when not inside a panel edit
+  if (!document.activeElement || !el.pscroll.contains(document.activeElement)) {
+    renderProps();
+  }
   el.sbCnt.textContent = S.els.length;
   updateUndoInfo();
 }
@@ -1401,14 +1481,14 @@ function applyStyle(dom, el2, forceRebuild) {
   const inner = dom.querySelector('.gel-inner');
   inner.style.cssText = `width:100%;height:100%;display:flex;align-items:${el2.valign==='top'?'flex-start':el2.valign==='bottom'?'flex-end':'center'};justify-content:${el2.align==='left'?'flex-start':el2.align==='right'?'flex-end':'center'};padding:${el2.pad ?? 12}px;overflow:hidden`;
 
-  const fam = el2.fontFamily || "'DM Sans',sans-serif";
+  const fam = escHtml(el2.fontFamily || "'DM Sans',sans-serif");
   const fs  = el2.fs  ?? 16;
   const fw  = el2.fw  || '500';
   const ls  = el2.ls  ?? 0;
   const lh  = el2.lh  ?? 1.45;
-  const tsh = (el2.tsh || '0 1px 6px rgba(0,0,0,.4)').replace(/^"|"$/g, '').replace(/"/g, "'");
+  const tsh = escHtml((el2.tsh || '0 1px 6px rgba(0,0,0,.4)').replace(/^"|"$/g, '').replace(/"/g, "'"));
   const align = el2.align || 'center';
-  const tc = el2.tc || '#ffffff';
+  const tc = escHtml(el2.tc || '#ffffff');
 
   const textCss = `color:${tc};font-size:${fs}px;font-weight:${fw};font-family:${fam};font-style:${el2.italic?'italic':'normal'};text-decoration:${el2.underline?'underline':'none'};letter-spacing:${ls}px;line-height:${lh};text-shadow:${tsh};white-space:pre-wrap;word-break:break-word;width:100%;text-align:${align};pointer-events:none`;
 
@@ -1526,7 +1606,7 @@ function startTextEdit(id) {
   ta.className = 'text-editor-area';
   ta.value = el2.text || '';
   const fam = el2.fontFamily || "'DM Sans',sans-serif";
-  ta.style.cssText = `width:100%;height:100%;background:transparent;border:none;outline:none;resize:none;font-family:${fam};font-size:${el2.fs||16}px;font-weight:${el2.fw||'500'};font-style:${el2.italic?'italic':'normal'};color:${el2.tc||'#fff'};text-align:${el2.align||'center'};letter-spacing:${el2.ls||0}px;line-height:${el2.lh||1.45};text-shadow:${(el2.tsh||'0 1px 6px rgba(0,0,0,.4)').replace(/"/g,"'")};word-break:break-word;white-space:pre-wrap;overflow:hidden;caret-color:${el2.tc||'#fff'}`;
+  ta.style.cssText = `width:100%;height:100%;background:transparent;border:none;outline:none;resize:none;font-family:${escHtml(fam)};font-size:${el2.fs||16}px;font-weight:${el2.fw||'500'};font-style:${el2.italic?'italic':'normal'};color:${escHtml(el2.tc||'#fff')};text-align:${el2.align||'center'};letter-spacing:${el2.ls||0}px;line-height:${el2.lh||1.45};text-shadow:${escHtml((el2.tsh||'0 1px 6px rgba(0,0,0,.4)').replace(/"/g,"'"))};word-break:break-word;white-space:pre-wrap;overflow:hidden;caret-color:${escHtml(el2.tc||'#fff')}`;
   ta.setAttribute('placeholder', '输入文字...');
 
   ta.addEventListener('blur',   () => { el2.text = ta.value; commitTextEdit(); });
@@ -1872,65 +1952,61 @@ document.addEventListener('keydown', e => {
 
   const step = e.shiftKey ? 10 : 1;
 
-  // Multi-select move
-  if (S.selSet.size > 1) {
-    let moved = false;
-    if (e.key === 'ArrowLeft')  { moveSelected(-step, 0); moved = true; }
-    if (e.key === 'ArrowRight') { moveSelected(step,  0); moved = true; }
-    if (e.key === 'ArrowUp')    { moveSelected(0, -step); moved = true; }
-    if (e.key === 'ArrowDown')  { moveSelected(0,  step); moved = true; }
-    if (moved) {
+  // Arrow keys: always prevent default scroll (app manages its own scrolling)
+  if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)) {
+    // Multi-select move
+    if (S.selSet.size > 1) {
+      const dir = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+      const [dx, dy] = dir[e.key] || [0, 0];
+      moveSelected(dx, dy);
       render(); e.preventDefault();
       clearTimeout(_arrowTimer); _arrowTimer = setTimeout(scheduleHistSave, 500);
       return;
     }
-  }
-
-  const el2 = getEl2(S.sel);
-  if (el2) {
+    // Single element move
+    const el2 = getEl2(S.sel);
     let moved = false;
-    if (!el2.locked) {
-      if (e.key === 'ArrowLeft')  { el2.x -= step; moved = true; e.preventDefault(); }
-      if (e.key === 'ArrowRight') { el2.x += step; moved = true; e.preventDefault(); }
-      if (e.key === 'ArrowUp')    { el2.y -= step; moved = true; e.preventDefault(); }
-      if (e.key === 'ArrowDown')  { el2.y += step; moved = true; e.preventDefault(); }
+    if (el2 && !el2.locked) {
+      const dir = { ArrowLeft: -step, ArrowRight: step, ArrowUp: -step, ArrowDown: step };
+      if (e.key === 'ArrowLeft')  { el2.x += dir.ArrowLeft;  moved = true; }
+      if (e.key === 'ArrowRight') { el2.x += dir.ArrowRight; moved = true; }
+      if (e.key === 'ArrowUp')    { el2.y += dir.ArrowUp;    moved = true; }
+      if (e.key === 'ArrowDown')  { el2.y += dir.ArrowDown;  moved = true; }
+      if (moved) { render(); e.preventDefault(); clearTimeout(_arrowTimer); _arrowTimer = setTimeout(scheduleHistSave, 500); return; }
     }
-    if (moved) {
-      render();
-      clearTimeout(_arrowTimer); _arrowTimer = setTimeout(scheduleHistSave, 500);
-      return;
-    }
-    if (e.key === 'Delete' || e.key === 'Backspace') { delSel(); e.preventDefault(); }
-    if (e.key === 'd' && (e.ctrlKey || e.metaKey)) { dupSel(); e.preventDefault(); }
-    if (e.key === 'l' && (e.ctrlKey || e.metaKey)) { toggleLock(); e.preventDefault(); }
-    // Layer ordering: Ctrl+] / Ctrl+[ = forward/backward, Ctrl+Shift+] / Ctrl+Shift+[ = to front/back
-    if ((e.ctrlKey || e.metaKey) && (e.key === ']' || e.key === '[')) {
-      e.preventDefault();
-      if (e.key === ']') { e.shiftKey ? toFront() : bringFwd(); }
-      else               { e.shiftKey ? toBack()  : sendBwd(); }
-    }
-  }
-
-  // Escape works regardless of selection (close panels / cancel export / deselect)
-  if (e.key === 'Escape') {
-    if (document.getElementById('shortcuts-panel').classList.contains('show')) { hideShortcuts(); return; }
+  } else if (e.key === 'Delete' || e.key === 'Backspace') {
+    if (S.sel) { delSel(); e.preventDefault(); }
+  } else if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
+    if (S.sel) { dupSel(); e.preventDefault(); }
+  } else if ((e.ctrlKey || e.metaKey) && e.key === 'l') {
+    if (S.sel) { toggleLock(); e.preventDefault(); }
+  } else if ((e.ctrlKey || e.metaKey) && (e.key === ']' || e.key === '[')) {
+    e.preventDefault();
+    if (e.key === ']') { e.shiftKey ? toFront() : bringFwd(); }
+    else               { e.shiftKey ? toBack()  : sendBwd(); }
+  } else if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+    undo(); e.preventDefault();
+  } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'z'))) {
+    redo(); e.preventDefault();
+  } else if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+    selectAll(); e.preventDefault();
+  } else if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+    saveProject(); e.preventDefault();
+  } else if (e.key === 'Escape') {
+    // Close panels / cancel export / cancel resize / deselect
+    const sp = document.getElementById('shortcuts-panel');
+    if (sp && sp.classList.contains('show')) { hideShortcuts(); e.preventDefault(); return; }
     if (el.expOvl.classList.contains('show')) { window._exportCancelled = true; e.preventDefault(); return; }
     if (S._editingId) return; // text edit handles its own escape
+    if (S._resize || S._drag) { S._resize = null; S._drag = null; render(); renderProps(); e.preventDefault(); return; }
     if (S.sel) { S.sel = null; S.selSet.clear(); render(); hideCtx(); e.preventDefault(); }
-  }
-
-  // Tool shortcuts (work without selection, but not during text edit)
-  if (!S._editingId && !e.ctrlKey && !e.metaKey && !e.altKey) {
+  } else if (!S._editingId && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    // Tool shortcuts (work without selection, but not during text edit)
     if (e.key === 'v' || e.key === 'V') { setTool('select'); e.preventDefault(); }
     else if (e.key === 't' || e.key === 'T') { addEl('text'); e.preventDefault(); }
     else if (e.key === 'g' || e.key === 'G') { addEl('glass'); e.preventDefault(); }
     else if (e.key === 'c' || e.key === 'C') { addEl('card'); e.preventDefault(); }
   }
-
-  if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { undo(); e.preventDefault(); }
-  if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'z'))) { redo(); e.preventDefault(); }
-  if ((e.ctrlKey || e.metaKey) && e.key === 'a') { selectAll(); e.preventDefault(); }
-  if ((e.ctrlKey || e.metaKey) && e.key === 's') { saveProject(); e.preventDefault(); }
 });
 
 function moveSelected(dx, dy) {
@@ -2279,8 +2355,13 @@ function showCtx(e, id) {
   el.ctxMenu.classList.add('show');
   let x = e.clientX, y = e.clientY;
   const mw = 180, mh = 220;
+  const isPhone = window.innerWidth <= 768;
+  // Account for fixed top toolbar (≈48px) on mobile and bottom toolbar (≈60px)
+  const topOffset = isPhone ? 48 : 0;
+  const bottomOffset = isPhone ? 60 : 0;
   if (x + mw > window.innerWidth)  x = window.innerWidth  - mw - 8;
-  if (y + mh > window.innerHeight) y = window.innerHeight - mh - 8;
+  if (y + mh > window.innerHeight - bottomOffset) y = window.innerHeight - mh - bottomOffset - 8;
+  y = Math.max(topOffset + 4, y);
   el.ctxMenu.style.left = x + 'px';
   el.ctxMenu.style.top  = y + 'px';
 }
@@ -2288,6 +2369,13 @@ function showCtx(e, id) {
 function hideCtx() { el.ctxMenu.classList.remove('show'); }
 
 document.addEventListener('click', e => {
+  // If a long-press just fired the context menu, skip hiding it here —
+  // the pointerup→click sequence fires after touchend and would close the menu.
+  if (_lpActive) return;
+  if (!e.target.closest('#ctx-menu') && !e.target.closest('.gel')) hideCtx();
+});
+document.addEventListener('touchend', e => {
+  if (_lpActive) return;
   if (!e.target.closest('#ctx-menu') && !e.target.closest('.gel')) hideCtx();
 });
 document.addEventListener('contextmenu', e => {
@@ -2374,8 +2462,8 @@ function renderLayers() {
       ? `<svg width="10" height="10" viewBox="0 0 16 16" fill="none"><rect x="1.5" y="1.5" width="13" height="13" rx="3" stroke="rgba(34,211,160,0.8)" stroke-width="1.2" stroke-dasharray="2 1.5"/></svg>`
       : `<svg width="10" height="10" viewBox="0 0 16 16" fill="none"><rect x="2" y="4" width="12" height="9" rx="2" fill="white" opacity=".25"/><rect x="2" y="4" width="12" height="9" rx="2" stroke="white" stroke-width="1.2"/></svg>`;
     const nm     = el2.type === 'glass' ? '毛玻璃' : el2.type === 'card' ? '深色卡片' : '文字';
-    const lockIcon = el2.locked ? '🔒' : '';
-    const preview = el2.text ? ` — ${el2.text.slice(0, 6)}${el2.text.length > 6 ? '…' : ''}` : '';
+    const lockIcon = el2.locked ? `<svg width="10" height="10" viewBox="0 0 16 16" fill="none" style="vertical-align:middle;margin-right:2px;opacity:.6"><rect x="3" y="7" width="10" height="8" rx="2" stroke="currentColor" stroke-width="1.3"/><path d="M5 7V5a3 3 0 016 0v2" stroke="currentColor" stroke-width="1.3"/></svg>` : '';
+    const preview = el2.text ? ` — ${escHtml(el2.text.slice(0, 6))}${el2.text.length > 6 ? '…' : ''}` : '';
     div.innerHTML = `<div class="lic ${icls}">${isvg}</div><div class="ln">${lockIcon}${nm}#${el2.id}${preview}</div><div class="ldel" tabindex="0" role="button" aria-label="删除图层" onclick="event.stopPropagation();delById(${el2.id})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopPropagation();delById(${el2.id})}"><svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M3 5h10M6 5V3h4v2M5 5l.6 8h4.8L11 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></div>`;
     div.addEventListener('click', e => {
       if (!e.target.closest('.ldel')) {
@@ -2459,9 +2547,9 @@ function _renderPropsImpl() {
   const cleanPreviewFont = curFontVal.replace(/'([^']+)'/g, '$1');
   st += `<div class="pg"><div class="pl">字体</div>
     <div style="display:flex;gap:5px">
-      <select class="psel" style="flex:1;font-family:${cleanPreviewFont}" title="选择文字字体"
+      <select class="psel" style="flex:1;font-family:${escHtml(cleanPreviewFont)}" title="选择文字字体"
         onchange="sp(${el2.id},'fontFamily',this.value);saveHist();this.style.fontFamily=this.value.replace(/'([^']+)'/g,'$1');renderProps()">
-        ${fontOpts.map(f => `<option value="${f.value}" ${el2.fontFamily === f.value ? 'selected' : ''} style="font-family:${f.value.replace(/'([^']+)'/g,'$1')}">${f.label}</option>`).join('')}
+        ${fontOpts.map(f => `<option value="${f.value}" ${el2.fontFamily === f.value ? 'selected' : ''} style="font-family:${escHtml(f.value.replace(/'([^']+)'/g,'$1'))}">${f.label}</option>`).join('')}
       </select>
       <label class="hb" style="padding:5px 8px;cursor:pointer" title="添加本地字体文件（ttf/otf/woff）" aria-label="添加本地字体" onclick="event.stopPropagation()">+
         <input type="file" accept=".ttf,.otf,.woff,.woff2" multiple style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none" onchange="loadLocalFonts(this)">
@@ -2556,9 +2644,18 @@ function _renderPropsImpl() {
   let sa2 = '';
   sa2 += `<div class="pg"><div class="pl">操作</div>
     <div class="mini-btns">
-      <button class="mini-btn ${el2.locked?'on':''}" onclick="toggleLock();renderProps()" title="锁定后不可拖动或调整">🔒 锁定</button>
-      <button class="mini-btn" onclick="dupSel()" title="复制选中元素（Ctrl+D）">📋 复制</button>
-      <button class="mini-btn" style="color:var(--danger)" onclick="delSel()" title="删除选中元素（Del）">🗑 删除</button>
+      <button class="mini-btn ${el2.locked?'on':''}" onclick="toggleLock();renderProps()" title="锁定后不可拖动或调整">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="vertical-align:middle;margin-right:3px"><rect x="3" y="7" width="10" height="8" rx="2" stroke="currentColor" stroke-width="1.3"/><path d="M5 7V5a3 3 0 016 0v2" stroke="currentColor" stroke-width="1.3"/></svg>
+        锁定
+      </button>
+      <button class="mini-btn" onclick="dupSel()" title="复制选中元素（Ctrl+D）">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="vertical-align:middle;margin-right:3px"><rect x="5" y="5" width="9" height="9" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M11 5V4a1 1 0 00-1-1H3a1 1 0 00-1 1v7a1 1 0 001 1h1" stroke="currentColor" stroke-width="1.4"/></svg>
+        复制
+      </button>
+      <button class="mini-btn" style="color:var(--danger)" onclick="delSel()" title="删除选中元素（Del）">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="vertical-align:middle;margin-right:3px"><path d="M3 5h10M6 5V3h4v2M5 5l.6 8h4.8L11 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        删除
+      </button>
     </div>
   </div>`;
   h += _sec('actions', '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="vertical-align:middle;margin-right:3px;opacity:.7"><path d="M11.5 2.5l2 2-7 7H4.5v-4l7-7z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M9.5 4.5l2 2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>操作', '锁定、复制、删除', sa2);
@@ -2844,10 +2941,10 @@ window.addEventListener('beforeunload', e => {
           el.dz.style.display = 'none';
           el.cv.style.display = 'block';
           el.cv.classList.add('loaded');
-          el.cvToolbar.style.display = 'flex';
+          el.cvToolbar.style.display = '';
           el.sbDim.textContent = `${S.imgNatW} × ${S.imgNatH}`;
-          el.sbHint.textContent = '双击元素编辑文字 · 右键更多操作 · Ctrl+Z撤销';
-          applyZoom(S.zoom, false);
+          el.sbHint.textContent = '双击元素编辑文字 · 长按更多操作 · 单点选中';
+          // fitCanvas() internally calls setZoom() → applyZoom() — no double-call
           fitCanvas();
           S.history = []; S.hIdx = -1;
           saveHist();
@@ -2946,15 +3043,15 @@ function loadProjectFile(input) {
         el.dz.style.display    = 'none';
         el.cv.style.display    = 'block';
         el.cv.classList.add('loaded');
-        el.cvToolbar.style.display = 'flex';
+        el.cvToolbar.style.display = '';
         el.sbDim.textContent = `${S.imgNatW} × ${S.imgNatH}`;
       }
-      fitCanvas();
-      // Clamp elements to loaded canvas bounds
+      // Clamp elements to loaded canvas bounds FIRST — fitCanvas() needs correct bounds
       S.els.forEach(el2 => {
         el2.x = Math.max(-el2.w + 20, Math.min(S.imgW - 20, el2.x));
         el2.y = Math.max(-el2.h + 20, Math.min(S.imgH - 20, el2.y));
       });
+      fitCanvas();
       S.history = [];
       S.hIdx = -1;
       saveHist();
@@ -3015,15 +3112,17 @@ async function exportImg() {
   // Clamp the requested scale so large source photos don't silently fail to export.
   const MAX_DIM = 16000, MAX_AREA = 268000000;
   let exportScale = S.exportScale || 2;
-  const rawW = S.imgNatW * exportScale, rawH = S.imgNatH * exportScale;
+  // DPR: match display pixel density for sharp export on Retina screens
+  const dpr = Math.min(window.devicePixelRatio || 1, 4);
+  const rawW = S.imgNatW * exportScale * dpr, rawH = S.imgNatH * exportScale * dpr;
   if (rawW > MAX_DIM || rawH > MAX_DIM || rawW * rawH > MAX_AREA) {
-    const capByDim  = Math.min(MAX_DIM / S.imgNatW, MAX_DIM / S.imgNatH);
-    const capByArea = Math.sqrt(MAX_AREA / (S.imgNatW * S.imgNatH));
+    const capByDim  = Math.min(MAX_DIM / (S.imgNatW * dpr), MAX_DIM / (S.imgNatH * dpr));
+    const capByArea = Math.sqrt(MAX_AREA / (S.imgNatW * S.imgNatH * dpr * dpr));
     exportScale = Math.max(1, Math.min(exportScale, capByDim, capByArea));
     toast(`⚠️ 图片过大，导出倍数已自动调整为 ${exportScale.toFixed(1)}×`);
   }
-  ec.width  = Math.round(S.imgNatW * exportScale);
-  ec.height = Math.round(S.imgNatH * exportScale);
+  ec.width  = Math.round(S.imgNatW * exportScale * dpr);
+  ec.height = Math.round(S.imgNatH * exportScale * dpr);
   const ctx = ec.getContext('2d', { alpha: true, willReadFrequently: false });
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
@@ -3044,8 +3143,9 @@ async function exportImg() {
     if (window._exportCancelled) { ov.classList.remove('show'); toast('已取消导出'); return; }
 
   // sx/sy: coordinate scale from canvas-display-pixels to export-canvas-pixels
-  const sx = exportScale * (S.imgNatW / S.imgW);
-  const sy = exportScale * (S.imgNatH / S.imgH);
+  // Includes DPR so positions are correct in the HiDPI canvas
+  const sx = exportScale * dpr * (S.imgNatW / S.imgW);
+  const sy = exportScale * dpr * (S.imgNatH / S.imgH);
   const total = S.els.length || 1;
 
   for (let i = 0; i < S.els.length; i++) {
@@ -3508,8 +3608,8 @@ function renderFontList() {
   }
   list.innerHTML = S.localFonts.map(font => {
     const isSelected = S.sel && getEl2(S.sel) && getEl2(S.sel).fontFamily === font.family;
-    return `<div class="font-item ${isSelected ? 'active' : ''}" onclick="selectFont('${font.family}', this)">
-      <div class="font-item-dot"></div>${font.name}
+    return `<div class="font-item ${isSelected ? 'active' : ''}" onclick="selectFont(${JSON.stringify(font.family)}, this)">
+      <div class="font-item-dot"></div>${escHtml(font.name)}
     </div>`;
   }).join('');
 }
@@ -3534,7 +3634,60 @@ document.addEventListener('click', e => {
 });
 
 // ═══════════════════════════════════════════════════════════════
-// TOAST
+// LONG-PRESS CONTEXT MENU (mobile)
+// ═══════════════════════════════════════════════════════════════
+let _lpTimer = null;
+let _lpElement = null;
+let _lpFired = false;
+// Flag set by long-press to prevent the subsequent click/touchend from hiding ctx-menu
+let _lpActive = false;
+
+document.addEventListener('touchstart', e => {
+  // Ignore touch events on canvas elements — pointer events handle drag/resize
+  const touch = e.touches[0];
+  const target = document.elementFromPoint(touch.clientX, touch.clientY);
+  if (!target || target.closest('#cv') || target.closest('.gel')) return;
+  // Clear any existing timer
+  clearTimeout(_lpTimer);
+  _lpElement = null;
+  _lpFired = false;
+  _lpActive = false;
+  // Start long-press timer (600ms)
+  _lpTimer = setTimeout(() => {
+    // Re-evaluate target in case user scrolled during the long press
+    const gel = document.elementFromPoint(touch.clientX, touch.clientY)?.closest?.('.gel');
+    if (!gel) return;
+    _lpFired = true;
+    _lpActive = true;
+    const id = +gel.dataset.id;
+    const el2 = getEl2(id);
+    if (!el2) return;
+    // Select the element if not already selected
+    if (!S.selSet.has(id)) {
+      S.sel = id;
+      S.selSet.clear();
+      S.selSet.add(id);
+      render();
+    }
+    // Show context menu at touch position
+    showCtx({ clientX: touch.clientX, clientY: touch.clientY }, id);
+    // Vibrate if supported
+    if (navigator.vibrate) navigator.vibrate(50);
+  }, 600);
+}, { passive: true });
+
+document.addEventListener('touchmove', e => {
+  // Cancel long-press if user scrolls or moves finger
+  clearTimeout(_lpTimer);
+  _lpTimer = null;
+}, { passive: true });
+
+document.addEventListener('touchend', e => {
+  clearTimeout(_lpTimer);
+  _lpTimer = null;
+  // Clear flag after a brief delay so the subsequent click event can observe it
+  requestAnimationFrame(() => { _lpActive = false; });
+});
 // ═══════════════════════════════════════════════════════════════
 let toastTimer;
 function toast(msg, dur) {
@@ -3570,7 +3723,9 @@ function hideShortcuts() {
 // ── Responsive layout helper ──
 function _applyResponsive() {
   const w = window.innerWidth;
-  const isPhone = w <= 768;
+  const h = window.innerHeight;
+  // Phone = ≤768px width AND taller than wide (portrait orientation)
+  const isPhone = w <= 768 && h >= w;
   // Panel toggle visibility
   const panelBtn = document.getElementById('panel-toggle');
   if (panelBtn) panelBtn.style.display = isPhone ? 'flex' : '';
@@ -3580,18 +3735,55 @@ function _applyResponsive() {
   // Mobile status bar
   const sbMob = document.getElementById('sb-mob');
   if (sbMob) sbMob.style.display = isPhone ? 'flex' : 'none';
-  // Close panel sheet when resizing away from phone
-  if (!isPhone) {
-    const rp = document.getElementById('rp');
+  // Canvas toolbar: hidden on desktop until image loaded; on mobile also hidden
+  // when no image so the full screen is available for the drop zone.
+  const cvTb = document.getElementById('canvas-toolbar');
+  if (cvTb) {
+    if (!isPhone) {
+      cvTb.classList.add('hidden');
+      if (S.imgSrc) cvTb.classList.remove('hidden');
+    } else {
+      // Mobile: show only when image is loaded, otherwise hide to avoid blocking drop zone
+      cvTb.classList.toggle('hidden', !S.imgSrc);
+    }
+    // Dynamically sync the CSS variable used by canvas-scroll padding-top so it
+    // always matches the actual rendered toolbar height (handles overflow, etc.)
+    if (isPhone) {
+      const toolbarH = cvTb.offsetHeight;
+      document.documentElement.style.setProperty('--m-toolbar-h', toolbarH + 'px');
+    }
+  }
+  // Landscape phone: hide right panel to maximise canvas width
+  const rp = document.getElementById('rp');
+  if (rp) {
+    rp.style.display = (isPhone && h < w) ? 'none' : '';
+  }
+  // Close panel sheet when resizing away from phone or entering landscape
+  if (!isPhone || h < w) {
     if (rp) rp.classList.remove('open');
+    const overlay = document.getElementById('panel-overlay');
+    if (overlay) overlay.classList.remove('show');
+    // Re-fit canvas after panel state changes so the available space is correct
+    if (S.imgW) fitCanvas();
   }
 }
 
 function togglePanel() {
-  document.getElementById('rp').classList.toggle('open');
+  const rp = document.getElementById('rp');
+  const overlay = document.getElementById('panel-overlay');
+  const isOpen = rp.classList.contains('open');
+  rp.classList.toggle('open');
+  if (overlay) overlay.classList.toggle('show', !isOpen);
 }
 
-window.addEventListener('resize', _applyResponsive);
+// Debounce _applyResponsive to avoid excessive calls during window resize
+let _responsiveTimer = null;
+function _debouncedResponsive() {
+  clearTimeout(_responsiveTimer);
+  _responsiveTimer = setTimeout(_applyResponsive, 150);
+}
+window.addEventListener('resize', _debouncedResponsive);
+window.addEventListener('orientationchange', _debouncedResponsive);
 _applyResponsive(); // run once on init
 
 saveHist();
