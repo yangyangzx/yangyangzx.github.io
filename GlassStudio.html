@@ -2344,9 +2344,9 @@ const PRESETS = {
   'title-card':     {type:'glass',bg:'#097757',op:0.18,blur:22,sat:150,bop:0.35,tc:'#ffffff',fs:22,fw:'700',r:16,w:300,h:80},
   'tag':            {type:'glass',bg:'#097757',op:0.18,blur:12,sat:140,bop:0.28,tc:'#ffffff',fs:14,fw:'500',r:22,w:140,h:44},
   // ── Circle Presets ─────────────────────────────────────────────────────────
-  'circle-light':   {type:'glass',bg:'#ffffff',op:0.15,blur:16,sat:160,bop:0.22,ca:1,tc:'#1a1a1a',fs:14,fw:'500',r:999,w:160,h:160,tsh:'0 1px 4px rgba(0,0,0,.15)'},
-  'circle-dark':    {type:'glass',bg:'#0F0F0F',op:0.4,blur:14,sat:130,bop:0.15,ca:1,tc:'#F9F6ED',fs:14,fw:'500',r:999,w:160,h:160},
-  'circle-blue':    {type:'glass',bg:'#097757',op:0.18,blur:16,sat:170,bop:0.3,ca:1,tc:'#ffffff',fs:14,fw:'500',r:999,w:160,h:160},
+  'circle-light':   {type:'glass',bg:'#ffffff',op:0.15,blur:16,sat:160,bop:0.22,ca:0,tc:'#1a1a1a',fs:14,fw:'500',r:999,w:160,h:160,tsh:'0 1px 4px rgba(0,0,0,.15)'},
+  'circle-dark':    {type:'glass',bg:'#0F0F0F',op:0.4,blur:14,sat:130,bop:0.15,ca:0,tc:'#F9F6ED',fs:14,fw:'500',r:999,w:160,h:160},
+  'circle-blue':    {type:'glass',bg:'#097757',op:0.18,blur:16,sat:170,bop:0.3,ca:0,tc:'#ffffff',fs:14,fw:'500',r:999,w:160,h:160},
   // ── Text Presets ───────────────────────────────────────────────────────────
   'big-text':       {type:'text',tc:'#F9F6ED',fs:36,fw:'700',tsh:'0 4px 20px rgba(0,0,0,.7)',w:320,h:100},
 };
@@ -2373,9 +2373,12 @@ function applyPreset(key) {
     locked: false,
   };
   S.els.push(el2);
-  S.sel = el2.id;
-  S.selSet.clear();
-  S.selSet.add(el2.id);
+  // Preserve multi-selection if active; otherwise select the new element
+  if (!S.selSet.size || !S.sel) {
+    S.sel = el2.id;
+    S.selSet.clear();
+    S.selSet.add(el2.id);
+  }
   saveHist();
   render();
   toast(`已添加「${document.querySelector(`.preset[onclick="applyPreset('${key}')"] span`)?.textContent || key}」`);
@@ -2405,10 +2408,11 @@ function showCtx(e, id) {
   el.ctxMenu.classList.add('show');
   let x = e.clientX, y = e.clientY;
   const mw = 180, mh = 220;
-  const isPhone = window.innerWidth <= 768;
-  // Account for fixed top toolbar (≈48px) on mobile and bottom toolbar (≈60px)
+  // Use the same isPhone definition as the responsive handler
+  const isPhone = window.innerWidth <= 768 && window.innerHeight >= window.innerWidth;
+  // Account for fixed top toolbar (~48px) on mobile and bottom toolbar (~52px + safe-area)
   const topOffset = isPhone ? 48 : 0;
-  const bottomOffset = isPhone ? 60 : 0;
+  const bottomOffset = isPhone ? 52 : 0;
   if (x + mw > window.innerWidth)  x = window.innerWidth  - mw - 8;
   if (y + mh > window.innerHeight - bottomOffset) y = window.innerHeight - mh - bottomOffset - 8;
   y = Math.max(topOffset + 4, y);
@@ -2425,7 +2429,7 @@ document.addEventListener('click', e => {
   if (!e.target.closest('#ctx-menu') && !e.target.closest('.gel')) hideCtx();
 });
 document.addEventListener('touchend', e => {
-  if (_lpActive) return;
+  if (_lpActive || _lpFired) return;
   if (!e.target.closest('#ctx-menu') && !e.target.closest('.gel')) hideCtx();
 });
 document.addEventListener('contextmenu', e => {
@@ -2741,9 +2745,29 @@ function _shdCleanup(id) {
 }
 
 function _shdHex(rgba) {
-  const m = rgba.match(/rgba?\((\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
-  if (!m) return '#000000';
-  return '#' + [m[1], m[2], m[3]].map(x => (+x).toString(16).padStart(2, '0')).join('');
+  // Try rgba/rgb first
+  let m = rgba.match(/rgba?\((\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
+  if (m) return '#' + [m[1], m[2], m[3]].map(x => (+x).toString(16).padStart(2, '0')).join('');
+  // Fall back to hsl/hsla: extract h, s%, l% and convert to RGB
+  m = rgba.match(/hsla?\((\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)%\s*,\s*(\d+(?:\.\d+)?)%/);
+  if (m) {
+    const h = ((+m[1]) % 360 + 360) % 360 / 360;
+    const s = Math.min(1, +m[2] / 100);
+    const l = Math.min(1, +m[3] / 100);
+    const c = (1 - Math.abs(2 * l - 1)) * s;
+    const x2 = c * (1 - Math.abs((h * 6) % 2 - 1));
+    const m2 = l - c / 2;
+    const rgb = [0,0,0];
+    const seg = Math.floor(h * 6);
+    const f = h * 6 - seg;
+    const v = [c, x2, 0, 0, x2, c][seg % 6] || 0;
+    const w = [x2, c, c, x2, 0, 0][seg % 6] || 0;
+    rgb[0] = Math.round((v + m2) * 255);
+    rgb[1] = Math.round((w + m2) * 255);
+    rgb[2] = Math.round(m2 * 255);
+    return '#' + rgb.map(x => x.toString(16).padStart(2, '0')).join('');
+  }
+  return '#000000';
 }
 
 function _shdParse(str) {
