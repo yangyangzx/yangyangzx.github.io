@@ -1051,6 +1051,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 // ═══════════════════════════════════════════════════════════════
 (function(){
   let h='<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>';
+  // 5-level chromatic aberration (Apple Liquid Glass style)
   for(let i=1;i<=5;i++){
     const o=i*0.5;
     h+=`<filter id="glass-ca-${i}" x="-5%" y="-5%" width="110%" height="110%">`
@@ -2076,13 +2077,37 @@ function addEl(type) {
   // Trigger materialize-in animation on the newly created DOM element
   requestAnimationFrame(() => {
     const dom = el.cv.querySelector(`[data-id="${el2.id}"]`);
-    if (dom) { dom.classList.add('materialize-in'); dom.addEventListener('animationend', function h() { dom.classList.remove('materialize-in'); dom.removeEventListener('animationend', h); }); }
+    if (dom) {
+      dom.classList.add('materialize-in');
+      const handler = function h() {
+        dom.classList.remove('materialize-in');
+        dom._matInHandler = null;
+        dom.removeEventListener('animationend', handler);
+      };
+      dom._matInHandler = handler;
+      dom.addEventListener('animationend', handler);
+    }
   });
 }
 
 // Track element IDs with pending delete animations — distinguishes "animation in progress"
 // from "undo cancelled the delete". render() won't clear materialize-out for these.
 const _pendingDelete = new Set();
+
+// Clean up animationend listeners on elements being deleted to prevent memory leaks.
+// When an element is removed before its animationend fires, the handler would leak.
+// We store handler references on the DOM element so _cleanupAnimListeners can remove them.
+function _cleanupAnimListeners() {
+  el.cv.querySelectorAll('.gel').forEach(dom => {
+    dom.classList.remove('materialize-in', 'materialize-out');
+    dom.style.animationDelay = '';
+    // Remove stored animationend handlers
+    if (dom._matInHandler) {
+      dom.removeEventListener('animationend', dom._matInHandler);
+      dom._matInHandler = null;
+    }
+  });
+}
 
 function delSel() {
   if (!S.sel) return;
@@ -2094,7 +2119,13 @@ function delSel() {
   let pending = 0;
   idsToRemove.forEach(id => {
     const dom = el.cv.querySelector(`[data-id="${id}"]`);
-    if (dom) { dom.classList.add('materialize-out'); _pendingDelete.add(id); pending++; }
+    if (dom) {
+      dom.classList.add('materialize-out');
+      _pendingDelete.add(id);
+      pending++;
+      // Remove any pending animationend handlers to prevent leaks
+      dom.querySelectorAll('.rh').forEach(h => h.remove());
+    }
   });
   let finished = false;
   const finish = () => {
@@ -2165,9 +2196,15 @@ function clearAll() {
   S.els.forEach(e => _shdCleanup(e.id));
   S.els = []; S.sel = null; S.selSet.clear();
   _pendingDelete.clear();
-  // Cancel any pending render/props timers to avoid stale DOM updates
+  // Cancel ALL pending timers to avoid stale updates
   clearTimeout(_propsTimer);
   clearTimeout(_layersTimer);
+  clearTimeout(_spTimer);
+  clearTimeout(_autosaveTimer);
+  clearTimeout(_arrowTimer);
+  if (_autoScrollRAF) { cancelAnimationFrame(_autoScrollRAF); _autoScrollRAF = 0; }
+  if (_rafId) { cancelAnimationFrame(_rafId); _rafId = null; _pendingHistSave = false; }
+  _cleanupAnimListeners();
   _dirty = false; // clearAll is a destructive action, not a modification requiring save warning
   saveHist();
   render();
@@ -2348,7 +2385,16 @@ function applyPreset(key) {
   // Trigger materialize-in animation
   requestAnimationFrame(() => {
     const dom = el.cv.querySelector(`[data-id="${el2.id}"]`);
-    if (dom) { dom.classList.add('materialize-in'); dom.addEventListener('animationend', function h() { dom.classList.remove('materialize-in'); dom.removeEventListener('animationend', h); }); }
+    if (dom) {
+      dom.classList.add('materialize-in');
+      const handler = function h() {
+        dom.classList.remove('materialize-in');
+        dom._matInHandler = null;
+        dom.removeEventListener('animationend', handler);
+      };
+      dom._matInHandler = handler;
+      dom.addEventListener('animationend', handler);
+    }
   });
 }
 
@@ -2618,7 +2664,7 @@ function _renderPropsImpl() {
     sa += rng(el2.id,'饱和度',  'sat',  el2.sat  ?? (el2.type==='glass'?140:100), 80, 220, '%');
     sa += rng(el2.id,'边框宽度', 'bw',  el2.bw  ?? 1, 0, 6, 'px');
     sa += rng(el2.id,'边框不透明度','bop',  Math.round((el2.bop ?? (el2.type==='glass'?0.35:0.1)) * 100), 0, 100, '%');
-    sa += shd(el2.id, '元素阴影', 'bs', el2.type==='glass' ? '0 8px 32px rgba(0,0,0,.2)' : '0 4px 24px rgba(0,0,0,.3)');
+    sa += shd(el2.id, '元素阴影', 'bs', el2.type==='glass' ? '0 8px 32px rgba(0,0,0,.35)' : '0 4px 24px rgba(0,0,0,.3)');
     sa += rng(el2.id,'圆角',  'r',   Math.min(el2.r ?? 12, 200),  0, 200, 'px');
     sa += rng(el2.id,'内边距','pad', el2.pad ?? 12, 4, 40, 'px');
     h += _sec('appearance', '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="vertical-align:middle;margin-right:3px;opacity:.7"><rect x="1.5" y="1.5" width="13" height="13" rx="3" stroke="currentColor" stroke-width="1.3" stroke-dasharray="2 1.5"/></svg>玻璃外观', '透明度、模糊、亮度、饱和度、边框、阴影、圆角', sa);
@@ -2725,6 +2771,11 @@ function _shdUpdate(id, key, partial) {
   sp(id, key, _shdBuild(s.x, s.y, s.blur, s.hex, s.alpha), true);
 }
 
+// ── Shadow slider helper (builds shadow string from parsed parts)
+// When called with noHist=true (internal updates during slider drag), schedule a
+// deferred history save so the user's final shadow position is captured as one step.
+// The 800ms timeout prevents duplicate saves if multiple shadow props change in quick
+// succession (e.g., X and Y both being dragged).
 function _shdSlide(id, key, field, raw, lblId) {
   const val = field === 'alpha' ? +raw / 100 : +raw;
   const partial = {};
@@ -2732,9 +2783,9 @@ function _shdSlide(id, key, field, raw, lblId) {
   _shdUpdate(id, key, partial);
   const lbl = document.getElementById(lblId);
   if (lbl) lbl.textContent = field === 'alpha' ? raw + '%' : raw + 'px';
-  // Schedule debounced history save (sp was called with noHist=true, so it doesn't save)
+  // Schedule debounced history save — use 800ms to debounce rapid X/Y updates
   clearTimeout(_spTimer);
-  _spTimer = setTimeout(scheduleHistSave, 600);
+  _spTimer = setTimeout(scheduleHistSave, 800);
 }
 
 function shd(id, label, key, defaultVal) {
@@ -3107,9 +3158,11 @@ async function exportImg() {
   msg.textContent = '准备导出...';
   bar.style.width = '3%'; // Give immediate visual feedback while fonts load
 
-  // Wait for all fonts (including local fonts) to be ready before measuring text
-  await document.fonts.ready;
-  bar.style.width = '8%'; // Acknowledge font loading done
+  // Wrap entire export in try-catch to prevent crashes on canvas errors
+  try {
+    // Wait for all fonts (including local fonts) to be ready before measuring text
+    await document.fonts.ready;
+    bar.style.width = '8%'; // Acknowledge font loading done
 
   const ec = document.getElementById('ec');
   // Most browsers cap canvas area around 16384px per side / ~268M px total.
@@ -3144,7 +3197,7 @@ async function exportImg() {
   // double-resampling blur from intermediate canvases).
   ctx.drawImage(img, 0, 0, ec.width, ec.height);
   await yield();
-    if (window._exportCancelled) { ov.classList.remove('show'); toast('已取消导出'); return; }
+  if (window._exportCancelled) { ov.classList.remove('show'); toast('已取消导出'); return; }
 
   // sx/sy: coordinate scale from canvas-display-pixels to export-canvas-pixels
   // Includes DPR so positions are correct in the HiDPI canvas
@@ -3202,7 +3255,7 @@ async function exportImg() {
     // Matches CSS: drop shadow is rendered behind the element's backdrop layer.
     // The blurred backdrop (step 3) will cover the shadow inside the rect,
     // leaving only the outer drop shadow visible.
-    const bsRaw = el2.bs || (el2.type === 'glass' ? '0 8px 32px rgba(0,0,0,.2)' : '0 4px 24px rgba(0,0,0,.3)');
+    const bsRaw = el2.bs || (el2.type === 'glass' ? '0 8px 32px rgba(0,0,0,.35)' : '0 4px 24px rgba(0,0,0,.3)');
     if (bsRaw && isBoxed) {
       // px? makes the px suffix optional, so '0 8px 32px ...' (CSS shorthand) also matches
       const bm = bsRaw.match(
@@ -3254,6 +3307,7 @@ async function exportImg() {
       if (lw > 0) {
         const bcRgb = h2r(bc);
         ctx.save();
+        ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
         ctx.shadowBlur = 0; ctx.shadowColor = 'transparent';
         ctx.strokeStyle = `rgba(${bcRgb.r},${bcRgb.g},${bcRgb.b},${bop})`;
         ctx.lineWidth   = lw;
@@ -3276,6 +3330,7 @@ async function exportImg() {
       const bcRgb = h2r(bc);
       const hlw = Math.max(1, avgS);
       ctx.save();
+      ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
       ctx.shadowBlur = 0; ctx.shadowColor = 'transparent';
       ctx.fillStyle = `rgba(${bcRgb.r},${bcRgb.g},${bcRgb.b},${bop * 0.5})`;
       // Two subpaths: original shape and shape offset down by hlw.
@@ -3352,6 +3407,7 @@ async function exportImg() {
         // Underline (canvas has no textDecoration, draw manually)
         if (el2.underline && line) {
           ctx.save();
+          ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
           ctx.shadowBlur = 0; ctx.shadowColor = 'transparent';
           const tw = measureWithSpacing(ctx, line, lsVal);
           const ux = ctx.textAlign === 'center' ? textX - tw / 2
@@ -3408,7 +3464,7 @@ async function exportImg() {
   bar.style.width = '90%';
   msg.textContent = '生成文件...';
   await yield();
-    if (window._exportCancelled) { ov.classList.remove('show'); toast('已取消导出'); return; }
+  if (window._exportCancelled) { ov.classList.remove('show'); toast('已取消导出'); return; }
 
   const a = document.createElement('a');
   a.download = `glass-studio-${exportScale}x-${Date.now()}.png`;
@@ -3427,6 +3483,11 @@ async function exportImg() {
     ov.classList.remove('show');
     toast(`✓ 已导出 ${ec.width}×${ec.height}px 高清图片`);
   }, 600);
+  } catch (exportErr) {
+    ov.classList.remove('show');
+    toast('❌ 导出失败：' + (exportErr.message || '未知错误'));
+    console.error('Export error:', exportErr);
+  }
 }
 
 // ── Canvas helpers ────────────────────────────────────────────
@@ -3625,8 +3686,8 @@ function selectFont(family, dom) {
   el2.fontFamily = family;
   saveHist();
   render();
-  renderFontList();
   renderProps();
+  renderFontList();
   if (dom) toast(`已应用：${dom.textContent.trim()}`);
 }
 
