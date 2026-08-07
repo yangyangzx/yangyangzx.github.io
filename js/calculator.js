@@ -139,10 +139,12 @@ function calculate() {
         weightedStopPct += (Math.abs(bp - bsl) / bp) * ba;
         totalAlloc += ba;
       }
-      if (skippedCount > 0) {
-        // M5: 部分批次止损方向非法，回退使用主止损距离，并给出明确提示
-        rw = '<span class="warning-tag"><i class="fas fa-exclamation-circle"></i> 分批止损部分批次方向非法（' + skippedCount + ' 批已跳过），已回退为全局止损计算。加权结果可能偏离实际仓位，建议逐批检查止损方向。</span>';
-        weightedStopPct = 0; // 触发后续 fallback
+      if (skippedCount > 0 && totalAlloc === 0) {
+        // 所有批次止损方向非法，回退使用主止损距离
+        rw = '<span class="warning-tag"><i class="fas fa-exclamation-circle"></i> 分批止损所有批次方向非法，已回退为全局止损计算。</span>';
+      } else if (skippedCount > 0) {
+        // 部分批次跳过，但仍有有效批次，继续加权计算
+        rw = '<span class="warning-tag"><i class="fas fa-exclamation-circle"></i> 分批止损 ' + skippedCount + ' 批方向非法已跳过，使用剩余 ' + totalAlloc.toFixed(1) + '% 仓位加权计算。</span>';
       }
       if (totalAlloc > 0 && weightedStopPct > 0) {
         stopDistance = (weightedStopPct / totalAlloc) * effectiveEntryPrice;
@@ -299,77 +301,32 @@ function calculate() {
     const takerRate = 0.08;
     feeRate = (feeRate > 0 && feeRate < takerRate) ? feeRate : takerRate;
   }
-  const slippageTicksInput = parseFloat(document.getElementById('slippage').value) || 0;
-  const tickSize = getTickSize(symbol);
-  
-  // ===== 修复手续费计算逻辑 =====
-  // 原Bug: finalPos * feeRate / 100 * 2 (错误地乘以2，重复计算)
-  // 新逻辑: 区分开仓费和平仓费，支持部分平仓场景
-  let openFee = 0;    // 开仓手续费
-  let closeFee = 0;   // 平仓手续费
-  let totalFee = 0;   // 总手续费
-  
+  const slippagePctInput = parseFloat(document.getElementById('slippage').value) || 0;
+
+  // ===== 手续费计算 =====
+  // 开仓和平仓各收取一次，总计 2 倍费率
+  let openFee = 0, closeFee = 0, totalFee = 0;
   if (feeRate > 0) {
-    // 开仓手续费 (一次性收取)
     openFee = finalPos * feeRate / 100;
-    
-    // 平仓手续费: 这里假设全仓平仓，实际应根据平仓数量调整
-    // 如果是部分平仓，应该传入partialCloseRatio参数
-    const closeRatio = 1.0; // 默认全仓平仓，未来可扩展为参数
-    closeFee = finalPos * feeRate / 100 * closeRatio;
-    
+    closeFee = finalPos * feeRate / 100; // 假设全仓平仓
     totalFee = openFee + closeFee;
   }
-  
-  // ===== 修复滑点成本计算 - 实现基于订单簿深度的非线性模型 =====
-  // 原Bug: slippageTicks * tickSize * finalPos / effectiveEntryPrice (线性模型，脱离现实)
-  // 新逻辑: 基于市场微观结构的非线性滑点模型
+
+  // ===== 滑点成本计算 =====
+  // 滑点成本 = 仓位名义价值 × 滑点百分比
+  // 注意：effectiveEntryPrice 已包含入场滑点（通过 slippageRate 修正）
+  // 因此 slippageCost 仅表示用户额外设置的滑点缓冲（如限价单与市价单的价差）
+  // 避免重复扣除：盈亏比计算中只扣除 fee，不扣除 slippageCost
   let slippageCost = 0;
-  
-  if (slippageTicksInput > 0 && finalPos > 0) {
-    // 获取基础滑点设置
-    const baseSlippageTicks = slippageTicksInput;
-    
-    // ===== 非线性滑点模型 =====
-    // 模型来源: Market Impact Theory (Kyle 1985, Almgren-Chriss 2000)
-    // 滑点 = 基础滑点 × 订单规模因子 × 波动率因子 × 流动性因子
-    
-    // 1. 订单规模因子 (非线性)
-    // 小订单: 滑点线性增长
-    // 大订单: 滑点指数增长 (市场冲击)
-    const orderSizeFactor = calculateOrderSizeImpact(finalPos, symbol);
-    
-    // 2. 波动率因子 (隐含波动率影响)
-    const volatilityFactor = calculateVolatilityImpact(symbol);
-    
-    // 3. 流动性因子 (订单簿深度)
-    const liquidityFactor = calculateLiquidityImpact(symbol, finalPos);
-    
-    // 4. 订单类型因子
-    const orderType = document.getElementById('orderType').value || 'market';
-    const orderTypeFactor = orderType === 'market' ? 1.0 : (orderType === 'limit' ? 0.3 : 0.8);
-    
-    // 综合滑点计算 (非线性模型)
-    const adjustedSlippageTicks = baseSlippageTicks * 
-                                  orderSizeFactor * 
-                                  volatilityFactor * 
-                                  liquidityFactor * 
-                                  orderTypeFactor;
-    
-    // 确保滑点在合理范围内 (不超过基础滑点的10倍)
-    const maxSlippageMultiplier = 10;
-    const cappedAdjustedTicks = Math.min(adjustedSlippageTicks, baseSlippageTicks * maxSlippageMultiplier);
-    
-    // 计算最终滑点成本
-    slippageCost = cappedAdjustedTicks * tickSize * finalPos / effectiveEntryPrice;
-    
-    // 调试信息 (生产环境可移除或改为debug级别)
-    console.log(`滑点计算详情 - 基础: ${baseSlippageTicks}, 订单因子: ${orderSizeFactor.toFixed(3)}, 波动率: ${volatilityFactor.toFixed(3)}, 流动性: ${liquidityFactor.toFixed(3)}, 调整后: ${cappedAdjustedTicks.toFixed(2)}, 成本: ${slippageCost.toFixed(4)}`);
+  if (slippagePctInput > 0 && finalPos > 0) {
+    slippageCost = finalPos * slippagePctInput / 100;
   }
-  
+
   const totalCost = totalFee + slippageCost;
 
-  // ===== 盈亏比预判（扣除手续费和滑点后的净盈亏比） =====
+  // ===== 盈亏比预判（扣除手续费后的净盈亏比） =====
+  // 注意：effectiveEntryPrice 已包含入场滑点，不再重复扣除 slippageCost
+  // 净盈亏比 = (目标收益 - 手续费) / (止损损失 + 手续费)
   let targetRR = null, targetPct = null;
   if (!isNaN(targetPrice) && targetPrice > 0) {
     let targetDistance;
@@ -380,13 +337,13 @@ function calculate() {
     }
     if (targetDistance > 0) {
       targetPct = targetDistance / effectiveEntryPrice * 100;
-      // 毛 R:R
+      // 毛 R:R（不含费用）
       var grossRR = targetDistance / stopDistance;
-      // 净 R:R = (目标收益 - 手续费) / (止损损失 + 手续费)
+      // 净盈亏（扣除手续费）
       var grossProfit = targetDistance * finalPos / effectiveEntryPrice;
-      var grossLoss = stopDistance * finalPos / effectiveEntryPrice;
-      var netProfit = grossProfit - totalCost;
-      var netLoss = grossLoss + totalCost;
+      var grossLoss = stopDistance * finalPos / effectiveEntryPrice; // = riskAmount
+      var netProfit = grossProfit - totalFee; // 只扣手续费，不重复扣滑点
+      var netLoss = grossLoss + totalFee;
       if (netLoss > 0) {
         targetRR = netProfit / netLoss;
       } else {

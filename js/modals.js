@@ -386,7 +386,10 @@ window.cpUpdateExecScore = cpUpdateExecScore;
 function calcMAEMFE(idx) {
   const item = logs[idx];
   if (!item || !item.entryPrice || !item.direction) return;
-  const entry = parseFloat(item.entryPrice);
+  // 使用 effectiveEntryPrice（含入场滑点）作为基准，与 storeMAEMFE 口径一致
+  const entry = (item.effectiveEntryPrice != null && !isNaN(parseFloat(item.effectiveEntryPrice)))
+    ? parseFloat(item.effectiveEntryPrice)
+    : parseFloat(item.entryPrice);
   if (isNaN(entry) || entry <= 0) return;
 
   const lowEl = document.getElementById('cpLowPrice_' + idx);
@@ -638,12 +641,12 @@ function doSaveSplit(calc, count) {
   const splitPos = parseFloat((calc.positionSize / count).toFixed(2));
   const remainderPos = parseFloat((calc.positionSize - splitPos * (count - 1)).toFixed(2));
   const fee = parseFloat(document.getElementById('feeRate').value) || 0;
-  const slippageTicks = parseFloat(document.getElementById('slippage').value) || 0;
-  let tickSize = 0.1;
-  if (calc.symbol.includes('ETH')) tickSize = 0.01;
-  const perSlippage = slippageTicks > 0 ? (slippageTicks * tickSize * splitPos / calc.entryPrice) : 0;
+  // 滑点成本统一使用与 calculator.js 相同的公式: positionSize × slippagePoints / entryPrice
+  // 注意: 用户输入的 slippage 是价格点数（如 BTC 输入 1 表示 1 美元），不是 tick 数量
+  const slippagePoints = parseFloat(document.getElementById('slippage').value) || 0;
+  const perSlippage = slippagePoints > 0 ? (splitPos * slippagePoints / calc.entryPrice) : 0;
   const perFee = fee > 0 ? (splitPos * fee / 100 * 2) : 0;
-  const remainderSlippage = slippageTicks > 0 ? (slippageTicks * tickSize * remainderPos / calc.entryPrice) : 0;
+  const remainderSlippage = slippagePoints > 0 ? (remainderPos * slippagePoints / calc.entryPrice) : 0;
   const remainderFee = fee > 0 ? (remainderPos * fee / 100 * 2) : 0;
 
   const now = new Date();

@@ -1731,6 +1731,20 @@ function onRS(e) {
 
 document.addEventListener('pointermove', onMouseMove);
 document.addEventListener('pointerup',   onMouseUp);
+// Fallback touch handlers for devices where pointer events are unreliable
+// (some older Android browsers don't fully support Pointer Events)
+document.addEventListener('touchmove', e => {
+  if (!S._drag && !S._resize) return;
+  if (e.touches.length === 0) return;
+  e.preventDefault(); // Prevent scrolling while dragging/resizing
+  const t = e.touches[0];
+  // Synthesize a pointer-like event for onMouseMove
+  onMouseMove({ clientX: t.clientX, clientY: t.clientY, pointerId: -1 });
+}, { passive: false });
+document.addEventListener('touchend', e => {
+  if (!S._drag && !S._resize) return;
+  onMouseUp({ pointerId: -1 });
+}, { passive: false });
 
 // Auto-scroll the canvas scroll container when the cursor approaches the viewport edge.
 // Uses rAF to throttle scroll updates to one per frame. The edge zone is 48px and
@@ -3643,6 +3657,34 @@ document.getElementById('canvas-scroll').addEventListener('wheel', e => {
   }
 }, { passive: false });
 
+// ── Two-finger pinch zoom for mobile (when no element is selected) ──
+// Tracks the distance between two touch points and adjusts zoom accordingly.
+let _pinchStartDist = null;
+let _pinchStartZoom = null;
+document.addEventListener('touchstart', e => {
+  if (!S.imgSrc || S.els.length === 0) return;
+  // Only handle two-finger gestures on the canvas area
+  if (e.touches.length !== 2) return;
+  const t0 = e.touches[0], t1 = e.touches[1];
+  const dx = t1.clientX - t0.clientX, dy = t1.clientY - t0.clientY;
+  _pinchStartDist = Math.sqrt(dx * dx + dy * dy);
+  _pinchStartZoom = S.zoom;
+}, { passive: true });
+
+document.addEventListener('touchmove', e => {
+  if (!S.imgSrc || !_pinchStartDist || e.touches.length !== 2) return;
+  const t0 = e.touches[0], t1 = e.touches[1];
+  const dx = t1.clientX - t0.clientX, dy = t1.clientY - t0.clientY;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  const scale = dist / _pinchStartDist;
+  const newZoom = Math.round(Math.max(20, Math.min(300, _pinchStartZoom * scale)));
+  if (newZoom !== S.zoom) setZoom(newZoom);
+}, { passive: true });
+
+document.addEventListener('touchend', e => {
+  if (e.touches.length < 2) { _pinchStartDist = null; _pinchStartZoom = null; }
+});
+
 // ═══════════════════════════════════════════════════════════════
 // FONT PICKER (local fonts — merged from original)
 // ═══════════════════════════════════════════════════════════════
@@ -3732,16 +3774,14 @@ let _lpFired = false;
 let _lpActive = false;
 
 document.addEventListener('touchstart', e => {
-  // Ignore touch events on canvas elements — pointer events handle drag/resize
-  const touch = e.touches[0];
-  const target = document.elementFromPoint(touch.clientX, touch.clientY);
-  if (!target || target.closest('#cv') || target.closest('.gel')) return;
   // Clear any existing timer
   clearTimeout(_lpTimer);
   _lpElement = null;
   _lpFired = false;
   _lpActive = false;
-  // Start long-press timer (600ms)
+  // Start long-press timer (600ms) for ALL touch areas including canvas
+  // (pointer events handle drag/resize, but long-press context menu is separate)
+  const touch = e.touches[0];
   _lpTimer = setTimeout(() => {
     // Re-evaluate target in case user scrolled during the long press
     const gel = document.elementFromPoint(touch.clientX, touch.clientY)?.closest?.('.gel');

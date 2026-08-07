@@ -72,7 +72,10 @@ function calcClosePnL(idx) {
 
 // ==================== MAE/MFE 统一计算 ====================
 function storeMAEMFE(item) {
-  const ep = parseFloat(item.entryPrice);
+  // 使用 effectiveEntryPrice（含入场滑点）作为基准，与平仓盈亏计算口径一致
+  const ep = (item.effectiveEntryPrice != null && !isNaN(parseFloat(item.effectiveEntryPrice)))
+    ? parseFloat(item.effectiveEntryPrice)
+    : parseFloat(item.entryPrice);
   if (isNaN(ep) || ep <= 0 || !item.direction) {
     item.mae = null;
     item.mfe = null;

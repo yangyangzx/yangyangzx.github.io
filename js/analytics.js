@@ -266,8 +266,10 @@ function groupByStrategy(closed) {
       if (pnl != null) totalPnl += pnl;
       var rr = safeParseNum(tr.rMultiple);
       if (rr != null) { totalRR += rr; rrCount++; }
+      // MAE: 仅统计亏损单（与 stats.js 口径一致）
       var mae = safeParseNum(tr.mae);
-      if (mae != null) { totalMAE += mae; maeCount++; }
+      if (mae != null && pnl != null && pnl < 0) { totalMAE += Math.abs(mae); maeCount++; }
+      // MFE: 统计全部已平仓交易
       var mfe = safeParseNum(tr.mfe);
       if (mfe != null) { totalMFE += mfe; mfeCount++; }
     }
@@ -459,8 +461,10 @@ function groupByPattern(closed) {
       if (pnl != null) totalPnl += pnl;
       var rr = safeParseNum(tr.rMultiple);
       if (rr != null) { totalRR += rr; rrCount++; }
+      // MAE: 仅统计亏损单（与 stats.js 口径一致）
       var mae = safeParseNum(tr.mae);
-      if (mae != null) { totalMAE += mae; maeCount++; }
+      if (mae != null && pnl != null && pnl < 0) { totalMAE += Math.abs(mae); maeCount++; }
+      // MFE: 统计全部已平仓交易
       var mfe = safeParseNum(tr.mfe);
       if (mfe != null) { totalMFE += mfe; mfeCount++; }
     }
@@ -487,16 +491,18 @@ function groupByPattern(closed) {
     var oRRc = 0, oMAEc = 0, oMFEc = 0;
     for (var o = 0; o < othersList.length; o++) {
       var or = othersList[o];
-      var pnl = safeParseNum(or.pnlAmount);
-      if (pnl > 0) oWins++;
-      else if (pnl < 0) oLosses++;
-      if (pnl != null) oPnl += pnl;
-      var rv = safeParseNum(or.rMultiple);
-      if (rv != null) { oRR += rv; oRRc++; }
-      var mv = safeParseNum(or.mae);
-      if (mv != null) { oMAE += mv; oMAEc++; }
-      var fv = safeParseNum(or.mfe);
-      if (fv != null) { oMFE += fv; oMFEc++; }
+      var opnl = safeParseNum(or.pnlAmount);
+      if (opnl > 0) oWins++;
+      else if (opnl < 0) oLosses++;
+      if (opnl != null) oPnl += opnl;
+      var orv = safeParseNum(or.rMultiple);
+      if (orv != null) { oRR += orv; oRRc++; }
+      // MAE: 仅统计亏损单
+      var omv = safeParseNum(or.mae);
+      if (omv != null && opnl != null && opnl < 0) { oMAE += Math.abs(omv); oMAEc++; }
+      // MFE: 统计全部
+      var ofv = safeParseNum(or.mfe);
+      if (ofv != null) { oMFE += ofv; oMFEc++; }
     }
     var oDecidedCnt = oWins + oLosses;
     var oWinRate = oDecidedCnt > 0 ? (oWins / oDecidedCnt * 100) : 0;

@@ -49,6 +49,34 @@ function getClosedSorted() {
 
 // ==================== 卡片渲染 ====================
 
+/**
+ * 获取按 groupId 聚合的未平仓持仓（用于强平预警）
+ * 同一 groupId 的多条日志代表分批建仓，合并计算总仓位和加权入场价
+ */
+function getAggregatedOpenPositions() {
+  var openLogs = getOpenPositions();
+  var groups = {};
+  for (var i = 0; i < openLogs.length; i++) {
+    var pos = openLogs[i];
+    var gid = pos.groupId || ('single_' + i);
+    if (!groups[gid]) {
+      groups[gid] = { symbol: pos.symbol, direction: pos.direction, leverage: pos.leverage, stopLoss: pos.stopLoss, positionSize: 0, weightedEntrySum: 0, entries: [] };
+    }
+    groups[gid].positionSize += parseFloat(pos.positionSize) || 0;
+    groups[gid].entries.push(pos);
+    if (pos.entryPrice != null && !isNaN(parseFloat(pos.entryPrice)) && parseFloat(pos.entryPrice) > 0) {
+      groups[gid].weightedEntrySum += parseFloat(pos.entryPrice) * (parseFloat(pos.positionSize) || 0);
+    }
+  }
+  var result = [];
+  for (var gid in groups) {
+    var g = groups[gid];
+    g.weightedEntry = g.positionSize > 0 ? g.weightedEntrySum / g.positionSize : 0;
+    result.push(g);
+  }
+  return result;
+}
+
 function renderRiskCenter() {
   renderAccountOverview();
   renderDailyLoss();
@@ -101,13 +129,14 @@ function renderAccountOverview() {
 }
 
 // ——— 卡片 2：日亏损监控 ———
-function renderDailyLoss() {
+function renderDailyLoss(closedOverride) {
   var container = document.getElementById('riskDailyContent');
   if (!container) return;
 
   var todayStr = window.utils.toLocalDateStr(new Date().toISOString());
   var todayPnl = 0;
-  var closed = getClosedSorted();
+  // 优先使用传入的过滤数据，否则使用全量数据
+  var closed = closedOverride || getClosedSorted();
 
   for (var i = 0; i < closed.length; i++) {
     var ct = closed[i].closeTime;
@@ -225,9 +254,10 @@ function renderLiqTable() {
   var container = document.getElementById('riskLiqContent');
   if (!container) return;
 
-  var openPositions = getOpenPositions();
+  // 使用聚合后的持仓（合并同一 groupId 的分批建仓）
+  var aggregatedPositions = getAggregatedOpenPositions();
 
-  if (openPositions.length === 0) {
+  if (aggregatedPositions.length === 0) {
     container.innerHTML = '<div class="risk-empty">无持仓</div>';
     return;
   }
@@ -239,14 +269,14 @@ function renderLiqTable() {
     if (raw) { var s = JSON.parse(raw); if (s.mmr != null) mmr = s.mmr / 100; }
   } catch(e) {}
 
-  // 计算每笔强平价和安全距离
+  // 计算每笔强平价和安全距离（按聚合持仓）
   var rows = [];
-  for (var i = 0; i < openPositions.length; i++) {
-    var pos = openPositions[i];
+  for (var i = 0; i < aggregatedPositions.length; i++) {
+    var pos = aggregatedPositions[i];
     if (pos.leverage <= 0) continue; // 现货跳过
     if (pos.stopLoss == null || pos.stopLoss === '' || isNaN(parseFloat(pos.stopLoss))) continue; // 无止损价，无法计算安全距离
 
-    var entryPrice = pos.entryPrice;
+    var entryPrice = pos.weightedEntry || pos.entries[0].entryPrice;
     var stopLoss = pos.stopLoss;
     var leverage = pos.leverage;
     var direction = pos.direction;
@@ -261,7 +291,9 @@ function renderLiqTable() {
       direction: direction,
       stopLoss: stopLoss,
       liquidationPrice: liquidationPrice,
-      safeDistance: safeDistance
+      safeDistance: safeDistance,
+      positionSize: pos.positionSize,
+      entryPrice: entryPrice
     });
   }
 
@@ -273,7 +305,7 @@ function renderLiqTable() {
     return;
   }
 
-  var html = '<table class="risk-liq-table"><thead><tr><th>品种</th><th>方向</th><th>止损价</th><th>强平价</th><th>安全距离</th></tr></thead><tbody>';
+  var html = '<table class="risk-liq-table"><thead><tr><th>品种</th><th>方向</th><th>止损价</th><th>强平价</th><th>安全距离</th><th>仓位</th></tr></thead><tbody>';
 
   for (var j = 0; j < rows.length; j++) {
     var r = rows[j];
@@ -292,6 +324,7 @@ function renderLiqTable() {
     html += '<td>' + (r.stopLoss != null ? Number(r.stopLoss).toFixed(2) : '—') + '</td>';
     html += '<td>' + r.liquidationPrice.toFixed(2) + '</td>';
     html += '<td class="' + distClass + '">' + r.safeDistance.toFixed(2) + '%</td>';
+    html += '<td>' + (r.positionSize != null ? r.positionSize.toFixed(0) + ' U' : '—') + '</td>';
     html += '</tr>';
   }
 
