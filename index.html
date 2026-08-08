@@ -754,6 +754,26 @@
         <div class="card-header">平仓类型分布</div>
         <div class="chart-wrap"><canvas id="closeTypeChart"></canvas></div>
       </div>
+      <!-- 新增：日盈亏时序分布 -->
+      <div class="card chart-card" id="dailyPnlCard">
+        <div class="card-header">日盈亏时序分布 <span style="font-size:11px;font-weight:400;color:var(--color-text-muted);margin-left:8px;">（按平仓日期聚合）</span></div>
+        <div class="chart-wrap"><canvas id="chartDailyPnl"></canvas></div>
+      </div>
+      <!-- 新增：周几绩效分布 -->
+      <div class="card chart-card" id="dayOfWeekCard">
+        <div class="card-header">周几绩效分布</div>
+        <div class="chart-wrap"><canvas id="chartDayOfWeek"></canvas></div>
+      </div>
+      <!-- 新增：持仓时长分布 -->
+      <div class="card chart-card" id="holdDurationCard">
+        <div class="card-header">持仓时长分布</div>
+        <div class="chart-wrap"><canvas id="chartHoldDuration"></canvas></div>
+      </div>
+      <!-- 新增：月度盈亏热力 -->
+      <div class="card chart-card" id="monthlyPnlCard">
+        <div class="card-header">月度盈亏汇总</div>
+        <div class="chart-wrap"><canvas id="chartMonthlyPnl"></canvas></div>
+      </div>
     </div>
     <div class="card" style="margin-top:16px;" id="strategyTableCard">
       <div class="card-header">策略绩效明细</div>

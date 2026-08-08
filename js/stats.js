@@ -415,7 +415,9 @@ function renderStrategyBreakdown(closed) {
     let maeSum = 0, maeCnt = 0;
     for (const l of trades) {
       const m = parseFloat(l.mae);
-      if (!isNaN(m)) { maeSum += Math.abs(m); maeCnt++; }
+      const pnl = parseFloat(l.pnlAmount);
+      // 与全局口径一致：MAE 仅统计亏损单（pnl < 0）
+      if (!isNaN(m) && !isNaN(pnl) && pnl < 0) { maeSum += Math.abs(m); maeCnt++; }
     }
     const avgMAE = maeCnt > 0 ? maeSum / maeCnt : null;
     rows.push({ name, cnt, wr, tPnl, exp, wlR, pf, avgMAE, lowSample: cnt < 2 });

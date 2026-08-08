@@ -322,8 +322,9 @@ function renderOrderTypeChart(closed) {
   var labels = [], wrData = [], pnlData = [];
   for (var j = 0; j < keys.length; j++) {
     var g = groups[keys[j]];
+    var decided = g.wins + g.losses; // 排除 break-even，与全局口径一致
     labels.push(keys[j] + ' (' + g.total + ')');
-    wrData.push(g.total > 0 ? parseFloat((g.wins / g.total * 100).toFixed(1)) : 0);
+    wrData.push(decided > 0 ? parseFloat((g.wins / decided * 100).toFixed(1)) : 0);
     pnlData.push(parseFloat(g.pnlTotal.toFixed(2)));
   }
 

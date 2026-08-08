@@ -7,7 +7,8 @@ var _analyticsCharts = {};
  * 销毁所有图表实例
  */
 function destroyAnalyticsCharts() {
-  var ids = ['chartEquity', 'chartStrategy', 'chartPattern', 'chartSession', 'chartMAEMFE', 'closeTypeChart'];
+  var ids = ['chartEquity', 'chartStrategy', 'chartPattern', 'chartSession', 'chartMAEMFE', 'closeTypeChart',
+             'chartDailyPnl', 'chartDayOfWeek', 'chartHoldDuration', 'chartMonthlyPnl'];
   for (var i = 0; i < ids.length; i++) {
     if (_analyticsCharts[ids[i]]) {
       _analyticsCharts[ids[i]].destroy();
@@ -78,6 +79,10 @@ function renderAnalytics() {
     ['renderSessionChart',      function() { renderSessionChart(closed); }],
     ['renderMAEMFEScatter',     function() { renderMAEMFEScatter(closed); }],
     ['renderCloseTypeChart',    function() { renderCloseTypeChart(closed); }],
+    ['renderDailyPnlChart',     function() { renderDailyPnlChart(closed); }],
+    ['renderDayOfWeekChart',    function() { renderDayOfWeekChart(closed); }],
+    ['renderHoldDurationChart', function() { renderHoldDurationChart(closed); }],
+    ['renderMonthlyPnlChart',   function() { renderMonthlyPnlChart(closed); }],
     ['renderDimensionBreakdown',function() { renderDimensionBreakdown(closed); }]
   ];
 
@@ -140,19 +145,12 @@ function renderEquityChart(closed) {
     _noteEl.remove();
   }
 
-  var labels = [];
-  var data = [];
-  var equity = capital;
-  for (var j = 0; j < sortedClosed.length; j++) {
-    // M5: 仅当 capital 变化时才视为存款/取款事件，否则累加 PnL
-    var capVal = parseFloat(sortedClosed[j].capital);
-    if (!isNaN(capVal) && capVal > 0 && capVal !== equity) {
-      equity = capVal;
-    } else {
-      equity += parseFloat(sortedClosed[j].pnlAmount) || 0;
-    }
-    labels.push(fmtDate(sortedClosed[j].closeTime));
-    data.push(parseFloat(equity.toFixed(2)));
+  // 使用统一权益曲线计算（避免手动重复实现相同逻辑）
+  var _curve = window.utils.calcEquityCurve(sortedClosed);
+  var _eqLabels = [], _eqData = [];
+  for (var _j = 0; _j < _curve.data.length; _j++) {
+    _eqLabels.push(fmtDate(sortedClosed[_j].closeTime));
+    _eqData.push(parseFloat(_curve.data[_j].eq.toFixed(2)));
   }
 
   // 清除空状态，恢复 canvas
@@ -165,10 +163,10 @@ function renderEquityChart(closed) {
   _analyticsCharts['chartEquity'] = new Chart(ctx, {
     type: 'line',
     data: {
-      labels: labels,
+      labels: _eqLabels,
       datasets: [{
         label: '累计权益 (USDT)',
-        data: data,
+        data: _eqData,
         borderColor: cc.barBorder,
         backgroundColor: function(context) {
           var chart = context.chart;
@@ -1130,4 +1128,379 @@ function ensureChartContainer(canvas) {
     canvas.parentNode.insertBefore(wrap, canvas);
     wrap.appendChild(canvas);
   }
+}
+
+// ==================== 图表 7：日盈亏时序分布 ====================
+
+function renderDailyPnlChart(closed) {
+  var canvas = document.getElementById('chartDailyPnl');
+  if (!canvas) return;
+
+  // 按日期聚合
+  var daily = {};
+  for (var i = 0; i < closed.length; i++) {
+    var d = fmtDate(closed[i].closeTime);
+    if (!d || d === '—') continue;
+    var pnl = safeParseNum(closed[i].pnlAmount) || 0;
+    if (!daily[d]) daily[d] = { pnl: 0, count: 0, wins: 0 };
+    daily[d].pnl += pnl;
+    daily[d].count++;
+    if (pnl > 0) daily[d].wins++;
+  }
+
+  var keys = Object.keys(daily).sort();
+  if (keys.length === 0) {
+    _setCanvasEmpty(canvas, 'fa-calendar-day', '暂无日级数据');
+    return;
+  }
+
+  var cc = utils.getChartColors();
+  var labels = [], data = [], bgColors = [];
+  for (var j = 0; j < keys.length; j++) {
+    var k = keys[j];
+    labels.push(k.substring(5)); // MM-DD
+    data.push(parseFloat(daily[k].pnl.toFixed(2)));
+    bgColors.push(daily[k].pnl >= 0 ? cc.barWin : cc.barLoss);
+  }
+
+  _clearCanvasEmpty(canvas);
+  ensureChartContainer(canvas);
+
+  var ctx = canvas.getContext('2d');
+  _analyticsCharts['chartDailyPnl'] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: '日盈亏 (USDT)',
+        data: data,
+        backgroundColor: bgColors,
+        borderRadius: 3,
+        borderWidth: 1,
+        borderColor: cc.barBorder,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: cc.tooltipBg,
+          titleColor: cc.tooltipTitle,
+          bodyColor: cc.tooltipBody,
+          borderColor: cc.gridColor,
+          borderWidth: 1,
+          padding: 12,
+          callbacks: {
+            title: function(ctx) { return keys[ctx[0].dataIndex]; },
+            label: function(ctx) {
+              var k = keys[ctx.dataIndex];
+              return '盈亏 ' + ctx.parsed.y.toFixed(2) + ' USDT · ' + daily[k].count + ' 笔';
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: { color: cc.tickColor, font: { size: 10 }, maxRotation: 45, maxTicksLimit: 15 }
+        },
+        y: {
+          grid: { color: cc.gridColor },
+          ticks: { color: cc.tickColor, font: { size: 11 }, callback: function(v) { return v.toFixed(0); } }
+        }
+      }
+    }
+  });
+}
+
+// ==================== 图表 8：周几绩效分布 ====================
+
+function renderDayOfWeekChart(closed) {
+  var canvas = document.getElementById('chartDayOfWeek');
+  if (!canvas) return;
+
+  var dayLabels = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+  var groups = {};
+  for (var di = 0; di < 7; di++) {
+    groups[di] = { pnl: 0, count: 0, wins: 0, losses: 0 };
+  }
+
+  for (var i = 0; i < closed.length; i++) {
+    var ct = closed[i].closeTime;
+    if (!ct) continue;
+    var d = new Date(ct);
+    var dow = d.getDay(); // 0=Sun, 1=Mon...
+    // 转换为周一=0...周日=6
+    var adjustedDow = dow === 0 ? 6 : dow - 1;
+    var pnl = safeParseNum(closed[i].pnlAmount) || 0;
+    groups[adjustedDow].pnl += pnl;
+    groups[adjustedDow].count++;
+    if (pnl > 0) groups[adjustedDow].wins++;
+    else if (pnl < 0) groups[adjustedDow].losses++;
+  }
+
+  var cc = utils.getChartColors();
+  var labels = [], data = [], bgColors = [];
+  for (var di = 0; di < 7; di++) {
+    labels.push(dayLabels[di]);
+    data.push(parseFloat(groups[di].pnl.toFixed(2)));
+    var wr = groups[di].count > 0 ? (groups[di].wins / groups[di].count * 100) : 0;
+    if (wr >= 60) bgColors.push(cc.barWin);
+    else if (wr >= 40) bgColors.push(cc.barWarn);
+    else bgColors.push(cc.barLoss);
+  }
+
+  _clearCanvasEmpty(canvas);
+  ensureChartContainer(canvas);
+
+  var ctx = canvas.getContext('2d');
+  _analyticsCharts['chartDayOfWeek'] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: '周几盈亏 (USDT)',
+        data: data,
+        backgroundColor: bgColors,
+        borderRadius: 6,
+        borderWidth: 1,
+        borderColor: cc.barBorder,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: cc.tooltipBg,
+          titleColor: cc.tooltipTitle,
+          bodyColor: cc.tooltipBody,
+          borderColor: cc.gridColor,
+          borderWidth: 1,
+          padding: 12,
+          callbacks: {
+            label: function(ctx) {
+              var di = ctx.dataIndex;
+              var g = groups[di];
+              var wr = g.count > 0 ? (g.wins / g.count * 100).toFixed(1) : '—';
+              return '盈亏 ' + ctx.parsed.y.toFixed(2) + ' U · ' + g.count + ' 笔 · 胜率 ' + wr + '%';
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: { color: cc.tickColor, font: { size: 12 } }
+        },
+        y: {
+          grid: { color: cc.gridColor },
+          ticks: { color: cc.tickColor, font: { size: 11 }, callback: function(v) { return v.toFixed(0); } }
+        }
+      }
+    }
+  });
+}
+
+// ==================== 图表 9：持仓时长分布直方图 ====================
+
+function renderHoldDurationChart(closed) {
+  var canvas = document.getElementById('chartHoldDuration');
+  if (!canvas) return;
+
+  // 只取有持仓时长的交易
+  var hasDuration = false;
+  for (var i = 0; i < closed.length; i++) {
+    var hd = parseFloat(closed[i].holdDuration);
+    if (!isNaN(hd) && hd > 0) { hasDuration = true; break; }
+  }
+  if (!hasDuration) {
+    _setCanvasEmpty(canvas, 'fa-clock', '暂无持仓时长数据');
+    return;
+  }
+
+  // 分箱：0-15m, 15m-1h, 1h-4h, 4h-12h, 12h-1d, 1d+
+  var buckets = [
+    { label: '<15m', min: 0, max: 15 },
+    { label: '15m-1h', min: 15, max: 60 },
+    { label: '1h-4h', min: 60, max: 240 },
+    { label: '4h-12h', min: 240, max: 720 },
+    { label: '12h-1d', min: 720, max: 1440 },
+    { label: '>1d', min: 1440, max: Infinity }
+  ];
+
+  var counts = buckets.map(function() { return 0; });
+  var pnlByBucket = buckets.map(function() { return { pnl: 0, wins: 0, count: 0 }; });
+
+  // 直接遍历 closed 数组，避免 O(n²) 搜索和重复匹配
+  for (var i = 0; i < closed.length; i++) {
+    var hd = parseFloat(closed[i].holdDuration);
+    if (isNaN(hd) || hd <= 0) continue;
+    var pnl = safeParseNum(closed[i].pnlAmount) || 0;
+
+    for (var b = 0; b < buckets.length; b++) {
+      if (hd >= buckets[b].min && hd < buckets[b].max) {
+        counts[b]++;
+        pnlByBucket[b].pnl += pnl;
+        pnlByBucket[b].count++;
+        if (pnl > 0) pnlByBucket[b].wins++;
+        break;
+      }
+    }
+  }
+
+  var cc = utils.getChartColors();
+  var labels = [], data = [], bgColors = [];
+  for (var b = 0; b < buckets.length; b++) {
+    labels.push(buckets[b].label);
+    data.push(counts[b]);
+    var wr = pnlByBucket[b].count > 0 ? (pnlByBucket[b].wins / pnlByBucket[b].count * 100) : 0;
+    if (wr >= 60) bgColors.push(cc.barWin);
+    else if (wr >= 40) bgColors.push(cc.barWarn);
+    else bgColors.push(cc.barLoss);
+  }
+
+  _clearCanvasEmpty(canvas);
+  ensureChartContainer(canvas);
+
+  var ctx = canvas.getContext('2d');
+  _analyticsCharts['chartHoldDuration'] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: '笔数',
+        data: data,
+        backgroundColor: bgColors,
+        borderRadius: 6,
+        borderWidth: 1,
+        borderColor: cc.barBorder,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: cc.tooltipBg,
+          titleColor: cc.tooltipTitle,
+          bodyColor: cc.tooltipBody,
+          borderColor: cc.gridColor,
+          borderWidth: 1,
+          padding: 12,
+          callbacks: {
+            label: function(ctx) {
+              var b = ctx.dataIndex;
+              var total = counts.reduce(function(a, c) { return a + c; }, 0);
+              var pct = total > 0 ? (counts[b] / total * 100).toFixed(1) : '0';
+              var wr = pnlByBucket[b].count > 0 ? (pnlByBucket[b].wins / pnlByBucket[b].count * 100).toFixed(1) : '—';
+              return '笔数 ' + counts[b] + ' (' + pct + '%) · 胜率 ' + wr + '%';
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: { color: cc.tickColor, font: { size: 11 } }
+        },
+        y: {
+          grid: { color: cc.gridColor },
+          ticks: { color: cc.tickColor, font: { size: 11 }, stepSize: 1 }
+        }
+      }
+    }
+  });
+}
+
+// ==================== 图表 10：月度盈亏汇总 ====================
+
+function renderMonthlyPnlChart(closed) {
+  var canvas = document.getElementById('chartMonthlyPnl');
+  if (!canvas) return;
+
+  // 按年月聚合
+  var monthly = {};
+  for (var i = 0; i < closed.length; i++) {
+    var d = fmtDate(closed[i].closeTime);
+    if (!d || d === '—') continue;
+    var ym = d.substring(0, 7); // YYYY-MM
+    var pnl = safeParseNum(closed[i].pnlAmount) || 0;
+    if (!monthly[ym]) monthly[ym] = { pnl: 0, count: 0, wins: 0 };
+    monthly[ym].pnl += pnl;
+    monthly[ym].count++;
+    if (pnl > 0) monthly[ym].wins++;
+  }
+
+  var keys = Object.keys(monthly).sort();
+  if (keys.length === 0) {
+    _setCanvasEmpty(canvas, 'fa-calendar-alt', '暂无月度数据');
+    return;
+  }
+
+  var cc = utils.getChartColors();
+  var labels = [], data = [], bgColors = [];
+  for (var j = 0; j < keys.length; j++) {
+    var k = keys[j];
+    labels.push(k);
+    data.push(parseFloat(monthly[k].pnl.toFixed(2)));
+    var wr = monthly[k].count > 0 ? (monthly[k].wins / monthly[k].count * 100) : 0;
+    if (wr >= 60) bgColors.push(cc.barWin);
+    else if (wr >= 40) bgColors.push(cc.barWarn);
+    else bgColors.push(cc.barLoss);
+  }
+
+  _clearCanvasEmpty(canvas);
+  ensureChartContainer(canvas);
+
+  var ctx = canvas.getContext('2d');
+  _analyticsCharts['chartMonthlyPnl'] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: '月盈亏 (USDT)',
+        data: data,
+        backgroundColor: bgColors,
+        borderRadius: 6,
+        borderWidth: 1,
+        borderColor: cc.barBorder,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: cc.tooltipBg,
+          titleColor: cc.tooltipTitle,
+          bodyColor: cc.tooltipBody,
+          borderColor: cc.gridColor,
+          borderWidth: 1,
+          padding: 12,
+          callbacks: {
+            label: function(ctx) {
+              var k = keys[ctx.dataIndex];
+              return '盈亏 ' + ctx.parsed.y.toFixed(2) + ' U · ' + monthly[k].count + ' 笔';
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: { color: cc.tickColor, font: { size: 10 }, maxRotation: 45, maxTicksLimit: 12 }
+        },
+        y: {
+          grid: { color: cc.gridColor },
+          ticks: { color: cc.tickColor, font: { size: 11 }, callback: function(v) { return v.toFixed(0); } }
+        }
+      }
+    }
+  });
 }

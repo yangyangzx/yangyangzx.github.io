@@ -47,6 +47,23 @@ function getClosedSorted() {
   return closed;
 }
 
+/**
+ * 获取当前过滤后的已平仓日志（与 stats.js 口径一致）
+ * 无过滤器时返回全量
+ */
+function getFilteredClosed() {
+  var allClosed = getClosedSorted();
+  if (typeof applyFilters === 'function' && _activeFilters) {
+    var hasAnyFilter = !!( _activeFilters.direction || _activeFilters.symbol ||
+                           _activeFilters.strategy || _activeFilters.status ||
+                           _activeFilters.pnl || _activeFilters.time );
+    if (hasAnyFilter) {
+      return applyFilters(allClosed);
+    }
+  }
+  return allClosed;
+}
+
 // ==================== 卡片渲染 ====================
 
 /**
@@ -78,12 +95,14 @@ function getAggregatedOpenPositions() {
 }
 
 function renderRiskCenter() {
+  // 统一数据源：有过滤器时使用过滤后数据，否则全量（与 stats.js 口径一致）
+  var closed = getFilteredClosed();
   renderAccountOverview();
-  renderDailyLoss();
-  renderDrawdown();
+  renderDailyLoss(closed);
+  renderDrawdown(closed);
   renderLiqTable();
-  renderConcentration();
-  renderFrequency();
+  renderConcentration(closed);
+  renderFrequency(closed);
 }
 
 // ——— 卡片 1：账户概览 ———
@@ -183,11 +202,11 @@ function renderDailyLoss(closedOverride) {
 }
 
 // ——— 卡片 3：回撤监控 ———
-function renderDrawdown() {
+function renderDrawdown(closedOverride) {
   var container = document.getElementById('riskDrawdownContent');
   if (!container) return;
 
-  var closed = getClosedSorted();
+  var closed = closedOverride || getClosedSorted();
   if (closed.length === 0) {
     container.innerHTML = '<div class="risk-empty">暂无已平仓记录</div>';
     return;
@@ -333,12 +352,12 @@ function renderLiqTable() {
 }
 
 // ——— 卡片 5：风险集中度 ———
-function renderConcentration() {
+function renderConcentration(closedOverride) {
   var container = document.getElementById('riskConcentrationContent');
   if (!container) return;
 
   var openPositions = getOpenPositions();
-  var closed = getClosedSorted();
+  var closed = closedOverride || getClosedSorted();
   var capital = getAccountCapital() || loadSettings().accountBalance;
   if (capital == null || capital <= 0) {
     container.innerHTML = '<div class="risk-empty">请先在「系统设置」中填写账户余额</div>';
@@ -419,11 +438,11 @@ function renderConcentration() {
 }
 
 // ——— 卡片 6：交易频率与连赢/连亏趋势 ———
-function renderFrequency() {
+function renderFrequency(closedOverride) {
   var container = document.getElementById('riskFrequencyContent');
   if (!container) return;
 
-  var closed = getClosedSorted();
+  var closed = closedOverride || getClosedSorted();
   if (closed.length === 0) {
     container.innerHTML = '<div class="risk-empty">暂无已平仓记录</div>';
     return;

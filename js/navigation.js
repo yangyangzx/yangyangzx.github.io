@@ -59,7 +59,7 @@ function switchView(viewName) {
   }
 
   // 切出非日志/统计视图时清除过滤器状态
-  if (viewName !== 'journal' && viewName !== 'stats') {
+  if (viewName !== 'journal' && viewName !== 'risk' && viewName !== 'analytics') {
     window._activeFilters = {};
   }
 
