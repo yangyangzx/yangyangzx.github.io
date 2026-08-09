@@ -354,7 +354,7 @@ function renderStrategyChart(closed) {
           borderWidth: 1,
           padding: 12,
           callbacks: {
-            label: function(ctx) { return '均盈亏 ' + ctx.parsed.y.toFixed(2) + ' USDT'; }
+            label: function(ctx) { return '平均盈亏 ' + ctx.parsed.y.toFixed(2) + ' USDT'; }
           }
         }
       },
@@ -398,8 +398,8 @@ function renderStrategyTable(rows) {
   html += '<th data-col="totalPnl" data-sort="num">总盈亏 <span class="sort-arrow"></span></th>';
   html += '<th data-col="avgPnl" data-sort="num">平均盈亏 <span class="sort-arrow"></span></th>';
   html += '<th data-col="avgRR" data-sort="num">均 R <span class="sort-arrow"></span></th>';
-  html += '<th data-col="avgMAE" data-sort="num">均 MAE <span class="sort-arrow"></span></th>';
-  html += '<th data-col="avgMFE" data-sort="num">均 MFE <span class="sort-arrow"></span></th>';
+  html += '<th data-col="avgMAE" data-sort="num">平均 MAE <span class="sort-arrow"></span></th>';
+  html += '<th data-col="avgMFE" data-sort="num">平均 MFE <span class="sort-arrow"></span></th>';
   html += '</tr></thead><tbody>';
 
   for (var r = 0; r < rows.length; r++) {
@@ -583,7 +583,7 @@ function renderPatternChart(closed) {
           borderWidth: 1,
           padding: 12,
           callbacks: {
-            label: function(ctx) { return '均盈亏 ' + ctx.parsed.y.toFixed(2) + ' USDT'; }
+            label: function(ctx) { return '平均盈亏 ' + ctx.parsed.y.toFixed(2) + ' USDT'; }
           }
         }
       },
@@ -625,8 +625,8 @@ function renderPatternTable(rows) {
   html += '<th data-col="totalPnl" data-sort="num">总盈亏 <span class="sort-arrow"></span></th>';
   html += '<th data-col="avgPnl" data-sort="num">平均盈亏 <span class="sort-arrow"></span></th>';
   html += '<th data-col="avgRR" data-sort="num">均 R <span class="sort-arrow"></span></th>';
-  html += '<th data-col="avgMAE" data-sort="num">均 MAE <span class="sort-arrow"></span></th>';
-  html += '<th data-col="avgMFE" data-sort="num">均 MFE <span class="sort-arrow"></span></th>';
+  html += '<th data-col="avgMAE" data-sort="num">平均 MAE <span class="sort-arrow"></span></th>';
+  html += '<th data-col="avgMFE" data-sort="num">平均 MFE <span class="sort-arrow"></span></th>';
   html += '</tr></thead><tbody>';
 
   for (var r = 0; r < rows.length; r++) {
@@ -954,7 +954,7 @@ function computeGroupStats(trades) {
   }
   var decided = wins + losses;
   var wr = decided > 0 ? (wins / decided * 100) : 0;
-  return { count: trades.length, wins, losses, totalPnl, avgPnl: decided > 0 ? totalPnl / decided : 0, wr };
+  return { count: trades.length, wins, losses, totalPnl, avgPnl: decided > 0 ? totalPnl / decided : 0, winRate: wr };
 }
 
 function renderCloseTypeChart(closed) {
@@ -1112,7 +1112,7 @@ function renderDimensionBreakdown(closed) {
       '<td style="color:var(--color-text-secondary);font-size:12px;">' + row.dimension + '</td>' +
       '<td>' + row.groupName + '</td>' +
       '<td class="col-num">' + row.count + '</td>' +
-      '<td class="col-num">' + row.wr.toFixed(1) + '%</td>' +
+      '<td class="col-num">' + row.winRate.toFixed(1) + '%</td>' +
       '<td class="' + cls + '">' + (row.totalPnl >= 0 ? '+' : '') + row.totalPnl.toFixed(2) + '</td>' +
       '<td class="' + cls + '">' + (row.avgPnl >= 0 ? '+' : '') + row.avgPnl.toFixed(2) + '</td>' +
       '</tr>';
@@ -1249,7 +1249,8 @@ function renderDayOfWeekChart(closed) {
   for (var di = 0; di < 7; di++) {
     labels.push(dayLabels[di]);
     data.push(parseFloat(groups[di].pnl.toFixed(2)));
-    var wr = groups[di].count > 0 ? (groups[di].wins / groups[di].count * 100) : 0;
+    var decided = groups[di].wins + groups[di].losses;
+    var wr = decided > 0 ? (groups[di].wins / decided * 100) : 0;
     if (wr >= 60) bgColors.push(cc.barWin);
     else if (wr >= 40) bgColors.push(cc.barWarn);
     else bgColors.push(cc.barLoss);
@@ -1288,7 +1289,7 @@ function renderDayOfWeekChart(closed) {
             label: function(ctx) {
               var di = ctx.dataIndex;
               var g = groups[di];
-              var wr = g.count > 0 ? (g.wins / g.count * 100).toFixed(1) : '—';
+              var wr = (g.wins + g.losses) > 0 ? (g.wins / (g.wins + g.losses) * 100).toFixed(1) : '—';
               return '盈亏 ' + ctx.parsed.y.toFixed(2) + ' U · ' + g.count + ' 笔 · 胜率 ' + wr + '%';
             }
           }
@@ -1336,7 +1337,7 @@ function renderHoldDurationChart(closed) {
   ];
 
   var counts = buckets.map(function() { return 0; });
-  var pnlByBucket = buckets.map(function() { return { pnl: 0, wins: 0, count: 0 }; });
+  var pnlByBucket = buckets.map(function() { return { pnl: 0, wins: 0, losses: 0, count: 0 }; });
 
   // 直接遍历 closed 数组，避免 O(n²) 搜索和重复匹配
   for (var i = 0; i < closed.length; i++) {
@@ -1350,6 +1351,7 @@ function renderHoldDurationChart(closed) {
         pnlByBucket[b].pnl += pnl;
         pnlByBucket[b].count++;
         if (pnl > 0) pnlByBucket[b].wins++;
+        else if (pnl < 0) pnlByBucket[b].losses++;
         break;
       }
     }
@@ -1360,7 +1362,8 @@ function renderHoldDurationChart(closed) {
   for (var b = 0; b < buckets.length; b++) {
     labels.push(buckets[b].label);
     data.push(counts[b]);
-    var wr = pnlByBucket[b].count > 0 ? (pnlByBucket[b].wins / pnlByBucket[b].count * 100) : 0;
+    var decided = pnlByBucket[b].wins + pnlByBucket[b].losses;
+    var wr = decided > 0 ? (pnlByBucket[b].wins / decided * 100) : 0;
     if (wr >= 60) bgColors.push(cc.barWin);
     else if (wr >= 40) bgColors.push(cc.barWarn);
     else bgColors.push(cc.barLoss);
@@ -1400,7 +1403,7 @@ function renderHoldDurationChart(closed) {
               var b = ctx.dataIndex;
               var total = counts.reduce(function(a, c) { return a + c; }, 0);
               var pct = total > 0 ? (counts[b] / total * 100).toFixed(1) : '0';
-              var wr = pnlByBucket[b].count > 0 ? (pnlByBucket[b].wins / pnlByBucket[b].count * 100).toFixed(1) : '—';
+              var wr = (pnlByBucket[b].wins + pnlByBucket[b].losses) > 0 ? (pnlByBucket[b].wins / (pnlByBucket[b].wins + pnlByBucket[b].losses) * 100).toFixed(1) : '—';
               return '笔数 ' + counts[b] + ' (' + pct + '%) · 胜率 ' + wr + '%';
             }
           }
@@ -1433,9 +1436,11 @@ function renderMonthlyPnlChart(closed) {
     if (!d || d === '—') continue;
     var ym = d.substring(0, 7); // YYYY-MM
     var pnl = safeParseNum(closed[i].pnlAmount) || 0;
-    if (!monthly[ym]) monthly[ym] = { pnl: 0, count: 0, wins: 0 };
+    if (!monthly[ym]) monthly[ym] = { pnl: 0, count: 0, wins: 0, losses: 0 };
     monthly[ym].pnl += pnl;
     monthly[ym].count++;
+    if (pnl > 0) monthly[ym].wins++;
+    else if (pnl < 0) monthly[ym].losses++;
     if (pnl > 0) monthly[ym].wins++;
   }
 
@@ -1451,7 +1456,8 @@ function renderMonthlyPnlChart(closed) {
     var k = keys[j];
     labels.push(k);
     data.push(parseFloat(monthly[k].pnl.toFixed(2)));
-    var wr = monthly[k].count > 0 ? (monthly[k].wins / monthly[k].count * 100) : 0;
+    var decided = monthly[k].wins + monthly[k].losses;
+    var wr = decided > 0 ? (monthly[k].wins / decided * 100) : 0;
     if (wr >= 60) bgColors.push(cc.barWin);
     else if (wr >= 40) bgColors.push(cc.barWarn);
     else bgColors.push(cc.barLoss);

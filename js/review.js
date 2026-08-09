@@ -670,7 +670,7 @@ function renderExecutionQuality(closed) {
   tHtml += '<div style="font-size:11px;color:var(--color-text-muted);">整体基准</div>';
   tHtml += '<div style="font-size:18px;font-weight:600;color:' + (overallAvgPnl >= 0 ? 'var(--color-success)' : 'var(--color-danger)') + ';">';
   tHtml += (overallAvgPnl >= 0 ? '+' : '') + overallAvgPnl.toFixed(2) + ' USDT</div>';
-  tHtml += '<div style="font-size:12px;color:var(--color-text-muted);">均R ' + overallAvgRr.toFixed(2) + 'R · 胜率 ' + overallWinRate.toFixed(1) + '%</div>';
+  tHtml += '<div style="font-size:12px;color:var(--color-text-muted);">平均R ' + overallAvgRr.toFixed(2) + 'R · 胜率 ' + overallWinRate.toFixed(1) + '%</div>';
   tHtml += '</div>';
   tHtml += '</div>';
 
