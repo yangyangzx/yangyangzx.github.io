@@ -103,6 +103,10 @@ function onViewActivated(viewName) {
     if (typeof initMultiTPListeners === 'function') {
       initMultiTPListeners();
     }
+    // 切换回开仓计划时同步 datalist（确保从设置页返回后列表已更新）
+    if (typeof syncSymbolDatalist === 'function') {
+      syncSymbolDatalist();
+    }
   }
   // 风控中心：渲染风险指标
   if (viewName === 'risk') {

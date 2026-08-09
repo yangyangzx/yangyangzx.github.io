@@ -451,15 +451,13 @@ function calculate() {
 
   // ===== 手续费与滑点（提前到盈亏比计算之前，供 targetRR 使用） =====
   let feeRate = parseFloat(document.getElementById('feeRate').value) || 0;
-  // 订单类型费率联动：market/stop 使用 Taker 费率，limit 使用 Maker 费率
-  if (orderType === 'limit') {
-    // Maker 费率默认 0.04%，若用户设置值更低则用设置值
-    const makerRate = 0.04;
-    feeRate = (feeRate > 0 && feeRate < makerRate) ? feeRate : makerRate;
-  } else {
-    // market / stop → Taker 费率默认 0.08%
-    const takerRate = 0.08;
-    feeRate = (feeRate > 0 && feeRate < takerRate) ? feeRate : takerRate;
+  // 用户未设置手续费率时，根据订单类型使用默认费率
+  if (feeRate <= 0) {
+    if (orderType === 'limit') {
+      feeRate = 0.04;  // Maker 费率默认 0.04%
+    } else {
+      feeRate = 0.08;  // market / stop → Taker 费率默认 0.08%
+    }
   }
   const slippagePctInput = parseFloat(document.getElementById('slippage').value) || 0;
 
@@ -1080,7 +1078,7 @@ function toggleFormSection(sectionId) {
 
 // 关键字段变更时标记 _lastCalc 为脏
 (function() {
-  var dirtyFields = ['entryPrice', 'stopLoss', 'capital', 'leverage', 'direction'];
+  var dirtyFields = ['entryPrice', 'stopLoss', 'capital', 'leverage', 'direction', 'feeRate', 'slippage', 'lossStreak'];
   dirtyFields.forEach(function(id) {
     var el = document.getElementById(id);
     if (el) {

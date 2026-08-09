@@ -47,7 +47,11 @@ function buildRowsHTML(dl) {
     } else if (item.closeType === 'initialSL') {
       ctBadge = '<span class="badge-ct sl">止损</span>';
     } else if (item.closeType === 'trailingSL') {
-      ctBadge = '<span class="badge-ct trail">追踪损</span>';
+      // 追踪止损：根据实际盈亏金额着色（盈利=绿，亏损=黄）
+      var _pnl = parseFloat(item.pnlAmount) || 0;
+      ctBadge = _pnl >= 0
+        ? '<span class="badge-ct win">追踪盈</span>'
+        : '<span class="badge-ct trail">追踪损</span>';
     } else if (item.closeType === 'initialTP') {
       ctBadge = '<span class="badge-ct tp">止盈</span>';
     } else if (item.closeType === 'manualWin') {

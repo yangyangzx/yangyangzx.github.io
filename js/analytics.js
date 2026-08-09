@@ -992,10 +992,19 @@ function renderCloseTypeChart(closed) {
     data.push(count);
     pcts.push((count / totalClosed * 100).toFixed(1));
 
+    // 基于 closeType 硬分类 + 实际盈亏均值综合判断颜色
+    // trailingSL 等类型按实际盈亏金额着色：盈利>0 则绿，否则红
+    var groupPnl = 0;
+    for (var gi = 0; gi < groups[k].length; gi++) {
+      groupPnl += parseFloat(groups[k][gi].pnlAmount) || 0;
+    }
+    var avgPnl = count > 0 ? (groupPnl / count) : 0;
+
     if (profitTypes.indexOf(k) !== -1) {
       bgColors.push(cc.barWin);
     } else if (lossTypes.indexOf(k) !== -1) {
-      bgColors.push(cc.barLoss);
+      // trailingSL 等如果整体平均盈利则视为盈利类型
+      bgColors.push(avgPnl >= 0 ? cc.barWin : cc.barLoss);
     } else {
       bgColors.push(cc.barNeutral);
     }
