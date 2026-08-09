@@ -114,17 +114,15 @@ function onViewActivated(viewName) {
       renderRiskCenter();
     }
   }
-  // 统计分析：渲染图表
+  // 统计分析：销毁旧图表并重新渲染
   if (viewName === 'analytics') {
-    if (typeof renderAnalytics === 'function') {
-      renderAnalytics();
-    }
+    if (typeof destroyAnalyticsCharts === 'function') destroyAnalyticsCharts();
+    if (typeof renderAnalytics === 'function') renderAnalytics();
   }
-  // 复盘中心：渲染图表
+  // 复盘中心：销毁旧图表并重新渲染
   if (viewName === 'review') {
-    if (typeof renderReview === 'function') {
-      renderReview();
-    }
+    if (typeof destroyReviewCharts === 'function') destroyReviewCharts();
+    if (typeof renderReview === 'function') renderReview();
   }
   // 系统设置：渲染表单
   if (viewName === 'settings') {
