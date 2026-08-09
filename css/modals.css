@@ -224,7 +224,7 @@
   padding: var(--space-md) 20px;
   border-radius: var(--radius-md);
   font-size: 13px;
-  font-weight: 550;
+  font-weight: var(--font-weight-medium);
   box-shadow: var(--shadow-lg);
   animation: toastIn var(--dur-normal), toastOut var(--dur-normal) 2.5s forwards;
   max-width: 360px;

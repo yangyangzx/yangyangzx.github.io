@@ -4,14 +4,14 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
-  align-items: start;
+  align-items: stretch;
 }
 
 .settings-grid .card {
   overflow: visible;
   display: flex;
   flex-direction: column;
-  height: auto;
+  height: 100%;
 }
 
 .settings-grid .card > .settings-form {
@@ -144,7 +144,11 @@
   /* 指定 transition — gate 10 */
   transition: background-color var(--dur-short) var(--ease-out),
               border-color var(--dur-short) var(--ease-out),
-              color var(--dur-short) var(--ease-out);
+              color var(--dur-short) var(--ease-out),
+              transform var(--dur-fast) var(--ease-out);
+  /* 44px 最小触摸目标 */
+  min-height: 44px;
+  padding: 10px 20px;
 }
 
 .btn-outline:hover {
@@ -155,6 +159,11 @@
 .btn-outline:active {
   transform: scale(0.97);
   transition: transform var(--dur-fast) var(--ease-out);
+}
+
+.btn-outline:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 /* ——— 响应式 ——— */
@@ -194,6 +203,34 @@
   margin-top: 4px;
 }
 
+/* 设置项完整布局（含说明） */
+.setting-row-full {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 14px;
+  min-height: auto;
+}
+
+.setting-row-full > label {
+  font-size: 13px;
+  color: var(--color-text);
+  font-weight: var(--font-weight-medium);
+}
+
+.setting-row-full > input,
+.setting-row-full > .setting-input-wrap {
+  width: 100%;
+}
+
+.setting-row-full .setting-desc {
+  width: 100%;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  line-height: 1.4;
+}
+
 /* ——— 品种管理表格 ——— */
 .custom-symbols-table {
   width: 100%;
@@ -215,7 +252,7 @@
   color: var(--color-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
 }
 
 .custom-symbols-table input[type="text"] {
@@ -227,7 +264,7 @@
   color: var(--color-text);
   font-size: 13px;
   font-family: inherit;
-  transition: border-color var(--dur-short);
+  transition: border-color var(--dur-short), box-shadow var(--dur-short);
 }
 
 .custom-symbols-table input[type="text"]:focus {
@@ -237,7 +274,7 @@
 }
 
 .custom-symbols-table .cs-symbol {
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }

@@ -1017,10 +1017,10 @@
             <input type="number" id="setMindsetMinScore" min="1" max="5" step="1" value="3" title="低于此值的交易会标记警告">
           </div>
           <!-- 【增强】品种自定义止损比例（JSON） -->
-          <div class="setting-row">
+          <div class="setting-row-full">
             <label>自定义止损比例</label>
             <input type="text" id="setCustomStopLimit" placeholder='例: {"ETH":2,"BTC":3}' style="width:100%;padding:6px;border-radius:4px;border:1px solid var(--color-border);background:var(--color-surface);font-family:monoid;color:var(--color-text);" title='JSON 格式，如 {"ETH":2,"BTC":3}，留空使用默认规则'>
-            <span class="setting-desc" style="width:100%;">对特定品种设置止损距离上限（百分比），格式为 JSON 对象。例如 {"ETH":2,"BTC":3} 表示 ETH 止损距离不超过 2%，BTC 不超过 3%。留空则使用默认规则（BTC≤3%，ETH≤2%）。</span>
+            <span class="setting-desc">对特定品种设置止损距离上限（百分比），格式为 JSON 对象。例如 {"ETH":2,"BTC":3} 表示 ETH 止损距离不超过 2%，BTC 不超过 3%。留空则使用默认规则（BTC≤3%，ETH≤2%）。</span>
           </div>
         </div>
       </div>
