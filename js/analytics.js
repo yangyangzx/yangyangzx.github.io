@@ -1534,8 +1534,16 @@ function renderMindsetAnalysis(closed) {
 
   var keys = Object.keys(mindsetStats).map(Number).sort(function(a, b) { return a - b; });
   if (keys.length === 0) {
-    _setCanvasEmpty(canvas, 'fa-brain', '暂无心态评分数据');
-    if (tableEl) tableEl.innerHTML = '<div style="text-align:center;color:var(--color-text-muted);padding:16px;">暂无心态评分数据，请在开仓时记录心态评分</div>';
+    var totalClosed = closed.length;
+    var withMindset = closed.filter(function(l) { return l.mindsetScore != null; }).length;
+    var msg = '暂无心态评分数据';
+    if (totalClosed > 0) {
+      msg += '（共 ' + totalClosed + ' 笔已平仓，其中 ' + withMindset + ' 笔有心态评分）';
+    } else {
+      msg += '，请先完成至少一笔交易并记录心态评分';
+    }
+    _setCanvasEmpty(canvas, 'fa-brain', msg);
+    if (tableEl) tableEl.innerHTML = '<div style="text-align:center;color:var(--color-text-muted);padding:16px;">' + msg + '</div>';
     return;
   }
 
@@ -1748,8 +1756,16 @@ function renderMarketConditionAnalysis(closed) {
 
   var keys = Object.keys(marketStats);
   if (keys.length === 0) {
-    _setCanvasEmpty(canvas, 'fa-cloud-sun', '暂无市场环境数据');
-    if (tableEl) tableEl.innerHTML = '<div style="text-align:center;color:var(--color-text-muted);padding:16px;">暂无市场环境数据，请在开仓时记录市场环境</div>';
+    var totalClosed = closed.length;
+    var withMarket = closed.filter(function(l) { return l.marketCondition && l.marketCondition !== '未标记'; }).length;
+    var msg = '暂无市场环境数据';
+    if (totalClosed > 0) {
+      msg += '（共 ' + totalClosed + ' 笔已平仓，其中 ' + withMarket + ' 笔有市场环境记录）';
+    } else {
+      msg += '，请先完成至少一笔交易并记录市场环境';
+    }
+    _setCanvasEmpty(canvas, 'fa-cloud-sun', msg);
+    if (tableEl) tableEl.innerHTML = '<div style="text-align:center;color:var(--color-text-muted);padding:16px;">' + msg + '</div>';
     return;
   }
 

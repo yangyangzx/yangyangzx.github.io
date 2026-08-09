@@ -252,3 +252,32 @@ function syncFilterDOM() {
   setVal('fltPnl',       f.pnl);
   setVal('fltTime',      f.time);
 }
+
+// ==================== P0 分析数据诊断工具 ====================
+window.debugAnalysisData = function() {
+  var closed = getClosedSorted();
+  console.log('=== P0 分析数据诊断 ===');
+  console.log('已平仓交易总数:', closed.length);
+  console.log('有 mindsetScore:', closed.filter(function(l) { return l.mindsetScore != null; }).length);
+  console.log('有 executionScore (>0):', closed.filter(function(l) { return l.executionScore != null && l.executionScore > 0; }).length);
+  console.log('有 executionScore (>=0):', closed.filter(function(l) { return l.executionScore != null; }).length);
+  console.log('有 marketCondition:', closed.filter(function(l) { return l.marketCondition && l.marketCondition !== '未标记'; }).length);
+  console.log('有 session:', closed.filter(function(l) { return l.session && l.session !== '未标记'; }).length);
+  
+  // 显示 sample
+  if (closed.length > 0) {
+    console.log('Sample log:', JSON.stringify(closed[0], function(key, value) {
+      if (key === 'actions' || key === 'splitEntries') return '[...]';
+      return value;
+    }, 2));
+  }
+  
+  // 返回统计数据供页面显示
+  return {
+    total: closed.length,
+    withMindset: closed.filter(function(l) { return l.mindsetScore != null; }).length,
+    withExec: closed.filter(function(l) { return l.executionScore != null && l.executionScore > 0; }).length,
+    withMarket: closed.filter(function(l) { return l.marketCondition && l.marketCondition !== '未标记'; }).length,
+    withSession: closed.filter(function(l) { return l.session && l.session !== '未标记'; }).length
+  };
+};

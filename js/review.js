@@ -530,7 +530,7 @@ function renderExecutionQuality(closed) {
   var execStats = {};
   for (var i = 0; i < closed.length; i++) {
     var es = closed[i].executionScore;
-    if (es == null || es < 1 || es > 3) continue;
+    if (es == null || es < 0 || es > 3) continue;
     var pnl = safeParseNum(closed[i].pnlAmount);
     if (pnl == null) continue;
     var rm = safeParseNum(closed[i].rMultiple);
@@ -547,8 +547,16 @@ function renderExecutionQuality(closed) {
 
   var keys = Object.keys(execStats).map(Number).sort(function(a, b) { return a - b; });
   if (keys.length === 0) {
-    _setReviewEmpty(canvas, '暂无执行评分数据');
-    if (tableEl) tableEl.innerHTML = '<div style="text-align:center;color:var(--color-text-muted);padding:16px;">暂无执行评分数据，请在平仓时记录执行分</div>';
+    var totalClosed = closed.length;
+    var withExec = closed.filter(function(l) { return l.executionScore != null && l.executionScore > 0; }).length;
+    var msg = '暂无执行评分数据';
+    if (totalClosed > 0) {
+      msg += '（共 ' + totalClosed + ' 笔已平仓，其中 ' + withExec + ' 笔有执行评分）';
+    } else {
+      msg += '，请先完成至少一笔交易并在平仓时记录执行分';
+    }
+    _setReviewEmpty(canvas, msg);
+    if (tableEl) tableEl.innerHTML = '<div style="text-align:center;color:var(--color-text-muted);padding:16px;">' + msg + '</div>';
     return;
   }
 
