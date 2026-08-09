@@ -135,7 +135,8 @@ function autoCalcMultiTP() {
   var entryPrice, stopLoss, direction, stopDistance;
 
   if (calc && calc.entryPrice && calc.stopLoss) {
-    entryPrice = calc.entryPrice;
+    // 使用 effectiveEntryPrice（含滑点修正），与计算器保持一致
+    entryPrice = calc.effectiveEntryPrice || calc.entryPrice;
     stopLoss = calc.stopLoss;
     direction = calc.direction;
     // 优先使用加权止损距离（分批模式下），否则使用全局 stopDistance
@@ -152,6 +153,8 @@ function autoCalcMultiTP() {
     return;
   }
 
+  // 使用设置中的默认盈亏比
+  var settings = typeof loadSettings === 'function' ? loadSettings() : {};
   var tpRRs = [1.5, 2.0, 3.0];
   var tpIds = ['tp1Price', 'tp2Price', 'tp3Price'];
 
@@ -186,7 +189,8 @@ function updateMultiTP() {
   var entryPrice, stopLoss, direction, stopDistance;
 
   if (calc && calc.entryPrice && calc.stopLoss) {
-    entryPrice = calc.entryPrice;
+    // 使用 effectiveEntryPrice（含滑点修正），与计算器保持一致
+    entryPrice = calc.effectiveEntryPrice || calc.entryPrice;
     stopLoss = calc.stopLoss;
     direction = calc.direction;
     // 优先使用加权止损距离（分批模式下），否则使用全局 stopDistance
@@ -252,8 +256,14 @@ function updateMultiTP() {
       rrEl.textContent = '逆势';
       rrEl.className = 'tp-rr negative';
     } else {
-      var rr = profitDistance / stopDistance;
-      rrEl.textContent = rr.toFixed(1) + 'R';
+      // 计算净盈亏比（扣除手续费），与计算器保持一致
+      var grossProfit = profitDistance * (calc.positionSize || 0) / (calc.effectiveEntryPrice || entryPrice);
+      var grossLoss = stopDistance * (calc.positionSize || 0) / (calc.effectiveEntryPrice || entryPrice);
+      var fee = calc.fee || 0;
+      var netProfit = grossProfit - fee;
+      var netLoss = grossLoss + fee;
+      var rr = netLoss > 0 ? netProfit / netLoss : grossProfit / grossLoss;
+      rrEl.textContent = rr.toFixed(2) + 'R';
       rrEl.className = 'tp-rr' + (rr < 1.5 ? ' negative' : '');
     }
   }
@@ -396,10 +406,11 @@ function updateChecklist() {
     return { result: passed, message: '连亏 ' + calc.lossStreak + ' 笔 (<3) ' + (passed ? '正常' : '已熔断') };
   });
 
-  // 5. 盈亏比 ≥ 2:1（职业交易最低标准）
+  // 5. 盈亏比达标（使用设置中的最低盈亏比，优先读取，否则默认 2）
   updateCheckItemWithResult('checkRR', function() {
     if (!calc || calc.targetRR == null) return null;
-    var passed = calc.targetRR >= 2.0;
+    var minRR = (settings.minRRRatio != null && settings.minRRRatio > 0) ? settings.minRRRatio : 2;
+    var passed = calc.targetRR >= minRR;
     return { result: passed, message: '盈亏比 ' + calc.targetRR.toFixed(2) + ':1 ' + (passed ? '达标' : '偏低') };
   });
 
