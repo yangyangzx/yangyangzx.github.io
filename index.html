@@ -137,16 +137,11 @@
           <div class="form-section-content grid-2">
             <div class="form-group">
               <label><i class="fas fa-coins"></i> 交易品种<span class="required-star">*</span></label>
-              <select id="symbol">
-                <option value="BTC">BTC</option>
-                <option value="ETH">ETH</option>
-                <option value="SOL">SOL</option>
-                <option value="GOLD">GOLD</option>
-              </select>
+              <input type="text" id="symbol" value="BTC" placeholder="如 BTC、ETH、SOL、GOLD、AAPL" style="text-transform:uppercase;" />
             </div>
             <div class="form-group">
               <label><i class="fas fa-arrow-right"></i> 入场价格<span class="required-star">*</span></label>
-              <input type="number" id="entryPrice" value="" step="0.01" placeholder="价格" />
+              <input type="number" id="entryPrice" value="" step="0.00001" placeholder="价格" />
               <span class="field-tip">用于计算止损距离与仓位大小</span>
             </div>
             <div class="form-group row-2">
@@ -215,7 +210,7 @@
             </div>
             <div class="form-group">
               <label><i class="fas fa-stop-circle"></i> 止损价格<span class="required-star">*</span></label>
-              <input type="number" id="stopLoss" value="" step="0.01" placeholder="止损价" />
+              <input type="number" id="stopLoss" value="" step="0.00001" placeholder="止损价" />
               <span class="field-tip">触发止损的价位，用于计算风险敞口</span>
             </div>
             <div class="form-group">
@@ -228,13 +223,13 @@
             </div>
             <div class="form-group">
               <label><i class="fas fa-bullseye"></i> 目标价格<span class="optional-tag">（选填）</span></label>
-              <input type="number" id="targetPrice" value="" step="0.01" placeholder="选填，用于计算盈亏比" />
+              <input type="number" id="targetPrice" value="" step="0.00001" placeholder="选填，用于计算盈亏比" />
               <span class="field-tip">用于预判盈亏比，不影响仓位计算</span>
             </div>
             <div class="form-group">
               <label><i class="fas fa-ruler"></i> ATR 止损辅助<span class="optional-tag">（选填）</span></label>
               <div class="flex-row" style="gap:8px;">
-                <input type="number" id="atrValue" value="" step="0.01" placeholder="ATR值" style="flex:1 1 80px;" />
+                <input type="number" id="atrValue" value="" step="0.00001" placeholder="ATR值" style="flex:1 1 80px;" />
                 <span style="color:var(--color-text-muted);font-size:13px;">×</span>
                 <input type="number" id="atrMultiplier" value="1.5" step="0.1" min="0.5" placeholder="倍数" style="flex:1 1 60px;" />
                 <button class="btn btn-ghost btn-sm" id="applyAtrBtn" style="flex:0 0 auto;padding:8px 14px;">应用</button>
@@ -481,19 +476,19 @@
           <div id="multiTPList">
             <div class="tp-row">
               <span>TP1</span>
-              <input type="number" id="tp1Price" step="0.01" placeholder="止盈价">
+              <input type="number" id="tp1Price" step="0.00001" placeholder="止盈价">
               <input type="number" id="tp1Ratio" step="5" min="0" max="100" value="50" placeholder="减仓%">
               <span class="tp-rr" id="tp1RR">—</span>
             </div>
             <div class="tp-row">
               <span>TP2</span>
-              <input type="number" id="tp2Price" step="0.01" placeholder="止盈价">
+              <input type="number" id="tp2Price" step="0.00001" placeholder="止盈价">
               <input type="number" id="tp2Ratio" step="5" min="0" max="100" value="30" placeholder="减仓%">
               <span class="tp-rr" id="tp2RR">—</span>
             </div>
             <div class="tp-row">
               <span>TP3</span>
-              <input type="number" id="tp3Price" step="0.01" placeholder="止盈价">
+              <input type="number" id="tp3Price" step="0.00001" placeholder="止盈价">
               <input type="number" id="tp3Ratio" step="5" min="0" max="100" value="20" placeholder="减仓%">
               <span class="tp-rr" id="tp3RR">—</span>
             </div>
@@ -548,7 +543,7 @@
             <!-- Skills 融合：组合热量检查 -->
             <div class="check-item" id="checkPortfolioHeat">
               <span class="check-icon pending">○</span>
-              <span>组合热量安全（≤ ' + (settings.riskHeatMax || 6) + '%）</span>
+              <span>组合热量安全（≤ 6%）</span>
             </div>
             <!-- Skills 融合：品种集中度检查 -->
             <div class="check-item" id="checkSymbolConc">
@@ -909,29 +904,6 @@
     document.addEventListener('DOMContentLoaded', function() {
       console.log('Initializing TradingDiscipline modules...');
       
-      // 初始化Calculator
-      if (typeof Calculator !== 'undefined') {
-        Calculator.init({
-          form: document.getElementById('calcForm'),
-          inputs: {
-            symbol: document.getElementById('symbol'),
-            entryPrice: document.getElementById('entryPrice'),
-            stopLossPrice: document.getElementById('stopLossPrice'),
-            leverage: document.getElementById('leverage'),
-            accountBalance: document.getElementById('accountBalance'),
-            riskPercent: document.getElementById('riskPercent'),
-            positionSize: document.getElementById('positionSize'),
-            splitInputs: document.querySelectorAll('.split-input'),
-            feeInputs: document.querySelectorAll('.fee-input'),
-            emotionScore: document.getElementById('emotionScore'),
-            mindsetReminder: document.getElementById('mindsetReminder'),
-            calcSummary: document.getElementById('calcSummary'),
-            submitBtn: document.getElementById('submitPlanBtn')
-          }
-        });
-        console.log('Calculator initialized');
-      }
-      
       // 初始化Journal
       if (typeof Journal !== 'undefined') {
         Journal.init({
@@ -962,26 +934,6 @@
         console.log('Dashboard initialized');
       }
       
-      // 初始化Planner
-      if (typeof Planner !== 'undefined') {
-        Planner.init({
-          form: document.getElementById('planForm'),
-          inputs: {
-            planDate: document.getElementById('planDate'),
-            planSymbol: document.getElementById('planSymbol'),
-            planEntry: document.getElementById('planEntry'),
-            planSl: document.getElementById('planSl'),
-            planTp: document.getElementById('planTp'),
-            planLeverage: document.getElementById('planLeverage'),
-            planSize: document.getElementById('planSize'),
-            planEmotion: document.getElementById('planEmotion'),
-            planNotes: document.getElementById('planNotes'),
-            planList: document.getElementById('planList'),
-            planCount: document.getElementById('planCount')
-          }
-        });
-        console.log('Planner initialized');
-      }
       
       // 初始化RiskCenter
       if (typeof RiskCenter !== 'undefined') {

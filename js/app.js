@@ -134,7 +134,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const stopDistance = atr * mult;
     const dir = document.getElementById('direction').value;
     const sl = dir === 'long' ? entry - stopDistance : entry + stopDistance;
-    document.getElementById('stopLoss').value = sl.toFixed(2);
+    document.getElementById('stopLoss').value = sl.toFixed(5);
     calculate();
   });
 

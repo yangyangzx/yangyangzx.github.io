@@ -191,7 +191,7 @@ function buildRowsHTML(dl) {
           '</div>' +
           '<div class="fp">' +
             '<label>价格</label>' +
-            '<input type="number" id="actPrice_' + realIdx + '" step="0.01" placeholder="价格" />' +
+            '<input type="number" id="actPrice_' + realIdx + '" step="0.00001" placeholder="价格" />' +
           '</div>' +
           '<div class="fp">' +
             '<label>时间</label>' +
@@ -229,7 +229,7 @@ function buildRowsHTML(dl) {
           '</div>' +
           '<div class="fp">' +
             '<label>平仓价格 <span style="color:var(--color-danger);margin-left:2px">*</span></label>' +
-            '<input type="number" id="cpClosePrice_' + realIdx + '" step="0.01" placeholder="价格" />' +
+            '<input type="number" id="cpClosePrice_' + realIdx + '" step="0.00001" placeholder="价格" />' +
           '</div>' +
           '<div class="fp readonly">' +
             '<label>盈亏金额 (USDT)</label>' +
@@ -277,11 +277,11 @@ function buildRowsHTML(dl) {
           '</div>' +
           '<div class="fp">' +
             '<label>最低价</label>' +
-            '<input type="number" id="cpLowPrice_' + realIdx + '" step="0.01" placeholder="' + (item.entryPrice || '入场价') + '" value="' + (item.lowPrice != null ? item.lowPrice : '') + '" />' +
+            '<input type="number" id="cpLowPrice_' + realIdx + '" step="0.00001" placeholder="' + (item.entryPrice || '入场价') + '" value="' + (item.lowPrice != null ? item.lowPrice : '') + '" />' +
           '</div>' +
           '<div class="fp">' +
             '<label>最高价</label>' +
-            '<input type="number" id="cpHighPrice_' + realIdx + '" step="0.01" placeholder="' + (item.entryPrice || '入场价') + '" value="' + (item.highPrice != null ? item.highPrice : '') + '" />' +
+            '<input type="number" id="cpHighPrice_' + realIdx + '" step="0.00001" placeholder="' + (item.entryPrice || '入场价') + '" value="' + (item.highPrice != null ? item.highPrice : '') + '" />' +
           '</div>' +
           '<div class="fp span-2" id="cpMAEMFEDisplay_' + realIdx + '" style="display:none;background:var(--color-surface);border-radius:var(--radius-md);padding:8px 12px;font-size:13px;line-height:1.6;">' +
           '</div>' +

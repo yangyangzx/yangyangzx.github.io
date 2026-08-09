@@ -341,8 +341,8 @@ function renderLiqTable() {
     html += '<tr>';
     html += '<td>' + r.symbol + '</td>';
     html += '<td class="' + dirClass + '">' + dirLabel + '</td>';
-    html += '<td>' + (r.stopLoss != null ? Number(r.stopLoss).toFixed(2) : '—') + '</td>';
-    html += '<td>' + r.liquidationPrice.toFixed(2) + '</td>';
+    html += '<td>' + (r.stopLoss != null ? Number(r.stopLoss).toFixed(5) : '—') + '</td>';
+    html += '<td>' + r.liquidationPrice.toFixed(5) + '</td>';
     html += '<td class="' + distClass + '">' + r.safeDistance.toFixed(2) + '%</td>';
     html += '<td>' + (r.positionSize != null ? r.positionSize.toFixed(0) + ' U' : '—') + '</td>';
     html += '</tr>';

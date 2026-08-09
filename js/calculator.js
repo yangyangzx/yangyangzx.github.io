@@ -370,7 +370,7 @@ function calculate() {
                       (direction === 'short' && stopLoss > liquidationPrice);
     if (isInvalid) {
       cappedByLiquidation = true;
-      liqMsg = '<span class="warning-tag alert"><i class="fas fa-skull"></i> 止损超越强平价：止损 ' + stopLoss.toFixed(2) + ' 在强平价 ' + liquidationPrice.toFixed(2) + ' ' + (direction === 'long' ? '之下' : '之上') + '，价格到达止损前仓位将被强制平仓。建议收紧止损距离或降低杠杆。</span>';
+      liqMsg = '<span class="warning-tag alert"><i class="fas fa-skull"></i> 止损超越强平价：止损 ' + stopLoss.toFixed(5) + ' 在强平价 ' + liquidationPrice.toFixed(5) + ' ' + (direction === 'long' ? '之下' : '之上') + '，价格到达止损前仓位将被强制平仓。建议收紧止损距离或降低杠杆。</span>';
     }
   }
 
@@ -441,7 +441,7 @@ function calculate() {
   const stopPct = stopDistance / effectiveEntryPrice * 100;
 
   // ===== 止损距离色标 =====
-  const isEth = symbol.toUpperCase().includes('ETH');
+  const isEth = symbol.toUpperCase() === 'ETH';
   const maxStopPct = isEth ? 2 : 3;   // 职业交易：BTC/SOL/GOLD ≤3%, ETH ≤2%
   const minStopPct = isEth ? 0.3 : 0.5;
   let stopTagClass = 'green', stopTagLabel = '适中';
@@ -573,10 +573,10 @@ function calculate() {
   costL2HTML += ' <span class="sep">·</span> ' + symbol;
   // 若入场价有修正，显示修正后入场价
   if (Math.abs(effectiveEntryPrice - entryPrice) > 0.0001) {
-    costL2HTML += ' <span class="sep">·</span> 修正入场≈' + effectiveEntryPrice.toFixed(2);
+    costL2HTML += ' <span class="sep">·</span> 修正入场≈' + effectiveEntryPrice.toFixed(5);
   }
   if (targetPct !== null) {
-    costL2HTML += ' <span class="sep">·</span> 目标 ' + targetPrice + ' (+' + targetPct.toFixed(2) + '%)';
+    costL2HTML += ' <span class="sep">·</span> 目标 ' + (isNaN(targetPrice) ? '—' : targetPrice.toFixed(5)) + ' (+' + targetPct.toFixed(2) + '%)';
   }
   costL2.innerHTML = costL2HTML;
 
@@ -597,13 +597,13 @@ function calculate() {
         // 实际损失取风险额和计算值的较小者（考虑仓位被截断的情况）
         const bloss = Math.min(bRisk, bstopDist > 0 ? (bstopDist * bpos / effectiveEntryPrice) : bRisk);
         const blossPct = capital > 0 ? (bloss / capital * 100) : 0;
-        triggerHTML += '<div class="trigger-line"><span class="trigger-batch">#' + (i + 1) + '</span><span class="trigger-price">' + bsl.toFixed(2) + '</span><span class="trigger-arrow">→</span><span>损失</span><span class="trigger-loss">' + bloss.toFixed(2) + ' U (' + blossPct.toFixed(2) + '%)</span></div>';
+        triggerHTML += '<div class="trigger-line"><span class="trigger-batch">#' + (i + 1) + '</span><span class="trigger-price">' + bsl.toFixed(5) + '</span><span class="trigger-arrow">→</span><span>损失</span><span class="trigger-loss">' + bloss.toFixed(2) + ' U (' + blossPct.toFixed(2) + '%)</span></div>';
       });
     } else {
-      triggerHTML = '<div class="trigger-line"><span class="trigger-price">' + (stopLoss ? parseFloat(stopLoss).toFixed(2) : '—') + '</span><span class="trigger-arrow">→</span><span>损失</span><span class="trigger-loss">' + riskAmount.toFixed(2) + ' USDT (' + (riskPercent * 100).toFixed(2) + '%)</span></div>';
+      triggerHTML = '<div class="trigger-line"><span class="trigger-price">' + (stopLoss ? parseFloat(stopLoss).toFixed(5) : '—') + '</span><span class="trigger-arrow">→</span><span>损失</span><span class="trigger-loss">' + riskAmount.toFixed(2) + ' USDT (' + (riskPercent * 100).toFixed(2) + '%)</span></div>';
     }
   } else {
-    triggerHTML = '<div class="trigger-line"><span class="trigger-price">' + (stopLoss ? parseFloat(stopLoss).toFixed(2) : '—') + '</span><span class="trigger-arrow">→</span><span>损失</span><span class="trigger-loss">' + riskAmount.toFixed(2) + ' USDT (' + (riskPercent * 100).toFixed(2) + '%)</span></div>';
+    triggerHTML = '<div class="trigger-line"><span class="trigger-price">' + (stopLoss ? parseFloat(stopLoss).toFixed(5) : '—') + '</span><span class="trigger-arrow">→</span><span>损失</span><span class="trigger-loss">' + riskAmount.toFixed(2) + ' USDT (' + (riskPercent * 100).toFixed(2) + '%)</span></div>';
   }
   if (triggerHTML) {
     triggerContent.innerHTML = triggerHTML;
@@ -614,12 +614,12 @@ function calculate() {
   if (_splitMode && _splitBatches.length >= 2) {
     const w = computeWeightedEntry();
     if (w !== null) {
-      splitSummary.innerHTML = '加权入场价 <strong>' + w.toFixed(2) + '</strong>';
+      splitSummary.innerHTML = '加权入场价 <strong>' + w.toFixed(5) + '</strong>';
       let tbody = '';
       _splitBatches.forEach(function(b, i) {
         const bp = parseFloat(b.price), ba = parseFloat(b.alloc);
         const bpos = !isNaN(bp) && !isNaN(ba) ? (finalPosForDisplay * ba / 100).toFixed(2) : '—';
-        const bsl = b.stopLoss && !isNaN(parseFloat(b.stopLoss)) ? parseFloat(b.stopLoss).toFixed(2) : '—';
+        const bsl = b.stopLoss && !isNaN(parseFloat(b.stopLoss)) ? parseFloat(b.stopLoss).toFixed(5) : '—';
         tbody += '<tr><td>#' + (i + 1) + '</td><td>' + (isNaN(bp) ? '—' : bp) + '</td><td>' + (isNaN(ba) ? '—' : ba + '%') + '</td><td>' + bpos + ' U</td><td>' + bsl + '</td></tr>';
       });
       splitTable.innerHTML = '<thead><tr><th>批次</th><th>入场价</th><th>占比</th><th>仓位</th><th>止损</th></tr></thead><tbody>' + tbody + '</tbody>';
@@ -819,11 +819,11 @@ function renderSplitBatches() {
   _splitBatches.forEach(function(b, i) {
     html += '<div class="split-row" id="splitRow_' + i + '">' +
       '<div class="fp"><label>第' + (i + 1) + '批入场价</label>' +
-      '<input type="number" id="splitPrice_' + i + '" step="0.01" placeholder="价格" value="' + (b.price || '') + '" oninput="onSplitChange()" /></div>' +
+      '<input type="number" id="splitPrice_' + i + '" step="0.00001" placeholder="价格" value="' + (b.price || '') + '" oninput="onSplitChange()" /></div>' +
       '<div class="fp"><label>比例 %</label>' +
       '<input type="number" id="splitAlloc_' + i + '" step="0.5" min="0" max="100" placeholder="%" value="' + (b.alloc || '') + '" class="alloc-input" oninput="onSplitChange()" /></div>' +
       '<div class="fp"><label>止损(可选)</label>' +
-      '<input type="number" id="splitSL_' + i + '" step="0.01" placeholder="共用" value="' + (b.stopLoss || '') + '" oninput="onSplitChange()" /></div>' +
+      '<input type="number" id="splitSL_' + i + '" step="0.00001" placeholder="共用" value="' + (b.stopLoss || '') + '" oninput="onSplitChange()" /></div>' +
       (_splitBatches.length > 2 ? '<button class="btn-remove" onclick="removeSplitBatch(' + i + ')" title="移除此批">&times;</button>' : '<span></span>') +
       '</div>';
   });
@@ -881,7 +881,7 @@ function updateEntryPriceFromSplit() {
   const ep = computeWeightedEntry();
   const epEl = document.getElementById('entryPrice');
   if (ep !== null) {
-    epEl.value = ep.toFixed(2);
+    epEl.value = ep.toFixed(5);
     epEl.readOnly = true;
   } else {
     epEl.value = '';
@@ -996,7 +996,7 @@ function getSplitEntries() {
   }
   const weighted = computeWeightedEntry();
   if (entries.length < 2 || weighted === null) return null;
-  return { entries: entries, weightedEntry: parseFloat(weighted.toFixed(2)) };
+  return { entries: entries, weightedEntry: parseFloat(weighted.toFixed(5)) };
 }
 function getActiveEntryPrice() {
   if (_splitMode && _splitBatches.length >= 2) {

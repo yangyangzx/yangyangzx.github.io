@@ -321,7 +321,7 @@ function _renderLiqWarn() {
     if (isNaN(w.stopLoss) || isNaN(w.liqPrice) || isNaN(w.distance)) continue;
     html += '<div class="liq-item">' +
       '<span class="liq-item-symbol">' + w.symbol + ' (' + (w.direction === 'long' ? '多' : '空') + ')</span>' +
-      '<span class="liq-item-distance">止损 ' + Number(w.stopLoss).toFixed(2) + ' / 强平 ' + Number(w.liqPrice).toFixed(2) + ' (' + Number(w.distance).toFixed(1) + '%)</span>' +
+      '<span class="liq-item-distance">止损 ' + Number(w.stopLoss).toFixed(5) + ' / 强平 ' + Number(w.liqPrice).toFixed(5) + ' (' + Number(w.distance).toFixed(1) + '%)</span>' +
     '</div>';
   }
   listEl.innerHTML = html;

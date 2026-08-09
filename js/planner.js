@@ -54,7 +54,7 @@ function calcReverseTP() {
     targetPrice = entryPrice - stopDistance * desiredRR;
   }
 
-  document.getElementById('reverseTP').value = targetPrice.toFixed(2);
+  document.getElementById('reverseTP').value = targetPrice.toFixed(5);
 }
 
 /**
@@ -119,7 +119,7 @@ function calcReverseSL() {
     return;
   }
 
-  document.getElementById('reverseSL').value = stopLoss.toFixed(2);
+  document.getElementById('reverseSL').value = stopLoss.toFixed(5);
 }
 
 // ==================== 多止盈位 ====================
@@ -170,7 +170,7 @@ function autoCalcMultiTP() {
     if (el) {
       // 仅当用户未手动编辑过时才自动填充
       if (!el._userEdited) {
-        el.value = tpPrice.toFixed(2);
+        el.value = tpPrice.toFixed(5);
       }
     }
   }
@@ -372,7 +372,7 @@ function updateChecklist() {
     var maxPct;
     if (customLimits && customLimits[symbol] != null) {
       maxPct = customLimits[symbol];
-    } else if (symbol.includes('ETH')) {
+    } else if (symbol === 'ETH') {
       maxPct = 2;
     } else {
       maxPct = 3;
