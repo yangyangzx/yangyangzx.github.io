@@ -1605,8 +1605,9 @@ function renderMindsetAnalysis(closed) {
   var cc = utils.getChartColors();
   var labels = [], avgPnlData = [], winRateData = [], countData = [];
   for (var k = 0; k < keys.length; k++) {
-    var s = mindsetStats[k];
-    labels.push(keys[k] + '分');
+    var score = keys[k];
+    var s = mindsetStats[score];
+    labels.push(score + '分');
     var avgPnl = s.count > 0 ? (s.totalPnl / s.count) : 0;
     var wr = (s.wins + s.losses) > 0 ? (s.wins / (s.wins + s.losses) * 100) : 0;
     avgPnlData.push(parseFloat(avgPnl.toFixed(2)));
@@ -1706,7 +1707,8 @@ function renderMindsetAnalysis(closed) {
     '<th>心态评分</th><th>笔数</th><th>盈利/亏损</th><th>胜率</th><th>平均盈亏</th><th>vs整体</th></tr></thead><tbody>';
 
   for (var k = 0; k < keys.length; k++) {
-    var s = mindsetStats[k];
+    var score = keys[k];
+    var s = mindsetStats[score];
     var avgPnl = s.count > 0 ? (s.totalPnl / s.count) : 0;
     var wr = (s.wins + s.losses) > 0 ? (s.wins / (s.wins + s.losses) * 100) : 0;
     var wrDev = wr - overallWinRate;
@@ -1717,7 +1719,7 @@ function renderMindsetAnalysis(closed) {
 
     var pnlClass = avgPnl >= 0 ? 'col-pnl-pos' : 'col-pnl-neg';
     tHtml += '<tr>' +
-      '<td style="text-align:center;font-weight:600;">' + keys[k] + ' <span style="font-size:11px;color:var(--color-text-muted);">/5</span></td>' +
+      '<td style="text-align:center;font-weight:600;">' + score + ' <span style="font-size:11px;color:var(--color-text-muted);">/5</span></td>' +
       '<td class="col-num">' + s.count + '</td>' +
       '<td class="col-num">' + s.wins + '/' + s.losses + '</td>' +
       '<td class="col-num">' + wr.toFixed(1) + '%</td>' +
