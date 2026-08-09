@@ -442,8 +442,10 @@ function calculate() {
 
   // ===== 止损距离色标 =====
   const isEth = symbol.toUpperCase() === 'ETH';
-  const maxStopPct = isEth ? 2 : 3;   // 职业交易：BTC/SOL/GOLD ≤3%, ETH ≤2%
-  const minStopPct = isEth ? 0.3 : 0.5;
+  // 优先使用设置中的品种自定义止损比例
+  var customStopLimits = settings.customStopLimit || {};
+  var maxStopPct = customStopLimits[symbol] != null ? customStopLimits[symbol] : (isEth ? 2 : 3);
+  var minStopPct = isEth ? 0.3 : 0.5;
   let stopTagClass = 'green', stopTagLabel = '适中';
   if (stopPct > 5) { stopTagClass = 'red'; stopTagLabel = '偏大'; rw = '<span class="warning-tag alert"><i class="fas fa-exclamation-triangle"></i> 止损距离 '+stopPct.toFixed(2)+'% 较大，请确认策略</span>'; }
   else if (stopPct > maxStopPct) { stopTagClass = 'yellow'; stopTagLabel = '偏大'; rw = '<span class="warning-tag"><i class="fas fa-bolt"></i> 止损距离 '+stopPct.toFixed(2)+'% 偏大</span>'; }
