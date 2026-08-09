@@ -1533,10 +1533,10 @@ function renderMindsetAnalysis(closed) {
   }
 
   var keys = Object.keys(mindsetStats).map(Number).sort(function(a, b) { return a - b; });
-  console.log("[MindsetAnalysis] closed.length:", closed.length, "mindsetStats keys:", keys, "totalClosed with mindset:", withMindset);
+  var totalClosed = closed.length;
+  var withMindset = closed.filter(function(l) { return l.mindsetScore != null; }).length;
+  console.log("[MindsetAnalysis] closed.length:", totalClosed, "mindsetStats keys:", keys, "totalClosed with mindset:", withMindset);
   if (keys.length === 0) {
-    var totalClosed = closed.length;
-    var withMindset = closed.filter(function(l) { return l.mindsetScore != null; }).length;
     var msg = '暂无心态评分数据';
     if (totalClosed > 0) {
       msg += '（共 ' + totalClosed + ' 笔已平仓，其中 ' + withMindset + ' 笔有心态评分）';
@@ -1796,11 +1796,11 @@ function renderMarketConditionAnalysis(closed) {
   // 按总盈亏排序
   rows.sort(function(a, b) { return b.totalPnl - a.totalPnl; });
 
-  // 只显示样本>=2的
-  var validRows = rows.filter(function(r) { return r.count >= 2; });
+  // 显示所有组合（包括单笔），但用小样本标记提醒
+  var validRows = rows; // 不过滤，全部显示
   if (validRows.length === 0) {
-    _setCanvasEmpty(canvas, 'fa-cloud-sun', '样本不足（需至少2笔）');
-    if (tableEl) tableEl.innerHTML = '<div style="text-align:center;color:var(--color-text-muted);padding:16px;">样本不足，需至少2笔交易才能显示分析</div>';
+    _setCanvasEmpty(canvas, 'fa-cloud-sun', '暂无市场环境数据');
+    if (tableEl) tableEl.innerHTML = '<div style="text-align:center;color:var(--color-text-muted);padding:16px;">暂无市场环境数据</div>';
     return;
   }
 
@@ -1879,8 +1879,9 @@ function renderMarketConditionAnalysis(closed) {
     var r = validRows[i];
     var pnlClass = r.totalPnl >= 0 ? 'col-pnl-pos' : 'col-pnl-neg';
     var wrClass = r.winRate >= 50 ? 'col-pnl-pos' : 'col-pnl-neg';
+    var sampleNote = r.count < 2 ? ' <span style="font-size:10px;color:var(--color-text-muted);">(n=' + r.count + ')</span>' : '';
     tHtml += '<tr>' +
-      '<td>' + r.marketCondition + '</td>' +
+      '<td>' + r.marketCondition + sampleNote + '</td>' +
       '<td>' + r.session + '</td>' +
       '<td>' + r.direction + '</td>' +
       '<td class="col-num">' + r.count + '</td>' +
@@ -1890,6 +1891,6 @@ function renderMarketConditionAnalysis(closed) {
       '</tr>';
   }
   tHtml += '</tbody></table>';
-  tHtml += '<p style="font-size:11px;color:var(--color-text-muted);margin-top:8px;">注：仅显示样本≥2的组合，避免小样本误导。</p>';
+  tHtml += '<p style="font-size:11px;color:var(--color-text-muted);margin-top:8px;">注：显示所有组合，单笔交易结果仅供参考，样本≥2的结果更可靠。</p>';
   tableEl.innerHTML = tHtml;
 }

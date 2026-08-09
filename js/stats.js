@@ -73,7 +73,7 @@ function updateStats() {
   const avgPnl = decidedCnt > 0 ? totalPnl / decidedCnt : 0;
   const avgWin = wins.length > 0 ? grossProfit / wins.length : 0;
   const avgLoss = losses.length > 0 ? grossLoss / losses.length : 0;
-  const wlRatio = avgL > 0 ? (avgW / avgL) : (wins.length > 0 ? Infinity : 0);
+  const wlRatio = avgLoss > 0 ? (avgWin / avgLoss) : (wins.length > 0 ? Infinity : 0);
   const lossRate = decidedCnt > 0 ? (losses.length / decidedCnt * 100) : 0;
   const expectancy = decidedCnt > 0
     ? ((winRate / 100) * avgWin - (lossRate / 100) * avgLoss)
@@ -394,7 +394,7 @@ function renderStrategyBreakdown(closed) {
   // 分组：使用框架+形态双维度（与 analytics.js 口径一致）
   const groups = {};
   for (const l of closed) {
-    const framework = l.strategyFramework || '(未分类)';
+    const framework = l.strategyFramework || '未分类';
     const rawPattern = l.strategyPattern || '';
     const patternName = rawPattern ? (rawPattern.includes('|') ? rawPattern.split('|').pop().trim() : rawPattern.trim()) : '未标记';
     const key = framework + '|' + patternName;

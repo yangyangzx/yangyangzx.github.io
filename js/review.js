@@ -530,7 +530,7 @@ function renderExecutionQuality(closed) {
   var execStats = {};
   for (var i = 0; i < closed.length; i++) {
     var es = closed[i].executionScore;
-    if (es == null || es < 0 || es > 3) continue;
+    if (es == null || es < 1 || es > 3) continue;
     var pnl = safeParseNum(closed[i].pnlAmount);
     if (pnl == null) continue;
     var rm = safeParseNum(closed[i].rMultiple);
