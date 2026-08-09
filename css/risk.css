@@ -14,9 +14,9 @@
 /* 风控中心关键文本使用深色以确保可读性 */
 .risk-muted   { color: var(--color-text-secondary) !important; }
 
-.risk-badge-safe   { background: var(--color-success-bg);  color: var(--color-success); padding: 2px 8px; border-radius: var(--radius-xs); font-size: 12px; font-weight: 600; }
-.risk-badge-warn   { background: var(--color-warning-bg);  color: var(--color-warning); padding: 2px 8px; border-radius: var(--radius-xs); font-size: 12px; font-weight: 600; }
-.risk-badge-danger { background: var(--color-danger-bg);  color: var(--color-danger); padding: 2px 8px; border-radius: var(--radius-xs); font-size: 12px; font-weight: 600; }
+.risk-badge-safe   { background: var(--color-success-bg);  color: var(--color-success); padding: 2px 8px; border-radius: var(--radius-xs); font-size: 12px; font-weight: var(--font-weight-semibold); }
+.risk-badge-warn   { background: var(--color-warning-bg);  color: var(--color-warning); padding: 2px 8px; border-radius: var(--radius-xs); font-size: 12px; font-weight: var(--font-weight-semibold); }
+.risk-badge-danger { background: var(--color-danger-bg);  color: var(--color-danger); padding: 2px 8px; border-radius: var(--radius-xs); font-size: 12px; font-weight: var(--font-weight-semibold); }
 
 /* Risk center dashboard grid layout */
 .risk-dashboard {
@@ -51,7 +51,7 @@
 
 .risk-stat-value {
   font-size: 15px;
-  font-weight: 700;
+  font-weight: var(--font-weight-bold);
   color: var(--color-text);
 }
 
@@ -90,7 +90,7 @@
 }
 
 .risk-alert-row .risk-value {
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   font-size: 16px;
 }
 
@@ -110,7 +110,7 @@
   text-align: left;
   padding: 8px 10px;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   color: var(--color-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -129,12 +129,12 @@
   border-bottom: none;
 }
 
-.risk-liq-table .dir-long  { color: var(--color-success); font-weight: 600; }
-.risk-liq-table .dir-short { color: var(--color-danger);  font-weight: 600; }
+.risk-liq-table .dir-long  { color: var(--color-success); font-weight: var(--font-weight-semibold); }
+.risk-liq-table .dir-short { color: var(--color-danger);  font-weight: var(--font-weight-semibold); }
 
-.risk-liq-table .liq-dist-safe   { color: var(--color-success); font-weight: 600; }
-.risk-liq-table .liq-dist-warn   { color: var(--color-warning);  font-weight: 600; }
-.risk-liq-table .liq-dist-danger { color: var(--color-danger);  font-weight: 600; }
+.risk-liq-table .liq-dist-safe   { color: var(--color-success); font-weight: var(--font-weight-semibold); }
+.risk-liq-table .liq-dist-warn   { color: var(--color-warning);  font-weight: var(--font-weight-semibold); }
+.risk-liq-table .liq-dist-danger { color: var(--color-danger);  font-weight: var(--font-weight-semibold); }
 
 /* ——— 风险集中度表格容器（防截断） ——— */
 .risk-concentration-wrap {

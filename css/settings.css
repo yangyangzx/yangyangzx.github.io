@@ -124,7 +124,7 @@
 .settings-save-bar .btn {
   padding: 10px 32px;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
 }
 
 /* ——— 数据管理按钮 ——— */

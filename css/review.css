@@ -61,7 +61,7 @@
 
 .review-card-title {
   font-size: 15px;
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   color: var(--color-text);
 }
 
@@ -133,7 +133,7 @@
   align-items: center;
   justify-content: center;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: var(--font-weight-bold);
   flex-shrink: 0;
   background: var(--color-border);
   color: var(--color-text-muted);
@@ -153,17 +153,17 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
 }
 
 .strategy-rank-item.rank-1 .strategy-rank-name {
   font-size: 14px;
-  font-weight: 700;
+  font-weight: var(--font-weight-bold);
   color: var(--color-gold);
 }
 
 .strategy-rank-pnl {
-  font-weight: 700;
+  font-weight: var(--font-weight-bold);
   white-space: nowrap;
   font-size: 15px;
   font-variant-numeric: tabular-nums;
@@ -201,7 +201,7 @@
   text-align: left;
   padding: 8px 12px;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   color: var(--color-text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -227,12 +227,12 @@
 
 .emotion-table .risk-safe {
   color: var(--color-pnl-positive);
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
 }
 
 .emotion-table .risk-danger {
   color: var(--color-pnl-negative);
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
 }
 
 .emotion-table .col-num {
@@ -242,13 +242,13 @@
 
 .emotion-table .col-pnl-pos {
   color: var(--color-pnl-positive);
-  font-weight: 700;
+  font-weight: var(--font-weight-bold);
   text-align: right;
 }
 
 .emotion-table .col-pnl-neg {
   color: var(--color-pnl-negative);
-  font-weight: 700;
+  font-weight: var(--font-weight-bold);
   text-align: right;
 }
 

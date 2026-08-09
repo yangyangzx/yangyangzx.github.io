@@ -92,7 +92,7 @@
 /* 卡片数值 */
 .dash-card-value {
   font-size: 32px;
-  font-weight: 700;
+  font-weight: var(--font-weight-bold);
   color: var(--color-text);
   line-height: 1.15;
   letter-spacing: -0.5px;
