@@ -8,5 +8,6 @@ trading.html.backup_*
 .claude/
 
 # Ignore local assistant/worktree data
-.claude/
+.claude
 .hallmark
+*.md
