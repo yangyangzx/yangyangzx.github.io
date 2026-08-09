@@ -203,13 +203,18 @@ function checkDailyLossLimit() {
  * @returns {object} {adjustment, message, blocked}
  */
 function getMindsetAdjustment(mindsetScore) {
-  if (!mindsetScore) mindsetScore = 3;
-  if (mindsetScore <= 1) {
-    return { adjustment: 0, message: '心态极差，禁止交易', blocked: true };
+  var settings = loadSettings();
+  var minScore = settings.mindsetMinScore != null ? settings.mindsetMinScore : 3;
+  if (!mindsetScore) mindsetScore = minScore;
+  if (mindsetScore < minScore) {
+    // 低于最低通过值，逐步降仓
+    if (mindsetScore === 1) {
+      return { adjustment: 0, message: '心态极差，禁止交易', blocked: true };
+    } else {
+      return { adjustment: 0.8, message: '心态不佳，建议降仓至 80%', blocked: false };
+    }
   } else if (mindsetScore <= 2) {
     return { adjustment: 0.5, message: '心态不佳，建议降仓至 50%', blocked: false };
-  } else if (mindsetScore <= 3) {
-    return { adjustment: 0.8, message: '心态中性，建议降仓至 80%', blocked: false };
   }
   return { adjustment: 1, message: '心态良好，正常仓位', blocked: false };
 }
@@ -246,6 +251,7 @@ function checkDailyTradeFrequency() {
 function generateRiskCheckReport() {
   var settings = loadSettings();
   var mindsetScore = parseInt(document.getElementById('mindsetScore').value) || 3;
+  var minScore = settings.mindsetMinScore != null ? settings.mindsetMinScore : 3;
 
   return {
     portfolioHeat: calcPortfolioHeat(),

@@ -25,8 +25,9 @@ function calculate() {
   // ===== Skills 融合：ATR 动态止损 =====
   let atrStopMode = false;
   const atrValue = parseFloat(document.getElementById('atrValue').value);
-  const atrMultiplier = parseFloat(document.getElementById('atrMultiplier').value) || 2;
   var settings = loadSettings();
+  // 优先使用设置中的默认倍数，其次使用 DOM 中的值，最后回退到 2
+  const atrMultiplier = parseFloat(document.getElementById('atrMultiplier').value) || settings.atrDefaultMultiplier || 2;
   if (settings.atrStopEnabled && !isNaN(atrValue) && atrValue > 0) {
     var atrStopResult = calcATRStop(effectiveEntryPrice, atrValue, atrMultiplier, direction);
     if (atrStopResult) {

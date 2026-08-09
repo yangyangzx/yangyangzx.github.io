@@ -437,9 +437,9 @@ function updateChecklist() {
   updateCheckItemWithResult('checkMindset', function() {
     if (!calc) return null;
     var mindsetScore = calc.mindsetScore || 3;
-    // 策略：评分低于 3（中性以下）不禁止但标记警告，可考虑未来扩展为拦截
-    var passed = mindsetScore >= 3; // 中性及以上通过
-    return { result: passed, message: '心态评分 ' + mindsetScore + '/5 ' + (passed ? '(平静/良好)' : '(需谨慎)') };
+    var minScore = settings.mindsetMinScore != null ? settings.mindsetMinScore : 3;
+    var passed = mindsetScore >= minScore;
+    return { result: passed, message: '心态评分 ' + mindsetScore + '/5 ' + (passed ? '(平静/良好)' : '(低于最低要求 ' + minScore + ')') };
   });
 
   // Skills 融合：组合热量检查
