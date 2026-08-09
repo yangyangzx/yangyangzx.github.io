@@ -73,7 +73,7 @@ function updateStats() {
   const avgPnl = decidedCnt > 0 ? totalPnl / decidedCnt : 0;
   const avgWin = wins.length > 0 ? grossProfit / wins.length : 0;
   const avgLoss = losses.length > 0 ? grossLoss / losses.length : 0;
-  const wlRatio = grossLoss > 0 ? (grossProfit / grossLoss) : (wins.length > 0 ? Infinity : 0);
+  const wlRatio = avgL > 0 ? (avgW / avgL) : (wins.length > 0 ? Infinity : 0);
   const lossRate = decidedCnt > 0 ? (losses.length / decidedCnt * 100) : 0;
   const expectancy = decidedCnt > 0
     ? ((winRate / 100) * avgWin - (lossRate / 100) * avgLoss)
@@ -391,16 +391,20 @@ function renderStrategyBreakdown(closed) {
     return;
   }
 
-  // 分组
+  // 分组：使用框架+形态双维度（与 analytics.js 口径一致）
   const groups = {};
   for (const l of closed) {
-    const key = l.strategyFramework || '(未分类)';
-    if (!groups[key]) groups[key] = [];
-    groups[key].push(l);
+    const framework = l.strategyFramework || '(未分类)';
+    const rawPattern = l.strategyPattern || '';
+    const patternName = rawPattern ? (rawPattern.includes('|') ? rawPattern.split('|').pop().trim() : rawPattern.trim()) : '未标记';
+    const key = framework + '|' + patternName;
+    if (!groups[key]) groups[key] = { framework, patternName, trades: [] };
+    groups[key].trades.push(l);
   }
 
   const rows = [];
-  for (const [name, trades] of Object.entries(groups)) {
+  for (const [key, group] of Object.entries(groups)) {
+    const trades = group.trades;
     const cnt = trades.length;
     const { wins, losses, grossProfit, grossLoss } = computeWinLoss(trades);
     const decided = wins.length + losses.length;
@@ -409,6 +413,7 @@ function renderStrategyBreakdown(closed) {
     const tPnl = grossProfit - grossLoss;
     const avgW = wins.length > 0 ? grossProfit / wins.length : 0;
     const avgL = losses.length > 0 ? grossLoss / losses.length : 0;
+    // 统一使用平均金额比（与策略拆解口径一致）
     const wlR = avgL > 0 ? avgW / avgL : 0;
     const exp = decided > 0 ? (wr / 100) * avgW - (lossRate / 100) * avgL : 0;
     const pf = grossLoss > 0 ? grossProfit / grossLoss : (wins.length > 0 ? Infinity : 0);
@@ -420,7 +425,7 @@ function renderStrategyBreakdown(closed) {
       if (!isNaN(m) && !isNaN(pnl) && pnl < 0) { maeSum += Math.abs(m); maeCnt++; }
     }
     const avgMAE = maeCnt > 0 ? maeSum / maeCnt : null;
-    rows.push({ name, cnt, wr, tPnl, exp, wlR, pf, avgMAE, lowSample: cnt < 2 });
+    rows.push({ name: group.framework + ' - ' + group.patternName, framework: group.framework, patternName: group.patternName, cnt, wr, tPnl, exp, wlR, pf, avgMAE, lowSample: cnt < 2 });
   }
 
   if (rows.length === 0) {
@@ -433,14 +438,15 @@ function renderStrategyBreakdown(closed) {
   card.style.display = 'block';
 
   let html = '<table><thead><tr>' +
-    '<th>策略/形态</th><th>笔数</th><th>胜率</th><th>总盈亏</th>' +
+    '<th>策略框架</th><th>形态</th><th>笔数</th><th>胜率</th><th>总盈亏</th>' +
     '<th>期望值</th><th>盈亏比</th><th>利润因子</th><th>均MAE</th>' +
     '</tr></thead><tbody>';
   for (const r of rows) {
     const cls = r.lowSample ? ' class="low-sample"' : '';
     const pnlCls = r.tPnl > 0 ? 'positive' : r.tPnl < 0 ? 'negative' : '';
     html += '<tr' + cls + '>' +
-      '<td>' + r.name + (r.lowSample ? ' <span style="font-size:10px;">(样本不足)</span>' : '') + '</td>' +
+      '<td>' + r.framework + '</td>' +
+      '<td>' + r.patternName + (r.lowSample ? ' <span style="font-size:10px;">(n<' + r.cnt + ')</span>' : '') + '</td>' +
       '<td>' + r.cnt + '</td>' +
       '<td>' + r.wr.toFixed(1) + '%</td>' +
       '<td class="' + pnlCls + '">' + (r.tPnl >= 0 ? '+' : '') + r.tPnl.toFixed(2) + '</td>' +
