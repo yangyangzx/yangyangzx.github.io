@@ -7,7 +7,7 @@ var _reviewCharts = {};
  * 销毁复盘页面的所有图表实例
  */
 function destroyReviewCharts() {
-  var ids = ['chartLossReason', 'chartStrategyRank', 'chartOrderType', 'chartEmotion'];
+  var ids = ['chartLossReason', 'chartStrategyRank', 'chartOrderType', 'chartEmotion', 'chartExecutionQuality'];
   for (var i = 0; i < ids.length; i++) {
     if (_reviewCharts[ids[i]]) {
       _reviewCharts[ids[i]].destroy();
@@ -62,6 +62,7 @@ function renderReview() {
   renderStrategyRank(closed);
   renderOrderTypeChart(closed);
   renderEmotionAnalysis(closed);
+  renderExecutionQuality(closed);
 }
 
 // ==================== 卡片 1：亏损原因分布（环形图） ====================
@@ -515,5 +516,180 @@ function renderEmotionAnalysis(closed) {
   }
   tHtml += '</tbody></table></div>';
   tHtml += '<p style="font-size:11px;color:var(--color-text-muted);margin-top:8px;">注：负向关联表示该情绪出现时胜率低于整体水平，值得关注。</p>';
+  tableEl.innerHTML = tHtml;
+}
+
+// ==================== P0 执行质量分析 ====================
+
+function renderExecutionQuality(closed) {
+  var canvas = document.getElementById('chartExecutionQuality');
+  var tableEl = document.getElementById('executionTableWrap');
+  if (!canvas || !tableEl) return;
+
+  // 按执行分分组
+  var execStats = {};
+  for (var i = 0; i < closed.length; i++) {
+    var es = closed[i].executionScore;
+    if (es == null || es < 1 || es > 3) continue;
+    var pnl = safeParseNum(closed[i].pnlAmount);
+    if (pnl == null) continue;
+    var rm = safeParseNum(closed[i].rMultiple);
+
+    if (!execStats[es]) {
+      execStats[es] = { count: 0, wins: 0, losses: 0, totalPnl: 0, rrSum: 0, rrCount: 0 };
+    }
+    execStats[es].count++;
+    execStats[es].totalPnl += pnl;
+    if (pnl > 0) execStats[es].wins++;
+    else if (pnl < 0) execStats[es].losses++;
+    if (rm != null) { execStats[es].rrSum += rm; execStats[es].rrCount++; }
+  }
+
+  var keys = Object.keys(execStats).map(Number).sort(function(a, b) { return a - b; });
+  if (keys.length === 0) {
+    _setReviewEmpty(canvas, '暂无执行评分数据');
+    if (tableEl) tableEl.innerHTML = '<div style="text-align:center;color:var(--color-text-muted);padding:16px;">暂无执行评分数据，请在平仓时记录执行分</div>';
+    return;
+  }
+
+  // 整体基准
+  var overallWins = 0, overallLosses = 0, overallPnl = 0, overallRr = 0, overallRrCount = 0;
+  for (var k = 0; k < keys.length; k++) {
+    var s = execStats[k];
+    overallWins += s.wins;
+    overallLosses += s.losses;
+    overallPnl += s.totalPnl;
+    overallRr += s.rrSum;
+    overallRrCount += s.rrCount;
+  }
+  var overallDecided = overallWins + overallLosses;
+  var overallWinRate = overallDecided > 0 ? (overallWins / overallDecided * 100) : 0;
+  var overallAvgPnl = overallDecided > 0 ? (overallPnl / overallDecided) : 0;
+  var overallAvgRr = overallRrCount > 0 ? (overallRr / overallRrCount) : 0;
+
+  // 绘制图表
+  _clearReviewEmpty(canvas);
+
+  var cc = utils.getChartColors();
+  var labels = [], winRateData = [], avgPnlData = [], avgRrData = [];
+  for (var k = 0; k < keys.length; k++) {
+    var s = execStats[k];
+    labels.push('执行' + k + '分');
+    var wr = (s.wins + s.losses) > 0 ? (s.wins / (s.wins + s.losses) * 100) : 0;
+    var avgPnl = s.count > 0 ? (s.totalPnl / s.count) : 0;
+    var avgRr = s.rrCount > 0 ? (s.rrSum / s.rrCount) : 0;
+    winRateData.push(parseFloat(wr.toFixed(1)));
+    avgPnlData.push(parseFloat(avgPnl.toFixed(2)));
+    avgRrData.push(parseFloat(avgRr.toFixed(2)));
+  }
+
+  var ctx = canvas.getContext('2d');
+  _reviewCharts['chartExecutionQuality'] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: '平均盈亏 (USDT)',
+        data: avgPnlData,
+        backgroundColor: avgPnlData.map(function(v) { return v >= 0 ? cc.barWin : cc.barLoss; }),
+        borderRadius: 6,
+        borderWidth: 1,
+        borderColor: cc.barBorder,
+        yAxisID: 'y'
+      }, {
+        label: '平均R倍数',
+        data: avgRrData,
+        type: 'line',
+        borderColor: '#f59e0b',
+        backgroundColor: '#f59e0b',
+        pointRadius: 6,
+        pointHoverRadius: 10,
+        borderWidth: 3,
+        yAxisID: 'y1'
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'top',
+          labels: { color: cc.tickColor, font: { size: 12 }, usePointStyle: true }
+        },
+        tooltip: {
+          backgroundColor: cc.tooltipBg,
+          titleColor: cc.tooltipTitle,
+          bodyColor: cc.tooltipBody,
+          borderColor: cc.gridColor,
+          borderWidth: 1,
+          padding: 12,
+          callbacks: {
+            afterLabel: function(ctx) {
+              var idx = ctx.dataIndex;
+              var s = execStats[keys[idx]];
+              return '笔数: ' + s.count + ' | 胜率: ' + winRateData[idx] + '%';
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: cc.gridColor },
+          ticks: { color: cc.tickColor, font: { size: 12 } }
+        },
+        y: {
+          type: 'linear',
+          position: 'left',
+          grid: { color: cc.gridColor },
+          ticks: { color: cc.tickColor, font: { size: 11 }, callback: function(v) { return v.toFixed(0); } },
+          title: { display: true, text: '平均盈亏 (USDT)', color: cc.tickColor }
+        },
+        y1: {
+          type: 'linear',
+          position: 'right',
+          grid: { drawOnChartArea: false },
+          ticks: { color: '#f59e0b', font: { size: 11 }, callback: function(v) { return v.toFixed(1) + 'R'; } },
+          title: { display: true, text: '平均R倍数', color: '#f59e0b' },
+          min: 0
+        }
+      }
+    }
+  });
+
+  // 绘制表格
+  var tHtml = '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;">';
+  tHtml += '<div style="flex:1;min-width:150px;background:var(--color-surface);border-radius:8px;padding:12px;">';
+  tHtml += '<div style="font-size:11px;color:var(--color-text-muted);">整体基准</div>';
+  tHtml += '<div style="font-size:18px;font-weight:600;color:' + (overallAvgPnl >= 0 ? 'var(--color-success)' : 'var(--color-danger)') + ';">';
+  tHtml += (overallAvgPnl >= 0 ? '+' : '') + overallAvgPnl.toFixed(2) + ' USDT</div>';
+  tHtml += '<div style="font-size:12px;color:var(--color-text-muted);">均R ' + overallAvgRr.toFixed(2) + 'R · 胜率 ' + overallWinRate.toFixed(1) + '%</div>';
+  tHtml += '</div>';
+  tHtml += '</div>';
+
+  tHtml += '<table class="analytics-table"><thead><tr>' +
+    '<th>执行分</th><th>笔数</th><th>盈利/亏损</th><th>胜率</th><th>平均盈亏</th><th>平均R</th><th>vs整体</th></tr></thead><tbody>';
+
+  for (var k = 0; k < keys.length; k++) {
+    var s = execStats[k];
+    var avgPnl = s.count > 0 ? (s.totalPnl / s.count) : 0;
+    var wr = (s.wins + s.losses) > 0 ? (s.wins / (s.wins + s.losses) * 100) : 0;
+    var avgRr = s.rrCount > 0 ? (s.rrSum / s.rrCount) : 0;
+    var wrDev = wr - overallWinRate;
+
+    var wrClass = wrDev > 0 ? 'col-pnl-pos' : (wrDev < 0 ? 'col-pnl-neg' : '');
+    var pnlClass = avgPnl >= 0 ? 'col-pnl-pos' : 'col-pnl-neg';
+
+    tHtml += '<tr>' +
+      '<td style="text-align:center;font-weight:600;">' + k + ' <span style="font-size:11px;color:var(--color-text-muted);">/3</span></td>' +
+      '<td class="col-num">' + s.count + '</td>' +
+      '<td class="col-num">' + s.wins + '/' + s.losses + '</td>' +
+      '<td class="col-num ' + wrClass + '">' + wr.toFixed(1) + '%</td>' +
+      '<td class="' + pnlClass + '">' + (avgPnl >= 0 ? '+' : '') + avgPnl.toFixed(2) + '</td>' +
+      '<td class="col-num">' + avgRr.toFixed(2) + 'R</td>' +
+      '<td class="' + wrClass + '">' + (wrDev >= 0 ? '+' : '') + wrDev.toFixed(1) + '%</td>' +
+      '</tr>';
+  }
+  tHtml += '</tbody></table>';
+  tHtml += '<p style="font-size:11px;color:var(--color-text-muted);margin-top:8px;">注：执行分越高表示执行越到位。vs整体表示该评分与整体基准的偏差。</p>';
   tableEl.innerHTML = tHtml;
 }

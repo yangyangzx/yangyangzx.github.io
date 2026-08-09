@@ -813,6 +813,18 @@
       <div class="card-header">多维绩效拆解</div>
       <div id="dimensionTableWrap"></div>
     </div>
+    <!-- P0: 心态-绩效关联分析 -->
+    <div class="card" style="margin-top:16px;" id="mindsetAnalysisCard">
+      <div class="card-header"><i class="fas fa-brain"></i> 心态-绩效关联分析</div>
+      <div class="chart-wrap"><canvas id="chartMindsetPnl"></canvas></div>
+      <div id="mindsetTableWrap" style="margin-top:12px;"></div>
+    </div>
+    <!-- P0: 市场环境交叉分析 -->
+    <div class="card" style="margin-top:16px;" id="marketConditionCard">
+      <div class="card-header"><i class="fas fa-cloud-sun"></i> 市场环境×时段×方向 交叉分析</div>
+      <div class="chart-wrap"><canvas id="chartMarketCondition"></canvas></div>
+      <div id="marketConditionTableWrap" style="margin-top:12px;"></div>
+    </div>
 
   </section>
 
@@ -872,6 +884,20 @@
             <canvas id="chartEmotion"></canvas>
           </div>
           <div class="review-content" id="emotionTableWrap"></div>
+        </div>
+      </div>
+
+      <!-- P0: 执行质量分析 -->
+      <div class="review-card">
+        <div class="review-card-header">
+          <span class="review-card-icon"><i class="fas fa-clipboard-check"></i></span>
+          <span class="review-card-title">执行质量分析</span>
+        </div>
+        <div class="review-card-body">
+          <div class="review-chart-container">
+            <canvas id="chartExecutionQuality"></canvas>
+          </div>
+          <div class="review-content" id="executionTableWrap"></div>
         </div>
       </div>
     </div>

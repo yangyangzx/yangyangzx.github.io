@@ -8,7 +8,8 @@ var _analyticsCharts = {};
  */
 function destroyAnalyticsCharts() {
   var ids = ['chartEquity', 'chartStrategy', 'chartPattern', 'chartSession', 'chartMAEMFE', 'closeTypeChart',
-             'chartDailyPnl', 'chartDayOfWeek', 'chartHoldDuration', 'chartMonthlyPnl'];
+             'chartDailyPnl', 'chartDayOfWeek', 'chartHoldDuration', 'chartMonthlyPnl',
+             'chartMindsetPnl', 'chartMarketCondition'];
   for (var i = 0; i < ids.length; i++) {
     if (_analyticsCharts[ids[i]]) {
       _analyticsCharts[ids[i]].destroy();
@@ -83,7 +84,9 @@ function renderAnalytics() {
     ['renderDayOfWeekChart',    function() { renderDayOfWeekChart(closed); }],
     ['renderHoldDurationChart', function() { renderHoldDurationChart(closed); }],
     ['renderMonthlyPnlChart',   function() { renderMonthlyPnlChart(closed); }],
-    ['renderDimensionBreakdown',function() { renderDimensionBreakdown(closed); }]
+    ['renderDimensionBreakdown',function() { renderDimensionBreakdown(closed); }],
+    ['renderMindsetAnalysis',   function() { renderMindsetAnalysis(closed); }],
+    ['renderMarketConditionAnalysis', function() { renderMarketConditionAnalysis(closed); }]
   ];
 
   for (var i = 0; i < fns.length; i++) {
@@ -1503,4 +1506,370 @@ function renderMonthlyPnlChart(closed) {
       }
     }
   });
+}
+
+// ==================== P0 心态-绩效关联分析 ====================
+
+function renderMindsetAnalysis(closed) {
+  var canvas = document.getElementById('chartMindsetPnl');
+  var tableEl = document.getElementById('mindsetTableWrap');
+  if (!canvas || !tableEl) return;
+
+  // 按心态评分分组
+  var mindsetStats = {};
+  for (var i = 0; i < closed.length; i++) {
+    var ms = closed[i].mindsetScore;
+    if (ms == null || ms < 1 || ms > 5) continue;
+    var pnl = safeParseNum(closed[i].pnlAmount);
+    if (pnl == null) continue;
+
+    if (!mindsetStats[ms]) {
+      mindsetStats[ms] = { count: 0, wins: 0, losses: 0, totalPnl: 0 };
+    }
+    mindsetStats[ms].count++;
+    mindsetStats[ms].totalPnl += pnl;
+    if (pnl > 0) mindsetStats[ms].wins++;
+    else if (pnl < 0) mindsetStats[ms].losses++;
+  }
+
+  var keys = Object.keys(mindsetStats).map(Number).sort(function(a, b) { return a - b; });
+  if (keys.length === 0) {
+    _setCanvasEmpty(canvas, 'fa-brain', '暂无心态评分数据');
+    if (tableEl) tableEl.innerHTML = '<div style="text-align:center;color:var(--color-text-muted);padding:16px;">暂无心态评分数据，请在开仓时记录心态评分</div>';
+    return;
+  }
+
+  // 计算整体基准
+  var overallWins = 0, overallLosses = 0, overallPnl = 0;
+  for (var k = 0; k < keys.length; k++) {
+    var s = mindsetStats[keys[k]];
+    overallWins += s.wins;
+    overallLosses += s.losses;
+    overallPnl += s.totalPnl;
+  }
+  var overallDecided = overallWins + overallLosses;
+  var overallWinRate = overallDecided > 0 ? (overallWins / overallDecided * 100) : 0;
+  var overallAvgPnl = overallDecided > 0 ? (overallPnl / overallDecided) : 0;
+
+  // 计算相关性
+  var totalTrades = keys.reduce(function(s, k) { return s + mindsetStats[k].count; }, 0);
+  var meanX = (keys[0] + keys[keys.length - 1]) / 2;
+  var meanY = overallAvgPnl;
+  var num = 0, denX = 0, denY = 0;
+  for (var k = 0; k < keys.length; k++) {
+    var s = mindsetStats[k];
+    var x = k - meanX;
+    var y = (s.totalPnl / s.count) - meanY;
+    num += x * y * s.count;
+    denX += x * x * s.count;
+    denY += y * y * s.count;
+  }
+  var correlation = denX > 0 && denY > 0 ? (num / Math.sqrt(denX * denY)) : 0;
+
+  var corrDesc = '';
+  var corrColor = '';
+  if (totalTrades < 5) {
+    corrDesc = '样本不足';
+    corrColor = 'var(--color-text-muted)';
+  } else if (correlation > 0.3) {
+    corrDesc = '强正相关 (' + correlation.toFixed(2) + ')';
+    corrColor = 'var(--color-success)';
+  } else if (correlation > 0.1) {
+    corrDesc = '弱正相关 (' + correlation.toFixed(2) + ')';
+    corrColor = 'var(--color-warning)';
+  } else if (correlation < -0.3) {
+    corrDesc = '强负相关 (' + correlation.toFixed(2) + ')';
+    corrColor = 'var(--color-danger)';
+  } else if (correlation < -0.1) {
+    corrDesc = '弱负相关 (' + correlation.toFixed(2) + ')';
+    corrColor = 'var(--color-warning)';
+  } else {
+    corrDesc = '无明显相关 (' + correlation.toFixed(2) + ')';
+    corrColor = 'var(--color-text-muted)';
+  }
+
+  // 绘制图表
+  _clearCanvasEmpty(canvas);
+  ensureChartContainer(canvas);
+
+  var cc = utils.getChartColors();
+  var labels = [], avgPnlData = [], winRateData = [], countData = [];
+  for (var k = 0; k < keys.length; k++) {
+    var s = mindsetStats[k];
+    labels.push(keys[k] + '分');
+    var avgPnl = s.count > 0 ? (s.totalPnl / s.count) : 0;
+    var wr = (s.wins + s.losses) > 0 ? (s.wins / (s.wins + s.losses) * 100) : 0;
+    avgPnlData.push(parseFloat(avgPnl.toFixed(2)));
+    winRateData.push(parseFloat(wr.toFixed(1)));
+    countData.push(s.count);
+  }
+
+  var ctx = canvas.getContext('2d');
+  _analyticsCharts['chartMindsetPnl'] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: '平均盈亏 (USDT)',
+        data: avgPnlData,
+        backgroundColor: avgPnlData.map(function(v) { return v >= 0 ? cc.barWin : cc.barLoss; }),
+        borderRadius: 6,
+        borderWidth: 1,
+        borderColor: cc.barBorder,
+        yAxisID: 'y'
+      }, {
+        label: '胜率 (%)',
+        data: winRateData,
+        type: 'line',
+        borderColor: cc.barBorder,
+        backgroundColor: cc.barBorder,
+        pointRadius: 5,
+        pointHoverRadius: 8,
+        borderWidth: 2,
+        yAxisID: 'y1'
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'top',
+          labels: { color: cc.tickColor, font: { size: 12 }, usePointStyle: true }
+        },
+        tooltip: {
+          backgroundColor: cc.tooltipBg,
+          titleColor: cc.tooltipTitle,
+          bodyColor: cc.tooltipBody,
+          borderColor: cc.gridColor,
+          borderWidth: 1,
+          padding: 12,
+          callbacks: {
+            afterLabel: function(ctx) {
+              return '笔数: ' + countData[ctx.dataIndex];
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: cc.gridColor },
+          ticks: { color: cc.tickColor, font: { size: 12 } }
+        },
+        y: {
+          type: 'linear',
+          position: 'left',
+          grid: { color: cc.gridColor },
+          ticks: { color: cc.tickColor, font: { size: 11 }, callback: function(v) { return v.toFixed(0); } },
+          title: { display: true, text: '平均盈亏 (USDT)', color: cc.tickColor }
+        },
+        y1: {
+          type: 'linear',
+          position: 'right',
+          grid: { drawOnChartArea: false },
+          ticks: { color: cc.tickColor, font: { size: 11 }, callback: function(v) { return v + '%'; } },
+          title: { display: true, text: '胜率', color: cc.tickColor },
+          min: 0,
+          max: 100
+        }
+      }
+    }
+  });
+
+  // 绘制表格
+  var tHtml = '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;">';
+  tHtml += '<div style="flex:1;min-width:200px;background:var(--color-surface);border-radius:8px;padding:12px;">';
+  tHtml += '<div style="font-size:11px;color:var(--color-text-muted);">整体基准</div>';
+  tHtml += '<div style="font-size:18px;font-weight:600;color:' + (overallAvgPnl >= 0 ? 'var(--color-success)' : 'var(--color-danger)') + ';">';
+  tHtml += (overallAvgPnl >= 0 ? '+' : '') + overallAvgPnl.toFixed(2) + ' USDT</div>';
+  tHtml += '<div style="font-size:12px;color:var(--color-text-muted);">胜率 ' + overallWinRate.toFixed(1) + '% · ' + overallDecided + ' 笔</div>';
+  tHtml += '</div>';
+  tHtml += '<div style="flex:1;min-width:200px;background:var(--color-surface);border-radius:8px;padding:12px;">';
+  tHtml += '<div style="font-size:11px;color:var(--color-text-muted);">相关性</div>';
+  tHtml += '<div style="font-size:18px;font-weight:600;color:' + corrColor + ';">' + corrDesc + '</div>';
+  tHtml += '<div style="font-size:12px;color:var(--color-text-muted);">心态评分 vs 平均盈亏</div>';
+  tHtml += '</div>';
+  tHtml += '</div>';
+
+  tHtml += '<div style="font-size:12px;color:var(--color-text-muted);margin-bottom:8px;">各评分详细统计：</div>';
+  tHtml += '<table class="analytics-table"><thead><tr>' +
+    '<th>心态评分</th><th>笔数</th><th>盈利/亏损</th><th>胜率</th><th>平均盈亏</th><th>vs整体</th></tr></thead><tbody>';
+
+  for (var k = 0; k < keys.length; k++) {
+    var s = mindsetStats[k];
+    var avgPnl = s.count > 0 ? (s.totalPnl / s.count) : 0;
+    var wr = (s.wins + s.losses) > 0 ? (s.wins / (s.wins + s.losses) * 100) : 0;
+    var wrDev = wr - overallWinRate;
+
+    var wrClass = wrDev > 0 ? 'col-pnl-pos' : (wrDev < 0 ? 'col-pnl-neg' : '');
+    var devHtml = s.count < 2 ? '<span style="color:var(--color-text-muted);">样本不足</span>' :
+      '<span class="' + wrClass + '">' + (wrDev >= 0 ? '+' : '') + wrDev.toFixed(1) + '%</span>';
+
+    var pnlClass = avgPnl >= 0 ? 'col-pnl-pos' : 'col-pnl-neg';
+    tHtml += '<tr>' +
+      '<td style="text-align:center;font-weight:600;">' + keys[k] + ' <span style="font-size:11px;color:var(--color-text-muted);">/5</span></td>' +
+      '<td class="col-num">' + s.count + '</td>' +
+      '<td class="col-num">' + s.wins + '/' + s.losses + '</td>' +
+      '<td class="col-num">' + wr.toFixed(1) + '%</td>' +
+      '<td class="' + pnlClass + '">' + (avgPnl >= 0 ? '+' : '') + avgPnl.toFixed(2) + '</td>' +
+      '<td>' + devHtml + '</td>' +
+      '</tr>';
+  }
+  tHtml += '</tbody></table>';
+  tHtml += '<p style="font-size:11px;color:var(--color-text-muted);margin-top:8px;">注：vs整体表示该评分的胜率与整体胜率的偏差。</p>';
+  tableEl.innerHTML = tHtml;
+}
+
+// ==================== P0 市场环境交叉分析 ====================
+
+function renderMarketConditionAnalysis(closed) {
+  var canvas = document.getElementById('chartMarketCondition');
+  var tableEl = document.getElementById('marketConditionTableWrap');
+  if (!canvas || !tableEl) return;
+
+  // 按市场环境分组
+  var marketStats = {};
+  for (var i = 0; i < closed.length; i++) {
+    var mc = closed[i].marketCondition || '未标记';
+    var session = closed[i].session || '未标记';
+    var dir = closed[i].direction || '未标记';
+    var pnl = safeParseNum(closed[i].pnlAmount);
+    if (pnl == null) continue;
+
+    var key = mc + ' | ' + session + ' | ' + (dir === 'long' ? '多' : '空');
+    if (!marketStats[key]) {
+      marketStats[key] = { marketCondition: mc, session: session, direction: dir, count: 0, wins: 0, losses: 0, totalPnl: 0 };
+    }
+    marketStats[key].count++;
+    marketStats[key].totalPnl += pnl;
+    if (pnl > 0) marketStats[key].wins++;
+    else if (pnl < 0) marketStats[key].losses++;
+  }
+
+  var keys = Object.keys(marketStats);
+  if (keys.length === 0) {
+    _setCanvasEmpty(canvas, 'fa-cloud-sun', '暂无市场环境数据');
+    if (tableEl) tableEl.innerHTML = '<div style="text-align:center;color:var(--color-text-muted);padding:16px;">暂无市场环境数据，请在开仓时记录市场环境</div>';
+    return;
+  }
+
+  // 转换数据
+  var rows = [];
+  for (var k = 0; k < keys.length; k++) {
+    var s = marketStats[keys[k]];
+    var wr = (s.wins + s.losses) > 0 ? (s.wins / (s.wins + s.losses) * 100) : 0;
+    var avgPnl = s.count > 0 ? (s.totalPnl / s.count) : 0;
+    rows.push({
+      key: keys[k],
+      marketCondition: s.marketCondition,
+      session: s.session,
+      direction: s.direction,
+      count: s.count,
+      wins: s.wins,
+      losses: s.losses,
+      winRate: wr,
+      totalPnl: s.totalPnl,
+      avgPnl: avgPnl
+    });
+  }
+
+  // 按总盈亏排序
+  rows.sort(function(a, b) { return b.totalPnl - a.totalPnl; });
+
+  // 只显示样本>=2的
+  var validRows = rows.filter(function(r) { return r.count >= 2; });
+  if (validRows.length === 0) {
+    _setCanvasEmpty(canvas, 'fa-cloud-sun', '样本不足（需至少2笔）');
+    if (tableEl) tableEl.innerHTML = '<div style="text-align:center;color:var(--color-text-muted);padding:16px;">样本不足，需至少2笔交易才能显示分析</div>';
+    return;
+  }
+
+  // 绘制图表（显示前10）
+  _clearCanvasEmpty(canvas);
+  ensureChartContainer(canvas);
+
+  var cc = utils.getChartColors();
+  var topRows = validRows.slice(0, 10);
+  var labels = [], data = [], bgColors = [];
+  for (var i = 0; i < topRows.length; i++) {
+    var r = topRows[i];
+    var shortKey = r.marketCondition.substring(0, 4) + ' ' + r.session.substring(0, 2) + ' ' + r.direction;
+    labels.push(shortKey);
+    data.push(parseFloat(r.avgPnl.toFixed(2)));
+    bgColors.push(r.avgPnl >= 0 ? cc.barWin : cc.barLoss);
+  }
+
+  var ctx = canvas.getContext('2d');
+  _analyticsCharts['chartMarketCondition'] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: '平均盈亏 (USDT)',
+        data: data,
+        backgroundColor: bgColors,
+        borderRadius: 6,
+        borderWidth: 1,
+        borderColor: cc.barBorder
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: cc.tooltipBg,
+          titleColor: cc.tooltipTitle,
+          bodyColor: cc.tooltipBody,
+          borderColor: cc.gridColor,
+          borderWidth: 1,
+          padding: 12,
+          callbacks: {
+            title: function(ctx) {
+              return topRows[ctx[0].dataIndex].key;
+            },
+            label: function(ctx) {
+              var r = topRows[ctx.dataIndex];
+              return '平均盈亏 ' + ctx.parsed.x.toFixed(2) + ' U · 胜率 ' + r.winRate.toFixed(1) + '% · ' + r.count + ' 笔';
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: cc.gridColor },
+          ticks: { color: cc.tickColor, font: { size: 11 }, callback: function(v) { return v.toFixed(0); } }
+        },
+        y: {
+          grid: { display: false },
+          ticks: { color: cc.tickColor, font: { size: 11 } }
+        }
+      }
+    }
+  });
+
+  // 绘制表格
+  var tHtml = '<div style="font-size:12px;color:var(--color-text-muted);margin-bottom:8px;">环境×时段×方向 交叉分析（样本≥2）：</div>';
+  tHtml += '<table class="analytics-table"><thead><tr>' +
+    '<th>市场环境</th><th>时段</th><th>方向</th><th>笔数</th><th>胜率</th><th>总盈亏</th><th>平均盈亏</th></tr></thead><tbody>';
+
+  for (var i = 0; i < validRows.length; i++) {
+    var r = validRows[i];
+    var pnlClass = r.totalPnl >= 0 ? 'col-pnl-pos' : 'col-pnl-neg';
+    var wrClass = r.winRate >= 50 ? 'col-pnl-pos' : 'col-pnl-neg';
+    tHtml += '<tr>' +
+      '<td>' + r.marketCondition + '</td>' +
+      '<td>' + r.session + '</td>' +
+      '<td>' + r.direction + '</td>' +
+      '<td class="col-num">' + r.count + '</td>' +
+      '<td class="col-num ' + wrClass + '">' + r.winRate.toFixed(1) + '%</td>' +
+      '<td class="' + pnlClass + '">' + (r.totalPnl >= 0 ? '+' : '') + r.totalPnl.toFixed(2) + '</td>' +
+      '<td class="' + pnlClass + '">' + (r.avgPnl >= 0 ? '+' : '') + r.avgPnl.toFixed(2) + '</td>' +
+      '</tr>';
+  }
+  tHtml += '</tbody></table>';
+  tHtml += '<p style="font-size:11px;color:var(--color-text-muted);margin-top:8px;">注：仅显示样本≥2的组合，避免小样本误导。</p>';
+  tableEl.innerHTML = tHtml;
 }
