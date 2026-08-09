@@ -127,6 +127,12 @@ function onViewActivated(viewName) {
     if (typeof renderSettings === 'function') {
       renderSettings();
     }
+    if (typeof renderCustomSymbols === 'function') {
+      renderCustomSymbols();
+    }
+    if (typeof syncSymbolDatalist === 'function') {
+      syncSymbolDatalist();
+    }
   }
 }
 

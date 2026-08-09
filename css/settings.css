@@ -164,3 +164,51 @@
   display: block;
   margin-top: 4px;
 }
+
+/* ——— 品种管理表格 ——— */
+.custom-symbols-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+.custom-symbols-table th,
+.custom-symbols-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--color-border, rgba(148,163,184,0.12));
+  text-align: left;
+  vertical-align: middle;
+}
+
+.custom-symbols-table th {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 500;
+}
+
+.custom-symbols-table input[type="text"] {
+  width: 100%;
+  padding: 5px 8px;
+  background: var(--glass-bg-light);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  font-size: 13px;
+  font-family: inherit;
+  transition: border-color var(--dur-short);
+}
+
+.custom-symbols-table input[type="text"]:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-primary-bg);
+}
+
+.custom-symbols-table .cs-symbol {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}

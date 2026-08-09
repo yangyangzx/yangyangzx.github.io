@@ -1008,7 +1008,13 @@ function getActiveEntryPrice() {
 
 // ==================== 重置表单 ====================
 function resetForm() {
-  document.getElementById('symbol').value = 'BTC';
+  // 从设置读取默认品种，优先取第一个自定义品种，否则用 BTC
+  var _symDefault = 'BTC';
+  try {
+    var _symList = loadSettings().customSymbols;
+    if (_symList && _symList.length > 0 && _symList[0].symbol) _symDefault = _symList[0].symbol;
+  } catch(e) {}
+  document.getElementById('symbol').value = _symDefault;
   document.getElementById('entryPrice').value = '';
   document.getElementById('capital').value = '1000';
   document.getElementById('riskInput').value = '2%';

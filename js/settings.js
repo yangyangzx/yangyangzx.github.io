@@ -20,7 +20,13 @@ var SETTINGS_DEFAULTS = {
   minRRRatio: 2,             // 最低盈亏比 (默认 2:1)
   singleSymbolMaxPct: 10,    // 单品种最大占比 (%)
   dailyTradeMax: 8,          // 每日建议最大交易笔数
-  riskHeatMax: 6             // 组合热量安全上限 (%)
+  riskHeatMax: 6,              // 组合热量安全上限 (%)
+  customSymbols: [             // 新增：自定义品种列表 [{symbol, desc}]
+    { symbol: 'BTC', desc: '比特币' },
+    { symbol: 'ETH', desc: '以太坊' },
+    { symbol: 'SOL', desc: 'Solana' },
+    { symbol: 'GOLD', desc: '黄金' }
+  ]
 };
 
 var SETTINGS_VALIDATORS = {
@@ -368,4 +374,75 @@ function resetSettings() {
   localStorage.removeItem(SETTINGS_KEY);
   renderSettings();
   showToast('设置已重置为默认值', 'success');
+}
+
+// ==================== 品种管理 ====================
+
+/**
+ * 将 settings.customSymbols 同步到 input#symbol 的 datalist
+ */
+function syncSymbolDatalist() {
+  var dl = document.getElementById('symbolDatalist');
+  if (!dl) return;
+  var symbols = loadSettings().customSymbols || [];
+  dl.innerHTML = '';
+  symbols.forEach(function(s) {
+    var opt = document.createElement('option');
+    opt.value = s.symbol;
+    dl.appendChild(opt);
+  });
+}
+
+/**
+ * 渲染品种管理区域（在设置页的交易参数卡片中）
+ */
+function renderCustomSymbols() {
+  var container = document.getElementById('customSymbolsList');
+  if (!container) return;
+  var symbols = loadSettings().customSymbols || [];
+  var html = '<table class="custom-symbols-table"><thead><tr><th>品种</th><th>说明</th><th></th></tr></thead><tbody>';
+  symbols.forEach(function(s, idx) {
+    html += '<tr><td><input type="text" class="cs-symbol" value="' + esc(s.symbol) + '" /></td>';
+    html += '<td><input type="text" class="cs-desc" value="' + esc(s.desc || '') + '" placeholder="如：比特币、以太坊..." /></td>';
+    html += '<td><button class="btn-remove btn-sm" onclick="removeCustomSymbol(' + idx + ')">&times;</button></td></tr>';
+  });
+  html += '</tbody></table>';
+  html += '<button class="btn btn-sm btn-outline" onclick="addCustomSymbol()" style="margin-top:8px;"><i class="fas fa-plus"></i> 添加品种</button>';
+  container.innerHTML = html;
+}
+
+function esc(str) {
+  return String(str || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function addCustomSymbol() {
+  var settings = loadSettings();
+  if (!settings.customSymbols) settings.customSymbols = [];
+  settings.customSymbols.push({ symbol: '', desc: '' });
+  saveSettings();
+  renderCustomSymbols();
+}
+
+function removeCustomSymbol(idx) {
+  var settings = loadSettings();
+  if (!settings.customSymbols) return;
+  settings.customSymbols.splice(idx, 1);
+  saveSettings();
+  renderCustomSymbols();
+}
+
+function saveCustomSymbols() {
+  var rows = document.querySelectorAll('#customSymbolsList .cs-symbol');
+  var descs = document.querySelectorAll('#customSymbolsList .cs-desc');
+  var symbols = [];
+  rows.forEach(function(inp, i) {
+    var sym = (inp.value || '').trim().toUpperCase();
+    var desc = (descs[i].value || '').trim();
+    if (sym) symbols.push({ symbol: sym, desc: desc });
+  });
+  var settings = loadSettings();
+  settings.customSymbols = symbols;
+  saveSettings();
+  syncSymbolDatalist();
+  showToast('品种列表已保存', 'success');
 }

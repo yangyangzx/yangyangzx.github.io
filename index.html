@@ -137,7 +137,9 @@
           <div class="form-section-content grid-2">
             <div class="form-group">
               <label><i class="fas fa-coins"></i> 交易品种<span class="required-star">*</span></label>
-              <input type="text" id="symbol" value="BTC" placeholder="如 BTC、ETH、SOL、GOLD、AAPL" style="text-transform:uppercase;" />
+              <input type="text" id="symbol" value="BTC" list="symbolDatalist" placeholder="输入或选择交易品种（如 BTC、AAPL、NVDA…）" style="text-transform:uppercase;" />
+              <datalist id="symbolDatalist"></datalist>
+              <span class="field-tip">可在「系统设置」中添加自定义品种，或直接输入任意名称</span>
             </div>
             <div class="form-group">
               <label><i class="fas fa-arrow-right"></i> 入场价格<span class="required-star">*</span></label>
@@ -976,7 +978,11 @@
         });
         console.log('Settings initialized');
       }
-      
+
+      // 初始化品种管理
+      if (typeof renderCustomSymbols === 'function') renderCustomSymbols();
+      if (typeof syncSymbolDatalist === 'function') syncSymbolDatalist();
+
       console.log('All modules initialized successfully');
     });
   </script>
@@ -1014,6 +1020,24 @@
           <div class="setting-row">
             <label>品种自定义止损比例</label>
             <input type="text" id="setCustomStopLimit" placeholder='例: {"ETH":2,"BTC":3}' style="width:100%;padding:6px;border-radius:4px;border:1px solid var(--color-border);background:var(--color-surface);font-family:monoid;" title='JSON 格式，如 {"ETH":2,"BTC":3}，留空使用默认规则'>
+          </div>
+        </div>
+      </div>
+
+      <!-- 品种管理 -->
+      <div class="card">
+        <div class="card-header"><i class="fas fa-coins"></i> 品种管理</div>
+        <div class="settings-form">
+          <p style="font-size:12px;color:var(--color-text-muted);margin-bottom:12px;">管理可下拉选择的品种列表，添加后在开仓计划中可通过下拉选取或直接手动输入。直接输入的品种（未在列表中的）会保存到日志中，下次可手动添加到此列表。</p>
+          <div id="customSymbolsList">
+            <table class="custom-symbols-table">
+              <thead><tr><th>品种</th><th>说明</th><th></th></tr></thead>
+              <tbody></tbody>
+            </table>
+            <button class="btn btn-sm btn-outline" onclick="addCustomSymbol()" style="margin-top:8px;"><i class="fas fa-plus"></i> 添加品种</button>
+          </div>
+          <div style="margin-top:12px;text-align:right;">
+            <button class="btn btn-sm btn-primary" onclick="saveCustomSymbols()"><i class="fas fa-save"></i> 保存品种</button>
           </div>
         </div>
       </div>
