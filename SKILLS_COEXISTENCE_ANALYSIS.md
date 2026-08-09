@@ -139,72 +139,127 @@
 | UI | 结果区显示「凯利参考」div | ✅ |
 | 设置 | `mindsetMinScore` 未使用 | ⚠️ |
 
-**协同链完整度：90%**
+**协同链完整度：100%**（修复后）
 
 ---
 
-## 三、发现的问题
+## 三、已修复的问题
 
-### 问题 1：ATR 倍数未从设置读取
+### ✅ 问题 1：ATR 倍数未从设置读取 — 已修复
 
-**位置**：`calculator.js:28`
+**修复位置**：`calculator.js:30`
 
 ```javascript
-// 当前代码：硬读 DOM
+// 修复前：硬编码回退值 2
 const atrMultiplier = parseFloat(document.getElementById('atrMultiplier').value) || 2;
 
-// 应该改为：读取设置中的默认值
+// 修复后：优先读设置中的默认倍数
 const atrMultiplier = parseFloat(document.getElementById('atrMultiplier').value)
-  || (settings.atrDefaultMultiplier || 2);
+  || settings.atrDefaultMultiplier || 2;
 ```
 
-**影响**：用户在设置中修改 ATR 默认倍数后，新建计算不会使用新默认值。
+**影响**：用户在设置中修改 ATR 默认倍数后，新建计算会使用新默认值。
 
 ---
 
-### 问题 2：mindsetMinScore 未参与计算
+### ✅ 问题 2：mindsetMinScore 未参与计算 — 已修复
 
-**位置**：`skills-integration.js:206`
+**修复位置**：`skills-integration.js:207` 和 `planner.js:441`
 
 ```javascript
-// 当前代码：硬编码阈值
-if (!mindsetScore) mindsetScore = 3;  // ← 应读取 settings.mindsetMinScore
+// 修复前：硬编码阈值 3
+if (!mindsetScore) mindsetScore = 3;
+
+// 修复后：读取设置中的最低通过值
+var minScore = settings.mindsetMinScore != null ? settings.mindsetMinScore : 3;
+if (!mindsetScore) mindsetScore = minScore;
 ```
 
-**影响**：设置中的心态评分最低通过值被忽略，始终使用硬编码的 3。
+**影响**：设置中的心态评分最低通过值现在真正生效。
 
-**修复**：
+---
+
+### ✅ 问题 3：calculator.js 中 settings 变量未声明 — 已修复
+
+**修复位置**：`calculator.js:28`
+
 ```javascript
-function getMindsetAdjustment(mindsetScore) {
-  var settings = loadSettings();
-  var minScore = settings.mindsetMinScore || 3;
-  if (!mindsetScore) mindsetScore = minScore;
-  if (mindsetScore < minScore) {
-    // ... 应用调整
+// 修复前：settings 未定义，直接访问会报错
+const atrMultiplier = ... || settings.atrDefaultMultiplier || 2;
+
+// 修复后：先加载设置
+var settings = loadSettings();
+const atrMultiplier = ... || settings.atrDefaultMultiplier || 2;
+```
+
+---
+
+## 四、ATR 双层级协同机制详解
+
+ATR 动态止损涉及**两个独立的输入层**，用户需要理解其分工：
+
+### 4.1 层级分工
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ 层级 1: 系统设置（控制层）                                       │
+│ ┌─────────────────────────────────────────────────────────┐    │
+│ │  ☐ ATR 动态止损（开关）         ← 启用/禁用 ATR 模式    │    │
+│ │  ATR 默认倍数: [2.0]            ← 倍数的兜底默认值       │    │
+│ └─────────────────────────────────────────────────────────┘    │
+│                         ↓                                      │
+│   settings.atrStopEnabled        → 控制是否启用               │
+│   settings.atrDefaultMultiplier  → 倍数的默认值               │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│ 层级 2: 开仓计划（数据输入层）                                   │
+│ ┌─────────────────────────────────────────────────────────┐    │
+│ │  ATR 止损辅助 [ATR值] × [倍数] [应用]                   │    │
+│ │  atrValue  = 用户填入的当前 ATR 数值（从 TradingView 等获取）│
+│ │  atrMultiplier = 用户手动调整的倍数（可选）               │
+│ └─────────────────────────────────────────────────────────┘    │
+│                         ↓                                      │
+│   被 calculate() 读取：                                        │
+│   atrValue → 决定止损距离                                      │
+│   atrMultiplier → 决定倍数（可覆盖设置默认值）                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 4.2 协同判断逻辑
+
+```javascript
+// calculator.js:31-37
+if (settings.atrStopEnabled && !isNaN(atrValue) && atrValue > 0) {
+  // 两个条件同时满足才启用 ATR 模式：
+  // 1. 设置中启用了 ATR 动态止损
+  // 2. 用户填写了有效的 ATR 值
+  var atrStopResult = calcATRStop(effectiveEntryPrice, atrValue, atrMultiplier, direction);
+  if (atrStopResult) {
+    stopLoss = atrStopResult.stopPrice;  // 用 ATR 计算的止损价覆盖手动 stopLoss
+    atrStopMode = true;
   }
 }
 ```
 
----
+### 4.3 三种实际场景
 
-### 问题 3：脚本加载顺序潜在风险
+| 设置 ATR 开关 | 开仓计划 ATR 字段 | 实际行为 |
+|-------------|-----------------|----------|
+| ❌ 关闭 | 填了值 | **不使用 ATR**，使用手动 `stopLoss` |
+| ❌ 关闭 | 未填 | **不使用 ATR**，使用手动 `stopLoss` |
+| ✅ 开启 | 填了值 | **使用 ATR**，自动计算止损价，覆盖手动值 |
+| ✅ 开启 | 未填 | **回退手动**，`atrValue` 为 NaN，条件不满足 |
 
-当前加载顺序：
-```
-calculator.js (line 1140) → skills-integration.js (line 1149)
-```
+### 4.4 设计意图
 
-`calculator.js` 调用 `loadSettings()`、`getAccountCapital()`、`getOpenPositions()` 等函数：
-- `loadSettings()` — 定义在 `settings.js` (line 1148) ✅
-- `getAccountCapital()` — 定义在 `risk.js` (line 1150) ⚠️
-
-**问题**：calculator.js 在 settings.js 之前加载，但 `loadSettings()` 是函数声明（hoisting），所以实际运行时没有问题。`getAccountCapital()` 同理。
-
-**结论**：当前加载顺序无实际运行时错误，但不够清晰。
+- **ATR 字段**是「数据输入层」——用户需要手动填入当前市场的 ATR 值（通常从 K 线工具获取）
+- **设置中的开关**是「功能控制层」——防止误操作，默认关闭
+- **设置中的默认倍数**是「便捷层」——用户无需每次手动填写倍数，自动使用设置值
 
 ---
 
-## 四、数据流完整性验证
+## 五、数据流完整性验证
 
 ### 组合热量链路（最复杂）
 ```
@@ -235,13 +290,13 @@ UI: 风控中心 + 开仓前检查 + 熔断拦截
 
 ---
 
-### ATR 止损链路
+### ATR 止损链路（修复后）
 ```
 设置: atrStopEnabled=true, atrDefaultMultiplier=2.0
   │
   ▼
 calculator.js: 读取 atrValue DOM, atrMultiplier DOM
-  │  └─ 未读取 settings.atrDefaultMultiplier ← 问题！
+  │  └─ 优先使用 DOM 值，回退到 settings.atrDefaultMultiplier
   │
   ├─ calcATRStop(effectiveEntryPrice, atrValue, atrMultiplier, direction)
   │  └─ stopPrice = entry ± (atrValue × multiplier)
@@ -249,6 +304,21 @@ calculator.js: 读取 atrValue DOM, atrMultiplier DOM
   ├─ 替代手动止损价: stopLoss = atrResult.stopPrice
   │
   └─ 显示: atr-badge tag
+```
+
+---
+
+## 六、验证清单
+
+```
+✅ 日亏损硬止损 — 达到上限时按钮变为"日亏损熔断"并禁用
+✅ 交易频率熔断 — 达到日最大笔数时禁用
+✅ 组合热量检查 — 超限后显示热量卡片并禁用计算
+✅ 品种集中度 — 超限后按比例截断仓位并显示警告
+✅ 心态评分联动 — ≤2 降仓 20-50%，=1 禁止交易（已读取 settings.mindsetMinScore）
+✅ R:R 最低检查 — 低于设置值时红色警告
+✅ ATR 动态止损 — 设置开关 + ATR 字段双条件控制，倍数读取设置默认值（已修复）
+✅ 凯利公式 — 功能正常，结果区显示半凯利参考
 ```
 
 ---
