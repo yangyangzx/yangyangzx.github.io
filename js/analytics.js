@@ -1728,7 +1728,7 @@ function renderMindsetAnalysis(closed) {
       '<td class="col-num">' + s.wins + '/' + s.losses + '</td>' +
       '<td class="col-num">' + wr.toFixed(1) + '%</td>' +
       '<td class="' + pnlClass + '">' + (avgPnl >= 0 ? '+' : '') + avgPnl.toFixed(2) + '</td>' +
-      '<td>' + devHtml + '</td>' +
+      '<td style="text-align:right;">' + devHtml + '</td>' +
       '</tr>';
   }
   tHtml += '</tbody></table>';
