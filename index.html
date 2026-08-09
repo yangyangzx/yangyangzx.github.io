@@ -1014,12 +1014,13 @@
           <!-- 【增强】心态评分最低通过值 -->
           <div class="setting-row">
             <label>心态评分最低通过</label>
-            <input type="number" id="setMindsetMinScore" min="1" max="5" step="1" value="3" title="低于此值的交易会标记警告">
+            <input type="number" id="setMindsetMinScore" min="1" max="5" step="1" value="3">
+            <span class="setting-hint">低于此值时将对此笔交易标记心态警告</span>
           </div>
           <!-- 【增强】品种自定义止损比例（JSON） -->
           <div class="setting-row-full">
             <label>自定义止损比例</label>
-            <input type="text" id="setCustomStopLimit" placeholder='例: {"ETH":2,"BTC":3}' style="width:100%;padding:6px;border-radius:4px;border:1px solid var(--color-border);background:var(--color-surface);font-family:monoid;color:var(--color-text);" title='JSON 格式，如 {"ETH":2,"BTC":3}，留空使用默认规则'>
+            <input type="text" id="setCustomStopLimit" placeholder='例: {"ETH":2,"BTC":3}'>
             <span class="setting-desc">对特定品种设置止损距离上限（百分比），格式为 JSON 对象。例如 {"ETH":2,"BTC":3} 表示 ETH 止损距离不超过 2%，BTC 不超过 3%。留空则使用默认规则（BTC≤3%，ETH≤2%）。</span>
           </div>
         </div>
@@ -1029,15 +1030,15 @@
       <div class="card">
         <div class="card-header"><i class="fas fa-coins"></i> 品种管理</div>
         <div class="settings-form">
-          <p style="font-size:12px;color:var(--color-text-muted);margin-bottom:12px;">管理可下拉选择的品种列表，添加后在开仓计划中可通过下拉选取或直接手动输入。直接输入的品种（未在列表中的）会保存到日志中，下次可手动添加到此列表。</p>
+          <p class="symbols-hint">管理可下拉选择的品种列表，添加后在开仓计划中可通过下拉选取或直接手动输入。直接输入的品种（未在列表中的）会保存到日志中，下次可手动添加到此列表。</p>
           <div id="customSymbolsList">
             <table class="custom-symbols-table">
               <thead><tr><th>品种</th><th>说明</th><th></th></tr></thead>
               <tbody></tbody>
             </table>
-            <button class="btn btn-sm btn-outline" onclick="addCustomSymbol()" style="margin-top:8px;"><i class="fas fa-plus"></i> 添加品种</button>
+            <button class="btn btn-sm btn-outline btn-add-symbol" onclick="addCustomSymbol()"><i class="fas fa-plus"></i> 添加品种</button>
           </div>
-          <div style="margin-top:12px;text-align:right;">
+          <div class="symbols-save-row">
             <button class="btn btn-sm btn-primary" onclick="saveCustomSymbols()"><i class="fas fa-save"></i> 保存品种</button>
           </div>
         </div>
@@ -1061,23 +1062,28 @@
           </div>
           <div class="setting-row">
             <label>组合热量安全上限 (%)</label>
-            <input type="number" id="setRiskHeatMax" min="3" max="15" step="1" value="6" title="所有未平仓持仓风险之和占本金的最大百分比">
+            <input type="number" id="setRiskHeatMax" min="3" max="15" step="1" value="6">
+            <span class="setting-hint">所有未平仓持仓风险之和占本金的最大百分比</span>
           </div>
           <div class="setting-row">
             <label>组合热量警告上限 (%)</label>
-            <input type="number" id="setPortfolioHeatMax" min="5" max="20" step="1" value="8" title="超过此值时发出警告">
+            <input type="number" id="setPortfolioHeatMax" min="5" max="20" step="1" value="8">
+            <span class="setting-hint">超过此值时发出警告</span>
           </div>
           <div class="setting-row">
             <label>最低盈亏比 (R:R)</label>
-            <input type="number" id="setMinRRRatio" min="1" max="5" step="0.5" value="2" title="低于此值的交易将被标记为不可接受">
+            <input type="number" id="setMinRRRatio" min="1" max="5" step="0.5" value="2">
+            <span class="setting-hint">低于此值的交易将被标记为不可接受</span>
           </div>
           <div class="setting-row">
             <label>单品种最大占比 (%)</label>
-            <input type="number" id="setSingleSymbolMaxPct" min="5" max="50" step="1" value="10" title="单品种保证金占总本金的最大百分比">
+            <input type="number" id="setSingleSymbolMaxPct" min="5" max="50" step="1" value="10">
+            <span class="setting-hint">单品种保证金占总本金的最大百分比</span>
           </div>
           <div class="setting-row">
             <label>每日最大交易笔数</label>
-            <input type="number" id="setDailyTradeMax" min="5" max="30" step="1" value="8" title="达到此笔数后将触发频率警告">
+            <input type="number" id="setDailyTradeMax" min="5" max="30" step="1" value="8">
+            <span class="setting-hint">达到此笔数后将触发频率警告</span>
           </div>
         </div>
       </div>
@@ -1120,7 +1126,7 @@
             <span>导入日志</span>
             <button class="btn btn-outline btn-sm" onclick="importLogs()">导入 JSON/CSV</button>
           </div>
-          <div class="setting-row" style="border-top:1px solid var(--color-border, #cbd5e1);padding-top:12px;margin-top:8px;">
+          <div class="setting-row setting-row-sep">
             <span>重置设置为默认值</span>
             <button class="btn btn-outline btn-sm" onclick="resetSettings()">重置</button>
           </div>

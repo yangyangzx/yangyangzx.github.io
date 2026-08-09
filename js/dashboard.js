@@ -362,10 +362,15 @@ function _renderEquityChart() {
 
   // ===== 使用ChartManager进行专业生命周期管理 =====
   const CHART_KEY = 'dashboard_equity_chart';
-  
-  // 预先注销可能存在的旧实例（防止内存泄漏）
+
+  // 安全清理：直接销毁绑定在此 Canvas 上的任何旧 Chart 实例
+  // 使用同步销毁而非 ChartManager 的 1000ms 延迟，避免 Canvas 被占用时报错
+  if (canvas._chart && typeof canvas._chart.destroy === 'function') {
+    canvas._chart.destroy();
+  }
+  // 同时清理 ChartManager 注册（立即销毁，不走延迟队列）
   if (window.ChartManager) {
-    window.ChartManager.unregister(CHART_KEY);
+    window.ChartManager.unregister(CHART_KEY, true);
   }
 
   const curve = window.utils.calcEquityCurve(closed);
@@ -378,16 +383,9 @@ function _renderEquityChart() {
   if (sorted.length === 0) {
     // 绘制占位文字（使用 CSS 像素坐标，因为 ctx 已缩放）
     ctx.clearRect(0, 0, rectWidth, rectHeight);
-    const canvasC = utils.getCanvasColors();
-    ctx.fillStyle = canvasC.text;
+    ctx.fillStyle = '#ffffff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.font = '13px -apple-system, sans-serif';
-    ctx.textAlign = 'center';
     ctx.fillText('暂无交易数据', rectWidth / 2, rectHeight / 2);
-    
-    // 确保清理任何可能的残留实例
-    if (window.ChartManager) {
-      window.ChartManager.unregister(CHART_KEY, true);
-    }
     return;
   }
 
