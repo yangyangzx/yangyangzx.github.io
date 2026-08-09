@@ -122,6 +122,9 @@ function renderSettings() {
 function saveSettings() {
   var settings = loadSettings();
 
+  // ✅ 保存品种管理（从 settings UI 编辑）
+  if (typeof saveCustomSymbols === 'function') saveCustomSymbols();
+
   // 读取 + 验证（原有字段）
   var fields = [
     { key: 'accountBalance',  id: 'setAccountBalance',  parser: parseFloat },
@@ -419,7 +422,7 @@ function addCustomSymbol() {
   var settings = loadSettings();
   if (!settings.customSymbols) settings.customSymbols = [];
   settings.customSymbols.push({ symbol: '', desc: '' });
-  saveSettings();
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   renderCustomSymbols();
 }
 
@@ -427,7 +430,7 @@ function removeCustomSymbol(idx) {
   var settings = loadSettings();
   if (!settings.customSymbols) return;
   settings.customSymbols.splice(idx, 1);
-  saveSettings();
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   renderCustomSymbols();
 }
 
@@ -442,7 +445,6 @@ function saveCustomSymbols() {
   });
   var settings = loadSettings();
   settings.customSymbols = symbols;
-  saveSettings();
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   syncSymbolDatalist();
-  showToast('品种列表已保存', 'success');
 }

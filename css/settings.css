@@ -9,12 +9,20 @@
 
 .settings-grid .card {
   overflow: visible;
-}
-
-.settings-form {
   display: flex;
   flex-direction: column;
+  height: auto;
+}
+
+.settings-grid .card > .settings-form {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
   gap: 0;
+}
+
+.settings-grid .card > .settings-form > * {
+  flex-shrink: 0;
 }
 
 .setting-row {
@@ -153,6 +161,27 @@
 @media (max-width: 700px) {
   .settings-grid {
     grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .settings-form {
+    gap: 0;
+  }
+  .setting-row {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .setting-row > label {
+    width: 100%;
+    white-space: normal;
+  }
+  .setting-row input[type="number"] {
+    width: 100%;
+  }
+}
+
+@media (min-width: 701px) and (max-width: 1024px) {
+  .settings-grid {
+    gap: 12px;
   }
 }
 
@@ -211,4 +240,32 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.03em;
+}
+
+/* ——— 品种管理表格按钮 ——— */
+.custom-symbols-table .btn-remove {
+  background: none;
+  border: none;
+  color: var(--color-danger);
+  cursor: pointer;
+  font-size: 16px;
+  padding: 4px 8px;
+  opacity: 0.6;
+  transition: opacity var(--dur-fast), transform var(--dur-fast);
+  line-height: 1;
+}
+
+.custom-symbols-table .btn-remove:hover {
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+/* ——— 品种管理卡片内布局优化 ——— */
+#customSymbolsList {
+  min-height: 60px;
+}
+
+/* 品种管理卡片内的提示文字不撑开 form gap */
+#customSymbolsList p {
+  margin: 0 0 8px 0;
 }
