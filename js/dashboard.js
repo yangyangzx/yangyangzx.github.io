@@ -288,11 +288,13 @@ function _renderLiqWarn() {
     if (dir === 'long') {
       // 做多：止损价 > 强平价 才安全
       isSafe = sl > liqPrice;
-      distance = liqPrice > 0 ? ((sl - liqPrice) / sl * 100) : 0;
+      // 统一使用入场价作为基准（与 risk.js 保持一致）
+      distance = liqPrice > 0 ? ((sl - liqPrice) / entry * 100) : 0;
     } else {
       // 做空：止损价 < 强平价 才安全
       isSafe = sl < liqPrice;
-      distance = liqPrice > 0 ? ((liqPrice - sl) / sl * 100) : 0;
+      // 统一使用入场价作为基准（与 risk.js 保持一致）
+      distance = liqPrice > 0 ? ((liqPrice - sl) / entry * 100) : 0;
     }
 
     if (!isSafe) {
