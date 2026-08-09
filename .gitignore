@@ -11,3 +11,4 @@ trading.html.backup_*
 .claude
 .hallmark
 *.md
+.gitignore
