@@ -1704,7 +1704,11 @@ function renderMindsetAnalysis(closed) {
 
   tHtml += '<div style="font-size:12px;color:var(--color-text-muted);margin-bottom:8px;">各评分详细统计：</div>';
   tHtml += '<table class="analytics-table"><thead><tr>' +
-    '<th>心态评分</th><th>笔数</th><th>盈利/亏损</th><th>胜率</th><th>平均盈亏</th><th>vs整体</th></tr></thead><tbody>';
+    '<th>心态评分</th><th data-col="count" data-sort="num">笔数 <span class="sort-arrow"></span></th>' +
+    '<th data-col="wins" data-sort="num">盈利/亏损 <span class="sort-arrow"></span></th>' +
+    '<th data-col="winRate" data-sort="num">胜率 <span class="sort-arrow"></span></th>' +
+    '<th data-col="avgPnl" data-sort="num">平均盈亏 <span class="sort-arrow"></span></th>' +
+    '<th data-col="wrDev" data-sort="num">vs整体 <span class="sort-arrow"></span></th></tr></thead><tbody>';
 
   for (var k = 0; k < keys.length; k++) {
     var score = keys[k];
@@ -1873,7 +1877,10 @@ function renderMarketConditionAnalysis(closed) {
   // 绘制表格
   var tHtml = '<div style="font-size:12px;color:var(--color-text-muted);margin-bottom:8px;">环境×时段×方向 交叉分析（样本≥2）：</div>';
   tHtml += '<table class="analytics-table"><thead><tr>' +
-    '<th>市场环境</th><th>时段</th><th>方向</th><th>笔数</th><th>胜率</th><th>总盈亏</th><th>平均盈亏</th></tr></thead><tbody>';
+    '<th>市场环境</th><th>时段</th><th>方向</th><th data-col="count" data-sort="num">笔数 <span class="sort-arrow"></span></th>' +
+    '<th data-col="winRate" data-sort="num">胜率 <span class="sort-arrow"></span></th>' +
+    '<th data-col="totalPnl" data-sort="num">总盈亏 <span class="sort-arrow"></span></th>' +
+    '<th data-col="avgPnl" data-sort="num">平均盈亏 <span class="sort-arrow"></span></th></tr></thead><tbody>';
 
   for (var i = 0; i < validRows.length; i++) {
     var r = validRows[i];
