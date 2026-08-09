@@ -10,7 +10,7 @@ function calculate() {
   const direction = document.getElementById('direction').value;
   const orderType = (document.getElementById('orderType')?.value) || 'market';
   const stopType = (document.getElementById('stopType')?.value) || 'stop-market';
-  const stopLoss = parseFloat(document.getElementById('stopLoss').value);
+  let stopLoss = parseFloat(document.getElementById('stopLoss').value);
   const lossStreak = Math.max(0, parseInt(document.getElementById('lossStreak').value) || 0);
   const targetPrice = parseFloat(document.getElementById('targetPrice').value);
 
@@ -52,14 +52,14 @@ function calculate() {
     triggerRow.style.display = 'none';
     splitArea.style.display = 'none';
     warnD.innerHTML = '<span class="warning-tag alert"><i class="fas fa-ban"></i> 日亏损熔断: 亏损 ' + Math.abs(dailyLossCheck.todayPnl).toFixed(2) + ' USDT / 上限 ' + dailyLossCheck.limit.toFixed(2) + ' USDT</span>';
-    const calcBtn = document.getElementById('calcBtn');
+    var calcBtn = document.getElementById('calcBtn');
     if (calcBtn) { calcBtn.classList.add('blocked'); calcBtn.innerHTML = '<i class="fas fa-ban"></i> 日亏损熔断'; }
-    const rb = document.getElementById('resultBox');
+    var rb = document.getElementById('resultBox');
     if (rb) rb.classList.add('warn');
     return;
   }
   // 恢复按钮状态
-  const calcBtn = document.getElementById('calcBtn');
+  var calcBtn = document.getElementById('calcBtn');
   if (calcBtn && calcBtn.classList.contains('blocked') && !dailyLossCheck.blocked) {
     calcBtn.classList.remove('blocked');
     calcBtn.innerHTML = '<i class="fas fa-sync-alt"></i> 计算仓位';
@@ -82,7 +82,7 @@ function calculate() {
     splitArea.style.display = 'none';
     warnD.innerHTML = '<span class="warning-tag alert"><i class="fas fa-ban"></i> 交易频率熔断: 今日已交易 ' + freqCheck.todayCount + ' 笔</span>';
     if (calcBtn) { calcBtn.classList.add('blocked'); calcBtn.innerHTML = '<i class="fas fa-ban"></i> 频率熔断'; }
-    const rb = document.getElementById('resultBox');
+    var rb = document.getElementById('resultBox');
     if (rb) rb.classList.add('warn');
     return;
   }
@@ -106,7 +106,7 @@ function calculate() {
     triggerRow.style.display = 'none';
     splitArea.style.display = 'none';
     warnD.innerHTML = '<span class="warning-tag alert"><i class="fas fa-exclamation-triangle"></i> ' + heatCheck.warning + '</span>';
-    const rb = document.getElementById('resultBox');
+    var rb = document.getElementById('resultBox');
     if (rb) rb.classList.add('warn');
     return;
   }
@@ -141,13 +141,13 @@ function calculate() {
     triggerRow.style.display = 'none';
     splitArea.style.display = 'none';
     warnD.innerHTML = '';
-    const rb = document.getElementById('resultBox');
+    var rb = document.getElementById('resultBox');
     if (rb) rb.classList.remove('warn');
   }
 
   // ========== 连亏熔断（当日连亏 ≥3 笔禁止计算） ==========
   const currentStreak = _getTodayLossStreak();
-  const calcBtn = document.getElementById('calcBtn');
+  var calcBtn = document.getElementById('calcBtn');
   if (currentStreak >= 3) {
     showToast('当日已连续亏损 ' + currentStreak + ' 笔，建议暂停交易冷静一下', 'warn');
     posD.textContent = '交易熔断';
@@ -162,7 +162,7 @@ function calculate() {
     triggerRow.style.display = 'none';
     splitArea.style.display = 'none';
     warnD.innerHTML = '<span class="warning-tag alert"><i class="fas fa-shield-alt"></i> 熔断保护已触发</span>';
-    const rb = document.getElementById('resultBox');
+    var rb = document.getElementById('resultBox');
     if (rb) rb.classList.add('warn');
     if (calcBtn) {
       calcBtn.classList.add('blocked');
@@ -176,7 +176,7 @@ function calculate() {
     calcBtn.innerHTML = '<i class="fas fa-sync-alt"></i> 计算仓位';
   }
   // 移除熔断时添加的 warn 类
-  const rb = document.getElementById('resultBox');
+  var rb = document.getElementById('resultBox');
   if (rb) rb.classList.remove('warn');
 
   if (entryPrice <= 0) { showCalcError('无效入场价', '入场价必须大于 0'); return; }
@@ -406,7 +406,7 @@ function calculate() {
     splitArea.style.display = 'none';
     warnD.innerHTML = '<span class="warning-tag alert"><i class="fas fa-ban"></i> ' + mindsetAdjust.message + '</span>';
     if (calcBtn) { calcBtn.classList.add('blocked'); calcBtn.innerHTML = '<i class="fas fa-ban"></i> 禁止交易'; }
-    const rb = document.getElementById('resultBox');
+    var rb = document.getElementById('resultBox');
     if (rb) rb.classList.add('warn');
     return;
   }
@@ -1030,6 +1030,10 @@ function resetForm() {
   if (stEl) stEl.value = 'stop-market';
   document.getElementById('feeRate').value = '0.08';
   document.getElementById('slippage').value = '0';
+  // 重置凯利字段
+  document.getElementById('kellyWinRate').value = '';
+  document.getElementById('kellyAvgWin').value = '';
+  document.getElementById('kellyAvgLoss').value = '';
 // 重置分批状态
 if (_splitMode) toggleSplitMode();
   renderMindsetStars(3);
