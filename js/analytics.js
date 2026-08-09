@@ -1553,7 +1553,7 @@ function renderMindsetAnalysis(closed) {
 
   // 计算相关性
   var totalTrades = keys.reduce(function(s, k) { return s + mindsetStats[k].count; }, 0);
-  var meanX = (keys[0] + keys[keys.length - 1]) / 2;
+  var meanX = keys.reduce(function(sum, k) { return sum + k * mindsetStats[k].count; }, 0) / totalTrades;
   var meanY = overallAvgPnl;
   var num = 0, denX = 0, denY = 0;
   for (var k = 0; k < keys.length; k++) {
@@ -1793,7 +1793,7 @@ function renderMarketConditionAnalysis(closed) {
   var labels = [], data = [], bgColors = [];
   for (var i = 0; i < topRows.length; i++) {
     var r = topRows[i];
-    var shortKey = r.marketCondition.substring(0, 4) + ' ' + r.session.substring(0, 2) + ' ' + r.direction;
+    var shortKey = (r.marketCondition.length > 4 ? r.marketCondition.substring(0, 4) + '…' : r.marketCondition) + ' ' + (r.session.length > 2 ? r.session.substring(0, 2) + '…' : r.session) + ' ' + r.direction;
     labels.push(shortKey);
     data.push(parseFloat(r.avgPnl.toFixed(2)));
     bgColors.push(r.avgPnl >= 0 ? cc.barWin : cc.barLoss);
