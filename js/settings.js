@@ -12,7 +12,15 @@ var SETTINGS_DEFAULTS = {
   backupCount: 10,
   autoBackup: true,
   customStopLimit: {},       // 新增：品种自定义止损比例，如 { "ETH": 2, "BTC": 3 }
-  mindsetMinScore: 3         // 新增：心态评分最低通过值
+  mindsetMinScore: 3,        // 新增：心态评分最低通过值
+  // Skills 融合新增配置
+  atrStopEnabled: false,     // ATR 动态止损开关
+  atrDefaultMultiplier: 2,   // ATR 默认倍数
+  portfolioHeatMax: 8,       // 组合热量最大百分比 (默认 8%)
+  minRRRatio: 2,             // 最低盈亏比 (默认 2:1)
+  singleSymbolMaxPct: 10,    // 单品种最大占比 (%)
+  dailyTradeMax: 8,          // 每日建议最大交易笔数
+  riskHeatMax: 6             // 组合热量安全上限 (%)
 };
 
 var SETTINGS_VALIDATORS = {
@@ -22,7 +30,13 @@ var SETTINGS_VALIDATORS = {
   maxDrawdownAlert:{ min: 5,     max: 50,        label: '最大回撤告警' },
   defaultLeverage: { min: 1,     max: 125,       label: '默认杠杆' },
   mmr:             { min: 0.1,   max: 5,         label: '维持保证金率' },
-  backupCount:     { min: 3,     max: 50,        label: '备份份数' }
+  backupCount:     { min: 3,     max: 50,        label: '备份份数' },
+  atrDefaultMultiplier: { min: 0.5, max: 5,      label: 'ATR 默认倍数' },
+  portfolioHeatMax:{ min: 5,     max: 20,        label: '组合热量上限' },
+  minRRRatio:      { min: 1,     max: 5,         label: '最低盈亏比' },
+  singleSymbolMaxPct: { min: 5, max: 50,        label: '单品种最大占比' },
+  dailyTradeMax:   { min: 5,     max: 30,        label: '日最大交易笔数' },
+  riskHeatMax:     { min: 3,     max: 15,        label: '组合热量安全上限' }
   // customStopLimit 和 mindsetMinScore 不需要简单的数值验证，特殊处理
 };
 
@@ -64,6 +78,30 @@ function renderSettings() {
   // ✅ 新增：渲染 mindsetMinScore
   el = document.getElementById('setMindsetMinScore');
   if (el) el.value = settings.mindsetMinScore !== undefined ? settings.mindsetMinScore : 3;
+
+  // ✅ Skills 融合：ATR 动态止损配置
+  el = document.getElementById('setAtrStopEnabled');
+  if (el) el.checked = settings.atrStopEnabled === true;
+  el = document.getElementById('setAtrMultiplier');
+  if (el) el.value = settings.atrDefaultMultiplier != null ? settings.atrDefaultMultiplier : 2;
+
+  // ✅ Skills 融合：组合热量配置
+  el = document.getElementById('setPortfolioHeatMax');
+  if (el) el.value = settings.portfolioHeatMax != null ? settings.portfolioHeatMax : 8;
+  el = document.getElementById('setRiskHeatMax');
+  if (el) el.value = settings.riskHeatMax != null ? settings.riskHeatMax : 6;
+
+  // ✅ Skills 融合：盈亏比最低限制
+  el = document.getElementById('setMinRRRatio');
+  if (el) el.value = settings.minRRRatio != null ? settings.minRRRatio : 2;
+
+  // ✅ Skills 融合：单品种集中度限制
+  el = document.getElementById('setSingleSymbolMaxPct');
+  if (el) el.value = settings.singleSymbolMaxPct != null ? settings.singleSymbolMaxPct : 10;
+
+  // ✅ Skills 融合：日最大交易笔数
+  el = document.getElementById('setDailyTradeMax');
+  if (el) el.value = settings.dailyTradeMax != null ? settings.dailyTradeMax : 8;
 
   // ✅ 新增：渲染 customStopLimit 字段（简化版：显示为文本框，JSON 格式）
   el = document.getElementById('setCustomStopLimit');
@@ -113,6 +151,48 @@ function saveSettings() {
     if (msVal < 1) msVal = 1;
     if (msVal > 5) msVal = 5;
     settings.mindsetMinScore = msVal;
+  }
+
+  // ✅ Skills 融合：保存 ATR 配置
+  var atrEnableEl = document.getElementById('setAtrStopEnabled');
+  if (atrEnableEl) settings.atrStopEnabled = atrEnableEl.checked;
+  var atrMultEl = document.getElementById('setAtrMultiplier');
+  if (atrMultEl) {
+    var amVal = parseFloat(atrMultEl.value);
+    if (!isNaN(amVal)) settings.atrDefaultMultiplier = amVal;
+  }
+
+  // ✅ Skills 融合：保存组合热量配置
+  var phMaxEl = document.getElementById('setPortfolioHeatMax');
+  if (phMaxEl) {
+    var phVal = parseFloat(phMaxEl.value);
+    if (!isNaN(phVal)) settings.portfolioHeatMax = phVal;
+  }
+  var rHeatEl = document.getElementById('setRiskHeatMax');
+  if (rHeatEl) {
+    var rhVal = parseFloat(rHeatEl.value);
+    if (!isNaN(rhVal)) settings.riskHeatMax = rhVal;
+  }
+
+  // ✅ Skills 融合：保存盈亏比限制
+  var minRREl = document.getElementById('setMinRRRatio');
+  if (minRREl) {
+    var minRRVal = parseFloat(minRREl.value);
+    if (!isNaN(minRRVal)) settings.minRRRatio = minRRVal;
+  }
+
+  // ✅ Skills 融合：保存单品种限制
+  var ssEl = document.getElementById('setSingleSymbolMaxPct');
+  if (ssEl) {
+    var ssVal = parseFloat(ssEl.value);
+    if (!isNaN(ssVal)) settings.singleSymbolMaxPct = ssVal;
+  }
+
+  // ✅ Skills 融合：保存日最大笔数
+  var dtmEl = document.getElementById('setDailyTradeMax');
+  if (dtmEl) {
+    var dtmVal = parseFloat(dtmEl.value);
+    if (!isNaN(dtmVal)) settings.dailyTradeMax = dtmVal;
   }
 
   // ✅ 新增：保存 customStopLimit（JSON 格式字符串解析）

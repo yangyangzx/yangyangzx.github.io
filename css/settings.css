@@ -155,3 +155,12 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Skills 融合：setting-desc */
+.setting-desc {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  line-height: 1.4;
+  display: block;
+  margin-top: 4px;
+}

@@ -257,6 +257,16 @@
               <input type="number" id="slippage" value="0" step="0.1" min="0" placeholder="如 1 点" />
               <span class="field-tip">实际成交价与预期价的偏差，影响净盈亏</span>
             </div>
+            <!-- Skills 融合：凯利公式输入 -->
+            <div class="form-group" id="kellyInputGroup" style="display:none;">
+              <label><i class="fas fa-calculator"></i> 凯利参考 <span class="optional-tag">（选填）</span></label>
+              <div class="flex-row" style="gap:6px;flex-wrap:wrap;">
+                <input type="number" id="kellyWinRate" step="0.01" min="0" max="1" placeholder="胜率(如0.55)" style="flex:1 1 70px;" title="历史胜率 0~1" />
+                <input type="number" id="kellyAvgWin" step="0.01" min="0" placeholder="均盈利" style="flex:1 1 70px;" title="平均盈利金额" />
+                <input type="number" id="kellyAvgLoss" step="0.01" min="0" placeholder="均亏损" style="flex:1 1 70px;" title="平均亏损金额" />
+              </div>
+              <span class="field-tip">基于历史数据计算凯利最优仓位，半凯利建议作为参考</span>
+            </div>
           </div>
         </div>
 
@@ -535,6 +545,16 @@
               <span class="check-icon pending">○</span>
               <span>心态评分 ≥ 3（平静/良好）</span>
             </div>
+            <!-- Skills 融合：组合热量检查 -->
+            <div class="check-item" id="checkPortfolioHeat">
+              <span class="check-icon pending">○</span>
+              <span>组合热量安全（≤ ' + (settings.riskHeatMax || 6) + '%）</span>
+            </div>
+            <!-- Skills 融合：品种集中度检查 -->
+            <div class="check-item" id="checkSymbolConc">
+              <span class="check-icon pending">○</span>
+              <span>品种集中度未超限</span>
+            </div>
 
           </div>
         </div>
@@ -722,6 +742,11 @@
       <div class="card">
         <div class="card-header">交易频率与趋势</div>
         <div id="riskFrequencyContent"></div>
+      </div>
+      <!-- Skills 融合：组合热量 -->
+      <div class="card">
+        <div class="card-header"><i class="fas fa-thermometer-half"></i> 组合热量</div>
+        <div id="riskHeatContent"></div>
       </div>
     </div>
   </section>
@@ -1014,6 +1039,45 @@
           </div>
         </div>
       </div>
+
+      <!-- Skills 融合参数 -->
+      <div class="card">
+        <div class="card-header"><i class="fas fa-robot"></i> Skills 融合参数</div>
+        <div class="settings-form">
+          <div class="setting-row">
+            <label>ATR 动态止损</label>
+            <label class="switch">
+              <input type="checkbox" id="setAtrStopEnabled">
+              <span class="slider"></span>
+            </label>
+            <span class="setting-desc" style="font-size:11px;color:var(--color-text-muted);display:block;margin-top:4px;">启用后当 ATR 值非空时自动以 ATR×倍数 作为止损距离</span>
+          </div>
+          <div class="setting-row">
+            <label>ATR 默认倍数</label>
+            <input type="number" id="setAtrMultiplier" min="0.5" max="5" step="0.1" value="2">
+          </div>
+          <div class="setting-row">
+            <label>组合热量安全上限 (%)</label>
+            <input type="number" id="setRiskHeatMax" min="3" max="15" step="1" value="6" title="所有未平仓持仓风险之和占本金的最大百分比">
+          </div>
+          <div class="setting-row">
+            <label>组合热量警告上限 (%)</label>
+            <input type="number" id="setPortfolioHeatMax" min="5" max="20" step="1" value="8" title="超过此值时发出警告">
+          </div>
+          <div class="setting-row">
+            <label>最低盈亏比 (R:R)</label>
+            <input type="number" id="setMinRRRatio" min="1" max="5" step="0.5" value="2" title="低于此值的交易将被标记为不可接受">
+          </div>
+          <div class="setting-row">
+            <label>单品种最大占比 (%)</label>
+            <input type="number" id="setSingleSymbolMaxPct" min="5" max="50" step="1" value="10" title="单品种保证金占总本金的最大百分比">
+          </div>
+          <div class="setting-row">
+            <label>每日最大交易笔数</label>
+            <input type="number" id="setDailyTradeMax" min="5" max="30" step="1" value="8" title="达到此笔数后将触发频率警告">
+          </div>
+        </div>
+      </div>
       
       <!-- 交易参数 -->
       <div class="card">
@@ -1082,6 +1146,7 @@
   <script src="js/dashboard.js"></script>
   <script src="js/planner.js"></script>
   <script src="js/settings.js"></script>
+  <script src="js/skills-integration.js"></script>
   <script src="js/risk.js"></script>
   <script src="js/analytics.js"></script>
   <script src="js/review.js"></script>

@@ -103,6 +103,7 @@ function renderRiskCenter() {
   renderLiqTable();
   renderConcentration(closed);
   renderFrequency(closed);
+  renderPortfolioHeat(closed);
 }
 
 // ——— 卡片 1：账户概览 ———
@@ -531,4 +532,47 @@ function renderFrequency(closedOverride) {
 // 辅助函数：提取交易日期字符串（使用 utils 统一实现）
 function _getTradeDateRisk(l) {
   return window.utils.toLocalDateStr(l ? (l.closeTime || l.time) : '');
+}
+
+// ==================== 卡片 7：组合热量 ====================
+function renderPortfolioHeat(closedOverride) {
+  var container = document.getElementById('riskHeatContent');
+  if (!container) return;
+
+  var heatCheck = calcPortfolioHeat();
+  var capital = getAccountCapital();
+  var settings = loadSettings();
+  var maxHeat = settings.riskHeatMax || 6;
+
+  if (!capital || capital <= 0) {
+    container.innerHTML = '<div class="risk-empty">请先在「系统设置」中填写账户余额以启用组合热量监控</div>';
+    return;
+  }
+
+  var heat = heatCheck.heat || 0;
+  var isBlocked = heatCheck.blocked;
+  var fillClass = isBlocked ? 'danger' : (heat >= maxHeat * 0.8 ? 'warn' : 'safe');
+  var heatPct = Math.min(heat / (maxHeat * 1.5) * 100, 100);
+
+  var html = '<div class="risk-alert-row"><span class="risk-stat-label">当前组合热量</span><span class="risk-stat-value ' + (isBlocked ? 'risk-danger' : (heat > maxHeat * 0.8 ? 'risk-warn' : 'risk-safe')) + '">' + heat.toFixed(1) + '%</span></div>';
+  html += '<div class="risk-alert-row"><span class="risk-sub">安全上限 ' + maxHeat + '%（总开口风险占本金）</span></div>';
+  html += '<div class="risk-progress-wrap"><span style="font-size:12px;color:var(--color-text-muted);">' + (isBlocked ? '热量超限，禁止开新仓' : '热量 ' + heat.toFixed(1) + '% / 上限 ' + maxHeat + '%（' + heatPct.toFixed(0) + '%）') + '</span>';
+  html += '<div class="risk-progress-bar"><div class="risk-progress-fill ' + fillClass + '" style="width:' + heatPct + '%;"></div></div></div>';
+
+  // 明细
+  if (heatCheck.details && heatCheck.details.length > 0) {
+    html += '<div style="margin-top:12px;font-size:12px;">';
+    html += '<div style="color:var(--color-text-muted);margin-bottom:6px;">持仓风险明细：</div>';
+    for (var i = 0; i < heatCheck.details.length; i++) {
+      var d = heatCheck.details[i];
+      html += '<div class="risk-alert-row" style="padding:4px 0;"><span class="risk-sub">' + d.symbol + '</span><span class="risk-sub">' + d.risk.toFixed(2) + ' USDT (' + d.pct.toFixed(2) + '%)</span></div>';
+    }
+    html += '</div>';
+  }
+
+  if (heatCheck.warning) {
+    html += '<div style="margin-top:8px;font-size:12px;color:' + (isBlocked ? 'var(--color-danger)' : 'var(--color-warning)') + ';">' + heatCheck.warning + '</div>';
+  }
+
+  container.innerHTML = html;
 }

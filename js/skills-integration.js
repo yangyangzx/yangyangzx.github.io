@@ -1,0 +1,257 @@
+// ==================== Skills 融合计算模块 ====================
+// 融合 position-sizer, risk-management, trading-plan-generator 技能逻辑
+
+/**
+ * 计算组合热量（Portfolio Heat）
+ * 返回当前未平仓持仓的总风险占比百分比
+ */
+function calcPortfolioHeat() {
+  var openPositions = getOpenPositions();
+  var capital = getAccountCapital();
+  if (!capital || capital <= 0) return { heat: 0, details: [], warning: null, blocked: false };
+
+  var totalRisk = 0;
+  var details = [];
+  for (var i = 0; i < openPositions.length; i++) {
+    var pos = openPositions[i];
+    var risk = parseFloat(pos.riskAmount) || 0;
+    totalRisk += risk;
+    details.push({
+      symbol: pos.symbol,
+      risk: risk,
+      pct: capital > 0 ? (risk / capital * 100) : 0
+    });
+  }
+
+  var heat = totalRisk / capital * 100;
+  var settings = loadSettings();
+  var maxHeat = settings.riskHeatMax || 6;
+  var warning = null;
+  var blocked = false;
+
+  if (heat >= maxHeat) {
+    blocked = true;
+    warning = '组合热量已达 ' + heat.toFixed(1) + '%，超过安全上限 ' + maxHeat + '%。建议平仓后再开新仓。';
+  } else if (heat >= settings.portfolioHeatMax || heat >= maxHeat * 0.8) {
+    warning = '组合热量 ' + heat.toFixed(1) + '% 接近上限 (' + maxHeat + '%)，注意控制新开仓风险。';
+  }
+
+  return { heat: heat, details: details, warning: warning, blocked: blocked };
+}
+
+/**
+ * 计算凯利公式仓位
+ * @param {number} winRate - 胜率 (0~1)
+ * @param {number} avgWin - 平均盈利金额
+ * @param {number} avgLoss - 平均亏损金额 (正值)
+ * @param {number} accountSize - 账户大小
+ * @param {boolean} halfKelly - 是否使用半凯利 (默认 true)
+ * @returns {object} {kellyPct, halfKellyPct, kellyShares, recommendation}
+ */
+function calcKelly(winRate, avgWin, avgLoss, accountSize, halfKelly) {
+  if (halfKelly === undefined) halfKelly = true;
+  if (!winRate || !avgWin || !avgLoss || avgLoss <= 0) return null;
+
+  // Kelly 公式：Kelly% = (WR × AvgWin - LR × AvgLoss) / AvgWin
+  var lossRate = 1 - winRate;
+  var kellyPct = (winRate * avgWin - lossRate * avgLoss) / avgWin;
+
+  // 半凯利（实践标准）
+  var halfKellyPct = kellyPct * 0.5;
+
+  // 确保不出现负值
+  if (kellyPct < 0) kellyPct = 0;
+  if (halfKellyPct < 0) halfKellyPct = 0;
+
+  // 约束到合理范围（不超过 5%）
+  kellyPct = Math.min(kellyPct, 0.05);
+  halfKellyPct = Math.min(halfKellyPct, 0.05);
+
+  var kellyShares = accountSize * kellyPct / avgLoss;
+  var halfKellyShares = accountSize * halfKellyPct / avgLoss;
+
+  var recommendation = '';
+  if (kellyPct <= 0) {
+    recommendation = '策略期望值为负，不建议使用此策略';
+  } else if (halfKellyPct < 0.01) {
+    recommendation = '凯利仓位极低，建议寻找更好的入场机会';
+  } else {
+    recommendation = '推荐半凯利仓位（更安全）';
+  }
+
+  return {
+    kellyPct: kellyPct,
+    halfKellyPct: halfKellyPct,
+    kellyShares: kellyShares,
+    halfKellyShares: halfKellyShares,
+    expectancy: winRate * avgWin - lossRate * avgLoss,
+    recommendation: recommendation
+  };
+}
+
+/**
+ * 计算 ATR 动态止损距离
+ * @param {number} entryPrice - 入场价
+ * @param {number} atrValue - ATR 值
+ * @param {number} multiplier - ATR 倍数 (默认 2.0)
+ * @param {string} direction - 方向 'long' 或 'short'
+ * @returns {object} {stopDistance, stopPrice, atrPct}
+ */
+function calcATRStop(entryPrice, atrValue, multiplier, direction) {
+  if (!entryPrice || entryPrice <= 0 || !atrValue || atrValue <= 0) return null;
+  var stopDistance = atrValue * multiplier;
+  var stopPrice = direction === 'long' ? (entryPrice - stopDistance) : (entryPrice + stopDistance);
+  var atrPct = (stopDistance / entryPrice) * 100;
+  return { stopDistance: stopDistance, stopPrice: stopPrice, atrPct: atrPct };
+}
+
+/**
+ * 检查 R:R 是否满足最低要求
+ * @param {number} targetRR - 盈亏比
+ * @param {number} minRR - 最低要求 (默认 2)
+ * @returns {object} {pass, currentRR, minRR, message}
+ */
+function checkRRRequirement(targetRR, minRR) {
+  if (targetRR == null || isNaN(targetRR)) return { pass: false, currentRR: null, minRR: minRR || 2, message: '未设置目标价，无法计算盈亏比' };
+  minRR = minRR || 2;
+  var pass = targetRR >= minRR;
+  var message = pass
+    ? '盈亏比 ' + targetRR.toFixed(2) + ':1 满足最低要求 (' + minRR + ':1)'
+    : '盈亏比 ' + targetRR.toFixed(2) + ':1 不足 ' + minRR + ':1，建议跳过此交易';
+  return { pass: pass, currentRR: targetRR, minRR: minRR, message: message };
+}
+
+/**
+ * 检查品种集中度
+ * @param {string} symbol - 品种
+ * @param {number} positionSize - 新仓位大小
+ * @param {number} leverage - 杠杆
+ * @param {number} capital - 账户大小
+ * @param {Array} openPositions - 未平仓持仓
+ * @returns {object} {pass, currentPct, maxPct, warning}
+ */
+function checkSymbolConcentration(symbol, positionSize, leverage, capital, openPositions) {
+  if (!capital || capital <= 0) return { pass: true, currentPct: 0, maxPct: 10, warning: null };
+  var maxPct = 10; // 默认值
+  try {
+    var settings = loadSettings();
+    maxPct = settings.singleSymbolMaxPct || 10;
+  } catch(e) {}
+
+  // 计算该品种的总保证金占比
+  var usedMargin = 0;
+  for (var i = 0; i < openPositions.length; i++) {
+    var pos = openPositions[i];
+    if (pos.symbol === symbol) {
+      var posLev = parseFloat(pos.leverage) || 1;
+      if (posLev <= 0) posLev = 1;
+      usedMargin += (parseFloat(pos.positionSize) || 0) / posLev;
+    }
+  }
+  // 新增仓位
+  var newLev = leverage || 1;
+  if (newLev <= 0) newLev = 1;
+  var newMargin = positionSize / newLev;
+  var totalMargin = usedMargin + newMargin;
+  var pct = (totalMargin / capital) * 100;
+
+  var warning = null;
+  if (pct >= maxPct) {
+    warning = symbol + ' 保证金占比 ' + pct.toFixed(1) + '% 已达上限 ' + maxPct + '%，无法开新仓';
+  } else if (pct >= maxPct * 0.8) {
+    warning = symbol + ' 保证金占比 ' + pct.toFixed(1) + '% 接近上限 ' + maxPct + '%';
+  }
+
+  return { pass: pct < maxPct, currentPct: pct, maxPct: maxPct, warning: warning };
+}
+
+/**
+ * 检查日亏损硬止损
+ * @returns {object} {overLimit, todayPnl, limit, blocked}
+ */
+function checkDailyLossLimit() {
+  var todayStr = window.utils.toLocalDateStr(new Date().toISOString());
+  var todayPnl = 0;
+  var closed = getClosedSorted();
+  for (var i = 0; i < closed.length; i++) {
+    var ct = closed[i].closeTime;
+    if (!ct) continue;
+    var closeDateStr = window.utils.toLocalDateStr(ct);
+    if (closeDateStr === todayStr) {
+      todayPnl += parseFloat(closed[i].pnlAmount) || 0;
+    }
+  }
+
+  var settings = loadSettings();
+  var capital = getAccountCapital() || settings.accountBalance;
+  var dailyLossPct = settings.dailyLossLimit || 5;
+  var dailyLossLimit = capital > 0 ? capital * (dailyLossPct / 100) : Infinity;
+
+  var overLimit = todayPnl <= -dailyLossLimit;
+  return {
+    overLimit: overLimit,
+    todayPnl: todayPnl,
+    limit: dailyLossLimit,
+    pctOfLimit: dailyLossLimit > 0 ? (Math.abs(Math.min(todayPnl, 0)) / dailyLossLimit * 100) : 0,
+    blocked: overLimit
+  };
+}
+
+/**
+ * 根据心态评分获取仓位调整系数
+ * @param {number} mindsetScore - 心态评分 1-5
+ * @returns {object} {adjustment, message, blocked}
+ */
+function getMindsetAdjustment(mindsetScore) {
+  if (!mindsetScore) mindsetScore = 3;
+  if (mindsetScore <= 1) {
+    return { adjustment: 0, message: '心态极差，禁止交易', blocked: true };
+  } else if (mindsetScore <= 2) {
+    return { adjustment: 0.5, message: '心态不佳，建议降仓至 50%', blocked: false };
+  } else if (mindsetScore <= 3) {
+    return { adjustment: 0.8, message: '心态中性，建议降仓至 80%', blocked: false };
+  }
+  return { adjustment: 1, message: '心态良好，正常仓位', blocked: false };
+}
+
+/**
+ * 检查今日交易频率
+ * @returns {object} {todayCount, maxCount, blocked, suggestion}
+ */
+function checkDailyTradeFrequency() {
+  var todayStr = window.utils.toLocalDateStr(new Date().toISOString());
+  var closed = getClosedSorted();
+  var todayCount = 0;
+  for (var i = 0; i < closed.length; i++) {
+    var ct = closed[i].closeTime;
+    if (!ct) continue;
+    if (window.utils.toLocalDateStr(ct) === todayStr) {
+      todayCount++;
+    }
+  }
+
+  var settings = loadSettings();
+  var maxCount = settings.dailyTradeMax || 8;
+  var blocked = todayCount >= maxCount;
+  var suggestion = blocked
+    ? '今日已交易 ' + todayCount + ' 笔，达到上限 ' + maxCount + ' 笔，建议停止交易'
+    : '今日已交易 ' + todayCount + ' 笔，建议最多 ' + maxCount + ' 笔';
+
+  return { todayCount: todayCount, maxCount: maxCount, blocked: blocked, suggestion: suggestion };
+}
+
+/**
+ * 生成综合风控检查报告
+ */
+function generateRiskCheckReport() {
+  var settings = loadSettings();
+  var mindsetScore = parseInt(document.getElementById('mindsetScore').value) || 3;
+
+  return {
+    portfolioHeat: calcPortfolioHeat(),
+    dailyLoss: checkDailyLossLimit(),
+    mindset: getMindsetAdjustment(mindsetScore),
+    dailyFrequency: checkDailyTradeFrequency(),
+    settings: settings
+  };
+}

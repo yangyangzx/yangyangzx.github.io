@@ -442,6 +442,26 @@ function updateChecklist() {
     return { result: passed, message: '心态评分 ' + mindsetScore + '/5 ' + (passed ? '(平静/良好)' : '(需谨慎)') };
   });
 
+  // Skills 融合：组合热量检查
+  updateCheckItemWithResult('checkPortfolioHeat', function() {
+    if (!calc || !calc.capital || calc.capital <= 0) return null;
+    var heatCheck = calcPortfolioHeat();
+    if (!heatCheck || heatCheck.heat === undefined) return null;
+    var maxHeat = settings.riskHeatMax || 6;
+    var passed = heatCheck.heat <= maxHeat;
+    return { result: passed, message: '组合热量 ' + heatCheck.heat.toFixed(1) + '% ≤ 上限 ' + maxHeat + '%' };
+  });
+
+  // Skills 融合：品种集中度检查
+  updateCheckItemWithResult('checkSymbolConc', function() {
+    if (!calc || !calc.capital || calc.capital <= 0 || !calc.positionSize) return null;
+    var openPositions = getOpenPositions();
+    var concCheck = checkSymbolConcentration(calc.symbol, calc.positionSize, calc.leverage, calc.capital, openPositions);
+    if (!concCheck || concCheck.maxPct === undefined) return null;
+    var passed = concCheck.pass;
+    return { result: passed, message: concCheck.warning || (passed ? '品种集中度正常' : '集中度超限') };
+  });
+
   // ========== P1 修复：当 _lastCalc 为 null 时所有检查项均为 null，显示提示 ==========
   var hintEl = document.getElementById('checklistHint');
   if (!calc) {
@@ -465,7 +485,7 @@ function updateChecklist() {
   if (calc) {
     // 收集所有检查的结果（用于写入日志）
     var checklistResults = {};
-    var checkItems = ['checkRiskPct','checkStopDist','checkLiqSafe','checkLossStreak','checkRR','checkMargin','checkReason','checkDailyLoss','checkMindset'];
+    var checkItems = ['checkRiskPct','checkStopDist','checkLiqSafe','checkLossStreak','checkRR','checkMargin','checkReason','checkDailyLoss','checkMindset','checkPortfolioHeat','checkSymbolConc'];
     for (var i = 0; i < checkItems.length; i++) {
       var id = checkItems[i];
       var el = document.getElementById(id);

@@ -22,6 +22,94 @@ function calculate() {
   // limit 类型滑点率保持 0
   const effectiveEntryPrice = entryPrice * (1 + directionSign * slippageRate);
 
+  // ===== Skills 融合：ATR 动态止损 =====
+  let atrStopMode = false;
+  const atrValue = parseFloat(document.getElementById('atrValue').value);
+  const atrMultiplier = parseFloat(document.getElementById('atrMultiplier').value) || 2;
+  var settings = loadSettings();
+  if (settings.atrStopEnabled && !isNaN(atrValue) && atrValue > 0) {
+    var atrStopResult = calcATRStop(effectiveEntryPrice, atrValue, atrMultiplier, direction);
+    if (atrStopResult) {
+      stopLoss = atrStopResult.stopPrice;
+      atrStopMode = true;
+    }
+  }
+
+  // ===== Skills 融合：日亏损硬止损检查 =====
+  var dailyLossCheck = checkDailyLossLimit();
+  if (dailyLossCheck.blocked) {
+    showToast('日亏损已达上限 (' + dailyLossCheck.pctOfLimit.toFixed(0) + '%)，禁止开新仓', 'error');
+    posD.textContent = '日亏损熔断';
+    marginD.textContent = '—';
+    levD.textContent = '';
+    rrD.textContent = '— : 1';
+    cardRR.className = 'result-card rr-neutral';
+    cardMargin.classList.remove('margin-danger');
+    targetDistD.style.display = 'none';
+    costL1.textContent = '今日亏损 ' + dailyLossCheck.todayPnl.toFixed(2) + ' USDT 已达上限';
+    costL2.innerHTML = '';
+    triggerRow.style.display = 'none';
+    splitArea.style.display = 'none';
+    warnD.innerHTML = '<span class="warning-tag alert"><i class="fas fa-ban"></i> 日亏损熔断: 亏损 ' + Math.abs(dailyLossCheck.todayPnl).toFixed(2) + ' USDT / 上限 ' + dailyLossCheck.limit.toFixed(2) + ' USDT</span>';
+    const calcBtn = document.getElementById('calcBtn');
+    if (calcBtn) { calcBtn.classList.add('blocked'); calcBtn.innerHTML = '<i class="fas fa-ban"></i> 日亏损熔断'; }
+    const rb = document.getElementById('resultBox');
+    if (rb) rb.classList.add('warn');
+    return;
+  }
+  // 恢复按钮状态
+  const calcBtn = document.getElementById('calcBtn');
+  if (calcBtn && calcBtn.classList.contains('blocked') && !dailyLossCheck.blocked) {
+    calcBtn.classList.remove('blocked');
+    calcBtn.innerHTML = '<i class="fas fa-sync-alt"></i> 计算仓位';
+  }
+
+  // ===== Skills 融合：交易频率检查 =====
+  var freqCheck = checkDailyTradeFrequency();
+  if (freqCheck.blocked) {
+    showToast('今日交易已达上限 (' + freqCheck.todayCount + '/' + freqCheck.maxCount + ')，禁止开新仓', 'warn');
+    posD.textContent = '交易频率熔断';
+    marginD.textContent = '—';
+    levD.textContent = '';
+    rrD.textContent = '— : 1';
+    cardRR.className = 'result-card rr-neutral';
+    cardMargin.classList.remove('margin-danger');
+    targetDistD.style.display = 'none';
+    costL1.textContent = '今日已交易 ' + freqCheck.todayCount + ' 笔，达到上限';
+    costL2.innerHTML = '';
+    triggerRow.style.display = 'none';
+    splitArea.style.display = 'none';
+    warnD.innerHTML = '<span class="warning-tag alert"><i class="fas fa-ban"></i> 交易频率熔断: 今日已交易 ' + freqCheck.todayCount + ' 笔</span>';
+    if (calcBtn) { calcBtn.classList.add('blocked'); calcBtn.innerHTML = '<i class="fas fa-ban"></i> 频率熔断'; }
+    const rb = document.getElementById('resultBox');
+    if (rb) rb.classList.add('warn');
+    return;
+  }
+  if (calcBtn && calcBtn.classList.contains('blocked')) {
+    calcBtn.classList.remove('blocked');
+    calcBtn.innerHTML = '<i class="fas fa-sync-alt"></i> 计算仓位';
+  }
+
+  // ===== Skills 融合：组合热量检查 =====
+  var heatCheck = calcPortfolioHeat();
+  if (heatCheck.blocked) {
+    posD.textContent = '热量超限';
+    marginD.textContent = '—';
+    levD.textContent = '';
+    rrD.textContent = '— : 1';
+    cardRR.className = 'result-card rr-neutral';
+    cardMargin.classList.remove('margin-danger');
+    targetDistD.style.display = 'none';
+    costL1.textContent = '组合热量 ' + heatCheck.heat.toFixed(1) + '% 已达上限';
+    costL2.innerHTML = '';
+    triggerRow.style.display = 'none';
+    splitArea.style.display = 'none';
+    warnD.innerHTML = '<span class="warning-tag alert"><i class="fas fa-exclamation-triangle"></i> ' + heatCheck.warning + '</span>';
+    const rb = document.getElementById('resultBox');
+    if (rb) rb.classList.add('warn');
+    return;
+  }
+
   const posD = document.getElementById('positionDisplay');
   const marginD = document.getElementById('marginDisplay');
   const levD = document.getElementById('leverageDisplay');
@@ -121,6 +209,21 @@ function calculate() {
     }
   }
 
+  // ===== Skills 融合：凯利公式计算（额外显示） =====
+  let kellyHTML = '';
+  try {
+    var kellyWinRate = parseFloat(document.getElementById('kellyWinRate')?.value);
+    var kellyAvgWin = parseFloat(document.getElementById('kellyAvgWin')?.value);
+    var kellyAvgLoss = parseFloat(document.getElementById('kellyAvgLoss')?.value);
+    if (!isNaN(kellyWinRate) && !isNaN(kellyAvgWin) && !isNaN(kellyAvgLoss) && kellyAvgLoss > 0) {
+      var kellyResult = calcKelly(kellyWinRate, kellyAvgWin, kellyAvgLoss, capital, true);
+      if (kellyResult && kellyResult.halfKellyPct > 0) {
+        var kellyRisk = capital * kellyResult.halfKellyPct;
+        kellyHTML = '<div style="margin-top:8px;padding:8px;background:var(--color-surface);border-radius:6px;font-size:12px;"><span style="color:var(--color-text-muted);">凯利参考：</span><span style="color:var(--color-primary);">半凯利 ' + kellyResult.halfKellyPct.toFixed(2) + ' 风险 = ' + kellyRisk.toFixed(2) + ' USDT</span> <span style="color:var(--color-text-muted);">| 期望值 ' + kellyResult.expectancy.toFixed(2) + '</span></div>';
+      }
+    }
+  } catch(e) {}
+
   // BUG#2: 分批独立止损时，用各批止损距离的加权平均替代主止损计算 stopDistance
   let stopDistance=0, positionSize=0, valid=true, err='', rw='';
   let useWeightedStop = false;
@@ -153,7 +256,17 @@ function calculate() {
       }
     }
   }
-  if (!useWeightedStop) {
+
+  // Skills 融合：ATR 模式下使用 ATR 计算的止损距离
+  if (atrStopMode && !useWeightedStop) {
+    var atrResult = calcATRStop(effectiveEntryPrice, atrValue, atrMultiplier, direction);
+    if (atrResult) {
+      stopDistance = atrResult.stopDistance;
+      positionSize = riskAmount * effectiveEntryPrice / stopDistance;
+    }
+  }
+
+  if (!useWeightedStop && !atrStopMode) {
     if (direction==='long') {
       if (stopLoss>=effectiveEntryPrice) { err='做多止损价必须 < 入场价'; valid=false; }
       else { stopDistance=Math.abs(effectiveEntryPrice-stopLoss); positionSize=riskAmount*effectiveEntryPrice/stopDistance; }
@@ -258,6 +371,48 @@ function calculate() {
       cappedByLiquidation = true;
       liqMsg = '<span class="warning-tag alert"><i class="fas fa-skull"></i> 止损超越强平价：止损 ' + stopLoss.toFixed(2) + ' 在强平价 ' + liquidationPrice.toFixed(2) + ' ' + (direction === 'long' ? '之下' : '之上') + '，价格到达止损前仓位将被强制平仓。建议收紧止损距离或降低杠杆。</span>';
     }
+  }
+
+  // ===== Skills 融合：品种集中度检查 =====
+  var concentrationCheck = checkSymbolConcentration(symbol, finalPos, leverage, capital, openPositions);
+  if (!cappedByMargin && !concentrationCheck.pass) {
+    cappedByMargin = true;
+    capMsg = (capMsg ? capMsg + ' ' : '') + '<span class="warning-tag alert"><i class="fas fa-exclamation-triangle"></i> ' + concentrationCheck.warning + '</span>';
+    // 按比例缩减仓位
+    var ratio = (concentrationCheck.maxPct * capital / 100) / (finalPos / leverage);
+    if (ratio > 0 && ratio < 1) {
+      positionSize = finalPos * ratio;
+      riskAmount = positionSize * stopDistance / effectiveEntryPrice;
+      riskPercent = riskAmount / capital;
+    }
+  }
+
+  // ===== Skills 融合：心态评分影响仓位 =====
+  const mindsetScore = parseInt(document.getElementById('mindsetScore').value) || 3;
+  var mindsetAdjust = getMindsetAdjustment(mindsetScore);
+  if (mindsetAdjust.blocked) {
+    showToast('心态评分过低，禁止交易', 'error');
+    posD.textContent = '禁止交易';
+    marginD.textContent = '—';
+    levD.textContent = '';
+    rrD.textContent = '— : 1';
+    cardRR.className = 'result-card rr-neutral';
+    cardMargin.classList.remove('margin-danger');
+    targetDistD.style.display = 'none';
+    costL1.textContent = mindsetAdjust.message;
+    costL2.innerHTML = '';
+    triggerRow.style.display = 'none';
+    splitArea.style.display = 'none';
+    warnD.innerHTML = '<span class="warning-tag alert"><i class="fas fa-ban"></i> ' + mindsetAdjust.message + '</span>';
+    if (calcBtn) { calcBtn.classList.add('blocked'); calcBtn.innerHTML = '<i class="fas fa-ban"></i> 禁止交易'; }
+    const rb = document.getElementById('resultBox');
+    if (rb) rb.classList.add('warn');
+    return;
+  }
+  if (mindsetAdjust.adjustment < 1) {
+    positionSize = positionSize * mindsetAdjust.adjustment;
+    riskAmount = riskAmount * mindsetAdjust.adjustment;
+    riskPercent = riskAmount / capital;
   }
 
   let effLev=leverage, actualMargin=positionSize;
@@ -365,6 +520,7 @@ function calculate() {
   cardMargin.classList.toggle('margin-danger', finalMargin > capital);
 
   // ===== 三卡片：盈亏比 =====
+  let rrCheckResult = null;
   if (targetRR !== null) {
     rrD.textContent = targetRR.toFixed(2) + ' : 1';
     if (targetRR >= 3) {
@@ -373,6 +529,10 @@ function calculate() {
       cardRR.className = 'result-card rr-amber';
     } else {
       cardRR.className = 'result-card rr-red';
+    }
+    rrCheckResult = checkRRRequirement(targetRR, settings.minRRRatio);
+    if (!rrCheckResult.pass && settings.minRRRatio > 0) {
+      rw = '<span class="warning-tag alert"><i class="fas fa-exclamation-triangle"></i> ' + rrCheckResult.message + '</span>' + (rw ? '<br>' + rw : '');
     }
   } else {
     rrD.textContent = '— : 1';
@@ -396,6 +556,10 @@ function calculate() {
   if (totalFee > 0 || slippageCost > 0) {
     costL1HTML += '<span>费用 ' + totalCost.toFixed(2) + ' USDT</span>';
   }
+  if (atrStopMode) {
+    costL1HTML += '<span class="atr-badge" style="margin-left:8px;padding:2px 6px;background:var(--color-primary-bg);color:var(--color-primary);border-radius:4px;font-size:11px;"><i class="fas fa-wave-square"></i> ATR 动态止损 ' + atrMultiplier.toFixed(1) + 'x</span>';
+  }
+  if (kellyHTML) costL1HTML += kellyHTML;
   costL1.innerHTML = costL1HTML;
 
   // ===== 风险与成本行 L2：止损距离 tag + 方向 + 品种 + 目标 =====
