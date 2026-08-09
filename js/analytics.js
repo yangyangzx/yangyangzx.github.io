@@ -1744,10 +1744,14 @@ function renderMarketConditionAnalysis(closed) {
   if (!canvas || !tableEl) return;
 
   // 按市场环境分组
+  var sessionLabelMap = {
+    'asia': '亚盘', 'europe': '欧盘', 'us': '美盘',
+    'overlap': '重叠时段', 'allday': '全天', '未标记': '未标记'
+  };
   var marketStats = {};
   for (var i = 0; i < closed.length; i++) {
-    var mc = closed[i].marketCondition || '未标记';
-    var session = closed[i].session || '未标记';
+    var mc = getMarketConditionLabel(closed[i].marketCondition);
+    var session = sessionLabelMap[closed[i].session] || closed[i].session || '未标记';
     var dir = closed[i].direction || '未标记';
     var pnl = safeParseNum(closed[i].pnlAmount);
     if (pnl == null) continue;
@@ -1765,7 +1769,7 @@ function renderMarketConditionAnalysis(closed) {
   var keys = Object.keys(marketStats);
   if (keys.length === 0) {
     var totalClosed = closed.length;
-    var withMarket = closed.filter(function(l) { return l.marketCondition && l.marketCondition !== '未标记'; }).length;
+    var withMarket = closed.filter(function(l) { return l.marketCondition && getMarketConditionLabel(l.marketCondition) !== '—'; }).length;
     var msg = '暂无市场环境数据';
     if (totalClosed > 0) {
       msg += '（共 ' + totalClosed + ' 笔已平仓，其中 ' + withMarket + ' 笔有市场环境记录）';

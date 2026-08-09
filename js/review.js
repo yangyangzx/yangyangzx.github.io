@@ -526,11 +526,11 @@ function renderExecutionQuality(closed) {
   var tableEl = document.getElementById('executionTableWrap');
   if (!canvas || !tableEl) return;
 
-  // 按执行分分组
+  // 按执行分分组（0=未评分，1-3=已评分）
   var execStats = {};
   for (var i = 0; i < closed.length; i++) {
     var es = closed[i].executionScore;
-    if (es == null || es < 1 || es > 3) continue;
+    if (es == null || es < 0 || es > 3) continue;
     var pnl = safeParseNum(closed[i].pnlAmount);
     if (pnl == null) continue;
     var rm = safeParseNum(closed[i].rMultiple);
@@ -548,7 +548,7 @@ function renderExecutionQuality(closed) {
   var keys = Object.keys(execStats).map(Number).sort(function(a, b) { return a - b; });
   if (keys.length === 0) {
     var totalClosed = closed.length;
-    var withExec = closed.filter(function(l) { return l.executionScore != null && l.executionScore > 0; }).length;
+    var withExec = closed.filter(function(l) { return l.executionScore != null; }).length;
     var msg = '暂无执行评分数据';
     if (totalClosed > 0) {
       msg += '（共 ' + totalClosed + ' 笔已平仓，其中 ' + withExec + ' 笔有执行评分）';
