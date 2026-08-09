@@ -1533,6 +1533,7 @@ function renderMindsetAnalysis(closed) {
   }
 
   var keys = Object.keys(mindsetStats).map(Number).sort(function(a, b) { return a - b; });
+  console.log("[MindsetAnalysis] closed.length:", closed.length, "mindsetStats keys:", keys, "totalClosed with mindset:", withMindset);
   if (keys.length === 0) {
     var totalClosed = closed.length;
     var withMindset = closed.filter(function(l) { return l.mindsetScore != null; }).length;
@@ -1565,8 +1566,9 @@ function renderMindsetAnalysis(closed) {
   var meanY = overallAvgPnl;
   var num = 0, denX = 0, denY = 0;
   for (var k = 0; k < keys.length; k++) {
-    var s = mindsetStats[k];
-    var x = k - meanX;
+    var score = keys[k];  // 修复：使用 keys[k] 作为键值
+    var s = mindsetStats[score];
+    var x = score - meanX;
     var y = (s.totalPnl / s.count) - meanY;
     num += x * y * s.count;
     denX += x * x * s.count;
