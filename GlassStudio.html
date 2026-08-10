@@ -372,7 +372,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 .rh.mr{top:calc(50% - 4px);right:-4px;cursor:e-resize}
 .gel.locked{cursor:default;opacity:0.7;transition:opacity 200ms var(--ease-out)}
 .gel.locked .rh{display:none!important}
-.gel.dragging{box-shadow:0 12px 40px rgba(0,0,0,.5),0 0 0 1px var(--border2);transition:box-shadow 140ms var(--ease-out)}
+.gel.dragging{box-shadow:0 12px 40px rgba(0,0,0,.5),0 0 0 1px var(--border2);transition:box-shadow 140ms var(--ease-out);will-change:left,top,width,height,backdrop-filter}
 /* Staggered entrance: new elements fade/scale in sequentially */
 .gel:nth-child(1 of .gel){animation-delay:0ms}
 .gel:nth-child(2 of .gel){animation-delay:60ms}
@@ -1065,7 +1065,8 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
       +`</filter>`;
   }
   h+='</defs></svg>';
-  document.write(h);
+  // document.write is deprecated and breaks in module/XHTML contexts — inject directly
+  document.body.insertAdjacentHTML('afterbegin', h);
 })();
 
 // ═══════════════════════════════════════════════════════════════
@@ -1255,7 +1256,7 @@ function loadFile(file) {
       S.hIdx = -1;
       saveHist();
       _dirty = false; // new image load is not an "unsaved change"
-      localStorage.removeItem('gs_autosave'); // clear stale autosave
+      _idb.del('gs_autosave').catch(()=>{}); // clear stale autosave
       render();
     };
     img.src = ev.target.result;
@@ -1306,9 +1307,11 @@ function applyZoom(pct, updateSlider) {
 // RENDER
 // ═══════════════════════════════════════════════════════════════
 function render() {
-  // Size canvas to image
-  el.cv.style.width  = S.imgW + 'px';
-  el.cv.style.height = S.imgH + 'px';
+  _rebuildElMap();
+  // Size canvas to image — skip DOM writes when unchanged (avoid layout churn)
+  const cvW = S.imgW + 'px', cvH = S.imgH + 'px';
+  if (el.cv.style.width !== cvW) el.cv.style.width = cvW;
+  if (el.cv.style.height !== cvH) el.cv.style.height = cvH;
 
   // Image element
   let imgEl = el.cv.querySelector('img');
@@ -1501,15 +1504,17 @@ function applyStyle(dom, el2, forceRebuild) {
   const rawTxt = el2.text || '';  // unescaped, for textContent comparison
   const empty = !rawTxt;
 
-  if (el2.type === 'glass') {
-    const rgb = h2r(el2.bg || '#ffffff');
-    const op  = el2.op  ?? 0.2;
-    const blr = el2.blur ?? 18;
+  if (el2.type === 'glass' || el2.type === 'card') {
+    // Glass and card share the same style pipeline — only defaults differ.
+    const isGlass = el2.type === 'glass';
+    const rgb = h2r(el2.bg || (isGlass ? '#ffffff' : '#000000'));
+    const op  = el2.op  ?? (isGlass ? 0.2 : 0.65);
+    const blr = el2.blur ?? (isGlass ? 18 : 4);
     const br  = el2.br   ?? 100;
-    const sat = el2.sat  ?? 140;
+    const sat = el2.sat  ?? (isGlass ? 140 : 100);
     const bw  = el2.bw   ?? 1;
-    const bc  = el2.bc   ?? '#ffffff';
-    const bop = el2.bop  ?? 0.35;
+    const bc  = el2.bc   ?? (isGlass ? '#ffffff' : '#000000');
+    const bop = el2.bop  ?? (isGlass ? 0.35 : 0.1);
     const bcRgb = h2r(bc);
     const bfStr = blr > 0 ? `blur(${blr}px) ` : '';
     const bfSat = sat !== 100 ? `saturate(${sat}%) ` : '';
@@ -1518,35 +1523,11 @@ function applyStyle(dom, el2, forceRebuild) {
     dom.style.backdropFilter    = `${bfStr}${bfSat}${bfBr}`.trim();
     dom.style.webkitBackdropFilter = dom.style.backdropFilter;
     dom.style.border            = bw > 0 ? `${bw}px solid rgba(${bcRgb.r},${bcRgb.g},${bcRgb.b},${bop})` : 'none';
-    dom.style.boxShadow         = (el2.bs || 'var(--shadow-md)') + (bw > 0 ? `,inset 0 1px 0 rgba(${bcRgb.r},${bcRgb.g},${bcRgb.b},${bop * 0.5})` : '');
+    // Glass keeps the inset top highlight via box-shadow; card uses a plain drop shadow.
+    dom.style.boxShadow = isGlass
+      ? (el2.bs || 'var(--shadow-md)') + (bw > 0 ? `,inset 0 1px 0 rgba(${bcRgb.r},${bcRgb.g},${bcRgb.b},${bop * 0.5})` : '')
+      : (el2.bs || '0 4px 24px rgba(0,0,0,.3)');
     // Skip innerHTML rebuild if nothing changed (compare against raw text, not escaped)
-    const child = inner.firstChild;
-    const needsRebuild = forceRebuild
-      || !child
-      || child.className !== 'el-text'
-      || child.style.cssText !== textCss
-      || (empty ? (child.textContent !== '双击添加文字') : (child.textContent !== rawTxt));
-    if (needsRebuild) {
-      inner.innerHTML = txt ? `<div class="el-text" style="${textCss}">${txt}</div>` : `<div class="el-text" style="${textCss};opacity:0.3;font-size:11px">双击添加文字</div>`;
-    }
-  } else if (el2.type === 'card') {
-    const rgb = h2r(el2.bg || '#000000');
-    const op  = el2.op  ?? 0.65;
-    const blr = el2.blur ?? 4;
-    const br  = el2.br   ?? 100;
-    const sat = el2.sat  ?? 100;
-    const bw  = el2.bw   ?? 1;
-    const bc  = el2.bc   ?? '#000000';
-    const bop = el2.bop  ?? 0.1;
-    const bcRgb = h2r(bc);
-    const bfStr = blr > 0 ? `blur(${blr}px) ` : '';
-    const bfSat = sat !== 100 ? `saturate(${sat}%) ` : '';
-    const bfBr  = br  !== 100 ? `brightness(${br}%)` : '';
-    dom.style.background        = `rgba(${rgb.r},${rgb.g},${rgb.b},${op})`;
-    dom.style.backdropFilter    = `${bfStr}${bfSat}${bfBr}`.trim();
-    dom.style.webkitBackdropFilter = dom.style.backdropFilter;
-    dom.style.border            = bw > 0 ? `${bw}px solid rgba(${bcRgb.r},${bcRgb.g},${bcRgb.b},${bop})` : 'none';
-    dom.style.boxShadow         = el2.bs || '0 4px 24px rgba(0,0,0,.3)';
     const child = inner.firstChild;
     const needsRebuild = forceRebuild
       || !child
@@ -1581,7 +1562,15 @@ function h2r(hex) {
   const v = parseInt(h, 16);
   return { r:(v>>16)&255, g:(v>>8)&255, b:v&255 };
 }
-function getEl2(id) { return S.els.find(e => e.id === id); }
+// id → element index. Rebuilt on every render (S.els is the source of truth),
+// turning getEl2 from O(n) linear scan into O(1) map lookup. All S.els mutations
+// are followed by a render() call, so the map never goes stale outside renders.
+const elMap = new Map();
+function _rebuildElMap() {
+  elMap.clear();
+  for (let i = 0; i < S.els.length; i++) elMap.set(S.els[i].id, S.els[i]);
+}
+function getEl2(id) { return elMap.get(id); }
 
 // ═══════════════════════════════════════════════════════════════
 // INLINE TEXT EDITING
@@ -1771,6 +1760,32 @@ function _autoScrollCanvas(clientX, clientY) {
   });
 }
 
+// Filter the element list to only neighbors that could possibly snap/gap-measure
+// against the dragged element. Mathematically equivalent to scanning every element
+// (snap requires a < SNAP px edge/center delta; spacing requires a ≤100px gap),
+// but skips far-away elements so dragging stays smooth with many elements.
+function _dragNearby(el2, nx, ny, axis) {
+  const res = [];
+  // Snap: element bounds must intersect the dragged bounds expanded by SNAP.
+  const sxL = nx - SNAP, sxR = nx + el2.w + SNAP;
+  const syT = ny - SNAP, syB = ny + el2.h + SNAP;
+  // Spacing: gap is capped at 100px, so bounds expanded by 100 is sufficient.
+  const bxL = nx - 100, bxR = nx + el2.w + 100;
+  const byT = ny - 100, byB = ny + el2.h + 100;
+  for (let i = 0; i < S.els.length; i++) {
+    const o = S.els[i];
+    if (o.id === S._drag) continue;
+    if (axis === 'x') {
+      if (o.x + o.w > sxL && o.x < sxR) res.push(o);
+    } else if (axis === 'y') {
+      if (o.y + o.h > syT && o.y < syB) res.push(o);
+    } else {
+      if (o.x + o.w > bxL && o.x < bxR && o.y + o.h > byT && o.y < byB) res.push(o);
+    }
+  }
+  return res;
+}
+
 function onMouseMove(e) {
   const scale = S.zoom / 100;
   if (S._drag) {
@@ -1792,10 +1807,9 @@ function onMouseMove(e) {
     // Checks left/center/right edges on X, top/center/bottom on Y.
     const guides = [];
 
-    // X-axis snap candidates: canvas edges/center + other elements' edges/center
+    // X-axis snap candidates: canvas edges/center + nearby elements' edges/center
     const vTargets = [0, S.imgW, S.imgW / 2];
-    S.els.forEach(o => {
-      if (o.id === S._drag) return;
+    _dragNearby(el2, nx, ny, 'x').forEach(o => {
       vTargets.push(o.x, o.x + o.w, o.x + o.w / 2);
     });
     const vEdges = [
@@ -1815,8 +1829,7 @@ function onMouseMove(e) {
 
     // Y-axis snap candidates
     const hTargets = [0, S.imgH, S.imgH / 2];
-    S.els.forEach(o => {
-      if (o.id === S._drag) return;
+    _dragNearby(el2, nx, ny, 'y').forEach(o => {
       hTargets.push(o.y, o.y + o.h, o.y + o.h / 2);
     });
     const hEdges = [
@@ -1841,8 +1854,7 @@ function onMouseMove(e) {
     let spIdx = 0;
     const aL = nx, aR = nx + el2.w, aT = ny, aB = ny + el2.h;
     let bestHG = null, bestVG = null;
-    S.els.forEach(o => {
-      if (o.id === S._drag) return;
+    _dragNearby(el2, nx, ny, 'both').forEach(o => {
       const oL = o.x, oR = o.x + o.w, oT = o.y, oB = o.y + o.h;
       // Horizontal gap (side by side): elements must vertically overlap
       const vOverlap = Math.min(aB, oB) - Math.max(aT, oT);
@@ -2497,6 +2509,11 @@ function _llDrop(e) {
   saveHist();
   render();
 }
+// Layer-list drag & drop is container-scoped — bind once at load; the per-item
+// DOM is rebuilt on every renderLayers() without touching these listeners.
+el.ll.addEventListener('dragover', _llDragOver);
+el.ll.addEventListener('dragleave', _llDragLeave);
+el.ll.addEventListener('drop', _llDrop);
 function renderLayers() {
   if (!S.els.length) {
     el.ll.innerHTML = `<div class="empty-st"><svg width="26" height="26" viewBox="0 0 26 26" fill="none"><rect x="2" y="4" width="22" height="18" rx="3" stroke="currentColor" stroke-width="1.2"/></svg><p>还没有元素</p></div>`;
@@ -2553,13 +2570,8 @@ function renderLayers() {
     });
     el.ll.appendChild(div);
   });
-  // Drop target on the layer list container
-  el.ll.removeEventListener('dragover', _llDragOver);
-  el.ll.removeEventListener('dragleave', _llDragLeave);
-  el.ll.removeEventListener('drop', _llDrop);
-  el.ll.addEventListener('dragover', _llDragOver);
-  el.ll.addEventListener('dragleave', _llDragLeave);
-  el.ll.addEventListener('drop', _llDrop);
+  // Drop target listeners are bound once at init (see _bindLayerDnD) — the layer
+  // items are rebuilt on every render but the container listeners persist.
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2967,6 +2979,50 @@ function tp(id, key) {
 let _dirty = false; // unsaved changes since last explicit save or autosave
 let _autosaveTimer = null;
 
+// IndexedDB-backed autosave store. localStorage's ~5MB quota is too small for the
+// embedded base64 image dataURL — oversized writes were silently discarded before,
+// leaving users with a false sense of recovery. IndexedDB handles large blobs.
+const _idb = {
+  _db: null,
+  _open() {
+    if (this._db) return Promise.resolve(this._db);
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open('glass-studio', 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv');
+      };
+      req.onsuccess = () => { this._db = req.result; resolve(this._db); };
+      req.onerror = () => reject(req.error);
+    });
+  },
+  set(key, value) {
+    return this._open().then(db => new Promise((resolve, reject) => {
+      const tx = db.transaction('kv', 'readwrite');
+      tx.objectStore('kv').put(value, key);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    }));
+  },
+  get(key) {
+    return this._open().then(db => new Promise((resolve, reject) => {
+      const tx = db.transaction('kv', 'readonly');
+      const req = tx.objectStore('kv').get(key);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    }));
+  },
+  del(key) {
+    return this._open().then(db => new Promise((resolve, reject) => {
+      const tx = db.transaction('kv', 'readwrite');
+      tx.objectStore('kv').delete(key);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    }));
+  },
+};
+
 function _scheduleAutosave() {
   clearTimeout(_autosaveTimer);
   _autosaveTimer = setTimeout(_doAutosave, 8000); // 8s after last change
@@ -2974,17 +3030,18 @@ function _scheduleAutosave() {
 
 function _doAutosave() {
   if (S.els.length === 0 && !S.imgSrc) return;
-  try {
-    const data = {
-      els: S.els, nid: S.nid,
-      imgW: S.imgW, imgH: S.imgH,
-      imgNatW: S.imgNatW, imgNatH: S.imgNatH,
-      imgSrc: S.imgSrc,
-      selSet: [...S.selSet],
-      ts: Date.now()
-    };
-    localStorage.setItem('gs_autosave', JSON.stringify(data));
-  } catch(e) { /* localStorage quota exceeded — skip silently */ }
+  const data = {
+    els: S.els, nid: S.nid,
+    imgW: S.imgW, imgH: S.imgH,
+    imgNatW: S.imgNatW, imgNatH: S.imgNatH,
+    imgSrc: S.imgSrc,
+    selSet: [...S.selSet],
+    ts: Date.now()
+  };
+  _idb.set('gs_autosave', data).catch(() => {
+    // Storage failure (private mode / disk full) — surface it instead of failing silently
+    toast('⚠️ 自动保存失败：浏览器存储不可用', 4000);
+  });
 }
 
 function saveHist() {
@@ -3009,15 +3066,13 @@ window.addEventListener('beforeunload', e => {
   }
 });
 
-// On page load, offer to restore autosaved work
+// On page load, offer to restore autosaved work (IndexedDB, with legacy
+// localStorage fallback so pre-migration autosaves are still recoverable).
 (function _checkAutosave() {
-  try {
-    const saved = localStorage.getItem('gs_autosave');
-    if (!saved) return;
-    const data = JSON.parse(saved);
+  function restore(data) {
     if (!data.els || data.els.length === 0 || !data.imgSrc) return;
     const ageMin = Math.round((Date.now() - (data.ts || 0)) / 60000);
-    if (ageMin > 1440) { localStorage.removeItem('gs_autosave'); return; } // expire after 24h
+    if (ageMin > 1440) { _idb.del('gs_autosave').catch(()=>{}); return; } // expire after 24h
     setTimeout(() => {
       if (confirm(`检测到 ${ageMin} 分钟前的未保存工作（${data.els.length} 个元素），是否恢复？`)) {
         S.imgSrc = data.imgSrc;
@@ -3049,7 +3104,14 @@ window.addEventListener('beforeunload', e => {
         img.src = S.imgSrc;
       }
     }, 600); // delay to let UI initialize first
-  } catch(e) { /* parse error — skip */ }
+  }
+  _idb.get('gs_autosave').then(saved => {
+    if (saved) { restore(saved); return; }
+    try {
+      const legacy = localStorage.getItem('gs_autosave');
+      if (legacy) restore(JSON.parse(legacy));
+    } catch (_) { /* corrupt legacy entry — ignore */ }
+  }).catch(() => { /* storage unavailable — skip autosave restore */ });
 })();
 
 function undo() {
@@ -3110,6 +3172,55 @@ function saveProject() {
 
 function loadProject() { document.getElementById('proj-fi').click(); }
 
+// Whitelist/coerce every element field loaded from a project file. Project JSON is
+// user-supplied input: blindly trusting it meant malformed or hostile files could
+// inject arbitrary CSS values (e.g. fontFamily, text-shadow) into the DOM.
+function _sanitizeEl(raw, fallbackId) {
+  if (!raw || typeof raw !== 'object') return null;
+  const type = ['glass', 'card', 'text'].includes(raw.type) ? raw.type : null;
+  if (!type) return null;
+  const num = (v, d) => { const n = Number(v); return Number.isFinite(n) ? n : d; };
+  const str = (v, d, max) => (typeof v === 'string' ? v.slice(0, max) : d);
+  // Font-family values legitimately use single quotes ('DM Sans'); strip only the
+  // chars that could break out of a CSS declaration or inject markup.
+  const fontStr = (v, d, max) => (typeof v === 'string' ? v.slice(0, max).replace(/[<>{};"`\\]/g, '').trim() : d);
+  // Generic CSS value (colors, shadows): quotes are never needed.
+  const cssVal = (v, d, max) => (typeof v === 'string' ? v.slice(0, max).replace(/[<>{};"'`\\]/g, '').trim() : d);
+  const bool = v => !!v;
+  const id = Number(raw.id);
+  const fwSet = new Set(['100', '200', '300', '400', '500', '600', '700', '800', '900', 'bold', 'normal']);
+  return {
+    id: Number.isFinite(id) && id > 0 ? id : fallbackId,
+    type,
+    x: num(raw.x, 0), y: num(raw.y, 0),
+    w: Math.max(1, num(raw.w, 100)), h: Math.max(1, num(raw.h, 40)),
+    r: Math.max(0, num(raw.r, 12)),
+    bg: cssVal(raw.bg, type === 'card' ? '#000000' : '#ffffff', 32),
+    tc: cssVal(raw.tc, '#F9F6ED', 32),
+    fs: num(raw.fs, type === 'text' ? 22 : 16),
+    fw: fwSet.has(String(raw.fw)) ? String(raw.fw) : '500',
+    op: num(raw.op, type === 'card' ? 0.65 : (type === 'text' ? 0.12 : 0.2)),
+    blur: num(raw.blur, type === 'card' ? 4 : (type === 'text' ? 0 : 18)),
+    br: num(raw.br, 100),
+    sat: num(raw.sat, type === 'glass' ? 140 : 100),
+    bw: num(raw.bw, 1),
+    bc: cssVal(raw.bc, type === 'card' ? '#000000' : '#ffffff', 32),
+    bop: num(raw.bop, type === 'card' ? 0.1 : (type === 'glass' ? 0.35 : 0.2)),
+    ca: Math.min(5, Math.max(0, num(raw.ca, 0))),
+    text: str(raw.text, '', 4000),
+    tsh: cssVal(raw.tsh, type === 'text' ? '0 2px 10px rgba(0,0,0,.5)' : '0 1px 6px rgba(0,0,0,.4)', 120),
+    ls: num(raw.ls, 0),
+    lh: num(raw.lh, 1.45),
+    pad: num(raw.pad, 12),
+    italic: bool(raw.italic),
+    underline: bool(raw.underline),
+    align: ['left', 'center', 'right'].includes(raw.align) ? raw.align : 'center',
+    valign: ['top', 'center', 'bottom'].includes(raw.valign) ? raw.valign : 'center',
+    fontFamily: fontStr(raw.fontFamily, "'DM Sans',sans-serif", 120),
+    locked: bool(raw.locked),
+  };
+}
+
 function loadProjectFile(input) {
   const file = input.files[0];
   if (!file) return;
@@ -3121,15 +3232,18 @@ function loadProjectFile(input) {
       if (!proj.version) {
         proj.selSet = proj.selSet || [proj.sel];
       }
-      S.els    = proj.els    || [];
-      S.nid    = proj.nid    || (Math.max(0, ...S.els.map(e => e.id)) + 1);
-      S.imgW   = proj.imgW   || 0;
-      S.imgH   = proj.imgH   || 0;
-      S.imgNatW = proj.imgNatW || 0;
-      S.imgNatH = proj.imgNatH || 0;
-      S.imgSrc = proj.imgSrc || null;
+      S.els = Array.isArray(proj.els)
+        ? proj.els.map((e, i) => _sanitizeEl(e, -(i + 1))).filter(Boolean)
+        : [];
+      S.nid    = Math.max(1, proj.nid, ...S.els.map(e => e.id)) + 1;
+      S.imgW   = Number.isFinite(Number(proj.imgW))   ? +proj.imgW   : 0;
+      S.imgH   = Number.isFinite(Number(proj.imgH))   ? +proj.imgH   : 0;
+      S.imgNatW = Number.isFinite(Number(proj.imgNatW)) ? +proj.imgNatW : 0;
+      S.imgNatH = Number.isFinite(Number(proj.imgNatH)) ? +proj.imgNatH : 0;
+      S.imgSrc = (typeof proj.imgSrc === 'string' && proj.imgSrc.startsWith('data:image/')) ? proj.imgSrc : null;
       S.sel    = null;
-      S.selSet = new Set(proj.selSet || []);
+      const validIds = new Set(S.els.map(e => e.id));
+      S.selSet = new Set((Array.isArray(proj.selSet) ? proj.selSet : []).filter(id => validIds.has(Number(id))));
       _pendingDelete.clear();
 
       if (S.imgSrc) {
@@ -3149,7 +3263,7 @@ function loadProjectFile(input) {
       S.hIdx = -1;
       saveHist();
       _dirty = false; // loading a project file is not an "unsaved change"
-      localStorage.removeItem('gs_autosave'); // clear stale autosave
+      _idb.del('gs_autosave').catch(()=>{}); // clear stale autosave
       render();
       const knownFamilies = new Set([
         ...FONTS.map(f => f.value),
@@ -3186,6 +3300,16 @@ function showExportPanel() {
 function canvasFontStr(italic, fw, fsize, fam) {
   const cleanFam = fam.replace(/'([^']+)'/g, '"$1"');
   return `${italic ? 'italic ' : ''}${fw || '500'} ${fsize}px ${cleanFam}`;
+}
+
+// Reusable offscreen canvases for export (blur backdrop + chromatic aberration).
+// Reusing avoids allocating/freeing large canvases for every element on every export.
+const _expPool = {};
+function _expCanvas(name, w, h) {
+  let c = _expPool[name];
+  if (!c) { c = document.createElement('canvas'); _expPool[name] = c; }
+  if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+  return c;
 }
 
 async function exportImg() {
@@ -3274,9 +3398,7 @@ async function exportImg() {
       // produces visibly different results from CSS's Gaussian blur.
       const satVal = el2.sat && el2.sat !== 100 ? el2.sat : 100;
       const brVal  = el2.br  && el2.br  !== 100 ? el2.br  : 100;
-      blurredTmp = document.createElement('canvas');
-      blurredTmp.width  = bRw;
-      blurredTmp.height = bRh;
+      blurredTmp = _expCanvas('blur', bRw, bRh);
       const tc = blurredTmp.getContext('2d');
       const parts = [];
       if (bRadius > 0) parts.push(`blur(${bRadius}px)`);
@@ -3480,21 +3602,47 @@ async function exportImg() {
       const rw = Math.min(ec.width - rx, Math.ceil(ew));
       const rh = Math.min(ec.height - ry, Math.ceil(eh));
       if (rw > 2 && rh > 2) {
-        const imgData = ctx.getImageData(rx, ry, rw, rh);
-        const d = imgData.data;
-        const src = new Uint8ClampedArray(d);
-        for (let y = 0; y < rh; y++) {
-          for (let x = 0; x < rw; x++) {
-            const di = (y * rw + x) * 4;
-            // Red shifted left (sample from right)
-            d[di] = src[(y * rw + Math.min(rw - 1, x + caOff)) * 4];
-            // Green: no shift
-            d[di + 1] = src[di + 1];
-            // Blue shifted right (sample from left)
-            d[di + 2] = src[(y * rw + Math.max(0, x - caOff)) * 4 + 2];
-          }
+        // GPU channel separation — a handful of drawImage calls instead of a
+        // per-pixel JS loop (which blocked the main thread on large exports).
+        // Result is equivalent: red sampled from +caOff, green unchanged,
+        // blue sampled from -caOff.
+        const src = _expCanvas('ca-src', rw, rh);
+        const sc  = src.getContext('2d');
+        sc.drawImage(ec, rx, ry, rw, rh, 0, 0, rw, rh);
+
+        const channels = [
+          ['ca-R', '#ff0000', -caOff],
+          ['ca-G', '#00ff00', 0],
+          ['ca-B', '#0000ff', caOff],
+        ];
+        for (const [name, color, dx] of channels) {
+          const c  = _expCanvas(name, rw, rh);
+          const cc = c.getContext('2d');
+          cc.clearRect(0, 0, rw, rh);
+          cc.drawImage(src, 0, 0);
+          // Keep only this channel (multiply zeroes the others), then restore alpha.
+          cc.globalCompositeOperation = 'multiply';
+          cc.fillStyle = color;
+          cc.fillRect(0, 0, rw, rh);
+          cc.globalCompositeOperation = 'destination-in';
+          cc.drawImage(src, 0, 0);
+          cc.globalCompositeOperation = 'source-over';
         }
-        ctx.putImageData(imgData, rx, ry);
+
+        const out = _expCanvas('ca-out', rw, rh);
+        const oc  = out.getContext('2d');
+        oc.clearRect(0, 0, rw, rh);
+        oc.globalCompositeOperation = 'lighter';
+        oc.drawImage(_expPool['ca-R'], -caOff, 0);
+        oc.drawImage(_expPool['ca-G'], 0, 0);
+        oc.drawImage(_expPool['ca-B'], caOff, 0);
+        oc.globalCompositeOperation = 'source-over';
+        // Re-apply the source alpha so the additive composite doesn't blow it out.
+        oc.globalCompositeOperation = 'destination-in';
+        oc.drawImage(src, 0, 0);
+        oc.globalCompositeOperation = 'source-over';
+
+        ctx.drawImage(out, rx, ry);
       }
     }
   }
@@ -3507,14 +3655,20 @@ async function exportImg() {
   const a = document.createElement('a');
   a.download = `glass-studio-${exportScale}x-${Date.now()}.png`;
   try {
-    a.href = ec.toDataURL('image/png', 1.0);
+    // toBlob avoids the ~1.37× memory spike of toDataURL's base64 encoding.
+    const blob = await new Promise((resolve, reject) => {
+      ec.toBlob(b => { if (b) resolve(b); else reject(new Error('empty blob')); }, 'image/png');
+    });
+    const url = URL.createObjectURL(blob);
+    a.href = url;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
   } catch (err) {
     ov.classList.remove('show');
     toast('⚠️ 导出失败：图片尺寸过大，请降低导出倍数');
     console.error('Export failed:', err);
     return;
   }
-  a.click();
 
   bar.style.width = '100%';
   setTimeout(() => {
