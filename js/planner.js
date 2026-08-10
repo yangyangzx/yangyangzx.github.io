@@ -414,12 +414,12 @@ function updateChecklist() {
     return { result: passed, message: '盈亏比 ' + calc.targetRR.toFixed(2) + ':1 ' + (passed ? '达标' : '偏低') };
   });
 
-  // 6. 保证金占本金 ≤ 50%（避免单笔过度暴露）
+  // 6. 保证金占本金 ≤ 80%（与计算器硬上限一致）
   updateCheckItemWithResult('checkMargin', function() {
     if (!calc || calc.actualMargin == null || calc.capital == null || calc.capital <= 0) return null;
     var ratio = calc.actualMargin / calc.capital;
-    var passed = ratio <= 0.5;
-    return { result: passed, message: '保证金占比 ' + (ratio*100).toFixed(1) + '% ≤ 50%' };
+    var passed = ratio <= 0.8;
+    return { result: passed, message: '保证金占比 ' + (ratio*100).toFixed(1) + '% ≤ 80%' };
   });
 
   // 7. 入场理由已明确选择
@@ -582,5 +582,24 @@ function updateOrderTypeLabels() {
       // 初始同步
       updateOrderTypeLabels();
     }
+  } catch(e) {}
+})();
+
+// ==================== 凯利自动填充 ====================
+(function _initKellyAutoFill() {
+  try {
+    if (typeof autoFillKellyFromLogs !== 'function') return;
+    // 切换到开仓计划视图时自动填充凯利数据
+    var origSwitchView = window.switchView;
+    if (origSwitchView) {
+      window.switchView = function(viewName) {
+        origSwitchView(viewName);
+        if (viewName === 'planner') {
+          autoFillKellyFromLogs();
+        }
+      };
+    }
+    // 页面首次加载时也尝试填充
+    autoFillKellyFromLogs();
   } catch(e) {}
 })();

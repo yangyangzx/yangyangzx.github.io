@@ -42,7 +42,7 @@
     overflow-x: auto;
   }
   table {
-    min-width: auto;  /* 移除 820px 硬下限 */
+    min-width: auto;
     font-size: 13px;
   }
   thead tr {
@@ -201,6 +201,23 @@
   .split-row {
     grid-template-columns: 1fr;
     gap: var(--space-sm);
+  }
+
+  /* ——— 凯利面板移动端紧凑 ——— */
+  .kelly-row {
+    flex-direction: column;
+  }
+  .kelly-field {
+    flex: 1 1 auto;
+  }
+  .kelly-header {
+    padding: 8px 12px;
+  }
+
+  /* ——— 凯利侧边栏卡片 ——— */
+  .kelly-card-btn {
+    padding: 7px 10px;
+    font-size: var(--font-sm);
   }
 
   /* ——— 批量操作栏紧凑 ——— */

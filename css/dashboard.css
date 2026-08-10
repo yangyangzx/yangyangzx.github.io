@@ -255,7 +255,7 @@
 }
 
 /* 响应式 */
-@media (max-width: 640px) {
+@media (max-width: 48rem) {
   .dash-card-wide {
     grid-column: span 1;
   }

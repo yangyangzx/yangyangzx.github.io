@@ -157,7 +157,7 @@
 }
 
 /* ——— 响应式 ——— */
-@media (max-width: 768px) {
+@media (max-width: 48rem) {
   .risk-grid {
     grid-template-columns: 1fr;
   }

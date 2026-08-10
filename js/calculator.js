@@ -126,6 +126,13 @@ function calculate() {
   const triggerRow = document.getElementById('triggerRow');
   const triggerContent = document.getElementById('triggerContent');
   const warnD = document.getElementById('warningDisplay');
+  const kellyCard = document.getElementById('kellyCard');
+  const kellyFullPct = document.getElementById('kellyFullPct');
+  const kellyHalfPct = document.getElementById('kellyHalfPct');
+  const kellyExpectancy = document.getElementById('kellyExpectancy');
+  const kellyRiskAmount = document.getElementById('kellyRiskAmount');
+  const kellyWarning = document.getElementById('kellyWarning');
+  const kellyApplyBtn = document.getElementById('kellyApplyBtn');
   document.getElementById('riskHint').textContent = '';
 
   function showCalcError(title, msg) {
@@ -141,6 +148,7 @@ function calculate() {
     triggerRow.style.display = 'none';
     splitArea.style.display = 'none';
     warnD.innerHTML = '';
+    if (kellyCard) kellyCard.style.display = 'none';
     var rb = document.getElementById('resultBox');
     if (rb) rb.classList.remove('warn');
   }
@@ -212,6 +220,7 @@ function calculate() {
 
   // ===== Skills 融合：凯利公式计算（额外显示） =====
   let kellyHTML = '';
+  let kellyData = null;  // 持久化数据（存入日志和详情）
   try {
     var kellyWinRate = parseFloat(document.getElementById('kellyWinRate')?.value);
     var kellyAvgWin = parseFloat(document.getElementById('kellyAvgWin')?.value);
@@ -220,7 +229,20 @@ function calculate() {
       var kellyResult = calcKelly(kellyWinRate, kellyAvgWin, kellyAvgLoss, capital, true);
       if (kellyResult && kellyResult.halfKellyPct > 0) {
         var kellyRisk = capital * kellyResult.halfKellyPct;
-        kellyHTML = '<div style="margin-top:8px;padding:8px;background:var(--color-surface);border-radius:6px;font-size:12px;"><span style="color:var(--color-text-muted);">凯利参考：</span><span style="color:var(--color-primary);">半凯利 ' + kellyResult.halfKellyPct.toFixed(2) + ' 风险 = ' + kellyRisk.toFixed(2) + ' USDT</span> <span style="color:var(--color-text-muted);">| 期望值 ' + kellyResult.expectancy.toFixed(2) + '</span></div>';
+        kellyData = {
+          halfKellyPct: kellyResult.halfKellyPct,
+          halfKellyRisk: kellyRisk,
+          expectancy: kellyResult.expectancy,
+          kellyPct: kellyResult.kellyPct,
+          kellyCapped: kellyResult.kellyCapped,
+          halfKellyCapped: kellyResult.halfKellyCapped,
+          recommendation: kellyResult.recommendation
+        };
+        var kellyCappedMsg = '';
+        if (kellyResult.kellyCapped || kellyResult.halfKellyCapped) {
+          kellyCappedMsg = '<span class="kelly-capped-tip"><i class="fas fa-info-circle"></i> 已截断至 5%</span>';
+        }
+        kellyHTML = '<span class="kelly-result-text">半凯利风险 <strong>' + kellyResult.halfKellyPct.toFixed(2) + '%</strong> = ' + kellyRisk.toFixed(2) + ' USDT</span>' + kellyCappedMsg + '<span class="kelly-expectancy">期望 ' + kellyResult.expectancy.toFixed(2) + '</span><button type="button" class="kelly-apply-btn" onclick="applyKellyRisk()"><i class="fas fa-bolt"></i> 应用</button>';
       }
     }
   } catch(e) {}
@@ -647,9 +669,11 @@ function calculate() {
     else { resultBox.classList.remove('warn'); }
   }
 
-  window._lastCalc={ symbol,entryPrice,effectiveEntryPrice,capital,riskAmount,riskPercent,leverage:leverage,direction,orderType,stopType,stopLoss,lossStreak,targetPrice:isNaN(targetPrice)?null:targetPrice,positionSize:finalPosForDisplay,stopDistance,stopPct,liquidationPrice,cappedByLiquidation,targetRR,targetPct,reason:getReason(),signals:getSignals(),actualMargin:finalMargin,fee:parseFloat(totalFee.toFixed(2)),slippageCost:parseFloat(slippageCost.toFixed(2)),totalCost:parseFloat(totalCost.toFixed(2)),splitMode:_splitMode,weightedStopDistance:useWeightedStop?stopDistance:null, mindsetScore: parseInt(document.getElementById('mindsetScore').value) || 3 };
+  window._lastCalc={ symbol,entryPrice,effectiveEntryPrice,capital,riskAmount,riskPercent,leverage:leverage,direction,orderType,stopType,stopLoss,lossStreak,targetPrice:isNaN(targetPrice)?null:targetPrice,positionSize:finalPosForDisplay,stopDistance,stopPct,liquidationPrice,cappedByLiquidation,targetRR,targetPct,reason:getReason(),signals:getSignals(),actualMargin:finalMargin,fee:parseFloat(totalFee.toFixed(2)),slippageCost:parseFloat(slippageCost.toFixed(2)),totalCost:parseFloat(totalCost.toFixed(2)),splitMode:_splitMode,weightedStopDistance:useWeightedStop?stopDistance:null, mindsetScore: parseInt(document.getElementById('mindsetScore').value) || 3, kellyData: kellyData };
   // 自动滚动到结果区
   if (resultBox) resultBox.scrollIntoView({behavior:'smooth'});
+  // 更新凯利侧边栏卡片
+  try { updateKellySidebar(); } catch(e) { console.error('[calculate] updateKellySidebar error:', e); }
   try { if (typeof updateChecklist === 'function') updateChecklist(); } catch(e) { console.error('[calculate] updateChecklist error:', e); }
   try { if (typeof autoCalcMultiTP === 'function') autoCalcMultiTP(); } catch(e) { console.error('[calculate] autoCalcMultiTP error:', e); }
 }
@@ -730,11 +754,13 @@ function saveLog() {
     positionSize: parseFloat(calc.positionSize.toFixed(2)),
     leverage: calc.leverage,
     riskAmount: parseFloat(calc.riskAmount.toFixed(2)),
+    actualMargin: calc.actualMargin != null ? parseFloat(calc.actualMargin.toFixed(2)) : null,
     capital: isNaN(calc.capital) ? null : calc.capital,              // H1: 入场时本金快照，用于事后验证仓位合理性
     fee: calc.fee != null ? calc.fee : 0,
     slippageCost: calc.slippageCost != null ? calc.slippageCost : 0,
     targetRR: calc.targetRR != null ? calc.targetRR : null,
     stopPct: calc.stopPct,                                          // ✅ 新增：持久化止损距离百分比
+    kellyData: calc.kellyData != null ? JSON.parse(JSON.stringify(calc.kellyData)) : null,
     groupId: null,
     groupLabel: null,
     reason: calc.reason || getReason(),
@@ -1016,10 +1042,16 @@ function resetForm() {
   } catch(e) {}
   document.getElementById('symbol').value = _symDefault;
   document.getElementById('entryPrice').value = '';
-  document.getElementById('capital').value = '1000';
-  document.getElementById('riskInput').value = '2%';
+  // 从设置读取默认本金，否则用 1000
+  var _settings = loadSettings();
+  document.getElementById('capital').value = (_settings.accountBalance > 0) ? _settings.accountBalance : 1000;
+  // 从设置读取默认风险比例，否则用 2%
+  var _riskPct = _settings.riskPercent || 2;
+  document.getElementById('riskInput').value = _riskPct + '%';
   document.getElementById('riskHint').textContent = '';
-  document.getElementById('leverage').value = '0';
+  // 从设置读取默认杠杆，否则用 0（现货）
+  var _lev = _settings.defaultLeverage || 0;
+  document.getElementById('leverage').value = String(_lev);
   document.getElementById('direction').value = 'long';
   // 同步订单类型标签为做多版本
   (function() {
@@ -1080,7 +1112,7 @@ function toggleFormSection(sectionId) {
 
 // 关键字段变更时标记 _lastCalc 为脏
 (function() {
-  var dirtyFields = ['entryPrice', 'stopLoss', 'capital', 'leverage', 'direction', 'feeRate', 'slippage', 'lossStreak'];
+  var dirtyFields = ['entryPrice', 'stopLoss', 'capital', 'leverage', 'direction', 'feeRate', 'slippage', 'lossStreak', 'riskInput', 'targetPrice', 'kellyWinRate', 'kellyAvgWin', 'kellyAvgLoss'];
   dirtyFields.forEach(function(id) {
     var el = document.getElementById(id);
     if (el) {
@@ -1092,3 +1124,110 @@ function toggleFormSection(sectionId) {
   var sld = document.getElementById('stopLossSlider');
   if (sld) sld.addEventListener('input', function() { window._lastCalcDirty = true; });
 })();
+
+/**
+ * 将已保存的设置值同步到开仓计算器表单
+ * （DOMContentLoaded 时调用，确保下次打开页面使用上次设置）
+ */
+function syncSettingsToForm() {
+  var settings = loadSettings();
+  var capitalEl = document.getElementById('capital');
+  if (capitalEl) capitalEl.value = (settings.accountBalance > 0) ? settings.accountBalance : 1000;
+  var riskEl = document.getElementById('riskInput');
+  if (riskEl) riskEl.value = (settings.riskPercent || 2) + '%';
+  var levEl = document.getElementById('leverage');
+  if (levEl) levEl.value = String(settings.defaultLeverage || 0);
+}
+
+/**
+ * 方案D：一键应用凯利推荐风险比例到开仓计划
+ * 将半凯利风险百分比填入 riskInput，触发重新计算
+ */
+function applyKellyRisk() {
+  if (!window._lastCalc || !window._lastCalc.kellyData) {
+    showToast('请先填写凯利数据并点击计算', 'warn');
+    return;
+  }
+  var kellyPct = window._lastCalc.kellyData.halfKellyPct;
+  if (!kellyPct || kellyPct <= 0) {
+    showToast('凯利计算结果为 0，无法应用', 'warn');
+    return;
+  }
+  var riskEl = document.getElementById('riskInput');
+  if (!riskEl) return;
+  // 格式化为百分比字符串（如 "1.5%"）
+  riskEl.value = (kellyPct * 100).toFixed(1) + '%';
+  // 标记表单已变更，清除缓存
+  window._lastCalc = null;
+  window._lastCalcDirty = true;
+  // 自动重新计算
+  if (typeof calculate === 'function') {
+    calculate();
+  }
+  showToast('已应用半凯利风险 ' + (kellyPct * 100).toFixed(1) + '%，重新计算中...', 'info');
+}
+window.applyKellyRisk = applyKellyRisk;
+
+// ==================== 凯利面板折叠 ====================
+function toggleKellyPanel() {
+  var body = document.getElementById('kellyBody');
+  var icon = document.getElementById('kellyToggleIcon');
+  var group = document.getElementById('kellyInputGroup');
+  if (!body || !group) return;
+  var isOpen = !group.classList.contains('kelly-collapsed');
+  if (isOpen) {
+    // 折叠：隐藏 body + 旋转图标
+    body.style.transition = 'max-height 0.3s ease, opacity 0.2s ease';
+    body.style.maxHeight = body.scrollHeight + 'px';
+    body.offsetHeight; // 强制回流
+    body.style.maxHeight = '0';
+    body.style.opacity = '0';
+    if (icon) icon.classList.add('collapsed');
+    group.classList.add('kelly-collapsed');
+  } else {
+    // 展开
+    body.style.maxHeight = body.scrollHeight + 'px';
+    body.style.opacity = '1';
+    if (icon) icon.classList.remove('collapsed');
+    group.classList.remove('kelly-collapsed');
+    // 展开后移除 max-height 限制以支持内容动态变化
+    var timer = setTimeout(function() {
+      body.style.maxHeight = 'none';
+    }, 320);
+    body._collapseTimer = timer;
+  }
+}
+window.toggleKellyPanel = toggleKellyPanel;
+
+/**
+ * 更新凯利公式侧边栏卡片显示
+ */
+function updateKellySidebar() {
+  var card = document.getElementById('kellyCard');
+  if (!card) return;
+  var data = window._lastCalc && window._lastCalc.kellyData;
+  if (!data || data.halfKellyPct <= 0) {
+    card.style.display = 'none';
+    return;
+  }
+  card.style.display = '';
+  var fullPctEl = document.getElementById('kellyFullPct');
+  var halfPctEl = document.getElementById('kellyHalfPct');
+  var expectEl = document.getElementById('kellyExpectancy');
+  var riskEl = document.getElementById('kellyRiskAmount');
+  var warnEl = document.getElementById('kellyWarning');
+  var btnEl = document.getElementById('kellyApplyBtn');
+  if (fullPctEl) fullPctEl.textContent = (data.kellyPct * 100).toFixed(2) + '%';
+  if (halfPctEl) halfPctEl.textContent = data.halfKellyPct.toFixed(2) + '%';
+  if (expectEl) expectEl.textContent = (data.expectancy > 0 ? '+' : '') + data.expectancy.toFixed(2) + ' U';
+  if (riskEl) riskEl.textContent = data.halfKellyRisk.toFixed(2) + ' U';
+  if (warnEl) {
+    if (data.kellyCapped || data.halfKellyCapped) {
+      warnEl.style.display = '';
+      warnEl.innerHTML = '<span class="kelly-card-warning-text"><i class="fas fa-exclamation-triangle"></i> 原始凯利超出 5% 上限，已截断</span>';
+    } else {
+      warnEl.style.display = 'none';
+    }
+  }
+  if (btnEl) btnEl.style.display = '';
+}

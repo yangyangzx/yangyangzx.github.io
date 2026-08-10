@@ -16,7 +16,7 @@ body {
     radial-gradient(ellipse at 80% 80%, oklch(60% 0.04 280 / 0.04) 0%, transparent 50%);
   transition: background var(--dur-normal) var(--ease-out), color var(--dur-normal) var(--ease-out);
   /* gate 51: 长词可换行 */
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   min-width: 0;
 }
 

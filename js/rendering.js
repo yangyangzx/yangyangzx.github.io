@@ -162,7 +162,9 @@ function buildRowsHTML(dl) {
         '<div class="ditem"><span class="dlabel">目标价</span><span class="dval">' + targetPriceDisplay + '</span></div>' +
         '<div class="ditem"><span class="dlabel">仓位(USDT)</span><span class="dval">' + (item.positionSize != null ? Number(item.positionSize).toFixed(2) : '—') + '</span></div>' +
         '<div class="ditem"><span class="dlabel">杠杆</span><span class="dval">' + (item.leverage ?? 0) + '</span></div>' +
+        '<div class="ditem"><span class="dlabel">保证金</span><span class="dval">' + (item.actualMargin != null ? Number(item.actualMargin).toFixed(2) : '—') + '</span></div>' +
         '<div class="ditem"><span class="dlabel">风险额</span><span class="dval">' + (item.riskAmount != null ? item.riskAmount : '—') + '</span></div>' +
+        (item.kellyData ? '<div class="ditem"><span class="dlabel">凯利参考</span><span class="dval" style="color:var(--color-primary);">半凯利 ' + item.kellyData.halfKellyPct.toFixed(2) + '% = ' + item.kellyData.halfKellyRisk.toFixed(2) + 'U</span></div>' : '') +
         '<div class="ditem"><span class="dlabel">心态分</span><span class="dval">' + mindset + '</span></div>' +
         '<div class="ditem"><span class="dlabel">形态/策略</span><span class="dval">' + strategyShort + '</span></div>' +
         '<div class="ditem"><span class="dlabel">信号K</span><span class="dval">' + signalShort + '</span></div>' +

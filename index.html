@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
   <title>TradingDiscipline · 交易风险管理终端</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="icon" href="assets/logo.png">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -255,14 +258,30 @@
               <span class="field-tip">实际成交价与预期价的偏差，影响净盈亏</span>
             </div>
             <!-- Skills 融合：凯利公式输入 -->
-            <div class="form-group" id="kellyInputGroup" style="display:none;">
-              <label><i class="fas fa-calculator"></i> 凯利参考 <span class="optional-tag">（选填）</span></label>
-              <div class="flex-row" style="gap:6px;flex-wrap:wrap;">
-                <input type="number" id="kellyWinRate" step="0.01" min="0" max="1" placeholder="胜率(如0.55)" style="flex:1 1 70px;" title="历史胜率 0~1" />
-                <input type="number" id="kellyAvgWin" step="0.01" min="0" placeholder="均盈利" style="flex:1 1 70px;" title="平均盈利金额" />
-                <input type="number" id="kellyAvgLoss" step="0.01" min="0" placeholder="均亏损" style="flex:1 1 70px;" title="平均亏损金额" />
+            <div class="form-group kelly-input-group" id="kellyInputGroup">
+              <div class="kelly-header" onclick="toggleKellyPanel()">
+                <span class="kelly-header-left"><i class="fas fa-square-root-alt"></i> 凯利参考 <span class="optional-tag">（选填）</span></span>
+                <i class="fas fa-chevron-down kelly-toggle-icon" id="kellyToggleIcon"></i>
               </div>
-              <span class="field-tip">基于历史数据计算凯利最优仓位，半凯利建议作为参考</span>
+              <div class="kelly-body" id="kellyBody">
+                <div class="kelly-rows">
+                  <div class="kelly-row">
+                    <div class="kelly-field">
+                      <label for="kellyWinRate">历史胜率</label>
+                      <input type="number" id="kellyWinRate" step="0.01" min="0" max="1" placeholder="0.55" title="历史胜率 0~1" />
+                    </div>
+                    <div class="kelly-field">
+                      <label for="kellyAvgWin">平均盈利 (USDT)</label>
+                      <input type="number" id="kellyAvgWin" step="0.01" min="0" placeholder="如 50" title="平均盈利金额" />
+                    </div>
+                    <div class="kelly-field">
+                      <label for="kellyAvgLoss">平均亏损 (USDT)</label>
+                      <input type="number" id="kellyAvgLoss" step="0.01" min="0" placeholder="如 30" title="平均亏损金额" />
+                    </div>
+                  </div>
+                </div>
+                <span class="field-tip kelly-tip">基于历史数据计算凯利最优仓位，半凯利建议更保守安全</span>
+              </div>
             </div>
           </div>
         </div>
@@ -451,6 +470,33 @@
           </div>
         </div>
 
+        <!-- 凯利公式参考卡片 -->
+        <div class="card" id="kellyCard" style="display:none;">
+          <div class="card-header"><i class="fas fa-square-root-alt" style="color:var(--color-primary);"></i> 凯利参考</div>
+          <div class="kelly-card-body">
+            <div class="kelly-card-row">
+              <span class="kelly-card-label">原始凯利</span>
+              <span class="kelly-card-value" id="kellyFullPct">—</span>
+            </div>
+            <div class="kelly-card-row">
+              <span class="kelly-card-label">半凯利（推荐）</span>
+              <span class="kelly-card-value kelly-highlight" id="kellyHalfPct">—</span>
+            </div>
+            <div class="kelly-card-row">
+              <span class="kelly-card-label">期望收益/笔</span>
+              <span class="kelly-card-value" id="kellyExpectancy">—</span>
+            </div>
+            <div class="kelly-card-row kelly-card-divider">
+              <span class="kelly-card-label">建议风险额</span>
+              <span class="kelly-card-value kelly-highlight" id="kellyRiskAmount">—</span>
+            </div>
+            <div id="kellyWarning" style="display:none;" class="kelly-card-warning"></div>
+            <button type="button" class="kelly-card-btn" id="kellyApplyBtn" onclick="applyKellyRisk()">
+              <i class="fas fa-bolt"></i> 应用半凯利风险
+            </button>
+          </div>
+        </div>
+
         <!-- 盈亏比反推卡片 -->
         <div class="card" id="rrReverseCard">
           <div class="card-header">盈亏比反推</div>
@@ -526,7 +572,7 @@
             </div>
             <div class="check-item" id="checkMargin">
               <span class="check-icon pending">○</span>
-              <span>保证金 ≤ 本金 50%</span>
+              <span>保证金 ≤ 本金 80%</span>
             </div>
             <div class="check-item" id="checkReason">
               <span class="check-icon pending">○</span>
@@ -601,7 +647,7 @@
 
     <!-- 权益曲线 -->
     <div id="equity-card" style="display:none;">
-      <div class="card-header">📈 累计盈亏曲线</div>
+      <div class="card-header"><i class="fas fa-chart-line"></i> 累计盈亏曲线</div>
       <div style="position:relative;">
         <canvas id="equityCanvas"></canvas>
         <div id="equity-tooltip"></div>

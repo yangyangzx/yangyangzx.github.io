@@ -51,6 +51,7 @@ function calcPortfolioHeat() {
 function calcKelly(winRate, avgWin, avgLoss, accountSize, halfKelly) {
   if (halfKelly === undefined) halfKelly = true;
   if (!winRate || !avgWin || !avgLoss || avgLoss <= 0) return null;
+  if (winRate < 0 || winRate > 1) return null;
 
   // Kelly 公式：Kelly% = (WR × AvgWin - LR × AvgLoss) / AvgWin
   var lossRate = 1 - winRate;
@@ -64,6 +65,8 @@ function calcKelly(winRate, avgWin, avgLoss, accountSize, halfKelly) {
   if (halfKellyPct < 0) halfKellyPct = 0;
 
   // 约束到合理范围（不超过 5%）
+  var kellyCapped = kellyPct > 0.05;
+  var halfKellyCapped = halfKellyPct > 0.05;
   kellyPct = Math.min(kellyPct, 0.05);
   halfKellyPct = Math.min(halfKellyPct, 0.05);
 
@@ -85,7 +88,9 @@ function calcKelly(winRate, avgWin, avgLoss, accountSize, halfKelly) {
     kellyShares: kellyShares,
     halfKellyShares: halfKellyShares,
     expectancy: winRate * avgWin - lossRate * avgLoss,
-    recommendation: recommendation
+    recommendation: recommendation,
+    kellyCapped: kellyCapped,
+    halfKellyCapped: halfKellyCapped
   };
 }
 
@@ -260,4 +265,56 @@ function generateRiskCheckReport() {
     dailyFrequency: checkDailyTradeFrequency(),
     settings: settings
   };
+}
+
+/**
+ * 从已平仓日志自动计算凯利所需统计数据
+ * 计算：胜率、平均盈利、平均亏损
+ * @param {number} minSamples - 最少样本数才启用（默认 5）
+ * @returns {object|null} {winRate, avgWin, avgLoss} 或 null（样本不足）
+ */
+function calcKellyStatsFromLogs(minSamples) {
+  if (minSamples === undefined) minSamples = 5;
+  var closed = getClosedSorted();
+  if (closed.length < minSamples) return null;
+
+  var wins = 0, losses = 0, totalWin = 0, totalLoss = 0;
+  for (var i = 0; i < closed.length; i++) {
+    var pnl = parseFloat(closed[i].pnlAmount);
+    if (isNaN(pnl)) continue;
+    if (pnl > 0) { wins++; totalWin += pnl; }
+    else if (pnl < 0) { losses++; totalLoss += Math.abs(pnl); }
+  }
+
+  var totalTrades = wins + losses;
+  if (totalTrades < minSamples) return null;
+
+  var winRate = wins / totalTrades;
+  var avgWin = totalWin / (wins || 1);
+  var avgLoss = totalLoss / (losses || 1);
+
+  return { winRate: winRate, avgWin: avgWin, avgLoss: avgLoss, samples: totalTrades };
+}
+
+/**
+ * 自动填充凯利输入字段（从日志计算）
+ */
+function autoFillKellyFromLogs() {
+  try {
+    var stats = calcKellyStatsFromLogs(5);
+    var winRateEl = document.getElementById('kellyWinRate');
+    var avgWinEl = document.getElementById('kellyAvgWin');
+    var avgLossEl = document.getElementById('kellyAvgLoss');
+    var tipEl = document.querySelector('.kelly-tip');
+    if (!stats || !winRateEl) return;
+
+    // 仅在字段为空时自动填充
+    if (!winRateEl.value || winRateEl.value === '') winRateEl.value = stats.winRate.toFixed(2);
+    if (!avgWinEl.value || avgWinEl.value === '') avgWinEl.value = stats.avgWin.toFixed(2);
+    if (!avgLossEl.value || avgLossEl.value === '') avgLossEl.value = stats.avgLoss.toFixed(2);
+
+    if (tipEl) {
+      tipEl.textContent = '已从 ' + stats.samples + ' 笔历史交易自动计算；修改后手动覆盖';
+    }
+  } catch(e) {}
 }
