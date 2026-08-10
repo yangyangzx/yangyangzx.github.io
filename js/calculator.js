@@ -242,7 +242,7 @@ function calculate() {
         if (kellyResult.kellyCapped || kellyResult.halfKellyCapped) {
           kellyCappedMsg = '<span class="kelly-capped-tip"><i class="fas fa-info-circle"></i> 已截断至 5%</span>';
         }
-        kellyHTML = '<span class="kelly-result-text">半凯利风险 <strong>' + kellyResult.halfKellyPct.toFixed(2) + '%</strong> = ' + kellyRisk.toFixed(2) + ' USDT</span>' + kellyCappedMsg + '<span class="kelly-expectancy">期望 ' + kellyResult.expectancy.toFixed(2) + '</span><button type="button" class="kelly-apply-btn" onclick="applyKellyRisk()"><i class="fas fa-bolt"></i> 应用</button>';
+        kellyHTML = '<span class="kelly-result-text">半凯利风险 <strong>' + (kellyResult.halfKellyPct * 100).toFixed(2) + '%</strong> = ' + kellyRisk.toFixed(2) + ' USDT</span>' + kellyCappedMsg + '<span class="kelly-expectancy">期望 ' + kellyResult.expectancy.toFixed(2) + '</span><button type="button" class="kelly-apply-btn" onclick="applyKellyRisk()"><i class="fas fa-bolt"></i> 应用</button>';
       }
     }
   } catch(e) {}
@@ -1221,7 +1221,7 @@ function updateKellySidebar() {
   var warnEl = document.getElementById('kellyWarning');
   var btnEl = document.getElementById('kellyApplyBtn');
   if (fullPctEl) fullPctEl.textContent = (data.kellyPct * 100).toFixed(2) + '%';
-  if (halfPctEl) halfPctEl.textContent = data.halfKellyPct.toFixed(2) + '%';
+  if (halfPctEl) halfPctEl.textContent = (data.halfKellyPct * 100).toFixed(2) + '%';
   if (expectEl) expectEl.textContent = (data.expectancy > 0 ? '+' : '') + data.expectancy.toFixed(2) + ' U';
   if (riskEl) riskEl.textContent = data.halfKellyRisk.toFixed(2) + ' U';
   if (warnEl) {
