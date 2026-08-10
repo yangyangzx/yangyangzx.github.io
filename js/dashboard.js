@@ -163,6 +163,7 @@ function _renderRiskExposure() {
     totalPosition += parseFloat(log.positionSize) || 0;
     totalRisk += parseFloat(log.riskAmount) || 0;
     var lev = parseFloat(log.leverage) || 0;
+    // BUG-7 修复：现货(leverage=0)时保证金等于仓位本身
     if (lev > 0) {
       totalMargin += (parseFloat(log.positionSize) || 0) / lev;
     } else {
@@ -217,14 +218,22 @@ function _renderLossStreak() {
     return tb - ta;
   });
 
+  // 连续亏损（从末尾倒序）+ 当日总亏损笔数
   var streak = 0;
+  var totalLossCount = 0;
   for (var i = 0; i < sorted.length; i++) {
     var pnl = sorted[i].pnlAmount || 0;
     if (pnl < 0) {
       streak++;
+      totalLossCount++;
     } else {
       break;
     }
+  }
+  // 统计全天总亏损笔数（不限连续）
+  for (var j = 0; j < sorted.length; j++) {
+    var pnl2 = sorted[j].pnlAmount || 0;
+    if (pnl2 < 0) totalLossCount++;
   }
 
   valueEl.textContent = streak;
@@ -244,7 +253,8 @@ function _renderLossStreak() {
     tip = '<div class="streak-tip"><i class="fas fa-exclamation-triangle"></i> 建议降仓至 60%</div>';
   }
 
-  subEl.innerHTML = tag + '  连续亏损笔数' + tip;
+  // BUG-6 修复：明确显示"连续亏损"而非"连亏"，并补充总亏损笔数
+  subEl.innerHTML = tag + '  连续亏损 ' + streak + ' 笔（当日共 ' + totalLossCount + ' 笔亏损）' + tip;
 
   var card = document.getElementById('dashLossStreak');
   card.className = card.className.replace(/\bstatus-\w+/g, '');
@@ -282,18 +292,36 @@ function _renderLiqWarn() {
     var liqPrice = window.utils.calcLiquidationPrice(entry, dir, lev, mmr);
     if (isNaN(liqPrice) || liqPrice <= 0) continue; // 强平价无效跳过
 
+    // 前置校验：止损价方向必须正确（long: sl < entry, short: sl > entry）
+    var slDirectionValid;
+    if (dir === 'long') {
+      slDirectionValid = sl < entry;
+    } else {
+      slDirectionValid = sl > entry;
+    }
+    if (!slDirectionValid) {
+      // 止损方向错误，直接报警
+      warnings.push({
+        symbol: log.symbol,
+        stopLoss: sl,
+        liqPrice: liqPrice,
+        distance: 0,
+        direction: dir,
+        note: '止损方向错误'
+      });
+      continue;
+    }
+
     // 检查止损是否在强平价之外（安全方向）
     var isSafe;
     var distance;
     if (dir === 'long') {
       // 做多：止损价 > 强平价 才安全
       isSafe = sl > liqPrice;
-      // 统一使用入场价作为基准（与 risk.js 保持一致）
       distance = liqPrice > 0 ? ((sl - liqPrice) / entry * 100) : 0;
     } else {
       // 做空：止损价 < 强平价 才安全
       isSafe = sl < liqPrice;
-      // 统一使用入场价作为基准（与 risk.js 保持一致）
       distance = liqPrice > 0 ? ((liqPrice - sl) / entry * 100) : 0;
     }
 
@@ -320,10 +348,13 @@ function _renderLiqWarn() {
   for (var j = 0; j < warnings.length; j++) {
     var w = warnings[j];
     // 额外防御：NaN 值不直接显示
-    if (isNaN(w.stopLoss) || isNaN(w.liqPrice) || isNaN(w.distance)) continue;
+    if (isNaN(w.stopLoss) || isNaN(w.liqPrice)) continue;
+    var distText = isNaN(w.distance) ? '' : ' (' + Number(w.distance).toFixed(1) + '%)';
+    var noteText = w.note ? ' <span style="color:var(--color-danger);">[' + w.note + ']</span>' : '';
     html += '<div class="liq-item">' +
       '<span class="liq-item-symbol">' + w.symbol + ' (' + (w.direction === 'long' ? '多' : '空') + ')</span>' +
-      '<span class="liq-item-distance">止损 ' + Number(w.stopLoss).toFixed(5) + ' / 强平 ' + Number(w.liqPrice).toFixed(5) + ' (' + Number(w.distance).toFixed(1) + '%)</span>' +
+      '<span class="liq-item-distance">止损 ' + Number(w.stopLoss).toFixed(5) + ' / 强平 ' + Number(w.liqPrice).toFixed(5) + distText + '</span>' +
+      noteText +
     '</div>';
   }
   listEl.innerHTML = html;

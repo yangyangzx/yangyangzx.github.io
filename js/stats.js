@@ -604,6 +604,7 @@ function _getTradeDate(l) {
 }
 
 // ==================== 当日连亏计数（纯计算，不更新 UI） ====================
+// BUG-6 修复：函数名和注释明确为"连续亏损"（末尾倒序），并导出总亏损笔数供参考
 function _getTodayLossStreak() {
   var now = new Date();
   var todayStr = now.getFullYear() + '-' +
@@ -616,20 +617,28 @@ function _getTodayLossStreak() {
   todayClosed.sort(function(a, b) {
     return (a.closeTime || '').localeCompare(b.closeTime || '');
   });
+  // 连续亏损：从末尾倒序统计连续亏损笔数
   let streak = 0;
   for (let i = todayClosed.length - 1; i >= 0; i--) {
     const v = parseFloat(todayClosed[i].pnlAmount);
     if (!isNaN(v) && v < 0) { streak++; }
     else { break; }
   }
-  return streak;
+  // 同时计算当日总亏损笔数（供 UI 参考）
+  var totalLossCount = 0;
+  for (let j = 0; j < todayClosed.length; j++) {
+    const v2 = parseFloat(todayClosed[j].pnlAmount);
+    if (!isNaN(v2) && v2 < 0) totalLossCount++;
+  }
+  return { streak: streak, totalLossCount: totalLossCount };
 }
 
 // ==================== 连亏自动计数（限定当日 + UI 更新） ====================
 function autoCountLossStreak() {
   const autoCheck = document.getElementById('autoStreakCheck');
   const el = document.getElementById('lossStreak');
-  const streak = _getTodayLossStreak();
+  const streakResult = _getTodayLossStreak();
+  const streak = streakResult.streak;
   if (autoCheck && autoCheck.checked) {
     // Auto mode: update value and style, then refresh calc
     if (el) {

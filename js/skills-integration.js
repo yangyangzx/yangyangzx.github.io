@@ -4,6 +4,7 @@
 /**
  * 计算组合热量（Portfolio Heat）
  * 返回当前未平仓持仓的总风险占比百分比
+ * 使用实际止损距离重新计算每笔风险，而非依赖存储的 riskAmount（防止止损调整后低估风险）
  */
 function calcPortfolioHeat() {
   var openPositions = getOpenPositions();
@@ -14,12 +15,23 @@ function calcPortfolioHeat() {
   var details = [];
   for (var i = 0; i < openPositions.length; i++) {
     var pos = openPositions[i];
-    var risk = parseFloat(pos.riskAmount) || 0;
-    totalRisk += risk;
+    // 优先使用实际止损距离计算风险：|入场价 - 止损价| / 入场价 × 仓位
+    var actualRisk = 0;
+    var entry = parseFloat(pos.effectiveEntryPrice || pos.entryPrice);
+    var sl = parseFloat(pos.stopLoss);
+    var ps = parseFloat(pos.positionSize) || 0;
+    if (!isNaN(entry) && entry > 0 && !isNaN(sl) && sl > 0 && ps > 0) {
+      var stopDist = Math.abs(entry - sl);
+      actualRisk = stopDist / entry * ps;
+    } else {
+      // 兜底：使用存储的 riskAmount
+      actualRisk = parseFloat(pos.riskAmount) || 0;
+    }
+    totalRisk += actualRisk;
     details.push({
       symbol: pos.symbol,
-      risk: risk,
-      pct: capital > 0 ? (risk / capital * 100) : 0
+      risk: actualRisk,
+      pct: capital > 0 ? (actualRisk / capital * 100) : 0
     });
   }
 
@@ -133,9 +145,11 @@ function checkRRRequirement(targetRR, minRR) {
  * @param {number} leverage - 杠杆
  * @param {number} capital - 账户大小
  * @param {Array} openPositions - 未平仓持仓
+ * @param {number} [lookbackDays] - 已平仓历史回看天数（默认 7 天）
  * @returns {object} {pass, currentPct, maxPct, warning}
  */
-function checkSymbolConcentration(symbol, positionSize, leverage, capital, openPositions) {
+function checkSymbolConcentration(symbol, positionSize, leverage, capital, openPositions, lookbackDays) {
+  if (lookbackDays === undefined) lookbackDays = 7;
   if (!capital || capital <= 0) return { pass: true, currentPct: 0, maxPct: 10, warning: null };
   var maxPct = 10; // 默认值
   try {
@@ -143,7 +157,7 @@ function checkSymbolConcentration(symbol, positionSize, leverage, capital, openP
     maxPct = settings.singleSymbolMaxPct || 10;
   } catch(e) {}
 
-  // 计算该品种的总保证金占比
+  // 计算该品种的总保证金占比（未平仓）
   var usedMargin = 0;
   for (var i = 0; i < openPositions.length; i++) {
     var pos = openPositions[i];
@@ -153,6 +167,24 @@ function checkSymbolConcentration(symbol, positionSize, leverage, capital, openP
       usedMargin += (parseFloat(pos.positionSize) || 0) / posLev;
     }
   }
+
+  // BUG-5 修复：计入近 N 天内该品种的已平仓交易保证金（防止频繁开平仓绕过集中度检查）
+  try {
+    var cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - lookbackDays);
+    var closed = getClosedSorted();
+    for (var ci = 0; ci < closed.length; ci++) {
+      var cl = closed[ci];
+      if (cl.symbol !== symbol) continue;
+      var ct = cl.closeTime || cl.time;
+      if (!ct) continue;
+      if (new Date(ct) < cutoff) continue;
+      var clLev = parseFloat(cl.leverage) || 1;
+      if (clLev <= 0) clLev = 1;
+      usedMargin += (parseFloat(cl.positionSize) || 0) / clLev;
+    }
+  } catch(e) {}
+
   // 新增仓位
   var newLev = leverage || 1;
   if (newLev <= 0) newLev = 1;

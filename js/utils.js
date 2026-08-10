@@ -177,11 +177,19 @@
    */
   util.toLocalDateStr = function(isoStr) {
     if (!isoStr) return '';
+    // 优先尝试 ISO 格式解析
     var d = new Date(isoStr);
-    if (isNaN(d.getTime())) return '';
-    return d.getFullYear() + '-' +
-      String(d.getMonth() + 1).padStart(2, '0') + '-' +
-      String(d.getDate()).padStart(2, '0');
+    if (!isNaN(d.getTime())) {
+      return d.getFullYear() + '-' +
+        String(d.getMonth() + 1).padStart(2, '0') + '-' +
+        String(d.getDate()).padStart(2, '0');
+    }
+    // 兼容旧格式：YYYY/MM/DD HH:mm:ss 或 YYYY-MM-DD HH:mm:ss
+    var m = String(isoStr).match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})/);
+    if (m) {
+      return m[1] + '-' + m[2].padStart(2, '0') + '-' + m[3].padStart(2, '0');
+    }
+    return '';
   };
 
   // ======== 已平仓交易判断（统一过滤条件） ========

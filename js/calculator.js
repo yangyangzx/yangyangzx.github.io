@@ -154,7 +154,8 @@ function calculate() {
   }
 
   // ========== 连亏熔断（当日连亏 ≥3 笔禁止计算） ==========
-  const currentStreak = _getTodayLossStreak();
+  const streakResult = _getTodayLossStreak();
+  const currentStreak = streakResult.streak;
   var calcBtn = document.getElementById('calcBtn');
   if (currentStreak >= 3) {
     showToast('当日已连续亏损 ' + currentStreak + ' 笔，建议暂停交易冷静一下', 'warn');
@@ -269,9 +270,10 @@ function calculate() {
         // 所有批次止损方向非法，回退使用主止损距离
         rw = '<span class="warning-tag"><i class="fas fa-exclamation-circle"></i> 分批止损所有批次方向非法，已回退为全局止损计算。</span>';
       } else if (skippedCount > 0) {
-        // 部分批次跳过，但仍有有效批次，继续加权计算
+        // BUG-9 修复：跳过的批次不再占用比例，重新计算归一化权重
         rw = '<span class="warning-tag"><i class="fas fa-exclamation-circle"></i> 分批止损 ' + skippedCount + ' 批方向非法已跳过，使用剩余 ' + totalAlloc.toFixed(1) + '% 仓位加权计算。</span>';
       }
+      // BUG-9 修复：使用实际有效批次的总比例归一化，避免跳过批次稀释权重
       if (totalAlloc > 0 && weightedStopPct > 0) {
         stopDistance = (weightedStopPct / totalAlloc) * effectiveEntryPrice;
         positionSize = riskAmount * effectiveEntryPrice / stopDistance;
@@ -294,6 +296,7 @@ function calculate() {
       if (stopLoss>=effectiveEntryPrice) { err='做多止损价必须 < 入场价'; valid=false; }
       else { stopDistance=Math.abs(effectiveEntryPrice-stopLoss); positionSize=riskAmount*effectiveEntryPrice/stopDistance; }
     } else {
+      // 做空：止损价必须严格大于入场价（== 时止损距离为 0，会被下方零止损距离检查拦截）
       if (stopLoss<=effectiveEntryPrice) { err='做空止损价必须 > 入场价'; valid=false; }
       else { stopDistance=Math.abs(stopLoss-effectiveEntryPrice); positionSize=riskAmount*effectiveEntryPrice/stopDistance; }
     }
@@ -408,7 +411,7 @@ function calculate() {
   const finalPos = lossStreak >= 3 ? adjPos : positionSize;
 
   // ===== Skills 融合：品种集中度检查 =====
-  var concentrationCheck = checkSymbolConcentration(symbol, finalPos, leverage, capital, openPositions);
+  var concentrationCheck = checkSymbolConcentration(symbol, finalPos, leverage, capital, openPositions, 7);
   if (!cappedByMargin && !concentrationCheck.pass) {
     cappedByMargin = true;
     capMsg = (capMsg ? capMsg + ' ' : '') + '<span class="warning-tag alert"><i class="fas fa-exclamation-triangle"></i> ' + concentrationCheck.warning + '</span>';
@@ -1155,11 +1158,10 @@ function applyKellyRisk() {
   }
   var riskEl = document.getElementById('riskInput');
   if (!riskEl) return;
-  // select 只有 0.5% 步长选项，四舍五入到最近的可用值
+  // BUG-8 修复：使用精确值而非四舍五入到 0.5% 步长，避免偏离凯利建议
   var pctVal = parseFloat((kellyPct * 100).toFixed(2));
-  var roundedPct = Math.round(pctVal * 2) / 2; // 四舍五入到 0.5 的倍数
-  roundedPct = Math.max(0.5, Math.min(10, roundedPct)); // 限制在 0.5%~10%
-  riskEl.value = roundedPct + '%';
+  pctVal = Math.max(0.5, Math.min(10, pctVal)); // 限制在 0.5%~10%
+  riskEl.value = pctVal.toFixed(2) + '%';
   // 标记表单已变更，清除缓存
   window._lastCalc = null;
   window._lastCalcDirty = true;
@@ -1167,7 +1169,7 @@ function applyKellyRisk() {
   if (typeof calculate === 'function') {
     calculate();
   }
-  showToast('已应用半凯利风险 ' + (kellyPct * 100).toFixed(1) + '%，重新计算中...', 'info');
+  showToast('已应用半凯利风险 ' + pctVal.toFixed(2) + '%，重新计算中...', 'info');
 }
 window.applyKellyRisk = applyKellyRisk;
 

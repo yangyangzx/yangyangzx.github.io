@@ -121,9 +121,13 @@ function renderAccountOverview() {
   var openPositions = getOpenPositions();
   var usedMargin = 0;
   for (var i = 0; i < openPositions.length; i++) {
-    var lev = openPositions[i].leverage || 1;
-    if (lev <= 0) lev = 1;
-    usedMargin += openPositions[i].positionSize / lev;
+    var lev = openPositions[i].leverage || 0;
+    // BUG-7 修复：现货(leverage=0)时保证金等于仓位本身，杠杆合约用 positionSize/leverage
+    if (lev > 0) {
+      usedMargin += (openPositions[i].positionSize || 0) / lev;
+    } else {
+      usedMargin += openPositions[i].positionSize || 0;
+    }
   }
 
   var available = capital - usedMargin;
@@ -304,6 +308,24 @@ function renderLiqTable() {
     var liquidationPrice;
     liquidationPrice = window.utils.calcLiquidationPrice(entryPrice, direction, leverage, mmr);
 
+    // BUG-1 修复：前置校验止损方向正确性
+    var slDirValid = (direction === 'long' && stopLoss < entryPrice) ||
+                     (direction === 'short' && stopLoss > entryPrice);
+    if (!slDirValid) {
+      // 止损方向错误，显示为危险
+      rows.push({
+        symbol: pos.symbol,
+        direction: direction,
+        stopLoss: stopLoss,
+        liquidationPrice: liquidationPrice,
+        safeDistance: 0,
+        positionSize: pos.positionSize,
+        entryPrice: entryPrice,
+        note: '止损方向错误'
+      });
+      continue;
+    }
+
     var safeDistance = Math.abs(stopLoss - liquidationPrice) / entryPrice * 100;
 
     rows.push({
@@ -325,12 +347,14 @@ function renderLiqTable() {
     return;
   }
 
-  var html = '<table class="risk-liq-table"><thead><tr><th>品种</th><th>方向</th><th>止损价</th><th>强平价</th><th>安全距离</th><th>仓位</th></tr></thead><tbody>';
+  var html = '<table class="risk-liq-table"><thead><tr><th>品种</th><th>方向</th><th>止损价</th><th>强平价</th><th>安全距离</th><th>仓位</th><th>备注</th></tr></thead><tbody>';
 
   for (var j = 0; j < rows.length; j++) {
     var r = rows[j];
     var distClass = 'liq-dist-safe';
-    if (r.safeDistance < 1) {
+    if (r.note) {
+      distClass = 'liq-dist-danger';
+    } else if (r.safeDistance < 1) {
       distClass = 'liq-dist-danger';
     } else if (r.safeDistance < 2) {
       distClass = 'liq-dist-warn';
@@ -343,8 +367,9 @@ function renderLiqTable() {
     html += '<td class="' + dirClass + '">' + dirLabel + '</td>';
     html += '<td>' + (r.stopLoss != null ? Number(r.stopLoss).toFixed(5) : '—') + '</td>';
     html += '<td>' + r.liquidationPrice.toFixed(5) + '</td>';
-    html += '<td class="' + distClass + '">' + r.safeDistance.toFixed(2) + '%</td>';
+    html += '<td class="' + distClass + '">' + (r.note ? '方向错误' : r.safeDistance.toFixed(2) + '%') + '</td>';
     html += '<td>' + (r.positionSize != null ? r.positionSize.toFixed(0) + ' U' : '—') + '</td>';
+    html += '<td>' + (r.note ? '<span style="color:var(--color-danger);">' + r.note + '</span>' : '—') + '</td>';
     html += '</tr>';
   }
 
@@ -370,9 +395,13 @@ function renderConcentration(closedOverride) {
   var symbolCount = {};
   for (var i = 0; i < openPositions.length; i++) {
     var pos = openPositions[i];
-    var lev = pos.leverage || 1;
-    if (lev <= 0) lev = 1;
-    var margin = (pos.positionSize || 0) / lev;
+    var lev = pos.leverage || 0;
+    // BUG-7 修复：现货(leverage=0)时保证金等于仓位本身
+    if (lev > 0) {
+      var margin = (pos.positionSize || 0) / lev;
+    } else {
+      var margin = pos.positionSize || 0;
+    }
     var sym = pos.symbol || '未知';
     symbolMargin[sym] = (symbolMargin[sym] || 0) + margin;
     symbolCount[sym] = (symbolCount[sym] || 0) + 1;

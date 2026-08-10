@@ -256,9 +256,14 @@ function updateMultiTP() {
       rrEl.textContent = '逆势';
       rrEl.className = 'tp-rr negative';
     } else {
-      // 计算净盈亏比（扣除手续费），与计算器保持一致
-      var grossProfit = profitDistance * (calc.positionSize || 0) / (calc.effectiveEntryPrice || entryPrice);
-      var grossLoss = stopDistance * (calc.positionSize || 0) / (calc.effectiveEntryPrice || entryPrice);
+      // BUG-10 修复：使用 stopDistance 反推原始仓位（而非可能被截断的 positionSize）
+      // grossLoss = stopDistance * positionSize / effectiveEntryPrice = riskAmount
+      // 所以 positionSize = riskAmount * effectiveEntryPrice / stopDistance
+      var ep = calc.effectiveEntryPrice || entryPrice;
+      var riskAmt = calc.riskAmount || 0;
+      var origPosSize = stopDistance > 0 && ep > 0 ? (riskAmt * ep / stopDistance) : (calc.positionSize || 0);
+      var grossProfit = profitDistance * origPosSize / ep;
+      var grossLoss = stopDistance * origPosSize / ep;
       var fee = calc.fee || 0;
       var netProfit = grossProfit - fee;
       var netLoss = grossLoss + fee;
@@ -467,7 +472,7 @@ function updateChecklist() {
   updateCheckItemWithResult('checkSymbolConc', function() {
     if (!calc || !calc.capital || calc.capital <= 0 || !calc.positionSize) return null;
     var openPositions = getOpenPositions();
-    var concCheck = checkSymbolConcentration(calc.symbol, calc.positionSize, calc.leverage, calc.capital, openPositions);
+    var concCheck = checkSymbolConcentration(calc.symbol, calc.positionSize, calc.leverage, calc.capital, openPositions, 7);
     if (!concCheck || concCheck.maxPct === undefined) return null;
     var passed = concCheck.pass;
     return { result: passed, message: concCheck.warning || (passed ? '品种集中度正常' : '集中度超限') };
