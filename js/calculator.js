@@ -1155,8 +1155,11 @@ function applyKellyRisk() {
   }
   var riskEl = document.getElementById('riskInput');
   if (!riskEl) return;
-  // 格式化为百分比字符串（如 "1.5%"）
-  riskEl.value = (kellyPct * 100).toFixed(1) + '%';
+  // select 只有 0.5% 步长选项，四舍五入到最近的可用值
+  var pctVal = parseFloat((kellyPct * 100).toFixed(2));
+  var roundedPct = Math.round(pctVal * 2) / 2; // 四舍五入到 0.5 的倍数
+  roundedPct = Math.max(0.5, Math.min(10, roundedPct)); // 限制在 0.5%~10%
+  riskEl.value = roundedPct + '%';
   // 标记表单已变更，清除缓存
   window._lastCalc = null;
   window._lastCalcDirty = true;

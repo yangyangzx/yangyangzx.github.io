@@ -584,22 +584,3 @@ function updateOrderTypeLabels() {
     }
   } catch(e) {}
 })();
-
-// ==================== 凯利自动填充 ====================
-(function _initKellyAutoFill() {
-  try {
-    if (typeof autoFillKellyFromLogs !== 'function') return;
-    // 切换到开仓计划视图时自动填充凯利数据
-    var origSwitchView = window.switchView;
-    if (origSwitchView) {
-      window.switchView = function(viewName) {
-        origSwitchView(viewName);
-        if (viewName === 'planner') {
-          autoFillKellyFromLogs();
-        }
-      };
-    }
-    // 页面首次加载时也尝试填充
-    autoFillKellyFromLogs();
-  } catch(e) {}
-})();
