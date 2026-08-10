@@ -13,6 +13,8 @@
 </script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+/* iOS: avoid double-tap zoom stealing taps on controls (delays/breaks button clicks) */
+button,input,select,textarea,a,label,summary,.hb,.bt,.preset,.ctx-item{touch-action:manipulation}
 :root{
   --bg:#0F0F0F;--surface:#161616;--surface2:#1c1c1c;--surface3:#242424;
   --border:rgba(249,246,237,0.07);--border2:rgba(249,246,237,0.13);--border3:rgba(249,246,237,0.22);
@@ -653,7 +655,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
   #ctx-menu{min-width:calc(100vw - 24px)!important;max-width:300px!important}
   .ctx-item{padding:10px 14px;font-size:13px}
   /* Disable pointer events on resize handles when not selected on mobile */
-  .rh{touch-action:none}
+  .rh, .gel{touch-action:none}
   /* Hide scrollbars on touch devices (native scroll is smoother) */
   #presets-bar, #header, #ll, #pscroll, #canvas-scroll{
     -ms-overflow-style:auto;
@@ -2407,7 +2409,8 @@ function applyPreset(key) {
   }
   saveHist();
   render();
-  toast(`已添加「${document.querySelector(`.preset[onclick="applyPreset('${key}')"] span`)?.textContent || key}」`);
+  const presetNameEl = document.querySelector(`.preset[onclick="applyPreset('${key}')"] span`);
+  toast(`已添加「${presetNameEl ? presetNameEl.textContent : key}」`);
   // Brief highlight on the preset button
   const presetBtn = document.querySelector(`.preset[onclick="applyPreset('${key}')"]`);
   if (presetBtn) { presetBtn.classList.add('pressed'); setTimeout(() => presetBtn.classList.remove('pressed'), 260); }
@@ -3312,6 +3315,89 @@ function _expCanvas(name, w, h) {
   return c;
 }
 
+// ── ctx.filter fallback (iOS Safari added CanvasRenderingContext2D.filter in 17.4) ──
+// On older iOS the `filter` property is ignored, so exports silently lost their
+// blur/saturate/brightness and disagreed with the on-screen DOM effect. When the
+// property is missing we emulate it: a separable Gaussian blur (same kernel shape
+// as CSS blur()) plus a luminance saturate/brightness pass.
+let _ctxFilterSupported = null;
+function _supportsCtxFilter() {
+  if (_ctxFilterSupported === null) {
+    try {
+      const probe = document.createElement('canvas').getContext('2d');
+      _ctxFilterSupported = !!(probe && 'filter' in probe);
+    } catch (e) { _ctxFilterSupported = false; }
+  }
+  return _ctxFilterSupported;
+}
+
+function _gaussBlurCanvas(ctx, w, h, sigma) {
+  const img = ctx.getImageData(0, 0, w, h);
+  const d = img.data;
+  const n = Math.max(3, Math.round(sigma * 3) * 2 + 1);
+  const half = (n - 1) / 2;
+  const kernel = new Float64Array(n);
+  let sum = 0;
+  const twoSigmaSq = 2 * sigma * sigma;
+  for (let i = 0; i < n; i++) {
+    const x = i - half;
+    kernel[i] = Math.exp(-(x * x) / twoSigmaSq);
+    sum += kernel[i];
+  }
+  for (let i = 0; i < n; i++) kernel[i] /= sum;
+  const tmp = new Float64Array(w * h * 4);
+  const wm = w - 1, hm = h - 1;
+  for (let y = 0; y < h; y++) {
+    const row = y * w;
+    for (let x = 0; x < w; x++) {
+      let tr = 0, tg = 0, tb = 0, ta = 0;
+      for (let k = 0; k < n; k++) {
+        let cx = x + k - half;
+        if (cx < 0) cx = 0; else if (cx > wm) cx = wm;
+        const p = (row + cx) * 4;
+        const kv = kernel[k];
+        tr += d[p] * kv; tg += d[p + 1] * kv; tb += d[p + 2] * kv; ta += d[p + 3] * kv;
+      }
+      const o = (row + x) * 4;
+      tmp[o] = tr; tmp[o + 1] = tg; tmp[o + 2] = tb; tmp[o + 3] = ta;
+    }
+  }
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let tr = 0, tg = 0, tb = 0, ta = 0;
+      for (let k = 0; k < n; k++) {
+        let cy = y + k - half;
+        if (cy < 0) cy = 0; else if (cy > hm) cy = hm;
+        const p = (cy * w + x) * 4;
+        const kv = kernel[k];
+        tr += tmp[p] * kv; tg += tmp[p + 1] * kv; tb += tmp[p + 2] * kv; ta += tmp[p + 3] * kv;
+      }
+      const o = (y * w + x) * 4;
+      d[o] = tr; d[o + 1] = tg; d[o + 2] = tb; d[o + 3] = ta;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+function _applyBackdropFallback(ctx, bRadius, satVal, brVal) {
+  const w = ctx.canvas.width, h = ctx.canvas.height;
+  if (bRadius > 0) _gaussBlurCanvas(ctx, w, h, bRadius);
+  if (satVal !== 100 || brVal !== 100) {
+    const img = ctx.getImageData(0, 0, w, h);
+    const d = img.data;
+    const satF = satVal / 100, brF = brVal / 100;
+    const lr = 0.2126, lg = 0.7152, lb = 0.0722;
+    for (let i = 0; i < d.length; i += 4) {
+      const r = d[i], g = d[i + 1], b = d[i + 2];
+      const lum = lr * r + lg * g + lb * b;
+      d[i]     = Math.min(255, (lum + (r - lum) * satF) * brF);
+      d[i + 1] = Math.min(255, (lum + (g - lum) * satF) * brF);
+      d[i + 2] = Math.min(255, (lum + (b - lum) * satF) * brF);
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+}
+
 async function exportImg() {
   window._exportCancelled = false;
   const ov = el.expOvl, bar = el.expBar, msg = el.expMsg;
@@ -3322,27 +3408,47 @@ async function exportImg() {
 
   // Wrap entire export in try-catch to prevent crashes on canvas errors
   try {
-    // Wait for all fonts (including local fonts) to be ready before measuring text
-    await document.fonts.ready;
+    // Wait for all fonts (including local fonts) to be ready before measuring text.
+    // Race with a timeout: remote font hosts can hang (offline, throttled networks)
+    // and document.fonts.ready would then never resolve, stalling the export.
+    await Promise.race([
+      document.fonts.ready,
+      new Promise(r => setTimeout(r, 3000)),
+    ]);
     bar.style.width = '8%'; // Acknowledge font loading done
 
   const ec = document.getElementById('ec');
-  // Most browsers cap canvas area around 16384px per side / ~268M px total.
-  // Clamp the requested scale so large source photos don't silently fail to export.
-  const MAX_DIM = 16000, MAX_AREA = 268000000;
+  // iOS Safari caps canvas far below desktop: older iOS is ~4096px/side (~16.7M px)
+  // and setting a larger canvas silently invalidates it — drawImage then never
+  // paints and the export stalls forever at "绘制底图". Detect iOS and use
+  // conservative limits so exports always complete instead of freezing.
+  // Detect iOS/iPadOS: covers mobile Safari (iPhone/iPad UA) AND
+  // iPadOS 13+ desktop Safari which reports 'MacIntel' platform. On iPadOS
+  // desktop mode the UA no longer contains 'iPad', so we fall back to the
+  // touch-points check. Safari on Mac (non-touch) has maxTouchPoints=0, so
+  // this stays accurate on both platforms.
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 0);
+  const MAX_DIM  = isIOS ? 4096 : 16000;
+  const MAX_AREA = isIOS ? 16777216 : 268000000;
   let exportScale = S.exportScale || 2;
-  // DPR: match display pixel density for sharp export on Retina screens
-  const dpr = Math.min(window.devicePixelRatio || 1, 4);
+  // DPR is a display-layer concept; multiplying it into the PNG only inflates the
+  // file. On iOS (DPR 2-3) it would push straight past the canvas cap, so export
+  // at 1 device pixel there.
+  const dpr = isIOS ? 1 : Math.min(window.devicePixelRatio || 1, 4);
   const rawW = S.imgNatW * exportScale * dpr, rawH = S.imgNatH * exportScale * dpr;
   if (rawW > MAX_DIM || rawH > MAX_DIM || rawW * rawH > MAX_AREA) {
     const capByDim  = Math.min(MAX_DIM / (S.imgNatW * dpr), MAX_DIM / (S.imgNatH * dpr));
     const capByArea = Math.sqrt(MAX_AREA / (S.imgNatW * S.imgNatH * dpr * dpr));
-    exportScale = Math.max(1, Math.min(exportScale, capByDim, capByArea));
-    toast(`⚠️ 图片过大，导出倍数已自动调整为 ${exportScale.toFixed(1)}×`);
+    // Allow downscaling below 1× — a 1× floor would defeat the cap for very large
+    // sources and push the canvas past the limit again, re-triggering the stall.
+    exportScale = Math.max(0.25, Math.min(exportScale, capByDim, capByArea));
+    toast(`⚠️ 图片过大，导出倍数已自动调整为 ${exportScale.toFixed(2)}×`);
   }
   ec.width  = Math.round(S.imgNatW * exportScale * dpr);
   ec.height = Math.round(S.imgNatH * exportScale * dpr);
-  const ctx = ec.getContext('2d', { alpha: true, willReadFrequently: false });
+  // Safari < 15.4 does not support context options; use plain call for compatibility
+  const ctx = ec.getContext('2d');
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
 
@@ -3394,8 +3500,9 @@ async function exportImg() {
 
       // Use ctx.filter with combined blur+saturate+brightness in a single pass —
       // matches CSS backdrop-filter exactly (same Gaussian blur algorithm,
-      // same color space, same compositing order). StackBlur uses box blur which
-      // produces visibly different results from CSS's Gaussian blur.
+      // same color space, same compositing order). On browsers without ctx.filter
+      // (iOS Safari <17.4) fall back to a separable Gaussian blur + pixel pass so
+      // exports still carry the glass effect instead of silently dropping it.
       const satVal = el2.sat && el2.sat !== 100 ? el2.sat : 100;
       const brVal  = el2.br  && el2.br  !== 100 ? el2.br  : 100;
       blurredTmp = _expCanvas('blur', bRw, bRh);
@@ -3404,11 +3511,11 @@ async function exportImg() {
       if (bRadius > 0) parts.push(`blur(${bRadius}px)`);
       if (satVal !== 100) parts.push(`saturate(${satVal}%)`);
       if (brVal  !== 100) parts.push(`brightness(${brVal}%)`);
-      if (parts.length > 0) {
-        tc.filter = parts.join(' ');
-      }
+      const useCtxFilter = parts.length > 0 && _supportsCtxFilter();
+      if (useCtxFilter) tc.filter = parts.join(' ');
       tc.drawImage(ec, bRx, bRy, bRw, bRh, 0, 0, bRw, bRh);
       tc.filter = 'none';
+      if (parts.length > 0 && !useCtxFilter) _applyBackdropFallback(tc, bRadius, satVal, brVal);
     }
 
     // ── 2. Box shadow (draw BEFORE blur backdrop, so shadow sits behind element) ──
@@ -3664,10 +3771,27 @@ async function exportImg() {
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 30000);
   } catch (err) {
+    // Safari fallback: if Blob-based download fails, use data-URL + direct assign.
+    // This covers older Safari versions where createObjectURL + <a> click is
+    // blocked for security reasons (e.g. private browsing on iOS).
     ov.classList.remove('show');
-    toast('⚠️ 导出失败：图片尺寸过大，请降低导出倍数');
-    console.error('Export failed:', err);
-    return;
+    console.error('Export failed (Blob method):', err);
+    try {
+      const dataUrl = ec.toDataURL('image/png');
+      a.href = dataUrl;
+      a.download = `glass-studio-${exportScale}x-${Date.now()}.png`;
+      a.click();
+      bar.style.width = '100%';
+      setTimeout(() => {
+        ov.classList.remove('show');
+        toast(`✓ 已导出 ${ec.width}×${ec.height}px 高清图片`);
+      }, 600);
+      return;
+    } catch (e2) {
+      toast('⚠️ 导出失败：图片尺寸过大，请降低导出倍数');
+      console.error('Export failed:', e2);
+      return;
+    }
   }
 
   bar.style.width = '100%';
@@ -3938,7 +4062,8 @@ document.addEventListener('touchstart', e => {
   const touch = e.touches[0];
   _lpTimer = setTimeout(() => {
     // Re-evaluate target in case user scrolled during the long press
-    const gel = document.elementFromPoint(touch.clientX, touch.clientY)?.closest?.('.gel');
+    const hitPt = document.elementFromPoint(touch.clientX, touch.clientY);
+    const gel = hitPt && hitPt.closest ? hitPt.closest('.gel') : null;
     if (!gel) return;
     _lpFired = true;
     _lpActive = true;
