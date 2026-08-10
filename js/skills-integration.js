@@ -50,7 +50,7 @@ function calcPortfolioHeat() {
  */
 function calcKelly(winRate, avgWin, avgLoss, accountSize, halfKelly) {
   if (halfKelly === undefined) halfKelly = true;
-  if (!winRate || !avgWin || !avgLoss || avgLoss <= 0) return null;
+  if (winRate == null || winRate === undefined || !avgWin || !avgLoss || avgLoss <= 0) return null;
   if (winRate < 0 || winRate > 1) return null;
 
   // Kelly 公式：Kelly% = (WR × AvgWin - LR × AvgLoss) / AvgWin

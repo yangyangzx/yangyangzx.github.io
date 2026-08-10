@@ -1450,7 +1450,6 @@ function renderMonthlyPnlChart(closed) {
     monthly[ym].count++;
     if (pnl > 0) monthly[ym].wins++;
     else if (pnl < 0) monthly[ym].losses++;
-    if (pnl > 0) monthly[ym].wins++;
   }
 
   var keys = Object.keys(monthly).sort();

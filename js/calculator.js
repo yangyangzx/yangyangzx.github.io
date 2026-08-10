@@ -413,7 +413,7 @@ function calculate() {
     cappedByMargin = true;
     capMsg = (capMsg ? capMsg + ' ' : '') + '<span class="warning-tag alert"><i class="fas fa-exclamation-triangle"></i> ' + concentrationCheck.warning + '</span>';
     // 按比例缩减仓位
-    var ratio = (concentrationCheck.maxPct * capital / 100) / (finalPos / leverage);
+    var ratio = (concentrationCheck.maxPct * capital / 100) / (finalPos / effLev);
     if (ratio > 0 && ratio < 1) {
       positionSize = finalPos * ratio;
       riskAmount = positionSize * stopDistance / effectiveEntryPrice;

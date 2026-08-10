@@ -519,7 +519,7 @@ function saveEditLog(idx) {
       item.holdDuration = durMin >= 0 ? durMin : null;
     }
   }
-  v = gv('emRMultiple'); if (v !== undefined && v !== '') item.rMultiple = v;
+  v = gv('emRMultiple'); if (v !== undefined && v !== '') { var rm = parseFloat(v); item.rMultiple = isNaN(rm) ? null : rm; } else if (document.getElementById('emRMultiple')?.value === '') item.rMultiple = null;
   v = gv('emPnlAmount'); if (v !== undefined && v !== '') { var pnlVal = parseFloat(v); item.pnlAmount = isNaN(pnlVal) ? null : pnlVal; } else if (document.getElementById('emPnlAmount')?.value === '') item.pnlAmount = null;
   v = gv('emPnlPercent'); if (v !== undefined && v !== '') { var pnlPct = parseFloat(v); item.pnlPercent = isNaN(pnlPct) ? null : pnlPct; } else if (document.getElementById('emPnlPercent')?.value === '') item.pnlPercent = null;
   v = gn('emFee'); if (v !== undefined && v !== null) item.fee = v;

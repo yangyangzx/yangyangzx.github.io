@@ -73,7 +73,7 @@ function renderLossReasonPie(closed) {
 
   var losses = [];
   for (var i = 0; i < closed.length; i++) {
-    if (closed[i].pnlAmount < 0) losses.push(closed[i]);
+    if (closed[i].pnlAmount != null && parseFloat(closed[i].pnlAmount) < 0) losses.push(closed[i]);
   }
 
   if (losses.length === 0) {
@@ -90,11 +90,11 @@ function renderLossReasonPie(closed) {
       for (var k = 0; k < reasons.length; k++) {
         var r = reasons[k];
         reasonCount[r] = (reasonCount[r] || 0) + 1;
-        reasonPnl[r] = (reasonPnl[r] || 0) + losses[j].pnlAmount;
+        reasonPnl[r] = (reasonPnl[r] || 0) + parseFloat(losses[j].pnlAmount);
       }
     } else {
       reasonCount['未标记'] = (reasonCount['未标记'] || 0) + 1;
-      reasonPnl['未标记'] = (reasonPnl['未标记'] || 0) + losses[j].pnlAmount;
+      reasonPnl['未标记'] = (reasonPnl['未标记'] || 0) + parseFloat(losses[j].pnlAmount);
     }
   }
 
@@ -196,7 +196,7 @@ function renderStrategyRank(closed) {
     var trades = groups[keys[j]];
     var wins = 0, losses = 0, totalPnl = 0, winSum = 0, lossSum = 0;
     for (var t = 0; t < trades.length; t++) {
-      var pnl = trades[t].pnlAmount;
+      var pnl = safeParseNum(trades[t].pnlAmount);
       totalPnl += pnl;
       if (pnl > 0) { wins++; winSum += pnl; }
       else if (pnl < 0) { losses++; lossSum += Math.abs(pnl); }
@@ -390,7 +390,7 @@ function renderEmotionAnalysis(closed) {
   for (var i = 0; i < closed.length; i++) {
     var emotions = closed[i].emotions;
     var pnl = safeParseNum(closed[i].pnlAmount);
-    if (pnl == null || !isFinite(pnl)) continue;
+    if (pnl == null || isFinite(pnl) === false) continue;
 
     if (Array.isArray(emotions) && emotions.length > 0) {
       for (var j = 0; j < emotions.length; j++) {

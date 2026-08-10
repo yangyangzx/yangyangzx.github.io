@@ -317,7 +317,7 @@ function getTodayLossStatus() {
       if (logs[i].closeType && logs[i].pnlAmount != null) {
         var closeDate = window.utils.toLocalDateStr(logs[i].closeTime || logs[i].time);
         if (closeDate === todayStr && logs[i].pnlAmount < 0) {
-          totalTodayLoss += logs[i].pnlAmount;
+          totalTodayLoss += parseFloat(logs[i].pnlAmount) || 0;
         }
       }
     }
