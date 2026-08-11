@@ -1160,12 +1160,15 @@ function applyKellyRisk() {
     showToast('凯利计算结果为 0，无法应用', 'warn');
     return;
   }
+  var wasCapped = kellyPct >= 0.05; // 记录是否因上限被截断（0.05 = 5%）
   var riskEl = document.getElementById('riskInput');
   if (!riskEl) return;
-  // BUG-8 修复：使用精确值而非四舍五入到 0.5% 步长，避免偏离凯利建议
+  // riskInput 是 <select>，只有 0.5% 步长的固定选项。
+  // 将半凯利值四舍五入到最近的可用选项，确保 .value 能匹配到一个真实存在的 option。
   var pctVal = parseFloat((kellyPct * 100).toFixed(2));
   pctVal = Math.max(0.5, Math.min(10, pctVal)); // 限制在 0.5%~10%
-  riskEl.value = pctVal.toFixed(2) + '%';
+  var roundedPct = Math.round(pctVal * 2) / 2; // 四舍五入到 0.5% 步进
+  riskEl.value = roundedPct + '%';
   // 标记表单已变更，清除缓存
   window._lastCalc = null;
   window._lastCalcDirty = true;
@@ -1173,7 +1176,13 @@ function applyKellyRisk() {
   if (typeof calculate === 'function') {
     calculate();
   }
-  showToast('已应用半凯利风险 ' + pctVal.toFixed(2) + '%，重新计算中...', 'info');
+  var msg = '已应用半凯利风险 ' + roundedPct.toFixed(1) + '%';
+  if (wasCapped) {
+    msg += '（半凯利超出上限，已截断至 5%）';
+  } else if (roundedPct !== pctVal) {
+    msg += '（取整至最近 0.5% 步长）';
+  }
+  showToast(msg, 'info');
 }
 window.applyKellyRisk = applyKellyRisk;
 
