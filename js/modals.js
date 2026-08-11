@@ -636,6 +636,8 @@ function saveSplit() {
 }
 
 function doSaveSplit(calc, count) {
+  // P1-3: 入场价必须有效
+  if (!calc || !calc.entryPrice || calc.entryPrice <= 0) { showToast('入场价格无效，无法拆分保存', 'warn'); return; }
   const groupId = Date.now().toString(36) + Math.random().toString(36).substring(2);
   // 前 count-1 笔用除法取整，最后一笔用差值补足以防浮点精度丢失
   const splitPos = parseFloat((calc.positionSize / count).toFixed(2));
@@ -702,6 +704,8 @@ function doSaveSplit(calc, count) {
     if (logs[li]) logs[li].splitEntries = splitEntries;
   }
   openClosePanelIdx = -1;
+  actionPanelIdx = -1;
+  window._lastCalcDirty = false;
   saveLogs();
   showToast('拆分保存成功，共 ' + count + ' 笔', 'success');
 }

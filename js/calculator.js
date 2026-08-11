@@ -382,12 +382,8 @@ function calculate() {
     // MMR 从全局 settings 统一读取（百分比值需除以 100 转为小数）
     let mmr = 0.005; // 默认回退值
     try {
-      var _calcSettings = window.settings;
-      if (!_calcSettings) {
-        var raw = localStorage.getItem('trade_settings_v1');
-        if (raw) _calcSettings = JSON.parse(raw);
-      }
-      if (_calcSettings && _calcSettings.mmr != null) mmr = _calcSettings.mmr / 100;
+      var _raw = localStorage.getItem('trade_settings_v1');
+      if (_raw) { var _parsed = JSON.parse(_raw); if (_parsed && _parsed.mmr != null) mmr = _parsed.mmr / 100; }
     } catch(e) {}
 
     liquidationPrice = window.utils.calcLiquidationPrice(entryPrice, direction, leverage, mmr);
@@ -925,7 +921,10 @@ function updateEntryPriceFromSplit() {
 var _cachedWeightedEntry = null;
 var _cachedWeightedEntryHash = '';
 function computeWeightedEntry() {
-  var hash = JSON.stringify(_splitBatches);
+  // P2: 排序后哈希，避免因批次顺序不同但内容相同时产生无效缓存失效
+  var hash = JSON.stringify(_splitBatches.slice().sort(function(a, b) {
+    return parseFloat(a.price) - parseFloat(b.price) || parseFloat(a.alloc) - parseFloat(b.alloc);
+  }));
   if (hash === _cachedWeightedEntryHash) return _cachedWeightedEntry;
   let totalAlloc = 0, weightedSum = 0;
   for (const b of _splitBatches) {

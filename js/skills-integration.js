@@ -247,11 +247,11 @@ function getMindsetAdjustment(mindsetScore) {
     // 低于最低通过值，逐步降仓
     if (mindsetScore === 1) {
       return { adjustment: 0, message: '心态极差，禁止交易', blocked: true };
+    } else if (mindsetScore === 2) {
+      return { adjustment: 0.5, message: '心态不佳，建议降仓至 50%', blocked: false };
     } else {
       return { adjustment: 0.8, message: '心态不佳，建议降仓至 80%', blocked: false };
     }
-  } else if (mindsetScore <= 2) {
-    return { adjustment: 0.5, message: '心态不佳，建议降仓至 50%', blocked: false };
   }
   return { adjustment: 1, message: '心态良好，正常仓位', blocked: false };
 }

@@ -4,7 +4,7 @@
  * 读取当前入场价、止损价、方向，根据期望盈亏比反推目标价
  */
 function calcReverseTP() {
-  if (window._lastCalcDirty) { alert('计算器参数已变更，请先点击「计算仓位」更新结果。'); return; }
+  if (window._lastCalcDirty) { showToast('计算器参数已变更，请先点击「计算仓位」更新结果', 'warn'); return; }
   var calc = window._lastCalc;
   var entryPrice, stopLoss, direction;
 
@@ -61,7 +61,7 @@ function calcReverseTP() {
  * 读取入场价、目标价、方向，根据期望盈亏比反推止损价
  */
 function calcReverseSL() {
-  if (window._lastCalcDirty) { alert('计算器参数已变更，请先点击「计算仓位」更新结果。'); return; }
+  if (window._lastCalcDirty) { showToast('计算器参数已变更，请先点击「计算仓位」更新结果', 'warn'); return; }
   var calc = window._lastCalc;
   var entryPrice, direction;
 
@@ -130,7 +130,7 @@ function calcReverseSL() {
  * 如果用户已手动编辑过某个 TP 价格，则跳过该价位
  */
 function autoCalcMultiTP() {
-  if (window._lastCalcDirty) { alert('计算器参数已变更，请先点击「计算仓位」更新结果。'); return; }
+  if (window._lastCalcDirty) { showToast('计算器参数已变更，请先点击「计算仓位」更新结果', 'warn'); return; }
   var calc = window._lastCalc;
   var entryPrice, stopLoss, direction, stopDistance;
 
@@ -337,7 +337,7 @@ function getTodayLossStatus() {
  * 增强版：新增日亏损上限检查、心态评分检查，支持可配止损阈值，检查结果持久化至日志
  */
 function updateChecklist() {
-  if (window._lastCalcDirty) { alert('计算器参数已变更，请先点击「计算仓位」更新结果。'); return; }
+  if (window._lastCalcDirty) { showToast('计算器参数已变更，请先点击「计算仓位」更新结果', 'warn'); return; }
   var calc = window._lastCalc;
 
   // 获取设置（包含可配的止损比例和日亏损上限等）
@@ -373,9 +373,9 @@ function updateChecklist() {
   // 1. 单笔风险 ≤ 账户风险比例（设置值）
   updateCheckItemWithResult('checkRiskPct', function() {
     if (!calc || calc.riskPercent == null) return null;
-    var plRisk = (calc.riskPercent * 100).toFixed(1);
+    var plRisk = calc.riskPercent * 100;
     var settingVal = settings.riskPercent || 2;
-    return { result: plRisk <= settingVal, message: '风险 ' + plRisk + '% ≤ 设置 ' + settingVal + '%' };
+    return { result: plRisk <= settingVal, message: '风险 ' + plRisk.toFixed(1) + '% ≤ 设置 ' + settingVal + '%' };
   });
 
   // 2. 止损距离合理（可配阈值，原 ETH ≤2%/其他 ≤3% 改为从设置读取）

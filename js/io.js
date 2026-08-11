@@ -226,7 +226,6 @@ function importJSON(file) {
         // 合并去重逻辑可以在这里添加
         logs.push(...validationReport.valid);
         saveLogs();
-        refreshUI();
         showToast(`成功导入 ${validationReport.valid.length} 条记录`,'success');
       }
     } catch(err) { 
