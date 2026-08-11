@@ -91,12 +91,18 @@ function calcReverseSL() {
     return;
   }
 
-  // 根据目标价与期望盈亏比反推止损距离
-  var targetDistance = Math.abs(targetPrice - entryPrice);
-  if (targetDistance <= 0) {
-    document.getElementById('reverseSL').value = direction === 'long' ? '目标价需 > 入场价' : '目标价需 < 入场价';
+  // 方向校验：目标价必须与方向一致（做多需高于入场价，做空需低于入场价）
+  if (direction === 'long' && targetPrice <= entryPrice) {
+    document.getElementById('reverseSL').value = '做多目标价需 > 入场价';
     return;
   }
+  if (direction === 'short' && targetPrice >= entryPrice) {
+    document.getElementById('reverseSL').value = '做空目标价需 < 入场价';
+    return;
+  }
+
+  // 根据目标价与期望盈亏比反推止损距离
+  var targetDistance = Math.abs(targetPrice - entryPrice);
   // 优先使用加权止损距离（分批模式下）
   var stopDistance;
   if (calc && calc.splitMode && calc.weightedStopDistance != null) {
