@@ -326,9 +326,9 @@ function getTodayLossStatus() {
         }
       }
     }
-    return { todayLoss: totalTodayLoss, todayCount: 0 };
+    return { todayLoss: totalTodayLoss };
   } catch(e) {
-    return { todayLoss: 0, todayCount: 0 };
+    return { todayLoss: 0 };
   }
 }
 

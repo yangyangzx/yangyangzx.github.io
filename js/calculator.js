@@ -450,19 +450,24 @@ function calculate() {
     positionSize = positionSize * mindsetAdjust.adjustment;
     riskAmount = riskAmount * mindsetAdjust.adjustment;
     riskPercent = riskAmount / capital;
+    // 同步心态调整到 adjPos，避免连亏+心态叠加时 finalPosForDisplay 虚高
+    adjPos = adjPos * mindsetAdjust.adjustment;
   }
 
-  // 重新计算 finalPos（考虑心态调整）
-  let adjustedRisk = false;
   let adjMsg = '';
   if (lossStreak >= 3) {
-    adjMsg = '连续亏损 ' + lossStreak + ' 笔，建议降低仓位至 80% (≈' + adjPos.toFixed(2) + ' USDT';
+    // 显示实际调整后的仓位（可能同时受连亏和心态双重调整）
+    const adjLabel = adjPos !== positionSize
+      ? '降低至 80% × ' + mindsetAdjust.adjustment * 100 + '% = ' + (adjPos / positionSize * 100).toFixed(0) + '% 基准仓位'
+      : '降低至 80%';
+    adjMsg = '连续亏损 ' + lossStreak + ' 笔，建议仓位' + adjLabel + ' (≈' + adjPos.toFixed(2) + ' USDT)';
   } else if (lossStreak >= 2) {
     adjMsg = '连续亏损 ' + lossStreak + ' 笔，注意风险控制';
   }
 
-  const finalPosForDisplay = lossStreak >= 3 ? adjPos : positionSize;
-  const finalMargin = lossStreak >= 3 ? adjPos / (effLev || 1) : actualMargin;
+  // 同时考虑心态调整后的最终仓位
+  const finalPosForDisplay = lossStreak >= 3 ? adjPos : (positionSize * mindsetAdjust.adjustment);
+  const finalMargin = lossStreak >= 3 ? adjPos / (effLev || 1) : (actualMargin * mindsetAdjust.adjustment);
   const stopPct = stopDistance / effectiveEntryPrice * 100;
 
   // ===== 止损距离色标 =====
