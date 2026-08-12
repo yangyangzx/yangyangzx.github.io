@@ -458,3 +458,21 @@ body {
 .shortcut-desc {
   color: var(--color-text);
 }
+
+/* 快捷键提示 tooltip */
+#shortcutBtn {
+  cursor: pointer;
+  user-select: none;
+  padding: 4px 16px;
+}
+#shortcutBtn:hover {
+  color: var(--color-primary);
+}
+.shortcut-tooltip {
+  background: var(--color-surface-raised) !important;
+  border: 1px solid var(--color-border) !important;
+}
+.shortcut-tooltip kbd {
+  background: var(--glass-bg-light) !important;
+  border: 1px solid var(--glass-border) !important;
+}

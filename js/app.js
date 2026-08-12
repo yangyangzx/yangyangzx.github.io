@@ -314,3 +314,23 @@ window.debugAnalysisData = function() {
     showToast('系统已更新至最新版本', 'success');
   });
 })();
+
+// ==================== 快捷键提示 tooltip ====================
+(function _initShortcutTooltip() {
+  var btn = document.getElementById('shortcutBtn');
+  var tooltip = document.getElementById('shortcutTooltip');
+  if (!btn || !tooltip) return;
+  
+  btn.addEventListener('mouseenter', function() {
+    tooltip.style.display = 'block';
+  });
+  btn.addEventListener('mouseleave', function() {
+    tooltip.style.display = 'none';
+  });
+  btn.addEventListener('focus', function() {
+    tooltip.style.display = 'block';
+  });
+  btn.addEventListener('blur', function() {
+    tooltip.style.display = 'none';
+  });
+})();
