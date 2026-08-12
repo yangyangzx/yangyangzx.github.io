@@ -102,8 +102,13 @@ self.addEventListener('fetch', function(event) {
     return;
   }
 
-  // 静态资源 — Cache First
+  // 静态资源 — Cache First（跳过非 http/https 协议，如 chrome-extension://）
   if (event.request.method === 'GET') {
+    var reqUrl = new URL(event.request.url);
+    if (reqUrl.protocol !== 'http:' && reqUrl.protocol !== 'https:') {
+      event.respondWith(fetch(event.request));
+      return;
+    }
     event.respondWith(
       caches.match(event.request).then(function(cached) {
         return cached || fetch(event.request).then(function(response) {
