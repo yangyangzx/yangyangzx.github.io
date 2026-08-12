@@ -1177,8 +1177,19 @@ function syncSettingsToForm() {
 }
 
 /**
- * 方案D：一键应用凯利推荐风险比例到开仓计划
- * 将半凯利风险百分比填入 riskInput，触发重新计算
+ * 应用半凯利风险比例到开仓计划
+ * 
+ * 功能：
+ * 1. 读取已计算的凯利数据（window._lastCalc.kellyData）
+ * 2. 将半凯利比例四舍五入到最近的 0.5% 步进
+ * 3. 自动计算并填入止损价（优先 ATR，其次凯利平均亏损）
+ * 4. 触发重新计算仓位
+ * 
+ * @returns {void}
+ * 
+ * @example
+ * // 用户点击"应用半凯利风险"按钮时调用
+ * applyKellyRisk();
  */
 function applyKellyRisk() {
   if (!window._lastCalc || !window._lastCalc.kellyData) {

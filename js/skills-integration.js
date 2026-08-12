@@ -57,8 +57,30 @@ function calcPortfolioHeat() {
  * @param {number} avgWin - 平均盈利金额
  * @param {number} avgLoss - 平均亏损金额 (正值)
  * @param {number} accountSize - 账户大小
- * @param {boolean} halfKelly - 是否使用半凯利 (默认 true)
- * @returns {object} {kellyPct, halfKellyPct, kellyShares, recommendation}
+/**
+ * 计算凯利公式，返回最优仓位比例
+ * 
+ * 凯利公式：Kelly% = (胜率 × 平均盈利 - 败率 × 平均亏损) / 平均盈利
+ * 半凯利 = Kelly% × 0.5（实践标准，降低波动）
+ * 
+ * @param {number} winRate - 胜率，范围 0-1（如 0.55 表示 55%）
+ * @param {number} avgWin - 平均盈利金额（USDT）
+ * @param {number} avgLoss - 平均亏损金额（USDT），必须 > 0
+ * @param {number} accountSize - 账户本金（USDT）
+ * @param {boolean} [halfKelly=true] - 是否使用半凯利
+ * @param {number} [leverage=1] - 杠杆倍数（默认 1x 现货）
+ * @returns {KellyResult|null} 凯利计算结果，策略期望为负时返回 null
+ * 
+ * @typedef {Object} KellyResult
+ * @property {number} kellyPct - 完整凯利比例（已截断到 5%）
+ * @property {number} halfKellyPct - 半凯利比例（已截断到 5%）
+ * @property {number} kellyShares - 凯利建议仓位大小（股数/合约数）
+ * @property {number} halfKellyShares - 半凯利建议仓位大小
+ * @property {number} expectancy - 每笔交易的期望收益（USDT）
+ * @property {string} recommendation - 建议文本
+ * @property {boolean} kellyCapped - 完整凯利是否被截断
+ * @property {boolean} halfKellyCapped - 半凯利是否被截断
+ */
  */
 function calcKelly(winRate, avgWin, avgLoss, accountSize, halfKelly, leverage) {
   if (halfKelly === undefined) halfKelly = true;
