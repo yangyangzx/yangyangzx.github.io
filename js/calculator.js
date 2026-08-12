@@ -240,8 +240,10 @@ function calculate() {
     var kellyWinRate = parseFloat(document.getElementById('kellyWinRate')?.value);
     var kellyAvgWin = parseFloat(document.getElementById('kellyAvgWin')?.value);
     var kellyAvgLoss = parseFloat(document.getElementById('kellyAvgLoss')?.value);
+    console.log('[Kelly] Input values - WinRate:', kellyWinRate, 'AvgWin:', kellyAvgWin, 'AvgLoss:', kellyAvgLoss);
     if (!isNaN(kellyWinRate) && !isNaN(kellyAvgWin) && !isNaN(kellyAvgLoss) && kellyAvgLoss > 0) {
       var kellyResult = calcKelly(kellyWinRate, kellyAvgWin, kellyAvgLoss, capital, true);
+      console.log('[Kelly] calcKelly result:', kellyResult);
       if (kellyResult && kellyResult.halfKellyPct > 0) {
         var kellyRisk = capital * kellyResult.halfKellyPct;
         kellyData = {
@@ -1287,12 +1289,17 @@ window.toggleKellyPanel = toggleKellyPanel;
  */
 function updateKellySidebar() {
   var card = document.getElementById('kellyCard');
+  console.log('[Kelly] updateKellySidebar called, card exists:', !!card);
   if (!card) return;
   var data = window._lastCalc && window._lastCalc.kellyData;
+  console.log('[Kelly] _lastCalc exists:', !!window._lastCalc);
+  console.log('[Kelly] kellyData:', data);
   if (!data || data.halfKellyPct <= 0) {
+    console.log('[Kelly] Hiding card - no data or halfKellyPct <= 0');
     card.style.display = 'none';
     return;
   }
+  console.log('[Kelly] Showing card with halfKellyPct:', data.halfKellyPct);
   card.style.display = '';
   var fullPctEl = document.getElementById('kellyFullPct');
   var halfPctEl = document.getElementById('kellyHalfPct');
