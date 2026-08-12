@@ -945,3 +945,20 @@ body {
   color: var(--color-text-placeholder);
   margin-left: var(--space-xs);
 }
+
+/* 移动端触控优化 */
+@media (hover: none) and (pointer: coarse) {
+  /* 增大触控目标 */
+  button, .btn, .nav-item, input, select, textarea {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  /* 禁用文本选中，避免误触 */
+  body {
+    -webkit-touch-callout: none;
+  }
+  /* 消除双击缩放 */
+  * {
+    touch-action: manipulation;
+  }
+}

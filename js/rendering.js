@@ -574,7 +574,6 @@ function renderLogs() {
     document.getElementById('statsPanel').style.display = 'none';
     document.getElementById('summaryBar').style.display = 'none';
     // P2: 空状态下不触发连亏检测（避免无日志时意外调用 calculate）
-    if (logs.length > 0) autoCountLossStreak();
     populateFilterOptions();
     return;
   }

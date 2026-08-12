@@ -249,6 +249,10 @@ function batchDelete() {
     logs = newLogs;
     if (window._pendingDeleteIndices) window._pendingDeleteIndices.clear();
     _pendingDelete = null;
+    // 恢复后重置展开状态和面板索引，避免索引错位
+    _expandedRows.clear();
+    openClosePanelIdx = -1;
+    actionPanelIdx = -1;
     renderLogs();
   }, function() {
     _commitPendingDelete();

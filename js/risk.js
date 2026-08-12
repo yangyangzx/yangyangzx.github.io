@@ -363,13 +363,13 @@ function renderLiqTable() {
     var dirLabel = r.direction === 'long' ? '多' : '空';
 
     html += '<tr>';
-    html += '<td>' + r.symbol + '</td>';
+    html += '<td>' + esc(r.symbol) + '</td>';
     html += '<td class="' + dirClass + '">' + dirLabel + '</td>';
     html += '<td>' + (r.stopLoss != null ? Number(r.stopLoss).toFixed(5) : '—') + '</td>';
     html += '<td>' + r.liquidationPrice.toFixed(5) + '</td>';
     html += '<td class="' + distClass + '">' + (r.note ? '方向错误' : r.safeDistance.toFixed(2) + '%') + '</td>';
     html += '<td>' + (r.positionSize != null ? r.positionSize.toFixed(0) + ' U' : '—') + '</td>';
-    html += '<td>' + (r.note ? '<span style="color:var(--color-danger);">' + r.note + '</span>' : '—') + '</td>';
+    html += '<td>' + (r.note ? '<span style="color:var(--color-danger);">' + esc(r.note) + '</span>' : '—') + '</td>';
     html += '</tr>';
   }
 
@@ -445,7 +445,7 @@ function renderConcentration(closedOverride) {
       var r = symbolRows[sr];
       var cls = r.pct > 50 ? 'liq-dist-danger' : (r.pct > 30 ? 'liq-dist-warn' : '');
       var marginDisplay = r.margin > 0 ? r.margin.toFixed(2) + ' USDT' : '<span style="color:var(--color-text-muted);">—</span>';
-      html += '<tr><td>' + r.symbol + '</td><td>' + marginDisplay + '</td><td class="' + cls + '">' + r.pct.toFixed(1) + '%</td><td>' + r.count + '</td></tr>';
+      html += '<tr><td>' + esc(r.symbol) + '</td><td>' + marginDisplay + '</td><td class="' + cls + '">' + r.pct.toFixed(1) + '%</td><td>' + r.count + '</td></tr>';
     }
   }
   html += '</tbody></table></div>';
@@ -461,7 +461,7 @@ function renderConcentration(closedOverride) {
 
   // 集中度警告
   if (symbolRows.length > 0 && symbolRows[0].pct > 50) {
-    html += '<div style="font-size:12px;color:var(--color-warning);"><i class="fas fa-exclamation-triangle"></i> ⚠️ ' + symbolRows[0].symbol + ' 占用 ' + symbolRows[0].pct.toFixed(1) + '% 本金，风险高度集中</div>';
+    html += '<div style="font-size:12px;color:var(--color-warning);"><i class="fas fa-exclamation-triangle"></i> ⚠️ ' + esc(symbolRows[0].symbol) + ' 占用 ' + symbolRows[0].pct.toFixed(1) + '% 本金，风险高度集中</div>';
   }
 
   container.innerHTML = html;
@@ -594,7 +594,7 @@ function renderPortfolioHeat(closedOverride) {
     html += '<div style="color:var(--color-text-muted);margin-bottom:6px;">持仓风险明细：</div>';
     for (var i = 0; i < heatCheck.details.length; i++) {
       var d = heatCheck.details[i];
-      html += '<div class="risk-alert-row" style="padding:4px 0;"><span class="risk-sub">' + d.symbol + '</span><span class="risk-sub">' + d.risk.toFixed(2) + ' USDT (' + d.pct.toFixed(2) + '%)</span></div>';
+      html += '<div class="risk-alert-row" style="padding:4px 0;"><span class="risk-sub">' + esc(d.symbol) + '</span><span class="risk-sub">' + d.risk.toFixed(2) + ' USDT (' + d.pct.toFixed(2) + '%)</span></div>';
     }
     html += '</div>';
   }
