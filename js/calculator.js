@@ -1185,11 +1185,11 @@ function applyKellyRisk() {
     var calc = window._lastCalc;
     var stopLoss = null;
 
-    // 优先使用 ATR 止损（如果用户已配置）
+    // 优先使用 ATR 止损（仅当 ATR 自动模式已启用）
     var atrValue = parseFloat(document.getElementById('atrValue').value);
     var settings = loadSettings();
     const atrMultiplier = parseFloat(document.getElementById('atrMultiplier').value) || settings.atrDefaultMultiplier || 2;
-    if (!isNaN(atrValue) && atrValue > 0 && typeof calcATRStop === 'function') {
+    if (settings.atrStopEnabled && !isNaN(atrValue) && atrValue > 0 && typeof calcATRStop === 'function') {
       var atrResult = calcATRStop(entryPrice, atrValue, atrMultiplier, direction);
       if (atrResult && atrResult.stopPrice > 0) {
         stopLoss = atrResult.stopPrice;
