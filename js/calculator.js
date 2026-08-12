@@ -1190,6 +1190,18 @@ function applyKellyRisk() {
     return;
   }
   var wasCapped = kellyPct > 0.10; // 实际上限为 10%，kellyPct > 0.10 表示被 Math.min(10, ...) 截断
+  
+  // 杠杆感知：调整凯利风险比例
+  var leverage = parseInt(document.getElementById('leverage').value) || 1;
+  var effectiveRisk = kellyPct * leverage;
+  if (effectiveRisk > 0.10) {
+    // 有效风险超过 10%，降低凯利建议
+    var adjustedKelly = kellyPct / leverage * 0.10;
+    console.log('[Kelly] Leverage-aware adjustment: ' + kellyPct.toFixed(2) + '% × ' + leverage + 'x = ' + effectiveRisk.toFixed(0) + '% > 10%, adjusting to ' + (adjustedKelly * 100).toFixed(2) + '%');
+    kellyPct = adjustedKelly;
+    wasCapped = true;
+  }
+  
   var riskEl = document.getElementById('riskInput');
   if (!riskEl) return;
   // riskInput 是 <select>，只有 0.5% 步长的固定选项。
