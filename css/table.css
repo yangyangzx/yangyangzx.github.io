@@ -69,7 +69,7 @@ tbody tr:hover > td {
   display: block;
   width: 100%;
   height: 4px;
-  background: linear-gradient(to bottom, oklch(0% 0 0 / 0.06), transparent);
+  background: var(--table-gradient-overlay);
   pointer-events: none;
   z-index: 2;
 }
@@ -272,7 +272,7 @@ tbody tr:hover > td {
 
 /* 表头滚动阴影 */
 .table-wrap.scrolled th {
-  box-shadow: 0 2px 8px oklch(0% 0 0 / 0.06);
+  box-shadow: var(--shadow-sm);
 }
 
 
@@ -448,13 +448,13 @@ tbody tr:hover > td {
   border: none;
   font-weight: var(--font-weight-semibold);
   padding: 3px 10px;
-  box-shadow: 0 1px 4px oklch(62% 0.16 158 / 0.22);
+  box-shadow: var(--btn-success-shadow);
   transition: background-color var(--transition-normal), border-color var(--transition-normal), color var(--transition-normal), transform var(--transition-fast), box-shadow var(--transition-normal);
 }
 
 .btn-close-action:hover {
-  background: linear-gradient(135deg, var(--color-success-dark), oklch(50% 0.14 158 / 0.9));
-  box-shadow: 0 2px 10px oklch(62% 0.16 158 / 0.32);
+  background: var(--btn-success-hover-bg);
+  box-shadow: var(--btn-success-hover-shadow);
   color: var(--color-text-inverse);
   transform: translateY(-1px);
 }
@@ -467,13 +467,13 @@ tbody tr:hover > td {
   border: none;
   font-weight: var(--font-weight-semibold);
   padding: 3px 10px;
-  box-shadow: 0 1px 4px oklch(65% 0.18 80 / 0.22);
+  box-shadow: var(--btn-warning-shadow);
   transition: background-color var(--transition-normal), border-color var(--transition-normal), color var(--transition-normal), transform var(--transition-fast), box-shadow var(--transition-normal);
 }
 
 .btn-modify-action:hover {
-  background: linear-gradient(135deg, var(--color-warning-dark), oklch(50% 0.16 80 / 0.9));
-  box-shadow: 0 2px 10px oklch(65% 0.18 80 / 0.32);
+  background: var(--btn-warning-hover-bg);
+  box-shadow: var(--btn-warning-hover-shadow);
   color: var(--color-text-inverse);
   transform: translateY(-1px);
 }
@@ -639,6 +639,13 @@ tbody tr:hover > td {
   box-shadow: 0 0 0 3px var(--color-primary-bg);
   z-index: 2;
 }
+.close-panel .fp select:focus-visible,
+.close-panel .fp input:focus-visible,
+.close-panel .fp textarea:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-color: transparent;
+}
 
 .close-panel .fp textarea {
   resize: vertical;
@@ -707,8 +714,12 @@ tbody tr:hover > td {
   transition: border-color var(--transition-fast);
 }
 
-.stats-filter-bar select:focus { 
-  border-color: var(--color-primary); 
+.stats-filter-bar select:focus {
+  border-color: var(--color-primary);
+}
+.stats-filter-bar select:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 
@@ -1102,9 +1113,15 @@ tbody tr:hover > td {
 
 .trade-action-panel .fp input:focus,
 .trade-action-panel .fp select:focus {
-  outline: none; 
+  outline: none;
   border-color: var(--color-primary);
   box-shadow: 0 0 0 2px var(--color-primary-bg);
+}
+.trade-action-panel .fp input:focus-visible,
+.trade-action-panel .fp select:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-color: transparent;
 }
 
 .trade-action-panel .fp.span-2 { grid-column: span 2; }
@@ -1189,6 +1206,10 @@ tbody tr:hover > td {
 
 .filter-row select:focus {
   border-color: var(--color-primary);
+}
+.filter-row select:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 .filter-quick-row {

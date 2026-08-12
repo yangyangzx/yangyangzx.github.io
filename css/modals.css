@@ -180,11 +180,16 @@
 
 .modal-body .fp input:focus,
 .modal-body .fp select:focus {
+  outline: none;
   border-color: var(--color-primary);
-  outline: 2px solid var(--color-primary);
-  outline-offset: 1px;
-  border-width: 1px;
+  box-shadow: 0 0 0 2px var(--color-primary-bg);
   background: var(--glass-bg);
+}
+.modal-body .fp input:focus-visible,
+.modal-body .fp select:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-color: transparent;
 }
 
 .modal-body .fp textarea {

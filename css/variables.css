@@ -206,6 +206,26 @@
   --chart-bar-neutral:     oklch(60% 0.015 250 / 0.70);
   --chart-scatter-win:     oklch(62% 0.16 158 / 0.80);
   --chart-scatter-loss:    oklch(58% 0.20 25 / 0.80);
+
+  /* ——— 状态发光效果（dashboard / table / review） ——— */
+  --glow-success:  0 0 12px oklch(62% 0.16 158 / 0.50);
+  --glow-danger:   0 0 12px oklch(58% 0.20 25 / 0.50);
+  --glow-warning:  0 0 12px oklch(65% 0.18 80 / 0.50);
+  --text-glow-positive:  0 0 16px oklch(70% 0.15 158 / 0.15);
+  --text-glow-negative:  0 0 16px oklch(65% 0.18 25 / 0.12);
+  --table-gradient-overlay: linear-gradient(to bottom, oklch(0% 0 0 / 0.06), transparent);
+  --btn-success-shadow:    0 1px 4px oklch(62% 0.16 158 / 0.22);
+  --btn-success-hover-bg:  linear-gradient(135deg, var(--color-success-dark), oklch(50% 0.14 158 / 0.9));
+  --btn-success-hover-shadow: 0 2px 10px oklch(62% 0.16 158 / 0.32);
+  --btn-warning-shadow:    0 1px 4px oklch(65% 0.18 80 / 0.22);
+  --btn-warning-hover-bg:  linear-gradient(135deg, var(--color-warning-dark), oklch(50% 0.16 80 / 0.9));
+  --btn-warning-hover-shadow: 0 2px 10px oklch(65% 0.18 80 / 0.32);
+  --review-rank-1-border:  1px solid oklch(72% 0.17 78 / 0.20);
+  --review-card-hover-shadow: 0 12px 40px oklch(0% 0 0 / 0.30);
+
+  /* ——— Switch 组件 ——— */
+  --switch-bg:         oklch(60% 0.015 250 / 0.40);
+  --switch-bg-checked: var(--color-primary-bg);
 }
 
 /* ———— 浅色主题模式 ———— */

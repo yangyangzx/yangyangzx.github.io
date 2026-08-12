@@ -86,7 +86,7 @@
 <main id="mainContent" role="main" aria-label="主要内容区域">
 
   <!-- ====== 仪表盘 ====== -->
-  <section id="view-dashboard" class="view active">
+  <section id="view-dashboard" class="view active" role="region" aria-label="仪表盘">
     <div class="dashboard-grid">
       <!-- 卡片 1：今日 PnL -->
       <div class="dash-card" id="dashTodayPnl">
@@ -125,7 +125,7 @@
   </section>
 
   <!-- ====== 开仓计划 ====== -->
-  <section id="view-planner" class="view">
+  <section id="view-planner" class="view" role="region" aria-label="开仓计划">
     <div class="planner-grid">
       <!-- 左侧：计算器表单卡片（占 2 列） -->
       <div class="card planner-form-card">
@@ -613,7 +613,7 @@
   </section>
 
   <!-- ====== 交易日志 ====== -->
-  <section id="view-journal" class="view">
+  <section id="view-journal" class="view" role="region" aria-label="交易日志">
 
   <!-- ====== 日志卡片 ====== -->
   <div class="card">
@@ -760,7 +760,7 @@
   </section>
 
   <!-- ====== 风控中心 ====== -->
-  <section id="view-risk" class="view">
+  <section id="view-risk" class="view" role="region" aria-label="风控中心">
     <h2 class="view-title">风控中心</h2>
     <div class="risk-dashboard">
       <!-- 卡片 1：账户概览 -->
@@ -802,7 +802,7 @@
   </section>
 
   <!-- ====== 统计分析 ====== -->
-  <section id="view-analytics" class="view">
+  <section id="view-analytics" class="view" role="region" aria-label="统计分析">
     <h2 class="view-title">统计分析</h2>
     <div class="analytics-grid">
       <div class="card chart-card">
@@ -879,7 +879,7 @@
   </section>
 
   <!-- ====== 复盘中心 ====== -->
-  <section id="view-review" class="view">
+  <section id="view-review" class="view" role="region" aria-label="复盘中心">
     <h2 class="view-title">复盘中心</h2>
     
     <div class="review-header-note">
@@ -952,96 +952,8 @@
       </div>
     </div>
   </section>
-  
-  <!-- 初始化脚本 -->
-  <script>
-    // 等待DOM加载完成后初始化各模块
-    document.addEventListener('DOMContentLoaded', function() {
-      console.log('Initializing TradingDiscipline modules...');
-      
-      // 初始化Journal
-      if (typeof Journal !== 'undefined') {
-        Journal.init({
-          tableBody: document.querySelector('#tradeTable tbody'),
-          totalTradesEl: document.getElementById('totalTrades'),
-          winRateEl: document.getElementById('winRate'),
-          totalPnlEl: document.getElementById('totalPnl'),
-          avgPnlEl: document.getElementById('avgPnl'),
-          exportBtn: document.getElementById('exportBtn'),
-          importBtn: document.getElementById('importBtn')
-        });
-        console.log('Journal initialized');
-      }
-      
-      // 初始化Dashboard
-      if (typeof Dashboard !== 'undefined') {
-        Dashboard.init({
-          pnlValue: document.getElementById('dashPnlValue'),
-          pnlSub: document.getElementById('dashPnlSub'),
-          winRateValue: document.getElementById('dashWinRateValue'),
-          winRateSub: document.getElementById('dashWinRateSub'),
-          riskRows: document.getElementById('dashRiskRows'),
-          streakValue: document.getElementById('dashStreakValue'),
-          streakSub: document.getElementById('dashStreakSub'),
-          liqList: document.getElementById('dashLiqList'),
-          equityChart: document.getElementById('dashEquityChart')
-        });
-        console.log('Dashboard initialized');
-      }
-      
-      
-      // 初始化RiskCenter
-      if (typeof RiskCenter !== 'undefined') {
-        RiskCenter.init({
-          accountBalanceInput: document.getElementById('riskAccountBalance'),
-          positionsTableBody: document.querySelector('#positionsTable tbody'),
-          liquidationList: document.getElementById('liquidationList'),
-          exposureChart: document.getElementById('exposureChart'),
-          heatmapContainer: document.getElementById('heatmapContainer')
-        });
-        console.log('RiskCenter initialized');
-      }
-      
-      // 初始化Analytics
-      if (typeof Analytics !== 'undefined') {
-        Analytics.init({
-          ctxTrend: document.getElementById('pnlTrendChart'),
-          ctxDist: document.getElementById('pnlDistChart'),
-          ctxHeatmap: document.getElementById('heatmapChart'),
-          ctxScatter: document.getElementById('scatterChart'),
-          ctxCorrelation: document.getElementById('correlationChart'),
-          kpiContainer: document.getElementById('kpiContainer'),
-          correlationTable: document.getElementById('correlationTable')
-        });
-        console.log('Analytics initialized');
-      }
-      
-      // 初始化Review（全局函数模式，由 navigation.js 在切换视图时调用 renderReview()）
-      console.log('Review module ready (global function mode)');
-      
-      // 初始化Settings
-      if (typeof Settings !== 'undefined') {
-        Settings.init({
-          accountBalanceInput: document.getElementById('setAccountBalance'),
-          riskPercentInput: document.getElementById('setRiskPercent'),
-          dailyLossLimitInput: document.getElementById('setDailyLossLimit'),
-          maxDrawdownAlertInput: document.getElementById('setMaxDrawdownAlert'),
-          mindsetMinScoreInput: document.getElementById('setMindsetMinScore'),
-          customStopLimitInput: document.getElementById('setCustomStopLimit')
-        });
-        console.log('Settings initialized');
-      }
-
-      // 初始化品种管理
-      if (typeof renderCustomSymbols === 'function') renderCustomSymbols();
-      if (typeof syncSymbolDatalist === 'function') syncSymbolDatalist();
-
-      console.log('All modules initialized successfully');
-    });
-  </script>
-  
   <!-- ====== 系统设置 ====== -->
-  <section id="view-settings" class="view">
+  <section id="view-settings" class="view" role="region" aria-label="系统设置">
     <h2 class="view-title">系统设置</h2>
     <div class="settings-grid">
       <!-- 风控参数 -->

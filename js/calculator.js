@@ -1210,25 +1210,11 @@ function toggleKellyPanel() {
   if (!body || !group) return;
   var isOpen = !group.classList.contains('kelly-collapsed');
   if (isOpen) {
-    // 折叠：隐藏 body + 旋转图标
-    body.style.transition = 'max-height 0.3s ease, opacity 0.2s ease';
-    body.style.maxHeight = body.scrollHeight + 'px';
-    body.offsetHeight; // 强制回流
-    body.style.maxHeight = '0';
-    body.style.opacity = '0';
     if (icon) icon.classList.add('collapsed');
     group.classList.add('kelly-collapsed');
   } else {
-    // 展开
-    body.style.maxHeight = body.scrollHeight + 'px';
-    body.style.opacity = '1';
     if (icon) icon.classList.remove('collapsed');
     group.classList.remove('kelly-collapsed');
-    // 展开后移除 max-height 限制以支持内容动态变化
-    var timer = setTimeout(function() {
-      body.style.maxHeight = 'none';
-    }, 320);
-    body._collapseTimer = timer;
   }
 }
 window.toggleKellyPanel = toggleKellyPanel;

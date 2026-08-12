@@ -205,8 +205,15 @@
 .kelly-body {
   padding: 14px;
   background: var(--color-surface);
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--dur-slow) var(--ease-out);
   overflow: hidden;
-  transition: max-height 0.3s ease, opacity 0.2s ease, padding 0.3s ease;
+}
+
+.kelly-collapsed .kelly-body {
+  grid-template-rows: 0fr;
+  opacity: 0;
 }
 
 .kelly-rows {
@@ -654,6 +661,11 @@
 .split-row .fp input:focus {
   outline: none;
   border-color: var(--color-primary);
+}
+.split-row .fp input:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-color: transparent;
 }
 
 .split-row .fp input.alloc-input {

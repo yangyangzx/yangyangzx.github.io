@@ -61,19 +61,19 @@
 .dash-card.status-positive::before {
   background: var(--color-success);
   opacity: 1;
-  box-shadow: 0 0 12px oklch(62% 0.16 158 / 0.50);
+  box-shadow: var(--glow-success);
 }
 
 .dash-card.status-negative::before {
   background: var(--color-danger);
   opacity: 1;
-  box-shadow: 0 0 12px oklch(58% 0.20 25 / 0.50);
+  box-shadow: var(--glow-danger);
 }
 
 .dash-card.status-warning::before {
   background: var(--color-warning);
   opacity: 1;
-  box-shadow: 0 0 12px oklch(65% 0.18 80 / 0.50);
+  box-shadow: var(--glow-warning);
 }
 
 .dash-card-wide {
@@ -100,12 +100,12 @@
 
 .dash-card-value.pnl-positive {
   color: var(--color-pnl-positive);
-  text-shadow: 0 0 16px oklch(70% 0.15 158 / 0.15);
+  text-shadow: var(--text-glow-positive);
 }
 
 .dash-card-value.pnl-negative {
   color: var(--color-pnl-negative);
-  text-shadow: 0 0 16px oklch(65% 0.18 25 / 0.12);
+  text-shadow: var(--text-glow-negative);
 }
 
 .dash-card-value.pnl-neutral {

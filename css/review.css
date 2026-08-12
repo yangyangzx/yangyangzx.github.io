@@ -28,7 +28,7 @@
   .review-card:hover {
     background: var(--glass-bg-heavy);
     border-color: var(--color-border);
-    box-shadow: 0 12px 40px oklch(0% 0 0 / 0.30);
+    box-shadow: var(--review-card-hover-shadow);
     transform: translateY(-1px);
   }
 }
@@ -122,7 +122,7 @@
 
 .strategy-rank-item.rank-1 {
   background: var(--color-gold-bg);
-  border: 1px solid oklch(72% 0.17 78 / 0.20);
+  border: var(--review-rank-1-border);
 }
 
 .strategy-rank-badge {
