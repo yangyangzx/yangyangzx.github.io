@@ -1297,7 +1297,13 @@ function updateKellySidebar() {
   var data = window._lastCalc && window._lastCalc.kellyData;
   console.log('[Kelly] _lastCalc exists:', !!window._lastCalc);
   console.log('[Kelly] kellyData:', data);
-  if (!data || data.halfKellyPct <= 0) {
+  if (!data) {
+    console.log('[Kelly] Hiding card - no data');
+    card.style.display = 'none';
+    return;
+  }
+  // 即使凯利为负也显示卡片（带警告）
+  if (data.halfKellyPct <= 0 && !data.isNegative) {
     console.log('[Kelly] Hiding card - no data or halfKellyPct <= 0');
     card.style.display = 'none';
     return;
