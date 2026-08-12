@@ -3,6 +3,9 @@
  * 提供离线缓存和 PWA 安装支持
  */
 var CACHE_NAME = 'tradingdisc-v5-cache';
+// 缓存版本 - 每次更新代码时递增，强制浏览器重新缓存所有资源
+var CACHE_VERSION = 2;
+var VERSIONED_CACHE_NAME = CACHE_NAME + '-v' + CACHE_VERSION;
 var STATIC_ASSETS = [
   './',
   './index.html',
@@ -46,8 +49,8 @@ var STATIC_ASSETS = [
 // 安装：预缓存核心资源
 self.addEventListener('install', function(event) {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(function(cache) {
-      console.log('[SW] 缓存核心资源');
+    caches.open(VERSIONED_CACHE_NAME).then(function(cache) {
+      console.log('[SW] 缓存核心资源 (v' + CACHE_VERSION + ')');
       return cache.addAll(STATIC_ASSETS);
     }).catch(function(err) {
       console.warn('[SW] 部分资源缓存失败（可能来自 CDN）:', err);
@@ -62,15 +65,18 @@ self.addEventListener('activate', function(event) {
     caches.keys().then(function(names) {
       return Promise.all(
         names.filter(function(name) {
-          return name !== CACHE_NAME;
+          // 删除非当前版本的缓存
+          return name !== VERSIONED_CACHE_NAME && name.startsWith(CACHE_NAME);
         }).map(function(name) {
           console.log('[SW] 删除旧缓存:', name);
           return caches.delete(name);
         })
       );
+    }).then(function() {
+      // 获取页面控制权
+      return self.clients.claim();
     })
   );
-  self.clients.claim();
 });
 
 // 请求：先查缓存，再网络
@@ -89,7 +95,7 @@ self.addEventListener('fetch', function(event) {
         return fetch(event.request).then(function(response) {
           if (response.ok) {
             var clone = response.clone();
-            caches.open(CACHE_NAME).then(function(cache) {
+            caches.open(VERSIONED_CACHE_NAME).then(function(cache) {
               cache.put(event.request, clone);
             });
           }
@@ -114,7 +120,7 @@ self.addEventListener('fetch', function(event) {
         return cached || fetch(event.request).then(function(response) {
           if (response.ok) {
             var clone = response.clone();
-            caches.open(CACHE_NAME).then(function(cache) {
+            caches.open(VERSIONED_CACHE_NAME).then(function(cache) {
               cache.put(event.request, clone);
             });
           }
@@ -135,7 +141,7 @@ self.addEventListener('fetch', function(event) {
 // 消息：清缓存命令
 self.addEventListener('message', function(event) {
   if (event.data && event.data.type === 'CLEAR_CACHE') {
-    caches.delete(CACHE_NAME).then(function() {
+    caches.delete(VERSIONED_CACHE_NAME).then(function() {
       console.log('[SW] 缓存已清除');
     });
   }
