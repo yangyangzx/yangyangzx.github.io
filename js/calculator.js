@@ -241,8 +241,8 @@ function calculate() {
     var kellyAvgWin = parseFloat(document.getElementById('kellyAvgWin')?.value);
     var kellyAvgLoss = parseFloat(document.getElementById('kellyAvgLoss')?.value);
     if (!isNaN(kellyWinRate) && !isNaN(kellyAvgWin) && !isNaN(kellyAvgLoss) && kellyAvgLoss > 0) {
-      var leverage = parseInt(document.getElementById('leverage').value) || 1;
-      var kellyResult = calcKelly(kellyWinRate, kellyAvgWin, kellyAvgLoss, capital, true, leverage);
+      var kellyLev = parseInt(document.getElementById('leverage').value) || 1;
+      var kellyResult = calcKelly(kellyWinRate, kellyAvgWin, kellyAvgLoss, capital, true, kellyLev);
       if (kellyResult && kellyResult.halfKellyPct > 0) {
         var kellyRisk = capital * kellyResult.halfKellyPct;
         kellyData = {
