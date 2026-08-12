@@ -379,3 +379,17 @@ body {
     margin-left: auto;
   }
 }
+
+/* 快捷键提示 */
+.nav-shortcuts {
+  font-size: 14px;
+  padding: 4px 16px;
+  color: var(--color-text-muted);
+  cursor: help;
+  border-top: 1px solid var(--nav-border);
+  text-align: center;
+  transition: color var(--dur-fast);
+}
+.nav-shortcuts:hover {
+  color: var(--color-primary);
+}
