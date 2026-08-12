@@ -434,7 +434,7 @@ body {
 .nav-shortcuts-wrapper:focus-within .nav-shortcuts-tooltip {
   display: block !important;
   animation: tooltipFadeIn var(--dur-short) var(--ease-out);
-  border: 2px solid red; /* DEBUG */
+
 }
 @keyframes tooltipFadeIn {
   from { opacity: 0; transform: translateX(-50%) translateY(4px); }
