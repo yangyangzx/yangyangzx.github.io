@@ -161,54 +161,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }, {passive:true});
   }
 
-  // ==================== 键盘快捷键系统 ====================
-  document.addEventListener('keydown', function(e) {
-    const target = e.target;
-    const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEdited;
-
-    if (isInput && !e.ctrlKey && !e.metaKey) return;
-
-    // Ctrl+1~7 切换视图
-    if ((e.ctrlKey || e.metaKey) && e.key >= '1' && e.key <= '7') {
-      const views = ['dashboard', 'planner', 'journal', 'risk', 'analytics', 'review', 'settings'];
-      const idx = parseInt(e.key) - 1;
-      if (views[idx] && typeof switchView === 'function') {
-        switchView(views[idx]);
-        e.preventDefault();
-      }
-      return;
-    }
-
-    // Ctrl+S 保存日志
-    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-      const saveBtn = document.getElementById('saveBtn');
-      if (saveBtn) {
-        saveBtn.click();
-        e.preventDefault();
-      }
-      return;
-    }
-
-    // Ctrl+Enter 计算仓位
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-      const calcBtn = document.getElementById('calcBtn');
-      if (calcBtn) {
-        calcBtn.click();
-        e.preventDefault();
-      }
-      return;
-    }
-
-    // Escape 关闭模态框/面板
-    if (e.key === 'Escape') {
-      const modal = document.querySelector('.modal-overlay');
-      if (modal) {
-        modal.remove();
-        e.preventDefault();
-      }
-    }
-  });
-
 });
 
 // ==================== 过滤器控制 ====================
@@ -312,25 +264,5 @@ window.debugAnalysisData = function() {
   navigator.serviceWorker.addEventListener('controllerchange', function() {
     // SW 控制器变更，页面已自动更新
     showToast('系统已更新至最新版本', 'success');
-  });
-})();
-
-// ==================== 快捷键提示 tooltip ====================
-(function _initShortcutTooltip() {
-  var btn = document.getElementById('shortcutBtn');
-  var tooltip = document.getElementById('shortcutTooltip');
-  if (!btn || !tooltip) return;
-  
-  btn.addEventListener('mouseenter', function() {
-    tooltip.style.display = 'block';
-  });
-  btn.addEventListener('mouseleave', function() {
-    tooltip.style.display = 'none';
-  });
-  btn.addEventListener('focus', function() {
-    tooltip.style.display = 'block';
-  });
-  btn.addEventListener('blur', function() {
-    tooltip.style.display = 'none';
   });
 })();

@@ -1176,6 +1176,58 @@ function applyKellyRisk() {
   pctVal = Math.max(0.5, Math.min(10, pctVal)); // 限制在 0.5%~10%
   var roundedPct = Math.round(pctVal * 2) / 2; // 四舍五入到 0.5% 步进
   riskEl.value = roundedPct + '%';
+
+  // ===== 自动计算并填入止损价 =====
+  var entryPrice = parseFloat(document.getElementById('entryPrice').value);
+  var direction = document.getElementById('direction').value;
+  var stopLossEl = document.getElementById('stopLoss');
+  if (!isNaN(entryPrice) && entryPrice > 0 && stopLossEl && direction) {
+    var calc = window._lastCalc;
+    var stopLoss = null;
+
+    // 优先使用 ATR 止损（如果用户已配置）
+    var atrValue = parseFloat(document.getElementById('atrValue').value);
+    var settings = loadSettings();
+    const atrMultiplier = parseFloat(document.getElementById('atrMultiplier').value) || settings.atrDefaultMultiplier || 2;
+    if (!isNaN(atrValue) && atrValue > 0 && typeof calcATRStop === 'function') {
+      var atrResult = calcATRStop(entryPrice, atrValue, atrMultiplier, direction);
+      if (atrResult && atrResult.stopPrice > 0) {
+        stopLoss = atrResult.stopPrice;
+      }
+    }
+
+    // 如果没有 ATR，使用凯利平均亏损反推合理止损距离
+    if (stopLoss === null) {
+      var kellyAvgLoss = parseFloat(document.getElementById('kellyAvgLoss')?.value);
+      if (!isNaN(kellyAvgLoss) && kellyAvgLoss > 0) {
+        // 用平均亏损占入场价的比例作为止损距离基准
+        var slPct = kellyAvgLoss / entryPrice;
+        // 确保止损距离合理（不小于 minStopPct，不超过 maxStopPct）
+        var isEth = (calc && calc.symbol && calc.symbol.toUpperCase() === 'ETH');
+        var minStopPct = isEth ? 0.003 : 0.005;
+        var maxStopPct = isEth ? 0.02 : 0.03;
+        slPct = Math.max(minStopPct, Math.min(maxStopPct, slPct));
+        stopLoss = direction === 'long'
+          ? entryPrice * (1 - slPct)
+          : entryPrice * (1 + slPct);
+      }
+    }
+
+    // 兜底：使用 1% 止损距离
+    if (stopLoss === null) {
+      stopLoss = direction === 'long' ? entryPrice * 0.99 : entryPrice * 1.01;
+    }
+
+    // 方向校验
+    if ((direction === 'long' && stopLoss >= entryPrice) ||
+        (direction === 'short' && stopLoss <= entryPrice)) {
+      stopLoss = direction === 'long' ? entryPrice * 0.99 : entryPrice * 1.01;
+    }
+
+    stopLossEl.value = stopLoss.toFixed(5);
+  }
+  // =================================
+
   // 标记表单已变更，清除缓存
   window._lastCalc = null;
   window._lastCalcDirty = true;
