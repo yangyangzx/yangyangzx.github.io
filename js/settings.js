@@ -393,6 +393,76 @@ function resetSettings() {
   showToast('设置已重置为默认值', 'success');
 }
 
+// ==================== Settings 导入导出 ====================
+
+/**
+ * 导出设置为 JSON 文件
+ */
+function exportSettings() {
+  var settings = loadSettings();
+  var json = JSON.stringify(settings, null, 2);
+  var b = new Blob([json], { type: 'application/json' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(b);
+  a.download = 'trading_settings_' + new Date().toISOString().slice(0, 10) + '.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  showToast('设置已导出', 'success');
+}
+
+/**
+ * 从 JSON 文件导入设置（合并模式：保留现有值）
+ */
+function importSettings() {
+  var input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json';
+  input.onchange = function(e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function(ev) {
+      try {
+        var imported = JSON.parse(ev.target.result);
+        if (typeof imported !== 'object' || imported === null || Array.isArray(imported)) {
+          showToast('文件格式不正确', 'error');
+          return;
+        }
+        // 合并：已保存的设置优先，导入数据补全缺失字段
+        var current = loadSettings();
+        var keys = Object.keys(SETTINGS_DEFAULTS);
+        for (var i = 0; i < keys.length; i++) {
+          var k = keys[i];
+          if (imported[k] != null && !(k in current)) {
+            current[k] = imported[k];
+          }
+        }
+        // 特殊处理 customSymbols（合并而非覆盖）
+        if (imported.customSymbols && Array.isArray(imported.customSymbols)) {
+          var existingSyms = {};
+          for (var j = 0; j < current.customSymbols; j++) {
+            existingSyms[current.customSymbols[j].symbol] = true;
+          }
+          imported.customSymbols.forEach(function(s) {
+            if (!existingSyms[s.symbol]) {
+              current.customSymbols.push(s);
+            }
+          });
+        }
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify(current));
+        _clearSettingsCache();
+        renderSettings();
+        if (typeof renderCustomSymbols === 'function') renderCustomSymbols();
+        showToast('设置已导入', 'success');
+      } catch (err) {
+        showToast('解析失败: ' + err.message, 'error');
+      }
+    };
+    reader.readAsText(file);
+  };
+  input.click();
+}
+
 // ==================== 品种管理 ====================
 
 /**

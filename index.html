@@ -67,6 +67,7 @@
   </div>
   <div class="nav-footer">
     <div class="nav-version">v5.0-alpha</div>
+    <div class="nav-shortcuts" title="快捷键：Ctrl+1~7 切换视图 · Ctrl+S 保存 · Ctrl+Enter 计算">⌨️</div>
     <!-- 主题切换滑动开关 -->
     <label class="theme-toggle-switch" title="切换主题" aria-label="切换深色/浅色主题">
       <i class="fas fa-sun"></i>
@@ -674,28 +675,28 @@
     <!-- 日志过滤栏 -->
     <div class="log-filter-bar" id="logFilterBar">
       <div class="filter-row">
-        <select id="fltDirection" onchange="onFilterChange()">
+        <select id="fltDirection" onchange="_debouncedFilterChange()">
           <option value="">全部方向</option>
           <option value="long">做多</option>
           <option value="short">做空</option>
         </select>
-        <select id="fltSymbol" onchange="onFilterChange()">
+        <select id="fltSymbol" onchange="_debouncedFilterChange()">
           <option value="">全部品种</option>
         </select>
-        <select id="fltStrategy" onchange="onFilterChange()">
+        <select id="fltStrategy" onchange="_debouncedFilterChange()">
           <option value="">全部策略</option>
         </select>
-        <select id="fltStatus" onchange="onFilterChange()">
+        <select id="fltStatus" onchange="_debouncedFilterChange()">
           <option value="">全部状态</option>
           <option value="open">持仓中</option>
           <option value="closed">已平仓</option>
         </select>
-        <select id="fltPnl" onchange="onFilterChange()">
+        <select id="fltPnl" onchange="_debouncedFilterChange()">
           <option value="">全部盈亏</option>
           <option value="profit">盈利</option>
           <option value="loss">亏损</option>
         </select>
-        <select id="fltTime" onchange="onFilterChange()">
+        <select id="fltTime" onchange="_debouncedFilterChange()">
           <option value="">全部时间</option>
           <option value="today">今天</option>
           <option value="thisWeek">本周</option>

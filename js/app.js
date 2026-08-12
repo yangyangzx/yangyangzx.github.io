@@ -212,6 +212,19 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // ==================== 过滤器控制 ====================
+// 防抖：合并高频 filter 变更，避免重复 renderLogs
+function _debounce(fn, delay) {
+  var timer = null;
+  return function() {
+    var args = arguments;
+    var ctx = this;
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(function() { fn.apply(ctx, args); }, delay);
+  };
+}
+
+var _debouncedFilterChange = _debounce(onFilterChange, 150);
+
 function onFilterChange() {
   _activeFilters.direction = (document.getElementById('fltDirection') || {value:''}).value;
   _activeFilters.symbol    = (document.getElementById('fltSymbol')    || {value:''}).value;
@@ -222,7 +235,7 @@ function onFilterChange() {
   // M9: 过滤器变更时重置面板索引，避免过滤后 panel 状态与当前列表不匹配
   openClosePanelIdx = -1;
   actionPanelIdx = -1;
-  renderLogs();
+  _debouncedFilterChange();
 }
 
 function applyPreset(preset) {
@@ -283,3 +296,21 @@ window.debugAnalysisData = function() {
     withSession: closed.filter(function(l) { return l.session && l.session !== '未标记'; }).length
   };
 };
+
+// ==================== Service Worker 更新通知 ====================
+(function _initSWUpdate() {
+  if (!navigator.serviceWorker) return;
+  navigator.serviceWorker.ready.then(function(reg) {
+    if (!reg.waiting) return;
+    // 有新版本等待激活，提示用户刷新
+    if (confirm('发现新版本，是否立即刷新以获取最新内容？')) {
+      reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+      window.location.reload();
+    }
+  }).catch(function() {});
+
+  navigator.serviceWorker.addEventListener('controllerchange', function() {
+    // SW 控制器变更，页面已自动更新
+    showToast('系统已更新至最新版本', 'success');
+  });
+})();

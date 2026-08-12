@@ -134,4 +134,8 @@ self.addEventListener('message', function(event) {
       console.log('[SW] 缓存已清除');
     });
   }
+  // 跳过等待，立即激活新版本
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
