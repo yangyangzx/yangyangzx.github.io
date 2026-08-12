@@ -60,8 +60,9 @@ function calcPortfolioHeat() {
  * @param {boolean} halfKelly - 是否使用半凯利 (默认 true)
  * @returns {object} {kellyPct, halfKellyPct, kellyShares, recommendation}
  */
-function calcKelly(winRate, avgWin, avgLoss, accountSize, halfKelly) {
+function calcKelly(winRate, avgWin, avgLoss, accountSize, halfKelly, leverage) {
   if (halfKelly === undefined) halfKelly = true;
+  if (leverage === undefined) leverage = 1;
   if (winRate == null || winRate === undefined || !avgWin || !avgLoss || avgLoss <= 0) return null;
   if (winRate < 0 || winRate > 1) return null;
 
@@ -76,11 +77,16 @@ function calcKelly(winRate, avgWin, avgLoss, accountSize, halfKelly) {
   if (kellyPct < 0) kellyPct = 0;
   if (halfKellyPct < 0) halfKellyPct = 0;
 
-  // 约束到合理范围（不超过 5%）
-  var kellyCapped = kellyPct > 0.05;
-  var halfKellyCapped = halfKellyPct > 0.05;
-  kellyPct = Math.min(kellyPct, 0.05);
-  halfKellyPct = Math.min(halfKellyPct, 0.05);
+  // 杠杆感知：固定有效风险上限为 5%
+  // 有效风险 = Kelly% × 杠杆 ≤ 5%
+  // 因此 Kelly% ≤ 5% / 杠杆
+  var maxEffectiveRisk = 0.05;
+  var leverageAdjustedLimit = maxEffectiveRisk / Math.max(leverage, 1);
+  
+  var kellyCapped = kellyPct > leverageAdjustedLimit;
+  var halfKellyCapped = halfKellyPct > leverageAdjustedLimit;
+  kellyPct = Math.min(kellyPct, leverageAdjustedLimit);
+  halfKellyPct = Math.min(halfKellyPct, leverageAdjustedLimit);
 
   var kellyShares = accountSize * kellyPct / avgLoss;
   var halfKellyShares = accountSize * halfKellyPct / avgLoss;
