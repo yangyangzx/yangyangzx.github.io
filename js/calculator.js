@@ -240,10 +240,10 @@ function calculate() {
     var kellyWinRate = parseFloat(document.getElementById('kellyWinRate')?.value);
     var kellyAvgWin = parseFloat(document.getElementById('kellyAvgWin')?.value);
     var kellyAvgLoss = parseFloat(document.getElementById('kellyAvgLoss')?.value);
-    console.log('[Kelly] Input values - WinRate:', kellyWinRate, 'AvgWin:', kellyAvgWin, 'AvgLoss:', kellyAvgLoss);
+     Input values - WinRate:', kellyWinRate, 'AvgWin:', kellyAvgWin, 'AvgLoss:', kellyAvgLoss);
     if (!isNaN(kellyWinRate) && !isNaN(kellyAvgWin) && !isNaN(kellyAvgLoss) && kellyAvgLoss > 0) {
       var kellyResult = calcKelly(kellyWinRate, kellyAvgWin, kellyAvgLoss, capital, true);
-      console.log('[Kelly] calcKelly result:', kellyResult);
+       calcKelly result:', kellyResult);
       if (kellyResult && kellyResult.halfKellyPct > 0) {
         var kellyRisk = capital * kellyResult.halfKellyPct;
         kellyData = {
@@ -255,7 +255,7 @@ function calculate() {
           halfKellyCapped: kellyResult.halfKellyCapped,
           recommendation: kellyResult.recommendation
         };
-        console.log('[Kelly] kellyData assigned:', kellyData);
+         kellyData assigned:', kellyData);
         var kellyCappedMsg = '';
         if (kellyResult.kellyCapped || kellyResult.halfKellyCapped) {
           kellyCappedMsg = '<span class="kelly-capped-tip"><i class="fas fa-info-circle"></i> 已截断至 5%</span>';
@@ -263,7 +263,7 @@ function calculate() {
         kellyHTML = '<span class="kelly-result-text">半凯利风险 <strong>' + (kellyResult.halfKellyPct * 100).toFixed(2) + '%</strong> = ' + kellyRisk.toFixed(2) + ' USDT</span>' + kellyCappedMsg + '<span class="kelly-expectancy">期望 ' + kellyResult.expectancy.toFixed(2) + '</span><button type="button" class="kelly-apply-btn" onclick="applyKellyRisk()"><i class="fas fa-bolt"></i> 应用</button>';
       } else if (kellyResult && kellyResult.kellyPct <= 0) {
         // 凯利值为负或零，显示警告
-        console.log('[Kelly] Kelly value is negative or zero, showing warning');
+         Kelly value is negative or zero, showing warning');
         kellyData = {
           halfKellyPct: 0,
           halfKellyRisk: 0,
@@ -705,9 +705,9 @@ function calculate() {
     else { resultBox.classList.remove('warn'); }
   }
 
-  console.log('[Kelly] About to set _lastCalc, kellyData:', kellyData);
+   About to set _lastCalc, kellyData:', kellyData);
   window._lastCalc={ symbol,entryPrice,effectiveEntryPrice,capital,riskAmount,riskPercent,leverage:leverage,direction,orderType,stopType,stopLoss,lossStreak,targetPrice:isNaN(targetPrice)?null:targetPrice,positionSize:finalPosForDisplay,stopDistance,stopPct,liquidationPrice,cappedByLiquidation,targetRR,targetPct,reason:getReason(),signals:getSignals(),actualMargin:finalMargin,fee:parseFloat(totalFee.toFixed(2)),slippageCost:parseFloat(slippageCost.toFixed(2)),totalCost:parseFloat(totalCost.toFixed(2)),splitMode:_splitMode,weightedStopDistance:useWeightedStop?stopDistance:null, atrStopMode: atrStopMode, mindsetScore: parseInt(document.getElementById('mindsetScore').value) || 3, kellyData: kellyData };
-  console.log('[Kelly] _lastCalc set, kellyData:', window._lastCalc.kellyData);
+   _lastCalc set, kellyData:', window._lastCalc.kellyData);
   // 自动滚动到结果区
   if (resultBox) resultBox.scrollIntoView({behavior:'smooth'});
   // 更新凯利侧边栏卡片
@@ -1304,23 +1304,23 @@ window.toggleKellyPanel = toggleKellyPanel;
  */
 function updateKellySidebar() {
   var card = document.getElementById('kellyCard');
-  console.log('[Kelly] updateKellySidebar called, card exists:', !!card);
+   updateKellySidebar called, card exists:', !!card);
   if (!card) return;
   var data = window._lastCalc && window._lastCalc.kellyData;
-  console.log('[Kelly] _lastCalc exists:', !!window._lastCalc);
-  console.log('[Kelly] kellyData:', data);
+   _lastCalc exists:', !!window._lastCalc);
+   kellyData:', data);
   if (!data) {
-    console.log('[Kelly] Hiding card - no data');
+     Hiding card - no data');
     card.style.display = 'none';
     return;
   }
   // 即使凯利为负也显示卡片（带警告）
   if (data.halfKellyPct <= 0 && !data.isNegative) {
-    console.log('[Kelly] Hiding card - no data or halfKellyPct <= 0');
+     Hiding card - no data or halfKellyPct <= 0');
     card.style.display = 'none';
     return;
   }
-  console.log('[Kelly] Showing card with halfKellyPct:', data.halfKellyPct);
+   Showing card with halfKellyPct:', data.halfKellyPct);
   card.style.display = '';
   var fullPctEl = document.getElementById('kellyFullPct');
   var halfPctEl = document.getElementById('kellyHalfPct');
