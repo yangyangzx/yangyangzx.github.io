@@ -347,14 +347,21 @@ function calcKellyStatsFromLogs(minSamples, strategyFramework, lookbackDays) {
  */
 function autoFillKellyFromLogs() {
   try {
+    console.log('[Kelly AutoFill] Starting auto-fill from logs');
     // K3 修复：读取当前策略框架，只从同策略历史交易中计算凯利数据
     var curFramework = document.getElementById('strategyFramework') ? document.getElementById('strategyFramework').value : '';
+    console.log('[Kelly AutoFill] curFramework:', curFramework);
     var stats = calcKellyStatsFromLogs(5, curFramework || undefined);
+    console.log('[Kelly AutoFill] calcKellyStatsFromLogs result:', stats);
     var winRateEl = document.getElementById('kellyWinRate');
     var avgWinEl = document.getElementById('kellyAvgWin');
     var avgLossEl = document.getElementById('kellyAvgLoss');
     var tipEl = document.querySelector('.kelly-tip');
-    if (!stats || !winRateEl) return;
+    console.log('[Kelly AutoFill] Elements found:', !!winRateEl, !!avgWinEl, !!avgLossEl);
+    if (!stats || !winRateEl) {
+      console.log('[Kelly AutoFill] Early return - stats:', !!stats, 'winRateEl:', !!winRateEl);
+      return;
+    }
 
     // 仅在字段为空时自动填充
     if (!winRateEl.value || winRateEl.value === '') winRateEl.value = stats.winRate.toFixed(2);
