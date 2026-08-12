@@ -61,7 +61,7 @@ if (document.readyState === 'loading') {
 
 // ==================== 初始化 ====================
 document.addEventListener('DOMContentLoaded', function() {
-  loadLogs();
+  // loadLogs() 已由 navigation.js 在 DOMContentLoaded 中调用，此处不再重复
   // 将已保存的设置值同步到开仓计算器表单（本金、风险比例、杠杆）
   if (typeof syncSettingsToForm === 'function') syncSettingsToForm();
   updateLastUpdate();

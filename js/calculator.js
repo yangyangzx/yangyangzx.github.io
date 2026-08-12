@@ -1,18 +1,29 @@
 // ==================== 核心计算 ====================
 function calculate() {
   window._lastCalcDirty = false;  // 用户主动计算，清除脏标记
-  const symbol = document.getElementById('symbol').value.trim() || 'N/A';
+  const symbolEl = document.getElementById('symbol');
+  const symbol = symbolEl ? symbolEl.value.trim() || 'N/A' : 'N/A';
   const entryPrice = getActiveEntryPrice();
   if (isNaN(entryPrice)) return;
-  const capital = parseFloat(document.getElementById('capital').value);
-  const riskInput = document.getElementById('riskInput').value.trim();
-  const leverage = Math.max(0, parseFloat(document.getElementById('leverage').value) || 0);
-  const direction = document.getElementById('direction').value;
-  const orderType = (document.getElementById('orderType')?.value) || 'market';
-  const stopType = (document.getElementById('stopType')?.value) || 'stop-market';
-  let stopLoss = parseFloat(document.getElementById('stopLoss').value);
-  const lossStreak = Math.max(0, parseInt(document.getElementById('lossStreak').value) || 0);
-  const targetPrice = parseFloat(document.getElementById('targetPrice').value);
+  const capitalEl = document.getElementById('capital');
+  const capital = capitalEl ? parseFloat(capitalEl.value) : 0;
+  if (!capital || capital <= 0) { showCalcError('无效本金', '请输入有效的本金金额'); return; }
+  const riskInputEl = document.getElementById('riskInput');
+  const riskInput = riskInputEl ? riskInputEl.value.trim() : '';
+  const leverageEl = document.getElementById('leverage');
+  const leverage = leverageEl ? Math.max(0, parseFloat(leverageEl.value) || 0) : 0;
+  const directionEl = document.getElementById('direction');
+  const direction = directionEl ? directionEl.value : 'long';
+  const orderTypeEl = document.getElementById('orderType');
+  const orderType = orderTypeEl ? (orderTypeEl.value || 'market') : 'market';
+  const stopTypeEl = document.getElementById('stopType');
+  const stopType = stopTypeEl ? (stopTypeEl.value || 'stop-market') : 'stop-market';
+  const stopLossEl = document.getElementById('stopLoss');
+  let stopLoss = stopLossEl ? parseFloat(stopLossEl.value) : NaN;
+  const lossStreakEl = document.getElementById('lossStreak');
+  const lossStreak = lossStreakEl ? Math.max(0, parseInt(lossStreakEl.value) || 0) : 0;
+  const targetPriceEl = document.getElementById('targetPrice');
+  const targetPrice = targetPriceEl ? parseFloat(targetPriceEl.value) : NaN;
 
   // ===== 订单类型入场价修正 =====
   const directionSign = direction === 'long' ? 1 : -1;
