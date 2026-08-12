@@ -88,7 +88,8 @@ function calcKelly(winRate, avgWin, avgLoss, accountSize, halfKelly) {
   var recommendation = '';
   if (kellyPct <= 0) {
     recommendation = '策略期望值为负，不建议使用此策略';
-  } else if (halfKellyPct < 0.01) {
+  } else if (halfKellyPct < 0.005) {
+    // K1 修复：阈值改为 0.5%（与 riskInput <select> 最小步进一致），避免正常仓位被误标为"极低"
     recommendation = '凯利仓位极低，建议寻找更好的入场机会';
   } else {
     recommendation = '推荐半凯利仓位（更安全）';
@@ -305,7 +306,7 @@ function generateRiskCheckReport() {
  * @param {number} minSamples - 最少样本数才启用（默认 5）
  * @returns {object|null} {winRate, avgWin, avgLoss} 或 null（样本不足）
  */
-function calcKellyStatsFromLogs(minSamples) {
+function calcKellyStatsFromLogs(minSamples, strategyFramework) {
   if (minSamples === undefined) minSamples = 5;
   var closed = getClosedSorted();
   if (closed.length < minSamples) return null;
@@ -314,6 +315,8 @@ function calcKellyStatsFromLogs(minSamples) {
   for (var i = 0; i < closed.length; i++) {
     var pnl = parseFloat(closed[i].pnlAmount);
     if (isNaN(pnl)) continue;
+    // K3 修复：按策略框架隔离统计，避免不同策略混用导致统计数据失真
+    if (strategyFramework && closed[i].strategyFramework !== strategyFramework) continue;
     if (pnl > 0) { wins++; totalWin += pnl; }
     else if (pnl < 0) { losses++; totalLoss += Math.abs(pnl); }
   }
@@ -333,7 +336,9 @@ function calcKellyStatsFromLogs(minSamples) {
  */
 function autoFillKellyFromLogs() {
   try {
-    var stats = calcKellyStatsFromLogs(5);
+    // K3 修复：读取当前策略框架，只从同策略历史交易中计算凯利数据
+    var curFramework = document.getElementById('strategyFramework') ? document.getElementById('strategyFramework').value : '';
+    var stats = calcKellyStatsFromLogs(5, curFramework || undefined);
     var winRateEl = document.getElementById('kellyWinRate');
     var avgWinEl = document.getElementById('kellyAvgWin');
     var avgLossEl = document.getElementById('kellyAvgLoss');

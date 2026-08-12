@@ -33,6 +33,9 @@ function calculate() {
     if (atrStopResult) {
       stopLoss = atrStopResult.stopPrice;
       atrStopMode = true;
+      // A1 修复：同步更新 DOM 输入框，避免用户看到自己输入的值与实际计算的 ATR 止损价不一致
+      var _slInput = document.getElementById('stopLoss');
+      if (_slInput) _slInput.value = stopLoss.toFixed(5);
     }
   }
 
@@ -672,7 +675,7 @@ function calculate() {
     else { resultBox.classList.remove('warn'); }
   }
 
-  window._lastCalc={ symbol,entryPrice,effectiveEntryPrice,capital,riskAmount,riskPercent,leverage:leverage,direction,orderType,stopType,stopLoss,lossStreak,targetPrice:isNaN(targetPrice)?null:targetPrice,positionSize:finalPosForDisplay,stopDistance,stopPct,liquidationPrice,cappedByLiquidation,targetRR,targetPct,reason:getReason(),signals:getSignals(),actualMargin:finalMargin,fee:parseFloat(totalFee.toFixed(2)),slippageCost:parseFloat(slippageCost.toFixed(2)),totalCost:parseFloat(totalCost.toFixed(2)),splitMode:_splitMode,weightedStopDistance:useWeightedStop?stopDistance:null, mindsetScore: parseInt(document.getElementById('mindsetScore').value) || 3, kellyData: kellyData };
+  window._lastCalc={ symbol,entryPrice,effectiveEntryPrice,capital,riskAmount,riskPercent,leverage:leverage,direction,orderType,stopType,stopLoss,lossStreak,targetPrice:isNaN(targetPrice)?null:targetPrice,positionSize:finalPosForDisplay,stopDistance,stopPct,liquidationPrice,cappedByLiquidation,targetRR,targetPct,reason:getReason(),signals:getSignals(),actualMargin:finalMargin,fee:parseFloat(totalFee.toFixed(2)),slippageCost:parseFloat(slippageCost.toFixed(2)),totalCost:parseFloat(totalCost.toFixed(2)),splitMode:_splitMode,weightedStopDistance:useWeightedStop?stopDistance:null, atrStopMode: atrStopMode, mindsetScore: parseInt(document.getElementById('mindsetScore').value) || 3, kellyData: kellyData };
   // 自动滚动到结果区
   if (resultBox) resultBox.scrollIntoView({behavior:'smooth'});
   // 更新凯利侧边栏卡片
@@ -1118,7 +1121,7 @@ function toggleFormSection(sectionId) {
 
 // 关键字段变更时标记 _lastCalc 为脏
 (function() {
-  var dirtyFields = ['entryPrice', 'stopLoss', 'capital', 'leverage', 'direction', 'feeRate', 'slippage', 'lossStreak', 'riskInput', 'targetPrice', 'kellyWinRate', 'kellyAvgWin', 'kellyAvgLoss'];
+  var dirtyFields = ['entryPrice', 'stopLoss', 'capital', 'leverage', 'direction', 'feeRate', 'slippage', 'lossStreak', 'riskInput', 'targetPrice', 'kellyWinRate', 'kellyAvgWin', 'kellyAvgLoss', 'atrValue', 'atrMultiplier'];
   dirtyFields.forEach(function(id) {
     var el = document.getElementById(id);
     if (el) {
