@@ -292,6 +292,10 @@ function calculate() {
       stopDistance = atrResult.stopDistance;
       positionSize = riskAmount * effectiveEntryPrice / stopDistance;
     }
+  } else if (atrStopMode && useWeightedStop) {
+    // A 优化：ATR 与分批独立止损冲突时显示明确提示，而非静默跳过
+    rw = '<span class="warning-tag alert"><i class="fas fa-exclamation-triangle"></i> ATR 动态止损与分批独立止损不可同时使用，已优先使用分批止损计算。</span>';
+    atrStopMode = false;
   }
 
   if (!useWeightedStop && !atrStopMode) {
@@ -790,6 +794,7 @@ function saveLog() {
     emotions: null,
     actions: [],
     splitEntries: getSplitEntries(),
+    atrStopMode: calc.atrStopMode || false,                        // A 修复：持久化 ATR 止损使用状态
     checklistResults: checklistResults  // ✅ 新增：持久化检查结果至日志
   };
   logs.push(entry);
@@ -1183,6 +1188,15 @@ function applyKellyRisk() {
     msg += '（半凯利超出上限，已截断至 10%）';
   } else if (roundedPct !== pctVal) {
     msg += '（取整至最近 0.5% 步长）';
+  }
+  // K2 修复：验证 select 选项是否匹配，防止静默失败
+  var _matched = false;
+  for (var _oi = 0; _oi < riskEl.options.length; _oi++) {
+    if (riskEl.options[_oi].value === roundedPct + '%') { _matched = true; break; }
+  }
+  if (!_matched) {
+    showToast('凯利建议值 ' + roundedPct.toFixed(1) + '% 在可选范围外，请手动调整风险比例', 'warn');
+    return;
   }
   showToast(msg, 'info');
 }

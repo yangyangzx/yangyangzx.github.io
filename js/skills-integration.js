@@ -306,12 +306,22 @@ function generateRiskCheckReport() {
  * @param {number} minSamples - 最少样本数才启用（默认 5）
  * @returns {object|null} {winRate, avgWin, avgLoss} 或 null（样本不足）
  */
-function calcKellyStatsFromLogs(minSamples, strategyFramework) {
+function calcKellyStatsFromLogs(minSamples, strategyFramework, lookbackDays) {
   if (minSamples === undefined) minSamples = 5;
   var closed = getClosedSorted();
+
+  // K5 修复：支持时间窗口过滤
+  if (lookbackDays && lookbackDays > 0) {
+    var cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - lookbackDays);
+    closed = closed.filter(function(l) {
+      return l.closeTime && new Date(l.closeTime) >= cutoff;
+    });
+  }
+
   if (closed.length < minSamples) return null;
 
-  var wins = 0, losses = 0, totalWin = 0, totalLoss = 0;
+  var wins = 0, losses = 0, breakEvens = 0, totalWin = 0, totalLoss = 0;
   for (var i = 0; i < closed.length; i++) {
     var pnl = parseFloat(closed[i].pnlAmount);
     if (isNaN(pnl)) continue;
@@ -319,6 +329,7 @@ function calcKellyStatsFromLogs(minSamples, strategyFramework) {
     if (strategyFramework && closed[i].strategyFramework !== strategyFramework) continue;
     if (pnl > 0) { wins++; totalWin += pnl; }
     else if (pnl < 0) { losses++; totalLoss += Math.abs(pnl); }
+    else { breakEvens++; }
   }
 
   var totalTrades = wins + losses;
@@ -328,7 +339,7 @@ function calcKellyStatsFromLogs(minSamples, strategyFramework) {
   var avgWin = totalWin / (wins || 1);
   var avgLoss = totalLoss / (losses || 1);
 
-  return { winRate: winRate, avgWin: avgWin, avgLoss: avgLoss, samples: totalTrades };
+  return { winRate: winRate, avgWin: avgWin, avgLoss: avgLoss, samples: totalTrades, breakEvenRate: breakEvens / (totalTrades + breakEvens) };
 }
 
 /**
@@ -350,9 +361,13 @@ function autoFillKellyFromLogs() {
     if (!avgWinEl.value || avgWinEl.value === '') avgWinEl.value = stats.avgWin.toFixed(2);
     if (!avgLossEl.value || avgLossEl.value === '') avgLossEl.value = stats.avgLoss.toFixed(2);
 
-    if (tipEl) {
-      tipEl.textContent = '已从 ' + stats.samples + ' 笔历史交易自动计算；修改后手动覆盖';
+    // K3 修复：增加平盘率和样本质量提示
+    var tipText = '已从 ' + stats.samples + ' 笔' + (curFramework ? '「' + curFramework + '」策略' : '历史') + '交易自动计算';
+    if (stats.breakEvenRate > 0) {
+      tipText += '（平盘 ' + (stats.breakEvenRate * 100).toFixed(0) + '%）';
     }
+    tipText += '；修改后手动覆盖';
+    if (tipEl) tipEl.textContent = tipText;
   } catch(e) {}
 }
 

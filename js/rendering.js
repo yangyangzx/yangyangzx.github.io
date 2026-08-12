@@ -159,6 +159,7 @@ function buildRowsHTML(dl) {
         '<div class="ditem"><span class="dlabel">止损类型</span><span class="dval">' + stopTypeLabel + '</span></div>' +
         '<div class="ditem"><span class="dlabel">实入场价</span><span class="dval">' + effEntryDisplay + '</span></div>' +
         '<div class="ditem"><span class="dlabel">止损价</span><span class="dval">' + (item.stopLoss != null ? item.stopLoss : '—') + '</span></div>' +
+        (item.atrStopMode ? '<div class="ditem"><span class="dlabel">止损方式</span><span class="dval" style="color:var(--color-primary);"><i class="fas fa-wave-square"></i> ATR 动态止损</span></div>' : '') +
         '<div class="ditem"><span class="dlabel">目标价</span><span class="dval">' + targetPriceDisplay + '</span></div>' +
         '<div class="ditem"><span class="dlabel">仓位(USDT)</span><span class="dval">' + (item.positionSize != null ? Number(item.positionSize).toFixed(2) : '—') + '</span></div>' +
         '<div class="ditem"><span class="dlabel">杠杆</span><span class="dval">' + (item.leverage ?? 0) + '</span></div>' +
