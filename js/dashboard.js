@@ -183,7 +183,7 @@ function _renderRiskExposure() {
     '</div>' +
     '<div class="dash-risk-row">' +
       '<span class="dash-risk-label">总风险</span>' +
-      '<span class="dash-risk-value ' + riskCls + '">' + _fmtUSDT(totalRisk) + ' (' + riskPctDisplay + '%)</span>' +
+      '<span class="dash-risk-value ' + riskCls + '">' + _fmtUSDT(totalRisk) + ' (' + (riskPctDisplay === '—' ? '—' : riskPctDisplay + '%') + ')</span>' +
     '</div>' +
     '<div class="dash-risk-row">' +
       '<span class="dash-risk-label">占用保证金</span>' +

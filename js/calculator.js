@@ -1159,7 +1159,7 @@ function applyKellyRisk() {
     showToast('凯利计算结果为 0，无法应用', 'warn');
     return;
   }
-  var wasCapped = kellyPct >= 0.05; // 记录是否因上限被截断（0.05 = 5%）
+  var wasCapped = kellyPct > 0.10; // 实际上限为 10%，kellyPct > 0.10 表示被 Math.min(10, ...) 截断
   var riskEl = document.getElementById('riskInput');
   if (!riskEl) return;
   // riskInput 是 <select>，只有 0.5% 步长的固定选项。
@@ -1177,7 +1177,7 @@ function applyKellyRisk() {
   }
   var msg = '已应用半凯利风险 ' + roundedPct.toFixed(1) + '%';
   if (wasCapped) {
-    msg += '（半凯利超出上限，已截断至 5%）';
+    msg += '（半凯利超出上限，已截断至 10%）';
   } else if (roundedPct !== pctVal) {
     msg += '（取整至最近 0.5% 步长）';
   }
