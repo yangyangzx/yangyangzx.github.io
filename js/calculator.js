@@ -255,6 +255,7 @@ function calculate() {
           halfKellyCapped: kellyResult.halfKellyCapped,
           recommendation: kellyResult.recommendation
         };
+        console.log('[Kelly] kellyData assigned:', kellyData);
         var kellyCappedMsg = '';
         if (kellyResult.kellyCapped || kellyResult.halfKellyCapped) {
           kellyCappedMsg = '<span class="kelly-capped-tip"><i class="fas fa-info-circle"></i> 已截断至 5%</span>';
@@ -692,7 +693,9 @@ function calculate() {
     else { resultBox.classList.remove('warn'); }
   }
 
+  console.log('[Kelly] About to set _lastCalc, kellyData:', kellyData);
   window._lastCalc={ symbol,entryPrice,effectiveEntryPrice,capital,riskAmount,riskPercent,leverage:leverage,direction,orderType,stopType,stopLoss,lossStreak,targetPrice:isNaN(targetPrice)?null:targetPrice,positionSize:finalPosForDisplay,stopDistance,stopPct,liquidationPrice,cappedByLiquidation,targetRR,targetPct,reason:getReason(),signals:getSignals(),actualMargin:finalMargin,fee:parseFloat(totalFee.toFixed(2)),slippageCost:parseFloat(slippageCost.toFixed(2)),totalCost:parseFloat(totalCost.toFixed(2)),splitMode:_splitMode,weightedStopDistance:useWeightedStop?stopDistance:null, atrStopMode: atrStopMode, mindsetScore: parseInt(document.getElementById('mindsetScore').value) || 3, kellyData: kellyData };
+  console.log('[Kelly] _lastCalc set, kellyData:', window._lastCalc.kellyData);
   // 自动滚动到结果区
   if (resultBox) resultBox.scrollIntoView({behavior:'smooth'});
   // 更新凯利侧边栏卡片
