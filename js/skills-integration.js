@@ -347,19 +347,14 @@ function calcKellyStatsFromLogs(minSamples, strategyFramework, lookbackDays) {
  */
 function autoFillKellyFromLogs() {
   try {
-     Starting auto-fill from logs');
     // K3 修复：读取当前策略框架，只从同策略历史交易中计算凯利数据
     var curFramework = document.getElementById('strategyFramework') ? document.getElementById('strategyFramework').value : '';
-     curFramework:', curFramework);
     var stats = calcKellyStatsFromLogs(5, curFramework || undefined);
-     calcKellyStatsFromLogs result:', stats);
     var winRateEl = document.getElementById('kellyWinRate');
     var avgWinEl = document.getElementById('kellyAvgWin');
     var avgLossEl = document.getElementById('kellyAvgLoss');
     var tipEl = document.querySelector('.kelly-tip');
-     Elements found:', !!winRateEl, !!avgWinEl, !!avgLossEl);
     if (!stats || !winRateEl) {
-       Early return - stats:', !!stats, 'winRateEl:', !!winRateEl);
       return;
     }
 
