@@ -261,6 +261,18 @@ function calculate() {
           kellyCappedMsg = '<span class="kelly-capped-tip"><i class="fas fa-info-circle"></i> 已截断至 5%</span>';
         }
         kellyHTML = '<span class="kelly-result-text">半凯利风险 <strong>' + (kellyResult.halfKellyPct * 100).toFixed(2) + '%</strong> = ' + kellyRisk.toFixed(2) + ' USDT</span>' + kellyCappedMsg + '<span class="kelly-expectancy">期望 ' + kellyResult.expectancy.toFixed(2) + '</span><button type="button" class="kelly-apply-btn" onclick="applyKellyRisk()"><i class="fas fa-bolt"></i> 应用</button>';
+      } else if (kellyResult && kellyResult.kellyPct <= 0) {
+        // 凯利值为负或零，显示警告
+        console.log('[Kelly] Kelly value is negative or zero, showing warning');
+        kellyData = {
+          halfKellyPct: 0,
+          halfKellyRisk: 0,
+          expectancy: kellyResult.expectancy,
+          kellyPct: kellyResult.kellyPct,
+          recommendation: kellyResult.recommendation,
+          isNegative: true
+        };
+        kellyHTML = '<span class="kelly-result-text" style="color:var(--color-warning);"><i class="fas fa-exclamation-triangle"></i> 策略期望值为负，不建议开仓（期望 ' + kellyResult.expectancy.toFixed(2) + ' USDT/笔）</span>';
       }
     }
   } catch(e) {}
