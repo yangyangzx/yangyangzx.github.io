@@ -179,6 +179,7 @@ body {
 .nav-footer {
   padding: 12px 16px;
   border-top: 1px solid var(--nav-border);
+  overflow: visible;
 }
 
 .nav-version {
@@ -429,9 +430,9 @@ body {
   border: 6px solid transparent;
   border-top-color: var(--glass-border);
 }
-.nav-shortcuts:hover .nav-shortcuts-tooltip,
-.nav-shortcuts:focus .nav-shortcuts-tooltip {
-  display: block;
+.nav-shortcuts-wrapper:hover .nav-shortcuts-tooltip,
+.nav-shortcuts-wrapper:focus-within .nav-shortcuts-tooltip {
+  display: block !important;
   animation: tooltipFadeIn var(--dur-short) var(--ease-out);
 }
 @keyframes tooltipFadeIn {
