@@ -1197,7 +1197,6 @@ function applyKellyRisk() {
   if (effectiveRisk > 0.10) {
     // 有效风险超过 10%，降低凯利建议
     var adjustedKelly = kellyPct / leverage * 0.10;
-    console.log('[Kelly] Leverage-aware adjustment: ' + kellyPct.toFixed(2) + '% × ' + leverage + 'x = ' + effectiveRisk.toFixed(0) + '% > 10%, adjusting to ' + (adjustedKelly * 100).toFixed(2) + '%');
     kellyPct = adjustedKelly;
     wasCapped = true;
   }
