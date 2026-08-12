@@ -355,24 +355,23 @@ function calculate() {
   }
 
   // ===== 多品种聚合上限：总保证金（已有 + 新开）≤ 本金 × 90% =====
-  if (leverage > 0) {
-    var newMargin = positionSize / leverage;
-    var totalMargin = usedMargin + newMargin;
-    var aggregateLimit = capital * 0.9;
-    if (totalMargin > aggregateLimit) {
-      var maxNewMargin = aggregateLimit - usedMargin;
-      if (maxNewMargin > 0) {
-        var aggCappedPos = maxNewMargin * leverage;
-        riskAmount = aggCappedPos * stopDistance / effectiveEntryPrice;
-        riskPercent = riskAmount / capital;
-        capMsg = (capMsg ? capMsg + ' ' : '') + '<span class="warning-tag alert"><i class="fas fa-layer-group"></i> 总保证金触及 90% 聚合上限：已有 ' + usedMargin.toFixed(2) + ' + 新增 ' + newMargin.toFixed(2) + ' = ' + totalMargin.toFixed(2) + ' USDT（' + (totalMargin / capital * 100).toFixed(1) + '% 本金），已截断新仓位保证金至 ' + maxNewMargin.toFixed(2) + ' USDT。</span>';
-        positionSize = aggCappedPos;
-        cappedByMargin = true;
-      } else {
-        capMsg = (capMsg ? capMsg + ' ' : '') + '<span class="warning-tag alert"><i class="fas fa-layer-group"></i> 总保证金已达 90% 聚合上限：已有持仓已占用 ' + usedMargin.toFixed(2) + ' USDT（' + (usedMargin / capital * 100).toFixed(1) + '% 本金），无法再开新仓。请平仓后重试。</span>';
-        positionSize = 0;
-        cappedByMargin = true;
-      }
+  // 现货（leverage=0）时保证金 = positionSize，需同样纳入聚合上限检查
+  var newMarginForAggregate = leverage > 0 ? (positionSize / leverage) : positionSize;
+  var totalMarginForAggregate = usedMargin + newMarginForAggregate;
+  var aggregateLimit = capital * 0.9;
+  if (totalMarginForAggregate > aggregateLimit) {
+    var maxNewMarginAgg = aggregateLimit - usedMargin;
+    if (maxNewMarginAgg > 0) {
+      var aggCappedPos = leverage > 0 ? (maxNewMarginAgg * leverage) : maxNewMarginAgg;
+      riskAmount = aggCappedPos * stopDistance / effectiveEntryPrice;
+      riskPercent = riskAmount / capital;
+      capMsg = (capMsg ? capMsg + ' ' : '') + '<span class="warning-tag alert"><i class="fas fa-layer-group"></i> 总保证金触及 90% 聚合上限：已有 ' + usedMargin.toFixed(2) + ' + 新增 ' + newMarginForAggregate.toFixed(2) + ' = ' + totalMarginForAggregate.toFixed(2) + ' USDT（' + (totalMarginForAggregate / capital * 100).toFixed(1) + '% 本金），已截断新仓位保证金至 ' + maxNewMarginAgg.toFixed(2) + ' USDT。</span>';
+      positionSize = aggCappedPos;
+      cappedByMargin = true;
+    } else {
+      capMsg = (capMsg ? capMsg + ' ' : '') + '<span class="warning-tag alert"><i class="fas fa-layer-group"></i> 总保证金已达 90% 聚合上限：已有持仓已占用 ' + usedMargin.toFixed(2) + ' USDT（' + (usedMargin / capital * 100).toFixed(1) + '% 本金），无法再开新仓。请平仓后重试。</span>';
+      positionSize = 0;
+      cappedByMargin = true;
     }
   }
 
@@ -596,7 +595,7 @@ function calculate() {
   // ===== 风险与成本行 L2：止损距离 tag + 方向 + 品种 + 目标 =====
   let costL2HTML = '<span class="stop-tag ' + stopTagClass + '">止损 ' + stopPct.toFixed(2) + '%</span>';
   costL2HTML += ' <span class="sep">·</span> ' + (direction === 'long' ? '做多' : '做空');
-  costL2HTML += ' <span class="sep">·</span> ' + symbol;
+  costL2HTML += ' <span class="sep">·</span> ' + esc(symbol);
   // 若入场价有修正，显示修正后入场价
   if (Math.abs(effectiveEntryPrice - entryPrice) > 0.0001) {
     costL2HTML += ' <span class="sep">·</span> 修正入场≈' + effectiveEntryPrice.toFixed(5);
@@ -1041,16 +1040,16 @@ function getActiveEntryPrice() {
 
 // ==================== 重置表单 ====================
 function resetForm() {
+  var _settings = loadSettings();
   // 从设置读取默认品种，优先取第一个自定义品种，否则用 BTC
   var _symDefault = 'BTC';
   try {
-    var _symList = loadSettings().customSymbols;
+    var _symList = _settings.customSymbols;
     if (_symList && _symList.length > 0 && _symList[0].symbol) _symDefault = _symList[0].symbol;
   } catch(e) {}
   document.getElementById('symbol').value = _symDefault;
   document.getElementById('entryPrice').value = '';
   // 从设置读取默认本金，否则用 1000
-  var _settings = loadSettings();
   document.getElementById('capital').value = (_settings.accountBalance > 0) ? _settings.accountBalance : 1000;
   // 从设置读取默认风险比例，否则用 2%
   var _riskPct = _settings.riskPercent || 2;

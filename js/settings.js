@@ -2,6 +2,8 @@
 
 var SETTINGS_KEY = 'trade_settings_v1';
 
+var SETTINGS_CACHE = null; // 缓存已解析的设置对象，避免重复 localStorage 读写
+
 var SETTINGS_DEFAULTS = {
   accountBalance: 0,
   riskPercent: 2,
@@ -50,8 +52,9 @@ var SETTINGS_VALIDATORS = {
  * 加载设置（返回对象）
  */
 function loadSettings() {
+  if (SETTINGS_CACHE !== null) return SETTINGS_CACHE;
   var raw = localStorage.getItem(SETTINGS_KEY);
-  if (!raw) return JSON.parse(JSON.stringify(SETTINGS_DEFAULTS));
+  if (!raw) { SETTINGS_CACHE = JSON.parse(JSON.stringify(SETTINGS_DEFAULTS)); return SETTINGS_CACHE; }
   try {
     var settings = JSON.parse(raw);
     var merged = {};
@@ -60,10 +63,19 @@ function loadSettings() {
       var k = keys[i];
       merged[k] = (settings[k] != null) ? settings[k] : SETTINGS_DEFAULTS[k];
     }
+    SETTINGS_CACHE = merged;
     return merged;
   } catch (e) {
-    return JSON.parse(JSON.stringify(SETTINGS_DEFAULTS));
+    SETTINGS_CACHE = JSON.parse(JSON.stringify(SETTINGS_DEFAULTS));
+    return SETTINGS_CACHE;
   }
+}
+
+/**
+ * 清除设置缓存（设置变更后调用）
+ */
+function _clearSettingsCache() {
+  SETTINGS_CACHE = null;
 }
 
 /**
@@ -232,6 +244,7 @@ function saveSettings() {
   }
 
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  _clearSettingsCache();
 
   // 同步全局变量（如果有的话）
   if (typeof _autoBackupIndex !== 'undefined') {
@@ -375,6 +388,7 @@ function resetSettings() {
   if (!confirm('确定要将所有设置恢复为默认值吗？交易日志不受影响。')) return;
 
   localStorage.removeItem(SETTINGS_KEY);
+  _clearSettingsCache();
   renderSettings();
   showToast('设置已重置为默认值', 'success');
 }
@@ -423,6 +437,7 @@ function addCustomSymbol() {
   if (!settings.customSymbols) settings.customSymbols = [];
   settings.customSymbols.push({ symbol: '', desc: '' });
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  _clearSettingsCache();
   renderCustomSymbols();
 }
 
@@ -431,6 +446,7 @@ function removeCustomSymbol(idx) {
   if (!settings.customSymbols) return;
   settings.customSymbols.splice(idx, 1);
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  _clearSettingsCache();
   renderCustomSymbols();
 }
 
@@ -446,5 +462,6 @@ function saveCustomSymbols() {
   var settings = loadSettings();
   settings.customSymbols = symbols;
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  _clearSettingsCache();
   syncSymbolDatalist();
 }

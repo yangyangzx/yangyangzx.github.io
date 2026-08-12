@@ -3,7 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+  <meta name="theme-color" content="#0f1419" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="description" content="专业期货交易风控与复盘工具，覆盖开仓前计算、持仓监控、平仓记录、统计分析、复盘优化五大环节">
   <title>TradingDiscipline · 交易风险管理终端</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="assets/icon-192.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -25,7 +32,7 @@
   <link rel="stylesheet" href="css/settings.css">
 </head>
 <body>
-<nav id="mainNav">
+<nav id="mainNav" role="navigation" aria-label="主导航">
   <div class="nav-header">
     <div class="nav-logo">
       <img class="nav-logo-img" src="img/logo.png" alt="TradingDiscipline">
@@ -36,7 +43,7 @@
     </div>
   </div>
   <div class="nav-menu">
-    <a class="nav-item active" data-view="dashboard">
+    <a class="nav-item active" data-view="dashboard" aria-current="page">
       <i class="fas fa-tachometer-alt"></i> <span>仪表盘</span>
     </a>
     <a class="nav-item" data-view="planner">
@@ -61,7 +68,7 @@
   <div class="nav-footer">
     <div class="nav-version">v5.0-alpha</div>
     <!-- 主题切换滑动开关 -->
-    <label class="theme-toggle-switch" title="切换主题">
+    <label class="theme-toggle-switch" title="切换主题" aria-label="切换深色/浅色主题">
       <i class="fas fa-sun"></i>
       <input type="checkbox" id="themeToggleCheckbox">
       <span class="slider"></span>
@@ -76,7 +83,7 @@
   <span></span>
 </button>
 <div class="nav-mobile-overlay" id="navMobileOverlay"></div>
-<main id="mainContent">
+<main id="mainContent" role="main" aria-label="主要内容区域">
 
   <!-- ====== 仪表盘 ====== -->
   <section id="view-dashboard" class="view active">
@@ -1209,6 +1216,14 @@
   <script src="js/app.js"></script>
 
   <div id="toastContainer" style="position:fixed;top:20px;right:20px;z-index:400;display:flex;flex-direction:column;gap:8px;pointer-events:none;"></div>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./service-worker.js', { scope: './' })
+        .then(function(reg) { console.log('[SW] 已注册:', reg.scope); })
+        .catch(function(err) { console.warn('[SW] 注册失败:', err); });
+    }
+  </script>
 
 
 </html>

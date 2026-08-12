@@ -274,7 +274,7 @@ function renderStrategyRank(closed) {
     var rankClass = (rd === 0) ? ' rank-1' : '';
     listHtml += '<div class="strategy-rank-item' + rankClass + '">';
     listHtml += '<span class="strategy-rank-badge">' + (rd + 1) + '</span>';
-    listHtml += '<span class="strategy-rank-name" title="' + row.name + '">' + row.name;
+    listHtml += '<span class="strategy-rank-name" title="' + esc(row.name) + '">' + esc(row.name);
     if (row.count < 3) listHtml += ' <span style="font-size:10px;color:var(--color-text-muted);">(样本不足)</span>';
     listHtml += '</span>';
     listHtml += '<span class="strategy-rank-pnl ' + (row.totalPnl >= 0 ? 'risk-safe' : 'risk-danger') + '">' +
@@ -505,7 +505,7 @@ function renderEmotionAnalysis(closed) {
     }
 
     tHtml += '<tr>';
-    tHtml += '<td>' + em + '</td>';
+    tHtml += '<td>' + esc(em) + '</td>';
     tHtml += '<td class="col-num">' + stats.count + '</td>';
     tHtml += '<td class="col-num">' + stats.wins + '/' + stats.losses + '</td>';
     tHtml += '<td>' + (decided > 0 ? winRate.toFixed(1) : '-') + '</td>';

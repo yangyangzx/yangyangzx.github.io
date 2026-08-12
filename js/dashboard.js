@@ -171,8 +171,10 @@ function _renderRiskExposure() {
     }
   }
 
-  var riskPct = totalPosition > 0 ? ((totalRisk / totalPosition) * 100).toFixed(1) : '0.0';
-  var riskCls = parseFloat(riskPct) > 5 ? 'danger' : (parseFloat(riskPct) > 2 ? 'warn' : '');
+  // 若 riskAmount 为 0（无止损或未设置），显示 — 而非 0%
+  var riskPctDisplay = totalRisk > 0 ? ((totalRisk / totalPosition) * 100).toFixed(1) : '—';
+  var riskNum = totalRisk > 0 ? parseFloat(riskPctDisplay) : 0;
+  var riskCls = riskNum > 5 ? 'danger' : (riskNum > 2 ? 'warn' : '');
 
   rowsEl.innerHTML =
     '<div class="dash-risk-row">' +
@@ -181,7 +183,7 @@ function _renderRiskExposure() {
     '</div>' +
     '<div class="dash-risk-row">' +
       '<span class="dash-risk-label">总风险</span>' +
-      '<span class="dash-risk-value ' + riskCls + '">' + _fmtUSDT(totalRisk) + ' (' + riskPct + '%)</span>' +
+      '<span class="dash-risk-value ' + riskCls + '">' + _fmtUSDT(totalRisk) + ' (' + riskPctDisplay + '%)</span>' +
     '</div>' +
     '<div class="dash-risk-row">' +
       '<span class="dash-risk-label">占用保证金</span>' +
@@ -194,7 +196,6 @@ function _renderRiskExposure() {
 
   var card = document.getElementById('dashRiskExposure');
   card.className = card.className.replace(/\bstatus-\w+/g, '');
-  var riskNum = parseFloat(riskPct);
   card.classList.add(riskNum > 5 ? 'status-negative' : (riskNum > 2 ? 'status-warning' : 'status-positive'));
 }
 
@@ -350,9 +351,9 @@ function _renderLiqWarn() {
     // 额外防御：NaN 值不直接显示
     if (isNaN(w.stopLoss) || isNaN(w.liqPrice)) continue;
     var distText = isNaN(w.distance) ? '' : ' (' + Number(w.distance).toFixed(1) + '%)';
-    var noteText = w.note ? ' <span style="color:var(--color-danger);">[' + w.note + ']</span>' : '';
+    var noteText = w.note ? ' <span style="color:var(--color-danger);">[' + esc(w.note) + ']</span>' : '';
     html += '<div class="liq-item">' +
-      '<span class="liq-item-symbol">' + w.symbol + ' (' + (w.direction === 'long' ? '多' : '空') + ')</span>' +
+      '<span class="liq-item-symbol">' + esc(w.symbol) + ' (' + (w.direction === 'long' ? '多' : '空') + ')</span>' +
       '<span class="liq-item-distance">止损 ' + Number(w.stopLoss).toFixed(5) + ' / 强平 ' + Number(w.liqPrice).toFixed(5) + distText + '</span>' +
       noteText +
     '</div>';

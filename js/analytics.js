@@ -5,6 +5,7 @@ var _analyticsCharts = {};
 
 /**
  * 销毁所有图表实例
+ * 同时清理 ChartManager 注册，防止内存泄漏
  */
 function destroyAnalyticsCharts() {
   var ids = ['chartEquity', 'chartStrategy', 'chartPattern', 'chartSession', 'chartMAEMFE', 'closeTypeChart',
@@ -12,8 +13,21 @@ function destroyAnalyticsCharts() {
              'chartMindsetPnl', 'chartMarketCondition'];
   for (var i = 0; i < ids.length; i++) {
     if (_analyticsCharts[ids[i]]) {
+      // 优先通过 ChartManager 注销（若已注册）
+      if (window.ChartManager) window.ChartManager.unregister(ids[i], true);
       _analyticsCharts[ids[i]].destroy();
       _analyticsCharts[ids[i]] = null;
+    }
+  }
+  // 额外清理：通过 Chart.getChart 查找残留
+  for (var j = 0; j < ids.length; j++) {
+    var canvas = document.getElementById(ids[j]);
+    if (canvas) {
+      var existing = Chart.getChart(canvas);
+      if (existing) {
+        if (window.ChartManager) window.ChartManager.unregister(ids[j], true);
+        existing.destroy();
+      }
     }
   }
 }
@@ -409,8 +423,8 @@ function renderStrategyTable(rows) {
     else if (r === worstIdx && bestIdx !== worstIdx) rowClass = 'row-worst';
 
     html += '<tr class="' + rowClass + '">';
-    html += '<td>' + row.framework + '</td>';
-    html += '<td>' + row.patternName + '</td>';
+    html += '<td>' + esc(row.framework) + '</td>';
+    html += '<td>' + esc(row.patternName) + '</td>';
     html += '<td class="col-num">' + row.count + '</td>';
     html += '<td class="col-num">' + row.winRate.toFixed(1) + '%</td>';
     html += '<td class="' + (row.totalPnl >= 0 ? 'col-pnl-pos' : 'col-pnl-neg') + '">' + (row.totalPnl >= 0 ? '+' : '') + row.totalPnl.toFixed(2) + '</td>';
@@ -636,7 +650,7 @@ function renderPatternTable(rows) {
     else if (r === worstIdx && bestIdx !== worstIdx) rowClass = 'row-worst';
 
     html += '<tr class="' + rowClass + '">';
-    html += '<td>' + row.name + '</td>';
+    html += '<td>' + esc(row.name) + '</td>';
     html += '<td class="col-num">' + row.count + '</td>';
     html += '<td class="col-num">' + row.winRate.toFixed(1) + '%</td>';
     html += '<td class="' + (row.totalPnl >= 0 ? 'col-pnl-pos' : 'col-pnl-neg') + '">' + (row.totalPnl >= 0 ? '+' : '') + row.totalPnl.toFixed(2) + '</td>';
@@ -911,11 +925,11 @@ function bindTableSort(tableId, rows) {
           html += '<tr class="' + rowClass + '">';
           if (isStrategyTable) {
             // strategyDetailTable: 9 列（framework + patternName 分列）
-            html += '<td>' + row.framework + '</td>';
-            html += '<td>' + row.patternName + '</td>';
+            html += '<td>' + esc(row.framework) + '</td>';
+            html += '<td>' + esc(row.patternName) + '</td>';
           } else {
             // patternDetailTable: 8 列（name 合并列）
-            html += '<td>' + row.name + '</td>';
+            html += '<td>' + esc(row.name) + '</td>';
           }
           html += '<td class="col-num">' + row.count + '</td>';
           html += '<td class="col-num">' + row.winRate.toFixed(1) + '%</td>';

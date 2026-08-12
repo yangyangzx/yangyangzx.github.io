@@ -76,8 +76,10 @@ function updateNavActive(viewName) {
     var dv = items[i].getAttribute('data-view');
     if (dv === viewName) {
       items[i].classList.add('active');
+      items[i].setAttribute('aria-current', 'page');
     } else {
       items[i].classList.remove('active');
+      items[i].removeAttribute('aria-current');
     }
   }
 }
@@ -189,6 +191,7 @@ document.addEventListener('DOMContentLoaded', function() {
     nav.classList.add('open');
     if (overlay) overlay.classList.add('show');
     document.body.style.overflow = 'hidden';
+    toggle.setAttribute('aria-expanded', 'true');
   }
   function closeMobileNav() {
     if (!toggle || !nav) return;
@@ -196,6 +199,7 @@ document.addEventListener('DOMContentLoaded', function() {
     nav.classList.remove('open');
     if (overlay) overlay.classList.remove('show');
     document.body.style.overflow = '';
+    toggle.setAttribute('aria-expanded', 'false');
   }
   if (toggle) {
     toggle.addEventListener('click', function() {

@@ -40,9 +40,10 @@ function calcReverseTP() {
   }
 
   // 优先使用加权止损距离（分批模式下）
+  // 优先使用 _lastCalc 中的精确止损距离（含 ATR 模式），避免从 round 后的 stopLoss 反推精度丢失
   var stopDistance;
-  if (calc && calc.splitMode && calc.weightedStopDistance != null) {
-    stopDistance = calc.weightedStopDistance;
+  if (calc && calc.stopDistance != null) {
+    stopDistance = calc.stopDistance;
   } else {
     stopDistance = Math.abs(entryPrice - stopLoss);
   }
