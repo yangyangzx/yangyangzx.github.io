@@ -384,11 +384,6 @@ function autoFillKellyFromLogs() {
         }
       };
     }
-    // 页面首次加载时也尝试填充（等待 DOM 就绪）
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', autoFillKellyFromLogs);
-    } else {
-      autoFillKellyFromLogs();
-    }
+    // 注意：首次加载时的自动填充由 navigation.js 中的 loadLogs 后调用
   } catch(e) {}
 })();

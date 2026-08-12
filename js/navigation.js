@@ -151,6 +151,8 @@ function getCurrentView() {
 document.addEventListener('DOMContentLoaded', function() {
   // 必须在导航路由前加载日志数据，否则视图渲染时 logs 为空
   if (typeof loadLogs === 'function') loadLogs();
+  // 加载日志后自动填充凯利参数
+  if (typeof autoFillKellyFromLogs === 'function') autoFillKellyFromLogs();
 
   // 绑定导航点击事件
   var navItems = document.querySelectorAll('#mainNav .nav-item');
