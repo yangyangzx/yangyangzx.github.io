@@ -52,12 +52,6 @@ function calcPortfolioHeat() {
 }
 
 /**
- * 计算凯利公式仓位
- * @param {number} winRate - 胜率 (0~1)
- * @param {number} avgWin - 平均盈利金额
- * @param {number} avgLoss - 平均亏损金额 (正值)
- * @param {number} accountSize - 账户大小
-/**
  * 计算凯利公式，返回最优仓位比例
  * 
  * 凯利公式：Kelly% = (胜率 × 平均盈利 - 败率 × 平均亏损) / 平均盈利
@@ -80,7 +74,6 @@ function calcPortfolioHeat() {
  * @property {string} recommendation - 建议文本
  * @property {boolean} kellyCapped - 完整凯利是否被截断
  * @property {boolean} halfKellyCapped - 半凯利是否被截断
- */
  */
 function calcKelly(winRate, avgWin, avgLoss, accountSize, halfKelly, leverage) {
   if (halfKelly === undefined) halfKelly = true;
@@ -177,58 +170,50 @@ function checkRRRequirement(targetRR, minRR) {
  * @param {number} [lookbackDays] - 已平仓历史回看天数（默认 7 天）
  * @returns {object} {pass, currentPct, maxPct, warning}
  */
-function checkSymbolConcentration(symbol, positionSize, leverage, capital, openPositions, lookbackDays) {
-  if (lookbackDays === undefined) lookbackDays = 7;
-  if (!capital || capital <= 0) return { pass: true, currentPct: 0, maxPct: 10, warning: null };
-  var maxPct = 10; // 默认值
+function checkSymbolConcentration(symbol, positionSize, leverage, capital, openPositions) {
+  if (!capital || capital <= 0) {
+    return { pass: true, currentPct: 0, maxPct: 10, usedMargin: 0, allowedMargin: 0, allowedNewMargin: 0, warning: null };
+  }
+  var maxPct = 10;
   try {
     var settings = loadSettings();
     maxPct = settings.singleSymbolMaxPct || 10;
   } catch(e) {}
 
-  // 计算该品种的总保证金占比（未平仓）
+  // 集中度衡量的是“当前未平仓风险敞口”；已平仓交易不应持续占用保证金额度。
   var usedMargin = 0;
   for (var i = 0; i < openPositions.length; i++) {
     var pos = openPositions[i];
-    if (pos.symbol === symbol) {
-      var posLev = parseFloat(pos.leverage) || 1;
-      if (posLev <= 0) posLev = 1;
-      usedMargin += (parseFloat(pos.positionSize) || 0) / posLev;
-    }
+    if (pos.symbol !== symbol) continue;
+    var posLev = parseFloat(pos.leverage) || 1;
+    if (posLev <= 0) posLev = 1;
+    var posSize = parseFloat(pos.positionSize) || 0;
+    if (posSize > 0) usedMargin += posSize / posLev;
   }
 
-  // BUG-5 修复：计入近 N 天内该品种的已平仓交易保证金（防止频繁开平仓绕过集中度检查）
-  try {
-    var cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - lookbackDays);
-    var closed = getClosedSorted();
-    for (var ci = 0; ci < closed.length; ci++) {
-      var cl = closed[ci];
-      if (cl.symbol !== symbol) continue;
-      var ct = cl.closeTime || cl.time;
-      if (!ct) continue;
-      if (new Date(ct) < cutoff) continue;
-      var clLev = parseFloat(cl.leverage) || 1;
-      if (clLev <= 0) clLev = 1;
-      usedMargin += (parseFloat(cl.positionSize) || 0) / clLev;
-    }
-  } catch(e) {}
-
-  // 新增仓位
-  var newLev = leverage || 1;
+  var newLev = Number(leverage) || 1;
   if (newLev <= 0) newLev = 1;
-  var newMargin = positionSize / newLev;
+  var newMargin = Math.max(0, Number(positionSize) || 0) / newLev;
+  var allowedMargin = capital * (maxPct / 100);
+  var allowedNewMargin = Math.max(0, allowedMargin - usedMargin);
   var totalMargin = usedMargin + newMargin;
   var pct = (totalMargin / capital) * 100;
-
   var warning = null;
-  if (pct >= maxPct) {
-    warning = symbol + ' 保证金占比 ' + pct.toFixed(1) + '% 已达上限 ' + maxPct + '%，无法开新仓';
+  if (totalMargin > allowedMargin) {
+    warning = symbol + ' 保证金占比 ' + pct.toFixed(1) + '% 超过上限 ' + maxPct + '%，新增仓位最多还可使用 ' + allowedNewMargin.toFixed(2) + ' USDT 保证金';
   } else if (pct >= maxPct * 0.8) {
     warning = symbol + ' 保证金占比 ' + pct.toFixed(1) + '% 接近上限 ' + maxPct + '%';
   }
-
-  return { pass: pct < maxPct, currentPct: pct, maxPct: maxPct, warning: warning };
+  return {
+    pass: totalMargin <= allowedMargin,
+    currentPct: pct,
+    maxPct: maxPct,
+    usedMargin: usedMargin,
+    newMargin: newMargin,
+    allowedMargin: allowedMargin,
+    allowedNewMargin: allowedNewMargin,
+    warning: warning
+  };
 }
 
 /**
@@ -291,23 +276,24 @@ function getMindsetAdjustment(mindsetScore) {
  */
 function checkDailyTradeFrequency() {
   var todayStr = window.utils.toLocalDateStr(new Date().toISOString());
-  var closed = getClosedSorted();
   var todayCount = 0;
-  for (var i = 0; i < closed.length; i++) {
-    var ct = closed[i].closeTime;
-    if (!ct) continue;
-    if (window.utils.toLocalDateStr(ct) === todayStr) {
-      todayCount++;
-    }
+  var seenPlans = {};
+  // 以开仓时间统计，未平仓和已平仓计划都必须计入；同一拆分 groupId 只算一次计划。
+  for (var i = 0; i < logs.length; i++) {
+    var item = logs[i];
+    if (!item || !item.time || window.utils.toLocalDateStr(item.time) !== todayStr) continue;
+    var key = item.groupId || item.id || ('row_' + i);
+    if (seenPlans[key]) continue;
+    seenPlans[key] = true;
+    todayCount++;
   }
 
   var settings = loadSettings();
   var maxCount = settings.dailyTradeMax || 8;
   var blocked = todayCount >= maxCount;
   var suggestion = blocked
-    ? '今日已交易 ' + todayCount + ' 笔，达到上限 ' + maxCount + ' 笔，建议停止交易'
-    : '今日已交易 ' + todayCount + ' 笔，建议最多 ' + maxCount + ' 笔';
-
+    ? '今日已开仓 ' + todayCount + ' 笔，达到上限 ' + maxCount + ' 笔，建议停止交易'
+    : '今日已开仓 ' + todayCount + ' 笔，建议最多 ' + maxCount + ' 笔';
   return { todayCount: todayCount, maxCount: maxCount, blocked: blocked, suggestion: suggestion };
 }
 

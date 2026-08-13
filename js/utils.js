@@ -237,13 +237,13 @@
     var data = [], cum = _initCap, peakVal = _initCap, maxDD = 0;
     for (var i = 0; i < sorted.length; i++) {
       var l = sorted[i];
-      var capVal = parseFloat(l.capital);
-      if (!opts.purePnl && !isNaN(capVal) && capVal > 0 && capVal !== cum) {
-        cum = capVal;
-      } else {
-        cum += (parseFloat(l.pnlAmount) || 0);
-      }
-      data.push({ eq: cum, pnl: parseFloat(l.pnlAmount) || 0, idx: data.length + 1 });
+      // capital 是开仓时的账户快照，不能在每次平仓时被当作“当前权益”覆盖累计 PnL。
+      // 仅支持显式的 balanceAdjustment 作为未来存取款流水；未提供时权益严格连续累加已实现盈亏。
+      var balanceAdjustment = Number(l.balanceAdjustment);
+      if (!opts.purePnl && Number.isFinite(balanceAdjustment) && balanceAdjustment !== 0) cum += balanceAdjustment;
+      var pnl = Number(l.pnlAmount);
+      if (Number.isFinite(pnl)) cum += pnl;
+      data.push({ eq: cum, pnl: Number.isFinite(pnl) ? pnl : 0, idx: data.length + 1 });
       peakVal = Math.max(peakVal, cum);
       maxDD = peakVal > 0 ? Math.max(maxDD, (peakVal - cum) / peakVal * 100) : maxDD;
     }

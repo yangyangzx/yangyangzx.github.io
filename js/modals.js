@@ -9,6 +9,9 @@ function openEditModal(idx) {
   modal.id = 'editModal';
 
   const ms = item.mindsetScore || 3;
+  const isTickSlippage = !!(item.slippage && item.slippage.planning && item.slippage.planning.schema === 'ticks-v1');
+  const slippageLabel = isTickSlippage ? '滑点冲击（已计入有效入场价）' : '历史滑点成本';
+  const slippageReadonly = isTickSlippage ? ' readonly' : '';
   window._emMindsetScore = ms;  // 打开弹窗时重置为当前项的实际值，防止跨编辑污染
   let starsHTML = '<div class="star-rating-modal" style="display:flex;gap:4px;">';
   for (let s = 1; s <= 5; s++) {
@@ -91,7 +94,7 @@ function openEditModal(idx) {
         '<div class="fp"><label>盈亏金额</label><input type="text" id="emPnlAmount" value="' + (item.pnlAmount ?? '') + '" /><span id="emPnlManualTag" style="display:none;font-size:10px;color:var(--color-warning);margin-left:4px;">手动</span></div>' +
         '<div class="fp"><label>盈亏百分比 <span style="font-size:11px;color:var(--color-text-muted);font-weight:400;">（保证金回报率）</span></label><input type="text" id="emPnlPercent" value="' + (item.pnlPercent ?? '') + '" /></div>' +
         '<div class="fp"><label>手续费</label><input type="text" id="emFee" value="' + (item.fee ?? '') + '" /></div>' +
-        '<div class="fp"><label>滑点成本</label><input type="text" id="emSlippageCost" value="' + (item.slippageCost ?? '') + '" /></div>' +
+        '<div class="fp"><label>' + slippageLabel + '</label><input type="text" id="emSlippageCost" value="' + (item.slippageCost ?? '') + '"' + slippageReadonly + ' /></div>' +
         '<div class="fp"><label>持仓最低价</label><input type="number" id="emLowPrice" step="0.00001" value="' + (item.lowPrice != null ? item.lowPrice : '') + '" style="color:var(--color-danger);" /></div>' +
         '<div class="fp"><label>持仓最高价</label><input type="number" id="emHighPrice" step="0.00001" value="' + (item.highPrice != null ? item.highPrice : '') + '" style="color:var(--color-success);" /></div>' +
         '<div class="fp"><label>平仓时间</label><input type="text" readonly value="' + (item.closeTime ? new Date(item.closeTime).toLocaleString('zh-CN', {year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).replace(/\//g,'-') : '—') + '" style="color:var(--color-text-muted);font-size:12px;" /></div>' +
@@ -282,7 +285,9 @@ window.emBindRecalc = emBindRecalc;
 function emRecalc(item) {
   function num(id) { const el = document.getElementById(id); if (!el) return NaN; return parseFloat(el.value); }
   var emFee = parseFloat((document.getElementById('emFee') || {}).value) || 0;
-  var emSlippage = parseFloat((document.getElementById('emSlippageCost') || {}).value) || 0;
+  var emSlippage = (item.slippage && item.slippage.planning && item.slippage.planning.schema === 'ticks-v1')
+    ? 0
+    : (parseFloat((document.getElementById('emSlippageCost') || {}).value) || 0);
   const entry = num('emEntryPrice');
   const stop = num('emStopLoss');
   const pos = num('emPositionSize');
@@ -473,9 +478,51 @@ function calcMAEMFE(idx) {
 }
 window.calcMAEMFE = calcMAEMFE;
 
+function rebuildTickSlippageSnapshot(item) {
+  var oldPlanning = item && item.slippage && item.slippage.planning;
+  if (!oldPlanning || oldPlanning.schema !== 'ticks-v1') return false;
+  var entryPrice = Number(item.entryPrice);
+  var positionSize = Number(item.positionSize);
+  var tickSize = Number(oldPlanning.tickSize);
+  if (!Number.isFinite(entryPrice) || entryPrice <= 0 || !Number.isFinite(positionSize) || positionSize <= 0 || !Number.isFinite(tickSize) || tickSize <= 0) return false;
+  if (item.direction !== 'long' && item.direction !== 'short') return false;
+  var effectiveEntry = Slippage.applyAdversePrice(entryPrice, item.direction, Number(oldPlanning.entryTicks) || 0, tickSize, 'entry').filledPrice;
+  var quantity = positionSize / effectiveEntry;
+  function snapshot(exitPrice) {
+    if (!Number.isFinite(Number(exitPrice)) || Number(exitPrice) <= 0) return null;
+    return Slippage.toLogSnapshot(Slippage.calculate({
+      direction: item.direction,
+      expectedEntryPrice: entryPrice,
+      expectedExitPrice: Number(exitPrice),
+      quantity: quantity,
+      tickSize: tickSize,
+      entryTicks: Number(oldPlanning.entryTicks) || 0,
+      exitTicks: Number(oldPlanning.exitTicks) || 0
+    }), { source: oldPlanning.source || 'edit-repriced' });
+  }
+  var atStop = snapshot(item.stopLoss);
+  var atTarget = snapshot(item.targetPrice);
+  var planning = atTarget || atStop;
+  if (!planning) return false;
+  var feeRate = Number(item.feeRate);
+  if (!Number.isFinite(feeRate) || feeRate < 0) {
+    var oldQty = Number(oldPlanning.quantity) || (positionSize / Number(oldPlanning.effectiveEntryPrice || effectiveEntry));
+    var oldNotional = oldQty * (Number(oldPlanning.effectiveEntryPrice) + Number(oldPlanning.effectiveExitPrice));
+    feeRate = oldNotional > 0 ? (Number(item.fee) || 0) / oldNotional * 100 : 0;
+  }
+  item.effectiveEntryPrice = planning.effectiveEntryPrice;
+  item.slippage = { planning: planning, atStop: atStop, atTarget: atTarget };
+  item.slippageCost = planning.totalCost;
+  item.feeRate = feeRate;
+  item.fee = calcRoundTripFee(quantity, planning.effectiveEntryPrice, planning.effectiveExitPrice, feeRate);
+  item.executionSnapshotUpdatedAt = new Date().toISOString();
+  return true;
+}
+
 function saveEditLog(idx) {
   const item = logs[idx];
   if (!item) return;
+  const beforeEdit = JSON.parse(JSON.stringify(item));
 
   function gv(id) { const el = document.getElementById(id); return el ? el.value : undefined; }
   function gn(id) { const el = document.getElementById(id); if (!el) return undefined; const v = parseFloat(el.value); return isNaN(v) ? null : v; }
@@ -554,6 +601,21 @@ function saveEditLog(idx) {
   v = gv('emMarketCondition'); if (v !== undefined) item.marketCondition = v;
   v = gv('emExitReason'); if (v !== undefined) item.exitReason = v;
 
+  // ticks-v1 记录的执行字段改变后必须同步重建有效入场价、各路径滑点和计划费用。
+  rebuildTickSlippageSnapshot(item);
+  if (item.closeType && item.closePrice != null && typeof calculateCloseSettlement === 'function') {
+    var editedSettlement = calculateCloseSettlement(item, item.closePrice, item.actualCloseFee, item.actualExitLegacySlippageCost);
+    if (!editedSettlement) {
+      Object.assign(item, beforeEdit);
+      showToast('编辑后的平仓结算无效，请检查价格、仓位和费用。', 'warn');
+      return;
+    }
+    item.grossPnlAmount = parseFloat(editedSettlement.grossPnl.toFixed(2));
+    item.pnlAmount = parseFloat(editedSettlement.netPnl.toFixed(2));
+    item.pnlPercent = parseFloat(editedSettlement.pnlPercent.toFixed(2));
+    item.rMultiple = editedSettlement.rMultiple == null ? null : parseFloat(editedSettlement.rMultiple.toFixed(2));
+  }
+
   // 平仓价格空值校验（基于 item.closePrice 原值，不依赖 DOM 空字符串误判）
   if (item.closeType && (item.closePrice == null || isNaN(item.closePrice) || item.closePrice <= 0)) {
     showToast('平仓价格不能为空','warn');
@@ -574,7 +636,9 @@ function saveEditLog(idx) {
   const positionSize = parseFloat(document.getElementById('emPositionSize')?.value) || 0;
   const direction = document.getElementById('emDirection')?.value || item.direction;
   const fee = gn('emFee') || 0;
-  const slippageCost = gn('emSlippageCost') || 0;
+  const slippageCost = (item.slippage && item.slippage.planning && item.slippage.planning.schema === 'ticks-v1')
+    ? 0
+    : (gn('emSlippageCost') || 0);
 
   let realTimeNetPnl = null;
   if (closePrice != null && entryForPnl != null && entryForPnl > 0) {
@@ -598,15 +662,24 @@ function saveEditLog(idx) {
       return;
     }
   }
+  if (!saveLogs()) {
+    Object.assign(item, beforeEdit);
+    if (typeof renderLogs === 'function') renderLogs();
+    showToast('日志编辑未保存，已恢复到保存前状态。', 'error');
+    return false;
+  }
   closeEditModal();
-  saveLogs();
+  return true;
 }
 window.saveEditLog = saveEditLog;
 
 // ==================== 拆分保存 ====================
 function saveSplit() {
-  const calc = window._lastCalc;
-  if (!calc || !calc.positionSize || calc.positionSize <= 0) { showToast('请先点击「计算仓位」生成有效数据','warn'); return; }
+  const gate = typeof assertSavableCalculation === 'function'
+    ? assertSavableCalculation()
+    : { ok: !!(window._lastCalc && window._lastCalc.positionSize), calc: window._lastCalc };
+  if (!gate.ok) { showToast(gate.message || '请先点击「计算仓位」生成有效数据', 'warn'); return false; }
+  const calc = gate.calc;
 
   // 创建内嵌 prompt 替代原生 prompt
   const overlay = document.createElement('div');
@@ -636,23 +709,47 @@ function saveSplit() {
 }
 
 function doSaveSplit(calc, count) {
-  // P1-3: 入场价必须有效
-  if (!calc || !calc.entryPrice || calc.entryPrice <= 0) { showToast('入场价格无效，无法拆分保存', 'warn'); return; }
+  const gate = typeof assertSavableCalculation === 'function'
+    ? assertSavableCalculation()
+    : { ok: !!(calc && calc.positionSize) };
+  if (!gate.ok) { showToast(gate.message || '当前计划不能拆分保存', 'warn'); return false; }
+  if (!calc || !calc.entryPrice || calc.entryPrice <= 0 || !calc.slippage || !calc.slippage.atStop) {
+    showToast('计算快照缺少统一滑点数据，请重新计算后再拆分保存', 'warn');
+    return false;
+  }
   const groupId = Date.now().toString(36) + Math.random().toString(36).substring(2);
-  // 前 count-1 笔用除法取整，最后一笔用差值补足以防浮点精度丢失
   const splitPos = parseFloat((calc.positionSize / count).toFixed(2));
   const remainderPos = parseFloat((calc.positionSize - splitPos * (count - 1)).toFixed(2));
-  const fee = parseFloat(document.getElementById('feeRate').value) || 0;
-  // 滑点成本统一使用与 calculator.js 相同的公式: positionSize × slippagePoints / entryPrice
-  // 注意: 用户输入的 slippage 是价格点数（如 BTC 输入 1 表示 1 美元），不是 tick 数量
-  const slippagePoints = parseFloat(document.getElementById('slippage').value) || 0;
-  const perSlippage = slippagePoints > 0 ? (splitPos * slippagePoints / calc.entryPrice) : 0;
-  const perFee = fee > 0 ? (splitPos * fee / 100 * 2) : 0;
-  const remainderSlippage = slippagePoints > 0 ? (remainderPos * slippagePoints / calc.entryPrice) : 0;
-  const remainderFee = fee > 0 ? (remainderPos * fee / 100 * 2) : 0;
+  const feeRate = Number(calc.feeRate) || (calc.orderType === 'limit' ? 0.04 : 0.08);
+  const slippageBase = calc.slippage.planning || calc.slippage.atStop;
+
+  function createSnapshot(pos, expectedExitPrice) {
+    if (!Number.isFinite(Number(expectedExitPrice)) || Number(expectedExitPrice) <= 0) return null;
+    const quantity = pos / calc.effectiveEntryPrice;
+    const model = Slippage.calculate({
+      direction: calc.direction,
+      expectedEntryPrice: calc.entryPrice,
+      expectedExitPrice: expectedExitPrice,
+      quantity: quantity,
+      tickSize: slippageBase.tickSize,
+      entryTicks: slippageBase.entryTicks,
+      exitTicks: slippageBase.exitTicks
+    });
+    return Slippage.toLogSnapshot(model, { source: slippageBase.source });
+  }
+
+  function createBatchCosts(pos) {
+    const atStop = createSnapshot(pos, calc.stopLoss);
+    const atTarget = createSnapshot(pos, calc.targetPrice);
+    // 计划快照沿用主计算器约定：有目标时以目标路径衡量计划成本，否则使用止损路径。
+    const planning = atTarget || atStop;
+    const quantity = pos / calc.effectiveEntryPrice;
+    const fee = calcRoundTripFee(quantity, planning.effectiveEntryPrice, planning.effectiveExitPrice, feeRate);
+    return { fee: fee, slippage: { planning: planning, atStop: atStop, atTarget: atTarget } };
+  }
 
   const now = new Date();
-  const makeEntry = (pos, feeVal, slipVal, risk, groupLabel) => ({
+  const makeEntry = (pos, costs, risk, groupLabel) => ({
     time: now.toISOString(),
     symbol: calc.symbol,
     direction: calc.direction,
@@ -671,7 +768,11 @@ function doSaveSplit(calc, count) {
     strategyPattern: document.getElementById('strategyPattern').value,
     signals: calc.signals || getSignals(),
     closeType: '', closePrice: null, rMultiple: null, pnlAmount: null, pnlPercent: null,
-    closeNote: '', fee: parseFloat(feeVal.toFixed(2)), slippageCost: parseFloat(slipVal.toFixed(2)),
+    closeNote: '',
+    fee: parseFloat(costs.fee.toFixed(8)),
+    slippage: costs.slippage,
+    slippageCost: parseFloat(costs.slippage.planning.totalCost.toFixed(8)),
+    calculationVersion: calc.calculationVersion || 2,
     targetRR: calc.targetRR, groupId: groupId,
     groupLabel: groupLabel,
     splitEntries: [],  // F4: 记录分批明细
@@ -681,19 +782,18 @@ function doSaveSplit(calc, count) {
   for (let i = 0; i < count; i++) {
     const isLast = (i === count - 1);
     const pos = isLast ? remainderPos : splitPos;
-    const f = isLast ? remainderFee : perFee;
-    const sl = isLast ? remainderSlippage : perSlippage;
+    const costs = createBatchCosts(pos);
     const perRisk = calc.riskAmount / count;
     const remainderRisk = calc.riskAmount - perRisk * (count - 1);
     const risk = isLast ? remainderRisk : perRisk;
     const label = i === 0 ? '主' : ('第' + (i + 1) + '笔');
-    const entry = makeEntry(pos, f, sl, risk, label);
-    // F4: 记录每笔的分批信息
+    const entry = makeEntry(pos, costs, risk, label);
     splitEntries.push({
       index: i + 1,
       positionSize: parseFloat(pos.toFixed(2)),
-      fee: parseFloat(f.toFixed(2)),
-      slippageCost: parseFloat(sl.toFixed(2)),
+      fee: parseFloat(costs.fee.toFixed(8)),
+      slippageCost: parseFloat(costs.slippage.planning.totalCost.toFixed(8)),
+      slippage: costs.slippage,
       riskAmount: parseFloat(risk.toFixed(2)),
       label: label,
     });
@@ -703,11 +803,16 @@ function doSaveSplit(calc, count) {
   for (var li = logs.length - count; li < logs.length; li++) {
     if (logs[li]) logs[li].splitEntries = splitEntries;
   }
+  if (!saveLogs()) {
+    logs.splice(logs.length - count, count);
+    showToast('拆分日志未保存：浏览器本地存储写入失败。', 'error');
+    return false;
+  }
   openClosePanelIdx = -1;
   actionPanelIdx = -1;
   window._lastCalcDirty = false;
-  saveLogs();
   showToast('拆分保存成功，共 ' + count + ' 笔', 'success');
+  return true;
 }
 
 function emSwitchTab(tabIndex) {

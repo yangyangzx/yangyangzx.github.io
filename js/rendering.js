@@ -255,7 +255,7 @@ function buildRowsHTML(dl) {
             '<input type="text" id="cpFee_' + realIdx + '" readonly placeholder="从日志读取" value="' + (item.fee != null ? item.fee : '') + '" />' +
           '</div>' +
           '<div class="fp">' +
-            '<label>滑点成本 (USDT)</label>' +
+            '<label>' + ((item.slippage && item.slippage.planning && item.slippage.planning.schema === 'ticks-v1') ? '滑点冲击（已计入有效入场价）' : '历史滑点成本 (USDT)') + '</label>' +
             '<input type="text" id="cpSlippage_' + realIdx + '" readonly placeholder="从日志读取" value="' + (item.slippageCost != null ? item.slippageCost : '') + '" />' +
           '</div>' +
           '<div class="fp">' +

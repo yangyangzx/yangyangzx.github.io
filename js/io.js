@@ -4,7 +4,7 @@ var fmtTime = window.utils.fmtTime;
 
 function exportCSV() {
   if (!logs.length) { showToast('暂无日志','info'); return; }
-  const headers = ['时间','品种','方向','订单类型','入场价','止损价','目标价','仓位(USDT)','杠杆','风险额','本金','心态评分','形态/策略','信号K','交易时段','市场环境','平仓类型','平仓价','平仓时间','持仓时长(分钟)','R倍数','盈亏金额','盈亏百分比','MAE%','MFE%','执行评分','出场理由','亏损原因','交易情绪','平仓备注','入场原因','手续费','滑点成本'];
+  const headers = ['时间','品种','方向','订单类型','入场价','有效入场价','止损价','目标价','仓位(USDT)','杠杆','风险额','本金','心态评分','形态/策略','信号K','交易时段','市场环境','平仓类型','平仓价','平仓时间','持仓时长(分钟)','R倍数','盈亏金额','盈亏百分比','MAE%','MFE%','执行评分','出场理由','亏损原因','交易情绪','平仓备注','入场原因','手续费','滑点成本','计算版本','滑点Schema','入场Ticks','退出Ticks','TickSize','计划有效退出价','GroupId'];
   let csv = headers.join(',') + '\n';
   for (const row of logs) {
     const ms = row.mindsetScore ? '★'.repeat(row.mindsetScore)+'☆'.repeat(5-row.mindsetScore) : '';
@@ -17,7 +17,8 @@ function exportCSV() {
     const ss = (row.signals&&row.signals.length) ? row.signals.map(s=>SIGNAL_LABELS[s]||s).join(' / ') : '';
     const ctl = row.closeType ? (CLOSE_TYPE_LABELS[row.closeType]||row.closeType) : '';
     const closeTimeFormatted = fmtTime(row.closeTime);
-    const line = [fmtTime(row.time),row.symbol,row.direction,row.orderType||'market',row.entryPrice,row.stopLoss,row.targetPrice??'',row.positionSize,row.leverage,row.riskAmount,row.capital??'',ms,sf,ss,row.session||'',row.marketCondition||'',ctl,row.closePrice??'',closeTimeFormatted,row.holdDuration??'',String(row.rMultiple??'').replace(/R$/,''),row.pnlAmount??'',String(row.pnlPercent??'').replace(/%/g,''),row.mae??'',row.mfe??'',row.executionScore??'',row.exitReason??'',Array.isArray(row.lossReason)?row.lossReason.join(';'):(row.lossReason||''),Array.isArray(row.emotions)?row.emotions.join(';'):(row.emotions||''),row.closeNote??'',row.reason,row.fee??'',row.slippageCost??''].map(v=>'"'+(v==null?'':String(v).replace(/"/g,'""'))+'"').join(',');
+    const planSlip = row.slippage && row.slippage.planning ? row.slippage.planning : {};
+    const line = [fmtTime(row.time),row.symbol,row.direction,row.orderType||'market',row.entryPrice,row.effectiveEntryPrice??planSlip.effectiveEntryPrice??'',row.stopLoss,row.targetPrice??'',row.positionSize,row.leverage,row.riskAmount,row.capital??'',ms,sf,ss,row.session||'',row.marketCondition||'',ctl,row.closePrice??'',closeTimeFormatted,row.holdDuration??'',String(row.rMultiple??'').replace(/R$/,''),row.pnlAmount??'',String(row.pnlPercent??'').replace(/%/g,''),row.mae??'',row.mfe??'',row.executionScore??'',row.exitReason??'',Array.isArray(row.lossReason)?row.lossReason.join(';'):(row.lossReason||''),Array.isArray(row.emotions)?row.emotions.join(';'):(row.emotions||''),row.closeNote??'',row.reason,row.fee??'',row.slippageCost??'',row.calculationVersion??'',planSlip.schema??'',planSlip.entryTicks??'',planSlip.exitTicks??'',planSlip.tickSize??'',planSlip.effectiveExitPrice??'',row.groupId??''].map(v=>'"'+(v==null?'':String(v).replace(/"/g,'""'))+'"').join(',');
     csv += line + '\n';
   }
   const b = new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'});
@@ -82,19 +83,25 @@ class ImportValidator {
       }
     }
     
-    // 业务规则验证
-    if (item.direction && !this.validDirections.includes(item.direction.toLowerCase())) {
+    // 业务规则验证：不能用 if(value) 跳过 0、NaN 或空字符串。
+    if (typeof item.direction !== 'string' || !this.validDirections.includes(item.direction.toLowerCase())) {
       errors.push(`第${index}条记录方向无效：${item.direction}`);
     }
-    
-    if (item.entryPrice && (isNaN(Number(item.entryPrice)) || Number(item.entryPrice) <= 0)) {
-      errors.push(`第${index}条记录入场价无效：${item.entryPrice}`);
+    var entryPrice = Number(item.entryPrice);
+    if (!Number.isFinite(entryPrice) || entryPrice <= 0) errors.push(`第${index}条记录入场价必须为大于 0 的有限数字：${item.entryPrice}`);
+    if (typeof item.time !== 'string' || isNaN(new Date(item.time).getTime())) errors.push(`第${index}条记录时间无效：${item.time}`);
+    if (item.positionSize != null) {
+      var positionSize = Number(item.positionSize);
+      if (!Number.isFinite(positionSize) || positionSize <= 0) errors.push(`第${index}条记录仓位必须为大于 0 的有限数字`);
     }
-    
-    if (item.leverage && (isNaN(Number(item.leverage)) || Number(item.leverage) < 1 || Number(item.leverage) > 125)) {
-      errors.push(`第${index}条记录杠杆超出合理范围：1-125倍`);
+    if (item.stopLoss != null) {
+      var stopLoss = Number(item.stopLoss);
+      if (!Number.isFinite(stopLoss) || stopLoss <= 0) errors.push(`第${index}条记录止损价无效`);
     }
-    
+    if (item.leverage != null) {
+      var leverage = Number(item.leverage);
+      if (!Number.isFinite(leverage) || leverage < 0 || leverage > 125) errors.push(`第${index}条记录杠杆超出合理范围：0-125倍`);
+    }
     return errors;
   }
   
@@ -119,13 +126,8 @@ class ImportValidator {
           }
         }
         
-        // HTML实体编码
-        sanitized[field] = value
-          .replace(/&/g, '&amp;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;')
-          .replace(/"/g, '&quot;')
-          .replace(/'/g, '&#x27;');
+        // 存储为普通文本；渲染层负责统一转义，避免导入后出现双重实体编码。
+        sanitized[field] = value.replace(/<[^>]*>/g, '[已移除标签]');
       }
     }
     
@@ -203,10 +205,8 @@ function importJSON(file) {
       const validationReport = importValidator.validateAndSanitize(d);
       
       if (validationReport.errors.length > 0) {
-        const errorMsg = `导入验证失败:\n${validationReport.errors.slice(0, 5).join('\n')}`;
-        if (validationReport.errors.length > 5) {
-          errorMsg += `\n... 还有${validationReport.errors.length - 5}个错误`;
-        }
+        let errorMsg = `导入验证失败：为保证日志完整性，本次未导入任何记录。\n${validationReport.errors.slice(0, 5).join('\n')}`;
+        if (validationReport.errors.length > 5) errorMsg += `\n... 还有${validationReport.errors.length - 5}个错误`;
         alert(errorMsg);
         return;
       }
@@ -216,17 +216,27 @@ function importJSON(file) {
         return;
       }
       
-      // 显示导入报告
-      let msg = `导入验证完成：\n✅ 有效记录: ${validationReport.valid.length}条\n⚠️ 跳过记录: ${validationReport.errors.length}条`;
-      if (validationReport.warnings.length > 0) {
-        msg += `\n📋 警告: ${validationReport.warnings.join(', ')}`;
-      }
-      
-      if (confirm(msg + '\n\n是否继续导入有效记录？')) {
-        // 合并去重逻辑可以在这里添加
-        logs.push(...validationReport.valid);
-        saveLogs();
-        showToast(`成功导入 ${validationReport.valid.length} 条记录`,'success');
+      // 新旧导入记录统一进入 Schema 迁移，历史现金滑点仅做明确标记。
+      if (typeof migrateLogsToCurrentSchema === 'function') migrateLogsToCurrentSchema(validationReport.valid, 0);
+      var existing = new Set(logs.map(function(item) { return typeof _logFingerprint === 'function' ? _logFingerprint(item) : JSON.stringify(item); }));
+      var candidates = validationReport.valid.filter(function(item) {
+        var key = typeof _logFingerprint === 'function' ? _logFingerprint(item) : JSON.stringify(item);
+        if (existing.has(key)) return false;
+        existing.add(key);
+        return true;
+      });
+      if (!candidates.length) { showToast('所有记录均已存在，未重复导入。', 'info'); return; }
+      let msg = `导入验证完成：\n有效新记录: ${candidates.length}条\n重复跳过: ${validationReport.valid.length - candidates.length}条`;
+      if (validationReport.warnings.length > 0) msg += `\n警告: ${validationReport.warnings.join(', ')}`;
+      if (confirm(msg + '\n\n是否继续导入？')) {
+        var originalLength = logs.length;
+        logs.push(...candidates);
+        if (!saveLogs()) {
+          logs.splice(originalLength, candidates.length);
+          showToast('导入未保存，已恢复到导入前状态。', 'error');
+          return;
+        }
+        showToast(`成功导入 ${candidates.length} 条记录`, 'success');
       }
     } catch(err) { 
       showToast('解析失败: '+err.message,'error'); 

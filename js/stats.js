@@ -20,12 +20,14 @@ function updateStats() {
   var openLogs = totalLogs - allClosed.length;
 
   // --- 过滤逻辑 ---
-  let closed = applyFilters(allClosed);
+  // 先在全部日志上筛选，再派生已平仓样本；否则“未平仓/状态”筛选会被提前丢弃。
+  var filteredLogs = applyFilters(logs);
+  let closed = filteredLogs.filter(function(l) { return window.utils.isClosedTrade(l); });
   var hasAnyFilter = !!( _activeFilters.direction || _activeFilters.symbol || _activeFilters.strategy ||
                          _activeFilters.status || _activeFilters.pnl || _activeFilters.time );
 
-  // --- 汇总条：有过滤器时使用过滤后数据，否则使用全部 ---
-  var displayTotal = hasAnyFilter ? closed.length : totalLogs;
+  // --- 汇总条：有过滤器时使用完整筛选样本，否则使用全部 ---
+  var displayTotal = hasAnyFilter ? filteredLogs.length : totalLogs;
   var displayClosed = hasAnyFilter ? closed.length : allClosed.length;
   var displayOpen = hasAnyFilter ? (displayTotal - displayClosed) : openLogs;
   var displayPnl = hasAnyFilter
@@ -67,15 +69,16 @@ function updateStats() {
     filterBadge.style.display = 'none';
   }
   const { wins, losses, grossProfit, grossLoss } = computeWinLoss(closed);
-  const decidedCnt = wins.length + losses.length;  // count of trades with definitive outcome (excludes break-even)
-  const winRate = decidedCnt > 0 ? (wins.length / decidedCnt * 100) : 0;
+  // 所有已平仓交易（包含保本）均是策略执行样本；这样胜率、平均盈亏和期望值可相互核对。
+  const sampleCount = closed.length;
+  const winRate = sampleCount > 0 ? (wins.length / sampleCount * 100) : 0;
   const totalPnl = grossProfit - grossLoss;
-  const avgPnl = decidedCnt > 0 ? totalPnl / decidedCnt : 0;
+  const avgPnl = sampleCount > 0 ? totalPnl / sampleCount : 0;
   const avgWin = wins.length > 0 ? grossProfit / wins.length : 0;
   const avgLoss = losses.length > 0 ? grossLoss / losses.length : 0;
   const wlRatio = avgLoss > 0 ? (avgWin / avgLoss) : (wins.length > 0 ? Infinity : 0);
-  const lossRate = decidedCnt > 0 ? (losses.length / decidedCnt * 100) : 0;
-  const expectancy = decidedCnt > 0
+  const lossRate = sampleCount > 0 ? (losses.length / sampleCount * 100) : 0;
+  const expectancy = sampleCount > 0
     ? ((winRate / 100) * avgWin - (lossRate / 100) * avgLoss)
     : 0;
   const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : (wins.length > 0 ? Infinity : 0);
@@ -98,29 +101,10 @@ function updateStats() {
   totalPnlEl.textContent = (totalPnl >= 0 ? '+' : '') + totalPnl.toFixed(2) + ' USDT';
   totalPnlEl.style.color = totalPnl >= 0 ? 'var(--color-success)' : 'var(--color-danger)';
   totalPnlEl.className = 'stat-value ' + (totalPnl > 0 ? 'positive' : totalPnl < 0 ? 'negative' : 'neutral');
-  // 最大回撤（按平仓时间排序确保 PnL 实现时序正确，纳入初始本金）
-  var sortedClosed = [...closed].sort(function(a, b) { return new Date(a.closeTime || a.time) - new Date(b.closeTime || b.time); });
-  // 初始权益：从首笔已平仓日志的 capital 取，无则从 settings.accountBalance 兜底
-  var initialCapital = 0;
-  if (sortedClosed.length > 0 && sortedClosed[0].capital != null && !isNaN(sortedClosed[0].capital) && sortedClosed[0].capital > 0) {
-    initialCapital = sortedClosed[0].capital;
-  } else {
-    try { var _s = loadSettings(); if (_s.accountBalance > 0) initialCapital = _s.accountBalance; } catch(e) {}
-  }
-  let peak = initialCapital, maxDD = 0;
-  let runningEquity = initialCapital;
-  for (const l of sortedClosed) {
-    // M5: 仅当 capital 变化时才视为存款/取款事件，否则累加 PnL
-    var capVal = parseFloat(l.capital);
-    if (!isNaN(capVal) && capVal > 0 && capVal !== runningEquity) {
-      runningEquity = capVal;
-    } else {
-      runningEquity += (parseFloat(l.pnlAmount) || 0);
-    }
-    peak = Math.max(peak, runningEquity);
-    const dd = peak > 0 ? (peak - runningEquity) / peak * 100 : 0;
-    maxDD = Math.max(maxDD, dd);
-  }
+  // 最大回撤使用与仪表盘/分析页相同的统一权益曲线，避免 capital 开仓快照重置累计收益。
+  var ddCurve = window.utils.calcEquityCurve(closed);
+  var peak = ddCurve.peakVal;
+  var maxDD = ddCurve.maxDDPercent;
   const ddEl = document.getElementById('statMaxDD');
   if (maxDD > 0 || peak > 0) {
     ddEl.textContent = maxDD.toFixed(1) + '%';
@@ -157,7 +141,10 @@ function updateStats() {
   // ====== 新增统计：平均实际R:R ======
   let rrSum = 0, rrCount = 0;
   for (const l of closed) {
-    const rm = parseFloat(String(l.rMultiple || '').replace(/R/g, ''));
+    // 0R 是有效的保本交易结果，不能因逻辑或运算被转换为空字符串而漏计。
+    const rawRm = l.rMultiple;
+    const rm = rawRm === null || rawRm === undefined || String(rawRm).trim() === ''
+      ? NaN : parseFloat(String(rawRm).replace(/R/g, ''));
     if (!isNaN(rm)) { rrSum += rm; rrCount++; }
   }
   const avgRrEl = document.getElementById('statAvgRR');
@@ -168,7 +155,9 @@ function updateStats() {
   let biasSum = 0, biasCount = 0, biasExcluded = 0;
   for (const l of closed) {
     if (l.direction !== 'long' && l.direction !== 'short') continue;
-    const rm = parseFloat(String(l.rMultiple || '').replace(/R/g, ''));
+    const rawRm = l.rMultiple;
+    const rm = rawRm === null || rawRm === undefined || String(rawRm).trim() === ''
+      ? NaN : parseFloat(String(rawRm).replace(/R/g, ''));
     const tRR = l.targetRR;
     if (!isNaN(rm) && tRR != null && !isNaN(tRR) && tRR > 0) {
       biasSum += rm / tRR;
@@ -251,7 +240,8 @@ function updateStats() {
 function drawEquityCurve(closed) {
   const card = document.getElementById('equity-card');
   if (!card) return;
-  const curve = window.utils.calcEquityCurve(closed, null, { purePnl: true });
+  // 与核心最大回撤指标同用连续账户权益，避免“累计盈亏”曲线把净利润回撤误标为账户回撤。
+  const curve = window.utils.calcEquityCurve(closed);
   if (!curve || curve.data.length < 2) { card.style.display = 'none'; return; }
   card.style.display = 'block';
 
@@ -279,7 +269,7 @@ function drawEquityCurve(closed) {
   const peakVal = curve.peakVal;
   const maxDD = curve.maxDDPercent;
 
-  document.getElementById('equityPeak').textContent = (peakVal >= 0 ? '+' : '') + peakVal.toFixed(2) + ' USDT';
+  document.getElementById('equityPeak').textContent = peakVal.toFixed(2) + ' USDT';
   const ddEl = document.getElementById('equityDrawdown');
   ddEl.textContent = (maxDD > 0 ? '-' : '') + maxDD.toFixed(1) + '%';
   ddEl.classList.remove('dd-danger', 'dd-warn', 'dd-safe');
@@ -287,8 +277,8 @@ function drawEquityCurve(closed) {
 
   // 自适应 Y 轴
   const allVals = data.map(d => d.eq);
-  let yMin = Math.min(0, Math.min.apply(null, allVals));
-  let yMax = Math.max(0, Math.max.apply(null, allVals));
+  let yMin = Math.min.apply(null, allVals);
+  let yMax = Math.max.apply(null, allVals);
   const yPad = Math.max((yMax - yMin) * 0.1, 5);
   yMin -= yPad; yMax += yPad;
 
@@ -348,7 +338,7 @@ function drawEquityCurve(closed) {
   // 数据点
   for (let i = 0; i < data.length; i++) {
     const d = data[i];
-    const up = i > 0 ? d.eq >= data[i - 1].eq : (d.eq >= 0);
+    const up = i > 0 ? d.eq >= data[i - 1].eq : (d.pnl >= 0);
     ctx.fillStyle = up ? c.up : c.down;
     ctx.beginPath(); ctx.arc(xScale(i), yScale(d.eq), 5, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = c.ptCenter;
@@ -369,7 +359,7 @@ function drawEquityCurve(closed) {
     tooltip.innerHTML = '<b>#' + (closest + 1) + ' ' + (sc.symbol || '') + '</b><br>' +
       _getTradeDate(sc) + '<br>' +
       '盈亏: ' + (d.pnl >= 0 ? '+' : '') + d.pnl.toFixed(2) + ' USDT<br>' +
-      '累计: ' + (d.eq >= 0 ? '+' : '') + d.eq.toFixed(2) + ' USDT';
+      '累计权益: ' + d.eq.toFixed(2) + ' USDT';
     tooltip.style.display = 'block';
     const tx = xScale(closest) + 12;
     const ty = yScale(d.eq) - 10;
@@ -407,15 +397,14 @@ function renderStrategyBreakdown(closed) {
     const trades = group.trades;
     const cnt = trades.length;
     const { wins, losses, grossProfit, grossLoss } = computeWinLoss(trades);
-    const decided = wins.length + losses.length;
-    const wr = decided > 0 ? (wins.length / decided * 100) : 0;
-    const lossRate = decided > 0 ? (losses.length / decided * 100) : 0;
+    const sampleCount = trades.length;
+    const wr = sampleCount > 0 ? (wins.length / sampleCount * 100) : 0;
+    const lossRate = sampleCount > 0 ? (losses.length / sampleCount * 100) : 0;
     const tPnl = grossProfit - grossLoss;
     const avgW = wins.length > 0 ? grossProfit / wins.length : 0;
     const avgL = losses.length > 0 ? grossLoss / losses.length : 0;
-    // 统一使用平均金额比（与策略拆解口径一致）
     const wlR = avgL > 0 ? avgW / avgL : 0;
-    const exp = decided > 0 ? (wr / 100) * avgW - (lossRate / 100) * avgL : 0;
+    const exp = sampleCount > 0 ? (wr / 100) * avgW - (lossRate / 100) * avgL : 0;
     const pf = grossLoss > 0 ? grossProfit / grossLoss : (wins.length > 0 ? Infinity : 0);
     let maeSum = 0, maeCnt = 0;
     for (const l of trades) {
@@ -483,8 +472,8 @@ function renderOrderTypeDistribution(closed) {
   for (const [name, trades] of Object.entries(groups)) {
     const cnt = trades.length;
     const { wins, losses, grossProfit, grossLoss } = computeWinLoss(trades);
-    const decided = wins.length + losses.length;
-    const wr = decided > 0 ? (wins.length / decided * 100) : 0;
+    const sampleCount = trades.length;
+    const wr = sampleCount > 0 ? (wins.length / sampleCount * 100) : 0;
     const tPnl = grossProfit - grossLoss;
     const pf = grossLoss > 0 ? (grossProfit / grossLoss).toFixed(2) : (wins.length > 0 ? '∞' : '0');
     const avgW = wins.length > 0 ? grossProfit / wins.length : 0;

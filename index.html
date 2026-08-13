@@ -260,10 +260,21 @@
               <input type="number" id="feeRate" value="0.08" step="0.01" min="0" placeholder="0.08" />
               <span class="field-tip">开平仓双向费率，影响净盈亏计算</span>
             </div>
-            <div class="form-group">
-              <label><i class="fas fa-water"></i> 滑点 (ticks/点)<span class="optional-tag">（选填）</span></label>
-              <input type="number" id="slippage" value="0" step="0.1" min="0" placeholder="如 1 点" />
-              <span class="field-tip">实际成交价与预期价的偏差，影响净盈亏</span>
+            <div class="form-group" id="slippageModeGroup">
+              <label><i class="fas fa-water"></i> 滑点模型<span class="optional-tag">（选填）</span></label>
+              <select id="slippageMode">
+                <option value="default">按订单类型采用保守默认值</option>
+                <option value="manual">手动设置双侧 ticks</option>
+              </select>
+              <span class="field-tip">统一以最小价格变动单位（tick）输入；入场与退出分别计算。</span>
+            </div>
+            <div class="form-group" id="entrySlippageGroup" hidden>
+              <label>入场滑点（ticks）</label>
+              <input type="number" id="entrySlippageTicks" value="0" step="1" min="0" inputmode="decimal" placeholder="如 1" />
+            </div>
+            <div class="form-group" id="exitSlippageGroup" hidden>
+              <label>退出滑点（ticks）</label>
+              <input type="number" id="exitSlippageTicks" value="0" step="1" min="0" inputmode="decimal" placeholder="如 1" />
             </div>
             <!-- Skills 融合：凯利公式输入 -->
             <div class="form-group kelly-input-group" id="kellyInputGroup">
@@ -644,8 +655,8 @@
       <div class="stat-group-divider"></div>
       <!-- 质量指标 -->
       <div class="stat-item" title="计算公式：达成目标收益的笔数÷已平仓数×100%。参考价值：反映纪律执行而非盈利能力。偏低说明止盈目标设置不切实际。"><span class="stat-label">目标达成率</span><span class="stat-value" id="statTargetRate">—</span></div>
-      <div class="stat-item" title="计算公式：Σ(|netPnl÷riskAmount|)÷已平仓数。参考价值：实际风险回报比。>2R优秀，<1R说明止盈过早或止损过宽。"><span class="stat-label">均实际R:R</span><span class="stat-value" id="statAvgRR">—</span></div>
-      <div class="stat-item" title="计算公式：实际盈亏与入场预判相符的笔数÷已平仓数×100%。参考价值：方向判断准确度。>60%优秀，<40%需重检分析框架。"><span class="stat-label">预判偏差</span><span class="stat-value" id="statRRBias">—</span></div>
+      <div class="stat-item" title="计算公式：Σ(已实现 R 倍数)÷有 R 记录的已平仓数，包含盈利、亏损与保本交易。参考价值：衡量每笔交易实际兑现的平均风险回报。"><span class="stat-label">平均实现 R</span><span class="stat-value" id="statAvgRR">—</span></div>
+      <div class="stat-item" title="计算公式：平均值[(实际实现 R÷计划目标 R)−1]×100%，仅统计有有效目标 R 的已平仓交易。0%表示平均达到目标，负值表示未达到目标，正值表示超额完成。"><span class="stat-label">目标 R 偏差</span><span class="stat-value" id="statRRBias">—</span></div>
       <div class="stat-item" title="计算公式：所有已平仓持仓时长的平均值。参考价值：验证策略节奏。分钟级=短线，2小时以上=中长线，需与策略设计匹配。"><span class="stat-label">均持仓时长</span><span class="stat-value" id="statAvgHold">—</span></div>
       <div class="stat-group-divider"></div>
       <div class="stat-item" title="计算公式：仅亏损单的MAE平均值。参考价值：亏损单最大浮亏均值。过大说明不止损或止损过宽，需收紧风控参数。"><span class="stat-label">均 MAE（亏损单）</span><span class="stat-value" id="statAvgMAE">—</span></div>
@@ -655,14 +666,14 @@
 
     <!-- 权益曲线 -->
     <div id="equity-card" style="display:none;">
-      <div class="card-header"><i class="fas fa-chart-line"></i> 累计盈亏曲线</div>
+      <div class="card-header"><i class="fas fa-chart-line"></i> 账户权益曲线（含初始本金）</div>
       <div style="position:relative;">
         <canvas id="equityCanvas"></canvas>
         <div id="equity-tooltip"></div>
       </div>
       <div class="equity-stats">
-        <span>最高: <b id="equityPeak">—</b></span>
-        <span>回撤: <b id="equityDrawdown">—</b></span>
+        <span>权益峰值: <b id="equityPeak">—</b></span>
+        <span>最大回撤: <b id="equityDrawdown">—</b></span>
       </div>
     </div>
 
@@ -807,7 +818,7 @@
     <h2 class="view-title">统计分析</h2>
     <div class="analytics-grid">
       <div class="card chart-card">
-        <div class="card-header">资金曲线</div>
+        <div class="card-header">账户权益曲线（含初始本金）</div>
         <div class="chart-wrap"><canvas id="chartEquity"></canvas></div>
       </div>
       <div class="card chart-card">
@@ -1123,16 +1134,18 @@
 
 </main>
 
-  <script src="js/constants.js?v=2.1"></script>
-  <script src="js/utils.js?v=2.1"></script>
-  <script src="js/toast.js?v=2.1"></script>
-  <script src="js/storage.js?v=2.1"></script>
-  <script src="js/skills-integration.js?v=2.1"></script>
-  <script src="js/calculator.js?v=2.1"></script>
-  <script src="js/logs.js?v=2.1"></script>
+  <script src="js/constants.js?v=2.2"></script>
+  <script src="js/utils.js?v=2.2"></script>
+  <script src="js/toast.js?v=2.2"></script>
+  <script src="js/slippage.js?v=2.2"></script>
+  <script src="js/storage.js?v=3.0"></script>
+  <script src="js/skills-integration.js?v=3.0"></script>
+  <script src="js/calculation-ui.js?v=2.3"></script>
+  <script src="js/calculator.js?v=3.0"></script>
+  <script src="js/logs.js?v=3.0"></script>
   <script src="js/rendering.js?v=2.1"></script>
   <script src="js/stats.js?v=2.1"></script>
-  <script src="js/modals.js?v=2.1"></script>
+  <script src="js/modals.js?v=3.0"></script>
   <script src="js/navigation.js?v=2.1"></script>
   <script src="js/dashboard.js?v=2.1"></script>
   <script src="js/planner.js?v=2.1"></script>
@@ -1140,10 +1153,8 @@
   <script src="js/risk.js?v=2.1"></script>
   <script src="js/analytics.js?v=2.1"></script>
   <script src="js/review.js?v=2.1"></script>
-  <script src="js/io.js?v=2.1"></script>
+  <script src="js/io.js?v=3.0"></script>
   <script src="js/dom-cache.js?v=2.1"></script>
-  <script src="js/store.js?v=2.1"></script>
-  <script src="js/state-compat.js?v=2.1"></script>
   <script src="js/render-utils.js?v=2.1"></script>
   <script src="js/app.js?v=2.1"></script>
 <script src="js/version.js?v=2.1"></script>

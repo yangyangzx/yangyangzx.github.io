@@ -4,7 +4,7 @@
  */
 var CACHE_NAME = 'tradingdisc-v5-cache';
 // 缓存版本 - 每次更新代码时递增，强制浏览器重新缓存所有资源
-var CACHE_VERSION = 2;
+var CACHE_VERSION = 5;
 var VERSIONED_CACHE_NAME = CACHE_NAME + '-v' + CACHE_VERSION;
 var STATIC_ASSETS = [
   './',
@@ -25,6 +25,8 @@ var STATIC_ASSETS = [
   './js/constants.js',
   './js/utils.js',
   './js/toast.js',
+  './js/slippage.js',
+  './js/calculation-ui.js',
   './js/storage.js',
   './js/calculator.js',
   './js/logs.js',
@@ -40,7 +42,10 @@ var STATIC_ASSETS = [
   './js/analytics.js',
   './js/review.js',
   './js/io.js',
+  './js/dom-cache.js',
+  './js/render-utils.js',
   './js/app.js',
+  './js/version.js',
   './img/logo.png',
   './assets/icon-192.png',
   './assets/icon-512.png'
@@ -51,12 +56,16 @@ self.addEventListener('install', function(event) {
   event.waitUntil(
     caches.open(VERSIONED_CACHE_NAME).then(function(cache) {
       console.log('[SW] 缓存核心资源 (v' + CACHE_VERSION + ')');
-      return cache.addAll(STATIC_ASSETS);
-    }).catch(function(err) {
-      console.warn('[SW] 部分资源缓存失败（可能来自 CDN）:', err);
+      // 单个资源失败不能使整批核心缓存完全失效；失败资源会在首次联网请求时补充缓存。
+      return Promise.all(STATIC_ASSETS.map(function(asset) {
+        return cache.add(asset).catch(function(err) {
+          console.warn('[SW] 预缓存资源失败:', asset, err);
+          return null;
+        });
+      }));
     })
   );
-  self.skipWaiting();
+  // 不在安装时强制接管，避免旧页面与新脚本混用；由显式 SKIP_WAITING 消息控制更新时机。
 });
 
 // 激活：清理旧缓存
@@ -116,7 +125,8 @@ self.addEventListener('fetch', function(event) {
       return;
     }
     event.respondWith(
-      caches.match(event.request).then(function(cached) {
+      // index.html 请求的脚本带版本查询参数；忽略查询参数可命中预缓存的同一路径资源。
+      caches.match(event.request, { ignoreSearch: true }).then(function(cached) {
         return cached || fetch(event.request).then(function(response) {
           if (response.ok) {
             var clone = response.clone();
@@ -126,8 +136,9 @@ self.addEventListener('fetch', function(event) {
           }
           return response;
         }).catch(function() {
-          // 网络失败时返回缓存或 index.html（SPA fallback）
-          return caches.match('./index.html');
+          // SPA 回退只适用于导航文档，脚本/样式请求绝不能收到 index.html。
+          if (event.request.mode === 'navigate') return caches.match('./index.html');
+          return new Response('Offline resource unavailable', { status: 504, statusText: 'Gateway Timeout' });
         });
       })
     );

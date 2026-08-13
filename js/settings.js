@@ -292,9 +292,10 @@ function importLogs() {
                 }
               }
             }
+            // 所有导入数据先通过统一 Schema 迁移；v2 只标记历史现金滑点，绝不伪造 ticks。
+            if (typeof migrateLogsToCurrentSchema === 'function') migrateLogsToCurrentSchema(data, 0);
+            else if (typeof _migrateTimes === 'function') _migrateTimes(data);
             logs = data;
-            // 迁移时间格式为 ISO（与 logs.js 的 importJSON 保持一致）
-            if (typeof _migrateTimes === 'function') _migrateTimes(logs);
             saveLogs();
             showToast('已导入 ' + data.length + ' 条日志', 'success');
             renderLogs();
@@ -353,6 +354,8 @@ function parseCSVImport(csvText) {
     imported.push(obj);
   }
 
+  if (typeof migrateLogsToCurrentSchema === 'function') migrateLogsToCurrentSchema(imported, 0);
+  else if (typeof _migrateTimes === 'function') _migrateTimes(imported);
   logs = imported;
   saveLogs();
   showToast('已导入 ' + imported.length + ' 条日志', 'success');

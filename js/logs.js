@@ -1,5 +1,62 @@
 // ==================== 平仓盈亏计算 ====================
 const _closePriceEdited = {};
+
+function getPlanningSlippage(item) {
+  return item && item.slippage && item.slippage.planning ? item.slippage.planning : null;
+}
+
+function isTickSlippageRecord(item) {
+  var s = getPlanningSlippage(item);
+  return !!(s && s.schema === 'ticks-v1');
+}
+
+function getLegacySlippageCost(item, overrideValue) {
+  // 新模型的滑点已经通过 effectiveEntryPrice/实际平仓价计入 PnL，不能二次扣减。
+  if (isTickSlippageRecord(item)) return 0;
+  if (overrideValue !== undefined && overrideValue !== null && overrideValue !== '') {
+    return parseFloat(overrideValue) || 0;
+  }
+  return parseFloat(item && item.slippageCost) || 0;
+}
+
+function getEntryFillForPnL(item) {
+  var s = getPlanningSlippage(item);
+  if (s && Number.isFinite(Number(s.effectiveEntryPrice))) return Number(s.effectiveEntryPrice);
+  return Number(item.effectiveEntryPrice != null ? item.effectiveEntryPrice : item.entryPrice);
+}
+
+// 平仓预览与确认保存共享唯一结算口径，避免界面显示和落库数据分叉。
+function calculateCloseSettlement(item, closePrice, feeOverride, legacySlippageOverride) {
+  var entryPrice = getEntryFillForPnL(item);
+  var positionSize = Number(item && item.positionSize);
+  var exitPrice = Number(closePrice);
+  if (!item || !Number.isFinite(entryPrice) || entryPrice <= 0 || !Number.isFinite(positionSize) || positionSize <= 0 || !Number.isFinite(exitPrice) || exitPrice <= 0) return null;
+  if (item.direction !== 'long' && item.direction !== 'short') return null;
+  var grossPnl = item.direction === 'long'
+    ? (exitPrice - entryPrice) * positionSize / entryPrice
+    : (entryPrice - exitPrice) * positionSize / entryPrice;
+  var fee = feeOverride !== undefined && feeOverride !== null && feeOverride !== ''
+    ? Number(feeOverride)
+    : Number(item.fee) || 0;
+  if (!Number.isFinite(fee) || fee < 0) return null;
+  var legacySlippageCost = getLegacySlippageCost(item, legacySlippageOverride);
+  var netPnl = grossPnl - fee - legacySlippageCost;
+  var leverage = Number(item.leverage);
+  if (!Number.isFinite(leverage) || leverage <= 0) leverage = 1;
+  var margin = positionSize / leverage;
+  var riskAmount = Number(item.riskAmount);
+  return {
+    entryPrice: entryPrice,
+    closePrice: exitPrice,
+    grossPnl: grossPnl,
+    fee: fee,
+    legacySlippageCost: legacySlippageCost,
+    netPnl: netPnl,
+    pnlPercent: margin > 0 ? (netPnl / margin * 100) : 0,
+    rMultiple: Number.isFinite(riskAmount) && riskAmount > 0 ? netPnl / riskAmount : null
+  };
+}
+
 function calcClosePnL(idx) {
   const item = logs[idx];
   if (!item) return;
@@ -31,9 +88,7 @@ function calcClosePnL(idx) {
     if (rMultipleEl) rMultipleEl.value = '';
     return;
   }
-  const entryPrice = (item.effectiveEntryPrice != null && !isNaN(parseFloat(item.effectiveEntryPrice)))
-    ? parseFloat(item.effectiveEntryPrice)
-    : parseFloat(item.entryPrice);
+  const entryPrice = getEntryFillForPnL(item);
   const positionSize = parseFloat(item.positionSize);
   if (isNaN(entryPrice) || entryPrice <= 0 || isNaN(positionSize) || positionSize <= 0) return;
   if (item.direction !== 'long' && item.direction !== 'short') {
@@ -42,32 +97,20 @@ function calcClosePnL(idx) {
     if (rMultipleEl) rMultipleEl.value = '';
     return;
   }
-  let grossPnl;
-  if (item.direction === 'long') {
-    grossPnl = (closePrice - entryPrice) * positionSize / entryPrice;
-  } else {
-    grossPnl = (entryPrice - closePrice) * positionSize / entryPrice;
-  }
-  // Deduct fee and slippage —优先从 close panel 的输入框读取（用户可能临时修改）
   const feeEl = document.getElementById('cpFee_' + idx);
   const slipEl = document.getElementById('cpSlippage_' + idx);
-  const fee = feeEl && feeEl.value !== '' ? parseFloat(feeEl.value) : (parseFloat(item.fee) || 0);
-  const slippageCost = slipEl && slipEl.value !== '' ? parseFloat(slipEl.value) : (parseFloat(item.slippageCost) || 0);
-  const netPnl = grossPnl - fee - slippageCost;
-  const margin = positionSize / ((parseFloat(item.leverage) || 1));
-  const netPnlPercent = margin > 0 ? (netPnl / margin * 100) : 0;
-  if (pnlAmtEl) pnlAmtEl.value = netPnl.toFixed(2);
-  if (pnlPctEl) pnlPctEl.value = netPnlPercent.toFixed(2) + '%';
-  // Toggle loss reason visibility
-  const lrRow = document.getElementById('cpLossReasonRow_' + idx);
-  if (lrRow) lrRow.style.display = (netPnl < 0 || (closeType && (closeType.value === 'manualLoss' || closeType.value === 'liquidation'))) ? 'block' : 'none';
-  // R-multiple based on net PnL
-  const riskAmount = parseFloat(item.riskAmount);
-  if (rMultipleEl && !isNaN(riskAmount) && riskAmount > 0) {
-    rMultipleEl.value = (netPnl / riskAmount).toFixed(2);
-  } else if (rMultipleEl) {
-    rMultipleEl.value = '';
+  const settlement = calculateCloseSettlement(item, closePrice, feeEl ? feeEl.value : undefined, slipEl ? slipEl.value : undefined);
+  if (!settlement) {
+    if (pnlAmtEl) pnlAmtEl.value = '';
+    if (pnlPctEl) pnlPctEl.value = '';
+    if (rMultipleEl) rMultipleEl.value = '';
+    return;
   }
+  if (pnlAmtEl) pnlAmtEl.value = settlement.netPnl.toFixed(2);
+  if (pnlPctEl) pnlPctEl.value = settlement.pnlPercent.toFixed(2) + '%';
+  const lrRow = document.getElementById('cpLossReasonRow_' + idx);
+  if (lrRow) lrRow.style.display = (settlement.netPnl < 0 || (closeType && (closeType.value === 'manualLoss' || closeType.value === 'liquidation'))) ? 'block' : 'none';
+  if (rMultipleEl) rMultipleEl.value = settlement.rMultiple == null ? '' : settlement.rMultiple.toFixed(2);
 }
 
 // ==================== MAE/MFE 统一计算 ====================
@@ -103,11 +146,11 @@ function confirmClose(idx) {
   if (!closeType || !closeType.value) { showToast('请选择平仓类型','warn'); return; }
   const closePrice = parseFloat(closePriceEl ? closePriceEl.value : '');
   if (isNaN(closePrice) || closePrice <= 0) { showToast('请输入有效的平仓价格','warn'); return; }
-  // 先校验 PnL（避免 closeTime/holdDuration 写入后因 PnL 校验失败而跳过 saveLogs）
-  const fee = parseFloat(logs[idx].fee) || 0;
-  const slippageCost = parseFloat(logs[idx].slippageCost) || 0;
-  const netPnlVal = parseFloat(pnlAmtEl ? pnlAmtEl.value : 0);
-  if (isNaN(netPnlVal)) { showToast('盈亏计算失败，请检查入场价等数据是否有效','error'); return; }
+  const feeEl = document.getElementById('cpFee_' + idx);
+  const slipEl = document.getElementById('cpSlippage_' + idx);
+  const settlement = calculateCloseSettlement(logs[idx], closePrice, feeEl ? feeEl.value : undefined, slipEl ? slipEl.value : undefined);
+  if (!settlement) { showToast('盈亏计算失败，请检查入场价、仓位、费用和滑点输入是否有效','error'); return; }
+  const netPnlVal = settlement.netPnl;
   // 亏损单必须选择亏损原因
   const isLoss = netPnlVal < 0 || (closeType && (closeType.value === 'manualLoss' || closeType.value === 'liquidation'));
   if (isLoss) {
@@ -119,6 +162,8 @@ function confirmClose(idx) {
       return;
     }
   }
+  // 主存储写入失败时必须回滚本次内存变更，避免界面状态和持久化状态分叉。
+  const beforeClose = JSON.parse(JSON.stringify(logs[idx]));
   // 写入时间信息（仅新平仓时设置 closeTime，修改已平仓保留原始时间）
   const isNewClose = !logs[idx].closeType;
   logs[idx].closeType = closeType.value;
@@ -127,12 +172,12 @@ function confirmClose(idx) {
     logs[idx].closeTime = new Date().toISOString();
     logs[idx].holdDuration = Math.round((new Date(logs[idx].closeTime) - new Date(logs[idx].time)) / 60000);
   }
-  // 反推 grossPnl = netPnl + fee + slippageCost
-  const grossPnlVal = netPnlVal + fee + slippageCost;
-  logs[idx].grossPnlAmount = parseFloat(grossPnlVal.toFixed(2));
-  logs[idx].pnlAmount = parseFloat(netPnlVal.toFixed(2));
-  logs[idx].pnlPercent = pnlPctEl ? parseFloat(pnlPctEl.value) : null;
-  logs[idx].rMultiple = rMultipleEl ? parseFloat(rMultipleEl.value) : null;
+  logs[idx].grossPnlAmount = parseFloat(settlement.grossPnl.toFixed(2));
+  logs[idx].pnlAmount = parseFloat(settlement.netPnl.toFixed(2));
+  logs[idx].pnlPercent = parseFloat(settlement.pnlPercent.toFixed(2));
+  logs[idx].rMultiple = settlement.rMultiple == null ? null : parseFloat(settlement.rMultiple.toFixed(2));
+  logs[idx].actualCloseFee = parseFloat(settlement.fee.toFixed(8));
+  logs[idx].actualExitLegacySlippageCost = parseFloat(settlement.legacySlippageCost.toFixed(8));
   logs[idx].closeNote = closeNoteEl ? closeNoteEl.value.trim() : '';
   // Execution score
   const execChecks = document.getElementById('cpExecChecks_' + idx);
@@ -160,8 +205,14 @@ function confirmClose(idx) {
   // M3: exitReason（出场理由，文本输入可选）
   var exitReasonEl = document.getElementById('cpExitReason_' + idx);
   logs[idx].exitReason = exitReasonEl ? exitReasonEl.value.trim() : (logs[idx].exitReason || '');
+  if (!saveLogs()) {
+    logs[idx] = beforeClose;
+    if (typeof renderLogs === 'function') renderLogs();
+    showToast('平仓记录未保存，已恢复到保存前状态。', 'error');
+    return false;
+  }
   openClosePanelIdx = -1;
-  saveLogs();
+  return true;
 }
 
 // ==================== 批量操作 ====================

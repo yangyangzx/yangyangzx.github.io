@@ -1,5 +1,5 @@
 const STORAGE_KEY = 'trade_logs_plus_v4';
-const SCHEMA_VERSION = 1;       // L2: 统一数据迁移版本号
+const SCHEMA_VERSION = 2;       // v2: 双侧 tick 滑点快照迁移
 var logs = [];
 // ── 全局状态变量 ──
 var openClosePanelIdx = -1;         // 当前打开的平仓面板索引（-1 表示无）
@@ -149,19 +149,9 @@ function getTickSize(symbol) {
   return 0.1;
 }
 
-// ======== 计算配置常量（从硬编码中提取） ========
-
-/**
- * 滑点率配置（不同订单类型的预估滑点）
- * - MARKET: 市价单千分之一
- * - STOP: 止损单千分之二（突破时滑点更大）
- * - LIMIT: 限价单无滑点
- */
-const SLIPPAGE_RATE = {
-  market: 0.001,
-  stop: 0.002,
-  limit: 0
-};
+// ======== 计算配置常量 ========
+// 滑点假设已统一由 Slippage 模块按 tickSize 与双侧 ticks 计算。
+// 禁止在其他模块以百分比或“点”重新解释滑点。
 
 /**
  * 默认维持保证金率（USDT-M 期货强平阈值）

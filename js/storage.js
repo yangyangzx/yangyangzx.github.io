@@ -18,32 +18,22 @@ const StorageSecurity = {
    * @param {number} additionalBytes 预计要添加的字节数
    * @returns {Object} {canWrite: boolean, available: number, recommendation: string}
    */
-  checkCapacity(additionalBytes = 0) {
+  checkCapacity(projectedBytes) {
     try {
-      const currentUsage = JSON.stringify(logs).length;
-      const available = STORAGE_CONFIG.maxSizeBytes - currentUsage - additionalBytes;
-      
+      // 本应用的安全上限针对“替换后”的完整日志 JSON，而不是旧数据加新数据。
+      // localStorage.setItem 会替换同一键，因此不能把同一份数据重复计算两次。
+      const nextSize = Number(projectedBytes);
+      if (!Number.isFinite(nextSize) || nextSize < 0) {
+        return { canWrite: false, available: 0, recommendation: '无法计算日志数据大小' };
+      }
+      const available = STORAGE_CONFIG.maxSizeBytes - nextSize;
       if (available < 0) {
-        return {
-          canWrite: false,
-          available: available,
-          recommendation: '存储空间不足，需要清理历史数据'
-        };
+        return { canWrite: false, available: available, recommendation: '日志数据超过本应用的安全存储上限，请先完整导出并归档历史记录' };
       }
-      
-      if (currentUsage > STORAGE_CONFIG.warningThreshold) {
-        return {
-          canWrite: true,
-          available: available,
-          recommendation: '存储使用率较高，建议备份重要数据'
-        };
+      if (nextSize > STORAGE_CONFIG.warningThreshold) {
+        return { canWrite: true, available: available, recommendation: '存储使用率较高，建议备份重要数据' };
       }
-      
-      return {
-        canWrite: true,
-        available: available,
-        recommendation: '存储容量正常'
-      };
+      return { canWrite: true, available: available, recommendation: '存储容量正常' };
     } catch (error) {
       console.error('StorageSecurity.checkCapacity失败:', error);
       return { canWrite: false, available: 0, recommendation: '无法检查存储容量' };
@@ -128,154 +118,154 @@ function _migrateTimes(logArr) {
   return changed;
 }
 
+function migrateLogsToCurrentSchema(rows, fromVersion) {
+  var changed = false;
+  if (fromVersion < 1) changed = _migrateTimes(rows) || changed;
+  if (fromVersion < 2 && window.Slippage && typeof window.Slippage.migrateLegacyLog === 'function') {
+    for (var i = 0; i < rows.length; i++) {
+      changed = window.Slippage.migrateLegacyLog(rows[i]) || changed;
+    }
+  }
+  return changed;
+}
+
+function _logFingerprint(item) {
+  return [item && item.id, item && item.groupId, item && item.time, item && item.symbol,
+    item && item.direction, item && item.entryPrice, item && item.positionSize].join('|');
+}
+
+function _safeRenderAfterStorageChange() {
+  if (typeof renderLogs === 'function') renderLogs();
+  if (typeof updateLastUpdate === 'function') updateLastUpdate();
+  if (typeof populateFilterOptions === 'function') populateFilterOptions();
+}
+
 function loadLogs() {
-  try { const r = localStorage.getItem(STORAGE_KEY); logs = r ? JSON.parse(r) : []; }
-  catch(e) { logs = []; console.error('日志数据读取失败，已重置为空，建议检查备份:', e); if (typeof showToast === 'function') showToast('日志数据损坏，已重置。请从备份恢复', 'error'); }
-  // v3 → v4 自动迁移（仅执行一次，基于标记而非 v4 是否为空）
+  var raw = null;
+  try {
+    raw = localStorage.getItem(STORAGE_KEY);
+    logs = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(logs)) throw new Error('日志根节点不是数组');
+  } catch (e) {
+    // 保留原始 localStorage 值，绝不以空数组覆盖损坏数据。
+    logs = [];
+    console.error('日志数据读取失败，原始数据已保留等待恢复:', e);
+    if (typeof showToast === 'function') showToast('日志数据无法读取，原始数据未被覆盖。请从备份恢复后再编辑。', 'error');
+    return false;
+  }
+
+  // v3 → v4：使用完整业务指纹去重，避免同时间同品种的不同拆分交易被误丢弃。
   if (!localStorage.getItem('trade_migrated_v3_to_v4')) {
     try {
-      const r = localStorage.getItem('trade_logs_plus_v3');
-      const v3logs = r ? JSON.parse(r) : [];
-      if (v3logs.length > 0) {
-        const existingIds = new Set(logs.map(l => l.time + '_' + l.symbol));
-        const newLogs = v3logs.filter(l => !existingIds.has(l.time + '_' + l.symbol));
-        if (newLogs.length > 0) {
-          logs = logs.concat(newLogs);
-          try { localStorage.setItem(STORAGE_KEY, JSON.stringify(logs)); } catch {}
-        }
-      }
-    } catch {}
-    try { localStorage.setItem('trade_migrated_v3_to_v4', '1'); } catch {}
-  }
-  // ── 时间格式迁移（版本化；importJSON 也会调用 _migrateTimes 防绕过） ──
-  // L2: 统一 schemaVersion 迁移管理
-  var schemaVer = parseInt(localStorage.getItem('trade_schema_version')) || 0;
-  if (schemaVer < SCHEMA_VERSION) {
-    if (_migrateTimes(logs)) {
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(logs)); } catch {}
+      var legacyRaw = localStorage.getItem('trade_logs_plus_v3');
+      var v3logs = legacyRaw ? JSON.parse(legacyRaw) : [];
+      if (!Array.isArray(v3logs)) throw new Error('旧版日志不是数组');
+      var existing = new Set(logs.map(_logFingerprint));
+      var additions = v3logs.filter(function(item) {
+        var key = _logFingerprint(item);
+        if (existing.has(key)) return false;
+        existing.add(key);
+        return true;
+      });
+      if (additions.length) logs = logs.concat(additions);
+      if (additions.length && !saveLogs(true)) throw new Error('旧版日志迁移写入失败');
+      localStorage.setItem('trade_migrated_v3_to_v4', '1');
+    } catch (e) {
+      console.error('v3 日志迁移未完成，将在下次加载时重试:', e);
+      if (typeof showToast === 'function') showToast('旧版日志迁移未完成，原始数据已保留，将在下次加载时重试。', 'warn');
     }
-    try { localStorage.setItem('trade_schema_version', String(SCHEMA_VERSION)); } catch {}
-    try { localStorage.removeItem('trade_time_migration_ver'); } catch {}
-    try { localStorage.removeItem('trade_time_iso_migrated'); } catch {}
   }
 
-  // M2: 多标签页存储变更监听
-  window.addEventListener('storage', function(e) {
-    if (e.key === STORAGE_KEY && e.newValue !== e.oldValue) {
+  // Schema 版本仅在数据与版本标记均成功写入后提交；失败时保留旧标记以支持下次重试。
+  var schemaVer = parseInt(localStorage.getItem('trade_schema_version'), 10) || 0;
+  if (schemaVer < SCHEMA_VERSION) {
+    try {
+      var changed = migrateLogsToCurrentSchema(logs, schemaVer);
+      if (changed && !saveLogs(true)) throw new Error('Schema 迁移数据写入失败');
+      localStorage.setItem('trade_schema_version', String(SCHEMA_VERSION));
+      localStorage.removeItem('trade_time_migration_ver');
+      localStorage.removeItem('trade_time_iso_migrated');
+    } catch (e) {
+      console.error('日志 Schema 迁移未完成，将在下次加载时重试:', e);
+      if (typeof showToast === 'function') showToast('日志升级未完成，原始数据已保留，将在下次加载时重试。', 'error');
+    }
+  }
+
+  if (!window.__tradeStorageListenerBound) {
+    window.__tradeStorageListenerBound = true;
+    window.addEventListener('storage', function(e) {
+      if (e.key !== STORAGE_KEY || e.newValue === e.oldValue || !e.newValue) return;
       try {
         var remoteLogs = JSON.parse(e.newValue);
-        // 长度不同或内容不同都触发同步提示
-        var needsSync = remoteLogs.length !== logs.length;
-        if (!needsSync && remoteLogs.length > 0) {
-          // 比较最后一个日志的时间戳判断是否更新
-          var localLast = logs[logs.length - 1] ? (logs[logs.length - 1].time || '') : '';
-          var remoteLast = remoteLogs[remoteLogs.length - 1] ? (remoteLogs[remoteLogs.length - 1].time || '') : '';
-          needsSync = localLast !== remoteLast;
+        if (!Array.isArray(remoteLogs)) return;
+        var needsSync = JSON.stringify(remoteLogs) !== JSON.stringify(logs);
+        if (needsSync && confirm('检测到另一标签页修改了日志数据。\n\n点击「确定」刷新为最新数据，点击「取消」保留当前数据。')) {
+          logs = remoteLogs;
+          _safeRenderAfterStorageChange();
+          if (typeof showToast === 'function') showToast('已同步为最新数据', 'info');
         }
-        if (needsSync) {
-          if (confirm('检测到另一标签页修改了日志数据（本地 ' + logs.length + ' 条 vs 远程 ' + remoteLogs.length + ' 条）。\n\n点击「确定」刷新为最新数据，点击「取消」保留当前数据（继续操作将被覆盖）。')) {
-            logs = remoteLogs;
-            renderLogs();
-            updateLastUpdate();
-            populateFilterOptions();
-            showToast('已同步为最新数据', 'info');
-          }
-        }
-      } catch {}
-    }
-  });
+      } catch (e2) { console.error('多标签页日志同步失败:', e2); }
+    });
+  }
+  return true;
 }
-// skipBackup: 设为 true 时跳过自动备份轮转（用于高频 auto-save，避免快速耗尽备份槽位）
+// 返回值契约：仅当主日志写入并读回校验成功时返回 true；任何失败均返回 false。
+// skipBackup: true 时跳过备份轮转（用于迁移和高频自动保存）。
 function saveLogs(skipBackup) {
-  const jsonStr = JSON.stringify(logs);
-  const sizeBytes = jsonStr.length;
-  
-  // ===== 使用StorageSecurity进行专业的容量检查和备份 =====
-  const capacityCheck = StorageSecurity.checkCapacity(sizeBytes);
-  
+  var jsonStr;
+  try { jsonStr = JSON.stringify(logs); }
+  catch (e) {
+    if (typeof showToast === 'function') showToast('日志序列化失败: ' + e.message, 'error');
+    return false;
+  }
+  var sizeBytes = jsonStr.length;
+  var capacityCheck = StorageSecurity.checkCapacity(sizeBytes);
   if (!capacityCheck.canWrite) {
-    showToast('存储空间不足: ' + capacityCheck.recommendation, 'error');
-    // 尝试创建紧急备份
-    if (StorageSecurity.createEmergencyBackup()) {
-      showToast('已创建紧急备份，请及时下载保存', 'warn');
-    }
-    return false;
-  }
-  
-  if (capacityCheck.recommendation.includes('较高')) {
-    showToast('存储使用率较高: ' + capacityCheck.recommendation, 'warn');
-    // 自动创建备份以防万一
+    if (typeof showToast === 'function') showToast('存储空间不足: ' + capacityCheck.recommendation, 'error');
     StorageSecurity.createEmergencyBackup();
-  }
-  
-  // 大容量数据时提醒用户备份
-  if (sizeBytes > STORAGE_CONFIG.warningThreshold) {
-    console.warn('大额数据存储:', Math.round(sizeBytes/1024/1024*10)/10 + 'MB');
-    if (confirm('当前数据量较大(' + Math.round(sizeBytes/1024/1024*10)/10 + 'MB)，建议先备份再继续操作。是否立即下载备份？')) {
-      StorageSecurity.downloadBackup();
-    }
-  }
-  
-  // 预检查可用空间（尝试写入测试数据）
-  if (!preCheckStorageCapacity(sizeBytes)) {
-    showToast('存储空间检查失败，可能磁盘已满，请清理浏览器数据', 'error');
     return false;
   }
-  
+  if (!preCheckStorageCapacity(sizeBytes)) {
+    if (typeof showToast === 'function') showToast('存储空间检查失败，未写入任何日志数据。请先导出并清理浏览器数据。', 'error');
+    return false;
+  }
+
   try {
     localStorage.setItem(STORAGE_KEY, jsonStr);
-    
-    // 验证写入是否真的成功
-    const verification = localStorage.getItem(STORAGE_KEY);
-    if (!verification || verification.length !== jsonStr.length) {
-      throw new Error('写入验证失败：数据长度不匹配');
-    }
-    
-  } catch(e) {
-    if (e.name === 'QuotaExceededError' || e.code === 22) {
-      // L1: 满写时截断保留最近 80% 数据，再触发完整备份下载
-      var keepCount = Math.max(1, Math.floor(logs.length * 0.8));
-      var truncated = logs.slice(logs.length - keepCount);
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(truncated));
-        logs = truncated;
-        showToast('存储空间已满，已自动保留最近 ' + keepCount + ' 条日志。完整数据已触发备份下载。', 'warn');
-        // 先导出完整备份（在截断之前保存副本）
-        var _backupData = JSON.stringify(truncated);
-        setTimeout(function() {
-          var b = new Blob([_backupData],{type:'application/json'});
-          var a = document.createElement('a');
-          a.href = URL.createObjectURL(b);
-          a.download = 'trade_backup_' + new Date().toISOString().slice(0,10) + '_auto.json';
-          a.click();
-        }, 500);
-        renderLogs();
-        updateLastUpdate();
-        populateFilterOptions();
-        return; // 已截断保存，跳过后续备份逻辑
-      } catch(e2) {
-        showToast('存储空间已满，自动截断也失败，请手动清理后导出备份', 'error');
-      }
-    } else {
-      showToast('存储失败: ' + e.message,'error');
-    }
+    var verification = localStorage.getItem(STORAGE_KEY);
+    if (verification !== jsonStr) throw new Error('写入验证失败：内容不一致');
+  } catch (e) {
+    // 不自动截断或改写内存日志；所有数据必须保持可恢复。
+    StorageSecurity.createEmergencyBackup();
+    console.error('日志保存失败，未修改内存日志:', e);
+    if (typeof showToast === 'function') showToast('存储失败，当前日志未被截断。已尝试创建紧急备份，请先导出并清理存储空间。', 'error');
+    return false;
   }
-  renderLogs();
-  updateLastUpdate();
-  // skipBackup 为 true 时跳过自动备份轮转（高频 auto-save 场景）
-  if (skipBackup) return;
-  // 从设置中读取 autoBackup 开关和 backupCount（直接读 localStorage，避免循环依赖）
-  var _autoSettings = null;
-  try { var _raw = localStorage.getItem('trade_settings_v1'); if (_raw) _autoSettings = JSON.parse(_raw); } catch(e) {}
-  var _autoBackupEnabled = _autoSettings ? (_autoSettings.autoBackup !== false) : true;
-  var _backupCount = _autoSettings ? (_autoSettings.backupCount || 10) : 10;
 
-  if (_autoBackupEnabled) {
-    _autoBackupIndex = (_autoBackupIndex + 1) % _backupCount;
-    localStorage.setItem('trade_auto_backup_index', _autoBackupIndex);
-    localStorage.setItem('trade_auto_backup_' + _autoBackupIndex, JSON.stringify({time: new Date().toLocaleString('zh-CN',{hour12:false}), data: logs}));
-    updateBackupTime();
+  _safeRenderAfterStorageChange();
+  if (capacityCheck.recommendation.indexOf('较高') >= 0) {
+    StorageSecurity.createEmergencyBackup();
+    if (typeof showToast === 'function') showToast('存储使用率较高，已创建紧急备份。', 'warn');
   }
+  if (skipBackup) return true;
+
+  try {
+    var autoSettings = null;
+    var rawSettings = localStorage.getItem('trade_settings_v1');
+    if (rawSettings) autoSettings = JSON.parse(rawSettings);
+    var autoBackupEnabled = autoSettings ? autoSettings.autoBackup !== false : true;
+    var backupCount = autoSettings ? (autoSettings.backupCount || 10) : 10;
+    if (autoBackupEnabled) {
+      _autoBackupIndex = (_autoBackupIndex + 1) % backupCount;
+      localStorage.setItem('trade_auto_backup_index', String(_autoBackupIndex));
+      localStorage.setItem('trade_auto_backup_' + _autoBackupIndex, JSON.stringify({ time: new Date().toISOString(), data: logs }));
+      if (typeof updateBackupTime === 'function') updateBackupTime();
+    }
+  } catch (backupError) {
+    // 主日志已经确认写入，备份轮转失败不应把主事务标记为失败。
+    console.warn('自动备份轮转失败:', backupError);
+  }
+  return true;
 }
 function updateLastUpdate() {
   const el = document.getElementById('lastUpdate');

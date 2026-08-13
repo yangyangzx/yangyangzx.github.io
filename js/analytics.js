@@ -288,8 +288,8 @@ function groupByStrategy(closed) {
       var mfe = safeParseNum(tr.mfe);
       if (mfe != null) { totalMFE += mfe; mfeCount++; }
     }
-    var decidedCnt = wins + losses;
-    var winRate = decidedCnt > 0 ? (wins / decidedCnt * 100) : 0;
+    var sampleCount = trades.length;
+    var winRate = sampleCount > 0 ? (wins / sampleCount * 100) : 0;
 
     rows.push({
       name: group.framework + ' - ' + group.patternName,
@@ -300,7 +300,7 @@ function groupByStrategy(closed) {
       losses: losses,
       winRate: winRate,
       totalPnl: totalPnl,
-      avgPnl: decidedCnt > 0 ? totalPnl / decidedCnt : 0,
+      avgPnl: sampleCount > 0 ? totalPnl / sampleCount : 0,
       avgRR: rrCount > 0 ? totalRR / rrCount : null,
       avgMAE: maeCount > 0 ? totalMAE / maeCount : null,
       avgMFE: mfeCount > 0 ? totalMFE / mfeCount : null
@@ -483,8 +483,8 @@ function groupByPattern(closed) {
       var mfe = safeParseNum(tr.mfe);
       if (mfe != null) { totalMFE += mfe; mfeCount++; }
     }
-    var decidedCnt = wins + losses;
-    var winRate = decidedCnt > 0 ? (wins / decidedCnt * 100) : 0;
+    var sampleCount = trades.length;
+    var winRate = sampleCount > 0 ? (wins / sampleCount * 100) : 0;
 
     rows.push({
       name: k,
@@ -493,7 +493,7 @@ function groupByPattern(closed) {
       losses: losses,
       winRate: winRate,
       totalPnl: totalPnl,
-      avgPnl: decidedCnt > 0 ? totalPnl / decidedCnt : 0,
+      avgPnl: sampleCount > 0 ? totalPnl / sampleCount : 0,
       avgRR: rrCount > 0 ? totalRR / rrCount : null,
       avgMAE: maeCount > 0 ? totalMAE / maeCount : null,
       avgMFE: mfeCount > 0 ? totalMFE / mfeCount : null
@@ -519,15 +519,15 @@ function groupByPattern(closed) {
       var ofv = safeParseNum(or.mfe);
       if (ofv != null) { oMFE += ofv; oMFEc++; }
     }
-    var oDecidedCnt = oWins + oLosses;
-    var oWinRate = oDecidedCnt > 0 ? (oWins / oDecidedCnt * 100) : 0;
+    var otherSampleCount = othersList.length;
+    var oWinRate = otherSampleCount > 0 ? (oWins / otherSampleCount * 100) : 0;
     rows.push({
       name: '其他 (单笔形态)',
       count: othersList.length,
       wins: oWins,
       winRate: oWinRate,
       totalPnl: oPnl,
-      avgPnl: oDecidedCnt > 0 ? oPnl / oDecidedCnt : 0,
+      avgPnl: otherSampleCount > 0 ? oPnl / otherSampleCount : 0,
       avgRR: oRRc > 0 ? oRR / oRRc : null,
       avgMAE: oMAEc > 0 ? oMAE / oMAEc : null,
       avgMFE: oMFEc > 0 ? oMFE / oMFEc : null
@@ -966,9 +966,9 @@ function computeGroupStats(trades) {
     else if (pnl < 0) losses++;
     if (pnl != null) totalPnl += pnl;
   }
-  var decided = wins + losses;
-  var wr = decided > 0 ? (wins / decided * 100) : 0;
-  return { count: trades.length, wins, losses, totalPnl, avgPnl: decided > 0 ? totalPnl / decided : 0, winRate: wr };
+  var sampleCount = trades.length;
+  var wr = sampleCount > 0 ? (wins / sampleCount * 100) : 0;
+  return { count: trades.length, wins, losses, totalPnl, avgPnl: sampleCount > 0 ? totalPnl / sampleCount : 0, winRate: wr };
 }
 
 function renderCloseTypeChart(closed) {
@@ -1272,8 +1272,8 @@ function renderDayOfWeekChart(closed) {
   for (var di = 0; di < 7; di++) {
     labels.push(dayLabels[di]);
     data.push(parseFloat(groups[di].pnl.toFixed(2)));
-    var decided = groups[di].wins + groups[di].losses;
-    var wr = decided > 0 ? (groups[di].wins / decided * 100) : 0;
+    var groupCount = groups[di].count;
+    var wr = groupCount > 0 ? (groups[di].wins / groupCount * 100) : 0;
     if (wr >= 60) bgColors.push(cc.barWin);
     else if (wr >= 40) bgColors.push(cc.barWarn);
     else bgColors.push(cc.barLoss);
@@ -1312,7 +1312,7 @@ function renderDayOfWeekChart(closed) {
             label: function(ctx) {
               var di = ctx.dataIndex;
               var g = groups[di];
-              var wr = (g.wins + g.losses) > 0 ? (g.wins / (g.wins + g.losses) * 100).toFixed(1) : '—';
+              var wr = g.count > 0 ? (g.wins / g.count * 100).toFixed(1) : '—';
               return '盈亏 ' + ctx.parsed.y.toFixed(2) + ' U · ' + g.count + ' 笔 · 胜率 ' + wr + '%';
             }
           }
@@ -1385,8 +1385,8 @@ function renderHoldDurationChart(closed) {
   for (var b = 0; b < buckets.length; b++) {
     labels.push(buckets[b].label);
     data.push(counts[b]);
-    var decided = pnlByBucket[b].wins + pnlByBucket[b].losses;
-    var wr = decided > 0 ? (pnlByBucket[b].wins / decided * 100) : 0;
+    var bucketCount = pnlByBucket[b].count;
+    var wr = bucketCount > 0 ? (pnlByBucket[b].wins / bucketCount * 100) : 0;
     if (wr >= 60) bgColors.push(cc.barWin);
     else if (wr >= 40) bgColors.push(cc.barWarn);
     else bgColors.push(cc.barLoss);
@@ -1426,7 +1426,7 @@ function renderHoldDurationChart(closed) {
               var b = ctx.dataIndex;
               var total = counts.reduce(function(a, c) { return a + c; }, 0);
               var pct = total > 0 ? (counts[b] / total * 100).toFixed(1) : '0';
-              var wr = (pnlByBucket[b].wins + pnlByBucket[b].losses) > 0 ? (pnlByBucket[b].wins / (pnlByBucket[b].wins + pnlByBucket[b].losses) * 100).toFixed(1) : '—';
+              var wr = pnlByBucket[b].count > 0 ? (pnlByBucket[b].wins / pnlByBucket[b].count * 100).toFixed(1) : '—';
               return '笔数 ' + counts[b] + ' (' + pct + '%) · 胜率 ' + wr + '%';
             }
           }
@@ -1478,8 +1478,8 @@ function renderMonthlyPnlChart(closed) {
     var k = keys[j];
     labels.push(k);
     data.push(parseFloat(monthly[k].pnl.toFixed(2)));
-    var decided = monthly[k].wins + monthly[k].losses;
-    var wr = decided > 0 ? (monthly[k].wins / decided * 100) : 0;
+    var monthCount = monthly[k].count;
+    var wr = monthCount > 0 ? (monthly[k].wins / monthCount * 100) : 0;
     if (wr >= 60) bgColors.push(cc.barWin);
     else if (wr >= 40) bgColors.push(cc.barWarn);
     else bgColors.push(cc.barLoss);
