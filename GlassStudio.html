@@ -52,7 +52,7 @@ button,input,select,textarea,a,label,summary,.hb,.bt,.preset,.ctx-item{touch-act
 }
 html,body{height:100%;background:var(--bg);font-family:var(--font-ui);color:var(--text);overflow-x:clip;overflow-y:auto;overscroll-behavior:contain;-webkit-font-smoothing:antialiased}
 button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:var(--radius-sm)}
-.preset:focus-visible,.li:focus-visible,.ldel:focus-visible,.ctx-item:focus-visible,.font-item:focus-visible,.align-btn:focus-visible,.mini-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:var(--radius-sm)}
+.preset:focus-visible,.li:focus-visible,.ldel:focus-visible,.ctx-item:focus-visible,.align-btn:focus-visible,.mini-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:var(--radius-sm)}
 
 /* ── App Layout ── */
 #app{display:flex;flex-direction:column;height:100vh}
@@ -85,6 +85,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   cursor:pointer;transition:var(--tr);white-space:nowrap
 }
 .hb:hover{background:var(--surface2);color:var(--text);box-shadow:0 0 0 3px var(--accent-glow)}
+.hb:disabled,.tb:disabled{opacity:.35;cursor:default;box-shadow:none}
+.hb:disabled:hover,.tb:disabled:hover{background:transparent;color:var(--text-muted);box-shadow:none}
 .hb:active{transform:scale(0.97);transition-duration:60ms}
 .hb.primary{background:var(--accent);color:var(--color-accent-ink);border-color:transparent;transition:var(--tr)}
 .hb.primary:hover{background:var(--accent-hover);box-shadow:0 0 0 3px rgba(9,119,87,0.25)}
@@ -263,6 +265,9 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .li:hover{background:var(--surface2);box-shadow:0 0 0 2px var(--accent-glow)}
 .li:active{transform:scale(0.98)}
 .li.sel{background:rgba(9,119,87,.12);border-color:rgba(9,119,87,.3)}
+.para-row{border:1px solid transparent;border-radius:4px}
+.para-row:hover{background:var(--surface2)}
+.para-row.selected{background:var(--accent-glow);border-color:var(--accent-border)}
 .lic{width:22px;height:22px;border-radius:4px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .lic.gi{background:var(--glass-icon-bg);border:1px solid rgba(34,211,160,.3)}
 .lic.ci{background:var(--card-icon-bg);border:1px solid rgba(255,255,255,.1)}
@@ -380,17 +385,6 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 .gel:nth-child(2 of .gel){animation-delay:60ms}
 .gel:nth-child(3 of .gel){animation-delay:120ms}
 
-/* ── Inline Text Editor ── */
-.text-editor-overlay{
-  position:absolute;inset:0;z-index:50;
-  display:flex;align-items:center;justify-content:center;padding:12px
-}
-.text-editor-area{
-  width:100%;height:100%;background:transparent;border:none;outline:none;
-  resize:none;font-family:inherit;color:inherit;text-align:center;
-  line-height:inherit;letter-spacing:inherit;word-break:break-word;overflow:hidden
-}
-
 /* ── Context Menu ── */
 #ctx-menu{
   position:fixed;background:var(--surface2);border:1px solid var(--border2);
@@ -408,38 +402,6 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 .ctx-item:hover{background:var(--accent-glow);color:var(--text)}
 .ctx-item.danger:hover{background:rgba(248,113,113,.1);color:var(--danger)}
 .ctx-sep{height:1px;background:var(--border);margin:4px 0}
-
-/* ── Font Picker ── */
-#font-picker{
-  position:fixed;bottom:20px;right:20px;width:290px;
-  background:var(--surface);border:1px solid var(--border2);border-radius:12px;
-  box-shadow:var(--shadow-lg);z-index:300;
-  opacity:0;visibility:hidden;pointer-events:none;
-  transform:scale(0.95) translateY(8px);transform-origin:bottom right;
-  transition:opacity 160ms var(--ease-out),transform 160ms var(--ease-out),visibility 160ms
-}
-#font-picker.show{opacity:1;visibility:visible;pointer-events:auto;transform:scale(1) translateY(0)}
-.font-picker-header{
-  display:flex;justify-content:space-between;align-items:center;
-  padding:12px 14px;border-bottom:1px solid var(--border)
-}
-.font-picker-header span{font-size:13px;font-weight:500}
-.font-picker-close{
-  background:none;border:none;color:var(--text-muted);cursor:pointer;
-  font-size:18px;line-height:1
-}
-.font-picker-close:hover{color:var(--text)}
-#local-fonts-list{max-height:250px;overflow-y:auto;padding:8px}
-#local-fonts-list::-webkit-scrollbar{width:3px}
-#local-fonts-list::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
-.font-item{
-  padding:9px 12px;border-radius:6px;cursor:pointer;
-  margin-bottom:3px;font-size:12px;border:1px solid transparent;
-  display:flex;align-items:center;gap:8px
-}
-.font-item:hover{background:var(--surface2)}
-.font-item.active{background:var(--accent-glow);border-color:var(--accent-border-hover);color:var(--accent2)}
-.font-item-dot{width:8px;height:8px;border-radius:50%;background:var(--success);flex-shrink:0}
 
 /* ── Status Bar ── */
 #sb{
@@ -470,11 +432,39 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 #shortcuts-overlay{position:fixed;inset:0;background:var(--overlay-bg);z-index:500;opacity:0;visibility:hidden;pointer-events:none;transition:opacity 160ms var(--ease-out),visibility 160ms}
 #shortcuts-overlay.show{opacity:1;visibility:visible;pointer-events:auto}
 
+/* ── Confirm Dialog ── */
+/* Replaces native confirm(): sandboxed preview iframes silently return false
+ * from confirm(), so the "replace image / clear all / restore autosave" flows
+ * must use an in-app dialog to actually work. */
+#confirm-overlay{
+  position:fixed;inset:0;background:var(--overlay-bg);z-index:600;
+  display:flex;align-items:center;justify-content:center;
+  opacity:0;visibility:hidden;pointer-events:none;
+  transition:opacity 160ms var(--ease-out),visibility 160ms
+}
+#confirm-overlay.show{opacity:1;visibility:visible;pointer-events:auto}
+.confirm-box{
+  background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius-lg);
+  padding:22px 24px;max-width:340px;width:calc(100vw - 48px);
+  box-shadow:var(--shadow-xl);display:flex;flex-direction:column;gap:16px;
+  transform:scale(0.95);transition:transform 160ms var(--ease-out)
+}
+#confirm-overlay.show .confirm-box{transform:scale(1)}
+#confirm-msg{font-size:13px;color:var(--text);line-height:1.6;margin:0}
+.confirm-actions{display:flex;justify-content:flex-end;gap:8px}
+.confirm-actions button{
+  padding:7px 16px;border-radius:var(--radius-md);font-size:12px;cursor:pointer;
+  border:1px solid var(--border2);background:transparent;color:var(--text-muted);transition:var(--tr)
+}
+.confirm-actions button:hover{background:var(--surface2);color:var(--text)}
+.confirm-actions .ok{background:var(--accent);border-color:var(--accent);color:#fff}
+.confirm-actions .ok:hover{background:var(--accent-hover)}
+
 /* ── Toast ── */
 #toast{
   position:fixed;bottom:40px;left:50%;
   background:var(--surface2);color:var(--text);border:1px solid var(--border2);
-  padding:8px 18px;border-radius:8px;font-size:12.5px;z-index:400;
+  padding:8px 18px;border-radius:8px;font-size:12.5px;z-index:800;
   transform:translateX(-50%) translateY(6px) scale(0.96);transform-origin:center;
   transition:opacity 180ms var(--ease-out),transform 200ms var(--ease-out),visibility 0ms 200ms;
   pointer-events:none;opacity:0;visibility:hidden;white-space:normal;max-width:360px
@@ -530,7 +520,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 @media (max-width: 1024px){
   #rp{width:190px}
   #pscroll{padding:var(--space-sm) 10px}
-  .log{font-size:15px}
+  .logo{font-size:15px}
 }
 
 /* ── Phone (≤768px) ── */
@@ -633,10 +623,10 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
   #shortcuts-panel .sc-grid{grid-template-columns:1fr}
   /* Context menu full-width on phone */
   #ctx-menu{min-width:calc(100vw - 32px);max-width:320px}
-  /* Font picker full-width */
-  #font-picker{width:calc(100vw - 32px);right:16px;bottom:16px}
   /* btm 滚动条隐藏 — 与 header/presets-bar 一致 */
   #btm::-webkit-scrollbar{height:0}
+  /* Keep toast above the bottom toolbar + slide-up panel on phones */
+  #toast{bottom:calc(64px + env(safe-area-inset-bottom, 0px))}
   /* Larger touch targets for resize handles — 44px hit area */
   .rh{width:12px;height:12px}
   .rh::before{content:'';position:absolute;inset:-10px}
@@ -707,11 +697,11 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
   </div>
   <div class="h-sep"></div>
   <div class="hg">
-    <button class="hb" onclick="undo()" aria-label="撤销" title="撤销 (Ctrl+Z)">
+    <button id="btn-undo-top" class="hb" onclick="undo()" aria-label="撤销" title="撤销 (Ctrl+Z)">
       <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 6H2a4 4 0 014-4h4M2 6l4-4M2 6l4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
       撤销
     </button>
-    <button class="hb" onclick="redo()" aria-label="重做" title="重做 (Ctrl+Shift+Z)">
+    <button id="btn-redo-top" class="hb" onclick="redo()" aria-label="重做" title="重做 (Ctrl+Shift+Z)">
       <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M12 6h2a4 4 0 00-4-4H6M14 6l-4-4M14 6l-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
       重做
     </button>
@@ -733,6 +723,10 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
       <option value="2">2×</option>
       <option value="3" selected>3×</option>
       <option value="4">4×</option>
+    </select>
+    <select id="exp-fmt-sel" class="zoom-btn" title="导出格式" aria-label="导出格式" onchange="S.exportFmt=this.value" style="padding:4px 8px;flex-shrink:0">
+      <option value="png" selected>PNG</option>
+      <option value="jpeg">JPG</option>
     </select>
     <button class="hb primary" onclick="showExportPanel()" aria-label="导出高清图片">
       <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 2v8M5 7l3 3 3-3M3 13h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -862,6 +856,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
         <div class="guide h" id="g-h"></div>
         <div class="guide v" id="g-v"></div>
       </div>
+
     </div>
   </div>
 
@@ -912,11 +907,11 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 5h10M6 5V3h4v2M5 5l.6 8h4.8L11 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
       <div class="tip">删除</div>
     </button>
-    <button class="tb" onclick="undo()" aria-label="撤销">
+    <button id="btn-undo-btm" class="tb" onclick="undo()" aria-label="撤销">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6H2a4 4 0 014-4h4M2 6l4-4M2 6l4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
       <div class="tip">撤销</div>
     </button>
-    <button class="tb" onclick="redo()" aria-label="重做">
+    <button id="btn-redo-btm" class="tb" onclick="redo()" aria-label="重做">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M12 6h2a4 4 0 00-4-4H6M14 6l-4-4M14 6l-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
       <div class="tip">重做</div>
     </button>
@@ -995,22 +990,17 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
   </div>
 </div>
 
-<!-- Font Picker -->
-<div id="font-picker">
-  <div class="font-picker-header">
-    <span>本地字体</span>
-    <button class="font-picker-close" onclick="hideFontPicker()" aria-label="关闭字体选择器">✕</button>
-  </div>
-  <div style="padding:8px 12px;border-bottom:1px solid var(--border)">
-    <label class="hb" style="width:100%;display:flex;align-items:center;justify-content:center;cursor:pointer;box-sizing:border-box;text-align:center" aria-label="添加本地字体">
-      + 添加本地字体
-      <input type="file" accept=".ttf,.otf,.woff,.woff2" multiple style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none" onchange="loadLocalFonts(this)">
-    </label>
-  </div>
-  <div id="local-fonts-list"></div>
-</div>
-
 <canvas id="ec" style="display:none"></canvas>
+<!-- Confirm Dialog (replaces native confirm(), see CSS comment) -->
+<div id="confirm-overlay">
+  <div class="confirm-box">
+    <p id="confirm-msg"></p>
+    <div class="confirm-actions">
+      <button id="confirm-cancel">取消</button>
+      <button id="confirm-ok" class="ok">确认</button>
+    </div>
+  </div>
+</div>
 <!-- Shortcuts Panel -->
 <div id="shortcuts-overlay" onclick="hideShortcuts()"></div>
 <div id="shortcuts-panel">
@@ -1088,16 +1078,21 @@ const S = {
   localFonts: [],
   zoom: 100,
   exportScale: 3, // export resolution multiplier — higher = sharper PNG output
+  exportFmt: 'png', // export file format: png | jpeg | webp
   _drag: null,
   _didDrag: false,
+  _dupOnDrop: false, // Alt+drag copies the dragged element on mouseup
+  _dupStart: null,   // pre-drag origin, restored when Alt+drag duplicates
   _resize: null,
   _rsStart: null,
-  _editingId: null,
   _dragOX: 0,
   _dragOY: 0,
   _dragLayerId: null, // layer panel drag: which element id is being reordered
   _lastPointerId: null, // pointer capture tracking for proper cleanup
   _lastPointerEl: null,
+  // Paragraph selection: { id, idx } or null — tracks which paragraph row is active
+  _selectedParaId: null, // element id currently selected in paragraph editor
+  _selectedParaIdx: null, // which paragraph index is selected (null = none)
 };
 const SNAP = 6;
 
@@ -1166,6 +1161,7 @@ const el = {
   dz:       document.getElementById('dz'),
   dzInner:  document.getElementById('dz-inner'),
   cv:       document.getElementById('cv'),
+  scroll:   document.getElementById('canvas-scroll'),
   ll:       document.getElementById('ll'),
   pscroll:  document.getElementById('pscroll'),
   gh:       document.getElementById('g-h'),
@@ -1174,7 +1170,6 @@ const el = {
   expOvl:   document.getElementById('exp-overlay'),
   expBar:   document.getElementById('exp-bar'),
   expMsg:   document.getElementById('exp-msg'),
-  fontPick: document.getElementById('font-picker'),
   zoomSlider: document.getElementById('zoom-slider'),
   zoomVal:  document.getElementById('zoom-val'),
   cvToolbar: document.getElementById('canvas-toolbar'),
@@ -1184,7 +1179,30 @@ const el = {
   sbSize:   document.getElementById('sb-size'),
   sbCnt:    document.getElementById('sb-cnt'),
   undoInfo: document.getElementById('undo-info'),
+  confirmOvl:  document.getElementById('confirm-overlay'),
+  confirmMsg:  document.getElementById('confirm-msg'),
+  confirmOk:   document.getElementById('confirm-ok'),
+  confirmCancel: document.getElementById('confirm-cancel'),
 };
+
+// ── In-app confirm dialog (native confirm() is unreliable in sandboxed preview) ──
+let _confirmCb = null;
+function _askConfirm(message, onOk, onCancel) {
+  _confirmCb = onOk || null;
+  el.confirmMsg.textContent = message;
+  el.confirmOvl.classList.add('show');
+}
+el.confirmOk.addEventListener('click', () => {
+  el.confirmOvl.classList.remove('show');
+  if (_confirmCb) { const cb = _confirmCb; _confirmCb = null; cb(); }
+});
+el.confirmCancel.addEventListener('click', () => {
+  el.confirmOvl.classList.remove('show');
+  _confirmCb = null;
+});
+el.confirmOvl.addEventListener('click', e => {
+  if (e.target === el.confirmOvl) { el.confirmOvl.classList.remove('show'); _confirmCb = null; }
+});
 
 const FONTS = [
   {label:'DM Sans（默认）',      value:"'DM Sans',sans-serif"},
@@ -1201,18 +1219,19 @@ const FONTS = [
 // ═══════════════════════════════════════════════════════════════
 el.fi.addEventListener('change', e => { loadFile(e.target.files[0]); el.fi.value = ''; });
 
+// Keep the floating text toolbar glued to its element when the window resizes.
+
 // Drag-over / drag-leave on the entire scroll area
-const canvasScroll = document.getElementById('canvas-scroll');
-canvasScroll.addEventListener('dragover', e => {
+el.scroll.addEventListener('dragover', e => {
   e.preventDefault();
   el.dzInner.classList.add('drag-on');
 });
-canvasScroll.addEventListener('dragleave', e => {
-  if (!canvasScroll.contains(e.relatedTarget)) {
+el.scroll.addEventListener('dragleave', e => {
+  if (!el.scroll.contains(e.relatedTarget)) {
     el.dzInner.classList.remove('drag-on');
   }
 });
-canvasScroll.addEventListener('drop', e => {
+el.scroll.addEventListener('drop', e => {
   e.preventDefault();
   el.dzInner.classList.remove('drag-on');
   if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
@@ -1220,50 +1239,68 @@ canvasScroll.addEventListener('drop', e => {
 
 function loadFile(file) {
   if (!file || !file.type.startsWith('image/')) { toast('仅支持图片文件', 3000); return; }
-  if (S.imgSrc && S.els.length > 0) {
-    if (!confirm('更换图片将清空所有元素，确认继续？')) return;
-    S.els = []; S.sel = null; S.selSet.clear();
-    _pendingDelete.clear();
-  }
-  const reader = new FileReader();
-  reader.onload = ev => {
-    const img = new Image();
-    img.onload = () => {
-      // Fit to canvas area
-      const scrollEl = document.getElementById('canvas-scroll');
-      const availW = scrollEl.clientWidth  - 80;
-      const availH = scrollEl.clientHeight - 80;
-      const r = Math.min(availW / img.width, availH / img.height, 1);
-      S.imgW   = Math.round(img.width  * r);
-      S.imgH   = Math.round(img.height * r);
-      S.imgNatW = img.width;
-      S.imgNatH = img.height;
-      S.imgSrc  = ev.target.result;
+  if (file.size > 40 * 1024 * 1024) { toast('图片超过 40MB，请先压缩后再导入', 4000); return; }
+  if (S._editingId) commitTextEdit();
+  // Read + apply the image; shared with the "replace image" confirmation below.
+  const applyImage = () => {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const img = new Image();
+      img.onload = () => {
+        // Fit to canvas area
+        const scrollEl = el.scroll;
+        const availW = scrollEl.clientWidth  - 80;
+        const availH = scrollEl.clientHeight - 80;
+        const r = Math.min(availW / img.width, availH / img.height, 1);
+        S.imgW   = Math.round(img.width  * r);
+        S.imgH   = Math.round(img.height * r);
+        S.imgNatW = img.width;
+        S.imgNatH = img.height;
+        S.imgSrc  = ev.target.result;
 
-      el.dz.style.display    = 'none';
-      el.cv.style.display    = 'block';
-      el.cv.classList.add('loaded');
-      el.cvToolbar.style.display = '';
-      // fitCanvas() internally calls setZoom() → applyZoom() — no need to call applyZoom separately
-      fitCanvas();
-
-      el.sbDim.textContent  = `${img.width} × ${img.height}`;
-      el.sbHint.textContent  = '双击元素编辑文字 · 长按更多操作 · 单点选中';
-      // Clamp elements to new canvas bounds
-      S.els.forEach(el2 => {
-        el2.x = Math.max(-el2.w + 20, Math.min(S.imgW - 20, el2.x));
-        el2.y = Math.max(-el2.h + 20, Math.min(S.imgH - 20, el2.y));
-      });
-      S.history = [];
-      S.hIdx = -1;
-      saveHist();
-      _dirty = false; // new image load is not an "unsaved change"
-      _idb.del('gs_autosave').catch(()=>{}); // clear stale autosave
-      render();
+        el.sbHint.textContent  = '双击元素编辑文字 · 长按更多操作 · 单点选中';
+        // Clamp elements to new canvas bounds
+        S.els.forEach(el2 => {
+          el2.x = Math.max(-el2.w + 20, Math.min(S.imgW - 20, el2.x));
+          el2.y = Math.max(-el2.h + 20, Math.min(S.imgH - 20, el2.y));
+        });
+        // Shared workspace bootstrap: canvas show, status, fit, history reset, render
+        _enterWorkspace();
+        _idb.del('gs_autosave').catch(()=>{}); // clear stale autosave
+      };
+      img.onerror = () => toast('❌ 图片解码失败，请使用有效的 JPG、PNG 或 GIF 图片');
+      img.src = ev.target.result;
     };
-    img.src = ev.target.result;
+    reader.onerror = () => toast('❌ 图片读取失败，请重试');
+    reader.readAsDataURL(file);
   };
-  reader.readAsDataURL(file);
+
+  if (S.imgSrc && S.els.length > 0) {
+    _askConfirm('更换图片将清空所有元素，确认继续？', () => {
+      S.els = []; S.sel = null; S.selSet.clear();
+      _pendingDelete.clear();
+      applyImage();
+    });
+  } else {
+    applyImage();
+  }
+}
+
+// Shared "enter workspace" bootstrap used by image load, project load and
+// autosave restore — keeps the three paths visually and logically identical.
+function _enterWorkspace() {
+  el.dz.style.display    = 'none';
+  el.cv.style.display    = 'block';
+  el.cv.classList.add('loaded');
+  el.cvToolbar.style.display = '';
+  el.sbDim.textContent   = `${S.imgNatW} × ${S.imgNatH}`;
+  // fitCanvas() internally calls setZoom() → applyZoom() — no need to call applyZoom separately
+  fitCanvas();
+  S.history = [];
+  S.hIdx = -1;
+  saveHist();
+  _dirty = false; // restored/loaded work is not an "unsaved change"
+  render();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1275,8 +1312,17 @@ function setZoom(val) {
   S.zoom = Number.isFinite(num) ? Math.max(20, Math.min(300, Math.round(num))) : 100;
   el.zoomSlider.value = S.zoom;
   el.zoomVal.textContent = S.zoom + '%';
-  el.zoomVal.setAttribute('data-tip', S.zoom + '% zoom');
+  el.zoomVal.setAttribute('data-tip', S.zoom + '% 缩放');
   applyZoom(S.zoom, true);
+  // Save zoom to history so undo/redo restores it
+  const snap = JSON.stringify({ els: S.els, sel: S.sel, selSet: [...S.selSet], zoom: S.zoom });
+  if (S.history.length === 0 || S.history[S.hIdx] !== snap) {
+    S.history = S.history.slice(0, S.hIdx + 1);
+    S.history.push(snap);
+    if (S.history.length > 200) S.history.shift();
+    S.hIdx = S.history.length - 1;
+    updateUndoInfo();
+  }
 }
 
 function zoomCanvas(delta) {
@@ -1285,7 +1331,7 @@ function zoomCanvas(delta) {
 
 function fitCanvas() {
   if (!S.imgW) return;
-  const scrollEl = document.getElementById('canvas-scroll');
+  const scrollEl = el.scroll;
   const availW = scrollEl.clientWidth  - 80;
   const availH = scrollEl.clientHeight - 80;
   const fitZoom = Math.min(availW / S.imgW, availH / S.imgH) * 100;
@@ -1303,6 +1349,7 @@ function applyZoom(pct, updateSlider) {
     el.zoomSlider.value = pct;
     el.zoomVal.textContent = pct + '%';
   }
+  // The toolbar is positioned in canvas-scroll coordinates — reposition on zoom.
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1323,10 +1370,12 @@ function render() {
     el.cv.prepend(imgEl);
     el.cv.addEventListener('click', e => {
       // Commit text edit when clicking outside the editing element
-      if (S._editingId) { commitTextEdit(); return; }
       if (e.target === el.cv || e.target === imgEl) {
+        if (S._editingId) commitTextEdit();
         S.sel = null;
         S.selSet.clear();
+        S._selectedParaId = null;
+        S._selectedParaIdx = null; // clear paragraph selection when clicking canvas
         render();
       }
     });
@@ -1354,7 +1403,7 @@ function render() {
         italic: false, underline: false,
         align: 'center', valign: 'center',
         fontFamily: "'DM Sans',sans-serif",
-        locked: false,
+        locked: false, tOp: 1,
       };
       S.els.push(newEl);
       S.sel = newEl.id;
@@ -1363,7 +1412,6 @@ function render() {
       saveHist();
       render();
       // Immediately enter text edit mode so the user can type
-      requestAnimationFrame(() => startTextEdit(newEl.id));
     });
     el.cv.addEventListener('contextmenu', e => {
       if (e.target === el.cv || e.target === imgEl) {
@@ -1390,14 +1438,11 @@ function render() {
     }
     dom.style.zIndex = i + 1;
     // Staggered entrance for newly added elements
+    // Bug #8 fix: delegate to _materializeIn so handlers are tracked on dom._matInHandler
+    // and can be cleaned up by _cleanupAnimListeners.
     if (isNew && !_pendingDelete.has(el2.id)) {
-      dom.classList.add('materialize-in');
       dom.style.animationDelay = (i * 40) + 'ms';
-      dom.addEventListener('animationend', function handler() {
-        dom.classList.remove('materialize-in');
-        dom.style.animationDelay = '';
-        dom.removeEventListener('animationend', handler);
-      });
+      _materializeIn(dom);
     }
     applyStyle(dom, el2, false);
     dom.classList.toggle('sel',    S.selSet.has(el2.id));
@@ -1415,6 +1460,15 @@ function render() {
   updateUndoInfo();
 }
 
+el.cv.addEventListener('dblclick', e => {
+  const target = e.target.closest && e.target.closest('.gel');
+  if (!target) return;
+  const item = getEl2(+target.dataset.id);
+  if (!item || item.locked) return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  startTextEdit(item.id);
+}, true);
 function mkDOM(el2) {
   const dom = document.createElement('div');
   dom.className = 'gel';
@@ -1435,9 +1489,17 @@ function mkDOM(el2) {
 
   dom.addEventListener('pointerdown', onDS);
   dom.addEventListener('click', e => {
+    // Bug #1 fix: compare click timestamp vs. pointerup timestamp stored in dataset.
+    // If click fires within 100ms of pointerup, treat as drag — avoid re-selecting.
+    const atStr = e.currentTarget.dataset._didDragAt;
+    if (atStr && Date.now() - +atStr < 100) {
+      delete e.currentTarget.dataset._didDragAt;
+      return;
+    }
     if (S._didDrag || S._resize) return;
+    const wasSingleSelected = !(e.shiftKey || e.metaKey || e.ctrlKey) && S.sel === el2.id && S.selSet.size === 1;
+    if (wasSingleSelected) { e.stopPropagation(); return; }
     // Commit any in-progress text edit before changing selection
-    if (S._editingId && S._editingId !== el2.id) { commitTextEdit(); return; }
     // Shift-click or Cmd/Ctrl-click for multi-select
     if ((e.shiftKey || e.metaKey || e.ctrlKey) && S.sel !== null) {
       if (S.selSet.has(el2.id)) {
@@ -1457,8 +1519,11 @@ function mkDOM(el2) {
     e.stopPropagation();
   });
   dom.addEventListener('dblclick', e => {
-    startTextEdit(el2.id);
+    const current = getEl2(+dom.dataset.id);
+    if (!current || current.locked) return;
+    e.preventDefault();
     e.stopPropagation();
+    startTextEdit(current.id);
   });
   dom.addEventListener('contextmenu', e => {
     e.preventDefault();
@@ -1478,86 +1543,177 @@ function mkDOM(el2) {
 }
 
 function applyStyle(dom, el2, forceRebuild) {
-  if (S._editingId === el2.id) return;
-
-  // Preserve elastic transform/transition across cssText reset
-  const _tr = dom.style.transform, _ts = dom.style.transition;
-  // Apply chromatic aberration filter (glass/card only, ca > 0)
-  const caFilter = (el2.type !== 'text' && el2.ca && el2.ca >= 1 && el2.ca <= 5) ? `;filter:url(#glass-ca-${Math.round(el2.ca)})` : '';
-  dom.style.cssText = `position:absolute;left:${el2.x}px;top:${el2.y}px;width:${el2.w}px;height:${el2.h}px;border-radius:${el2.r ?? 12}px;cursor:move;user-select:none;overflow:${S.sel === el2.id ? 'visible' : 'hidden'};z-index:${dom.style.zIndex||1}${caFilter}`;
-  dom.style.transform = _tr;
-  dom.style.transition = _ts;
+  // cssText 会重置内联样式。位置/尺寸来自模型；变换也必须完全由模型重建，
+  // 不能把上一次渲染的 rotate()/scale() 再拼接回来，否则每次选择图层都会累积旋转。
+  const previousTransition = dom.style.transition;
+  const ca = Number(el2.ca);
+  const caFilter = (el2.type !== 'text' && Number.isFinite(ca) && ca >= 1 && ca <= 5)
+    ? `;filter:url(#glass-ca-${Math.round(ca)})` : '';
+  dom.style.cssText = `position:absolute;left:${Number(el2.x) || 0}px;top:${Number(el2.y) || 0}px;width:${Math.max(1, Number(el2.w) || 1)}px;height:${Math.max(1, Number(el2.h) || 1)}px;border-radius:${Math.max(0, Number(el2.r) || 0)}px;cursor:${el2.locked ? 'default' : 'move'};user-select:none;overflow:${S.sel === el2.id ? 'visible' : 'hidden'};z-index:${dom.style.zIndex || 1}${caFilter}`;
+  const rotation = Number(el2.rot) || 0;
+  dom.style.transform = rotation ? `rotate(${rotation}deg)` : '';
+  dom.style.transition = previousTransition;
 
   const inner = dom.querySelector('.gel-inner');
-  inner.style.cssText = `width:100%;height:100%;display:flex;align-items:${el2.valign==='top'?'flex-start':el2.valign==='bottom'?'flex-end':'center'};justify-content:${el2.align==='left'?'flex-start':el2.align==='right'?'flex-end':'center'};padding:${el2.pad ?? 12}px;overflow:hidden`;
-
-  const fam = escHtml(el2.fontFamily || "'DM Sans',sans-serif");
-  const fs  = el2.fs  ?? 16;
-  const fw  = el2.fw  || '500';
-  const ls  = el2.ls  ?? 0;
-  const lh  = el2.lh  ?? 1.45;
-  const tsh = escHtml((el2.tsh || '0 1px 6px rgba(0,0,0,.4)').replace(/^"|"$/g, '').replace(/"/g, "'"));
-  const align = el2.align || 'center';
-  const tc = escHtml(el2.tc || '#ffffff');
-
-  const textCss = `color:${tc};font-size:${fs}px;font-weight:${fw};font-family:${fam};font-style:${el2.italic?'italic':'normal'};text-decoration:${el2.underline?'underline':'none'};letter-spacing:${ls}px;line-height:${lh};text-shadow:${tsh};white-space:pre-wrap;word-break:break-word;width:100%;text-align:${align};pointer-events:none`;
-
-  const txt = escHtml(el2.text || '');
-  const rawTxt = el2.text || '';  // unescaped, for textContent comparison
-  const empty = !rawTxt;
+  if (!inner) return;
+  const va = el2.valign === 'top' ? 'flex-start' : el2.valign === 'bottom' ? 'flex-end' : 'center';
+  const ha = el2.align === 'left' ? 'flex-start' : el2.align === 'right' ? 'flex-end' : 'center';
+  inner.style.cssText = `width:100%;height:100%;display:flex;align-items:${va};justify-content:${ha};padding:${Math.max(0, Number(el2.pad) || 0)}px;overflow:hidden`;
 
   if (el2.type === 'glass' || el2.type === 'card') {
-    // Glass and card share the same style pipeline — only defaults differ.
     const isGlass = el2.type === 'glass';
     const rgb = h2r(el2.bg || (isGlass ? '#ffffff' : '#000000'));
-    const op  = el2.op  ?? (isGlass ? 0.2 : 0.65);
-    const blr = el2.blur ?? (isGlass ? 18 : 4);
-    const br  = el2.br   ?? 100;
-    const sat = el2.sat  ?? (isGlass ? 140 : 100);
-    const bw  = el2.bw   ?? 1;
-    const bc  = el2.bc   ?? (isGlass ? '#ffffff' : '#000000');
-    const bop = el2.bop  ?? (isGlass ? 0.35 : 0.1);
-    const bcRgb = h2r(bc);
-    const bfStr = blr > 0 ? `blur(${blr}px) ` : '';
-    const bfSat = sat !== 100 ? `saturate(${sat}%) ` : '';
-    const bfBr  = br  !== 100 ? `brightness(${br}%)` : '';
-    dom.style.background        = `rgba(${rgb.r},${rgb.g},${rgb.b},${op})`;
-    dom.style.backdropFilter    = `${bfStr}${bfSat}${bfBr}`.trim();
-    dom.style.webkitBackdropFilter = dom.style.backdropFilter;
-    dom.style.border            = bw > 0 ? `${bw}px solid rgba(${bcRgb.r},${bcRgb.g},${bcRgb.b},${bop})` : 'none';
-    // Glass keeps the inset top highlight via box-shadow; card uses a plain drop shadow.
+    // 先对原始值做空值回退，再 Number()。Number(undefined) 是 NaN，若反过来写
+    // 会使 saturate(NaN%)、brightness(NaN%) 失效，从视觉上丢掉毛玻璃效果。
+    const opacity = Math.max(0, Math.min(1, Number(el2.op ?? (isGlass ? 0.2 : 0.65))));
+    const blur = Math.max(0, Number(el2.blur ?? (isGlass ? 18 : 4)));
+    const brightness = Math.max(0, Number(el2.br ?? 100));
+    const saturation = Math.max(0, Number(el2.sat ?? (isGlass ? 140 : 100)));
+    const borderWidth = Math.max(0, Number(el2.bw ?? 1));
+    const borderRgb = h2r(el2.bc || (isGlass ? '#ffffff' : '#000000'));
+    const borderOpacity = Math.max(0, Math.min(1, Number(el2.bop ?? (isGlass ? 0.35 : 0.1))));
+    const filter = `${blur > 0 ? `blur(${blur}px) ` : ''}${saturation !== 100 ? `saturate(${saturation}%) ` : ''}${brightness !== 100 ? `brightness(${brightness}%)` : ''}`.trim();
+    dom.style.background = `rgba(${rgb.r},${rgb.g},${rgb.b},${opacity})`;
+    dom.style.backdropFilter = filter;
+    dom.style.webkitBackdropFilter = filter;
+    dom.style.border = borderWidth > 0 ? `${borderWidth}px solid rgba(${borderRgb.r},${borderRgb.g},${borderRgb.b},${borderOpacity})` : 'none';
     dom.style.boxShadow = isGlass
-      ? (el2.bs || 'var(--shadow-md)') + (bw > 0 ? `,inset 0 1px 0 rgba(${bcRgb.r},${bcRgb.g},${bcRgb.b},${bop * 0.5})` : '')
+      ? (el2.bs || 'var(--shadow-md)') + (borderWidth > 0 ? `,inset 0 1px 0 rgba(${borderRgb.r},${borderRgb.g},${borderRgb.b},${borderOpacity * 0.5})` : '')
       : (el2.bs || '0 4px 24px rgba(0,0,0,.3)');
-    // Skip innerHTML rebuild if nothing changed (compare against raw text, not escaped)
-    const child = inner.firstChild;
-    const needsRebuild = forceRebuild
-      || !child
-      || child.className !== 'el-text'
-      || child.style.cssText !== textCss
-      || (empty ? (child.textContent !== '双击添加文字') : (child.textContent !== rawTxt));
-    if (needsRebuild) {
-      inner.innerHTML = txt ? `<div class="el-text" style="${textCss}">${txt}</div>` : `<div class="el-text" style="${textCss};opacity:0.3;font-size:11px">双击添加文字</div>`;
-    }
-  } else if (el2.type === 'text') {
-    dom.style.background     = 'transparent';
-    dom.style.border         = 'none';
+  } else {
+    dom.style.background = 'transparent';
+    dom.style.border = 'none';
     dom.style.backdropFilter = 'none';
-    dom.style.overflow       = 'visible';
-    const child = inner.firstChild;
-    const placeholder = '双击编辑文字';
-    const needsRebuild = forceRebuild
-      || !child
-      || child.className !== 'el-text'
-      || child.style.cssText !== textCss
-      || child.textContent !== (rawTxt || placeholder);
-    if (needsRebuild) {
-      inner.innerHTML = `<div class="el-text" style="${textCss}">${txt || placeholder}</div>`;
+    dom.style.webkitBackdropFilter = 'none';
+    dom.style.overflow = 'visible';
+  }
+
+  // 活跃编辑器不重建以免丢失输入，但必须同步全局字体、颜色、字号等样式。
+  // textarea 无法独立渲染每一段的富样式；属性面板在切换段落样式前会使其失焦并提交，
+  // 随后通过下方逐段预览即时呈现。
+  if (S._editingId === el2.id) {
+    const editor = inner.querySelector('.text-editor-area');
+    if (editor) {
+      _applyTextNodeStyle(editor, el2);
+      editor.style.pointerEvents = 'auto';
+    }
+    return;
+  }
+
+  const rawText = typeof el2.text === 'string' ? el2.text : '';
+  const placeholder = el2.type === 'text' ? '双击编辑文字' : '双击添加文字';
+  const previous = inner.firstChild;
+  const expectedText = rawText || placeholder;
+  const lines = rawText.split('\n');
+  const styles = Array.isArray(el2.paragraphs) && el2.paragraphs.length === lines.length ? el2.paragraphs : null;
+  // 首次设置某段样式时，paragraphs 会由稀疏数组变成与行数等长的数组；原节点却仍是纯文本。
+  // 必须重建为逐段 span，否则 setParaStyle 虽写入模型但画布不会出现任何视觉变化。
+  const existingSpans = previous ? previous.querySelectorAll(':scope > span') : [];
+  const shouldRebuild = forceRebuild || !previous || previous.className !== 'el-text' || previous.textContent !== expectedText || !!(styles && existingSpans.length !== lines.length);
+  // 样式更新不应依赖文字内容变化。已有逐段节点时同步字体、颜色和字号。
+  if (!shouldRebuild) {
+    _applyTextNodeStyle(previous, el2);
+    if (styles) existingSpans.forEach((span, index) => _applyTextNodeStyle(span, el2, styles[index] || {}));
+    return;
+  }
+
+  const textNode = document.createElement('div');
+  textNode.className = 'el-text';
+  _applyTextNodeStyle(textNode, el2);
+  if (!rawText) {
+    textNode.textContent = placeholder;
+    textNode.style.opacity = '0.3';
+    textNode.style.fontSize = '11px';
+  } else {
+    const paragraphs = rawText.split('\n');
+    const paragraphStyles = Array.isArray(el2.paragraphs) && el2.paragraphs.length === paragraphs.length ? el2.paragraphs : null;
+    if (paragraphStyles) {
+      paragraphs.forEach((paragraph, index) => {
+        if (index) textNode.appendChild(document.createTextNode('\n'));
+        const span = document.createElement('span');
+        _applyTextNodeStyle(span, el2, paragraphStyles[index] || {});
+        span.textContent = paragraph;
+        textNode.appendChild(span);
+      });
+    } else {
+      textNode.textContent = rawText;
     }
   }
+  inner.replaceChildren(textNode);
 }
 
-function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function _applyTextNodeStyle(node, base, override) {
+  const o = override || {};
+  const fontSize = Math.max(8, Math.min(400, Number(o.fs ?? base.fs) || 16));
+  const fontWeight = String(o.fw ?? base.fw ?? '500');
+  const fontFamily = String(o.fontFamily ?? base.fontFamily ?? "'DM Sans',sans-serif");
+  const color = String(o.tc ?? base.tc ?? '#ffffff');
+  node.style.color = color;
+  node.style.fontSize = `${fontSize}px`;
+  node.style.fontWeight = fontWeight;
+  node.style.fontFamily = fontFamily;
+  node.style.fontStyle = (o.italic ?? base.italic) ? 'italic' : 'normal';
+  node.style.textDecoration = (o.underline ?? base.underline) ? 'underline' : 'none';
+  node.style.letterSpacing = `${Number(base.ls) || 0}px`;
+  node.style.lineHeight = String(Number(base.lh) || 1.45);
+  node.style.textShadow = String(base.tsh || '0 1px 6px rgba(0,0,0,.4)');
+  node.style.opacity = String(Math.max(0, Math.min(1, Number(base.tOp ?? 1))));
+  node.style.whiteSpace = 'pre-wrap';
+  node.style.wordBreak = 'break-word';
+  node.style.width = '100%';
+  node.style.textAlign = ['left', 'center', 'right'].includes(base.align) ? base.align : 'center';
+  node.style.pointerEvents = 'none';
+}
+
+function startTextEdit(id) {
+  id = Number(id);
+  if (S._editingId) commitTextEdit();
+  const item = getEl2(id);
+  // 毛玻璃与卡片同样承载文字；双击任何未锁定元素均应进入该元素的文字编辑。
+  if (!item || item.locked) return;
+  const dom = el.cv.querySelector(`[data-id="${id}"]`);
+  if (!dom) return;
+  const inner = dom.querySelector('.gel-inner');
+  if (!inner) return;
+  S._editingId = id;
+  dom.style.overflow = 'visible';
+  const overlay = document.createElement('div');
+  overlay.className = 'text-editor-overlay';
+  overlay.style.cssText = 'position:absolute;inset:0;z-index:50;display:flex;padding:' + Math.max(0, Number(item.pad) || 0) + 'px';
+  const textarea = document.createElement('textarea');
+  textarea.className = 'text-editor-area';
+  textarea.value = typeof item.text === 'string' ? item.text : '';
+  textarea.placeholder = '输入文字...';
+  textarea.style.cssText = 'width:100%;height:100%;background:transparent;border:none;outline:none;resize:none;overflow:hidden;word-break:break-word;white-space:pre-wrap;';
+  _applyTextNodeStyle(textarea, item);
+  textarea.style.pointerEvents = 'auto';
+  textarea.addEventListener('input', () => { item.text = textarea.value; });
+  textarea.addEventListener('blur', () => commitTextEdit());
+  textarea.addEventListener('keydown', event => {
+    if (event.key === 'Escape') { event.preventDefault(); commitTextEdit(); }
+    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); commitTextEdit(); }
+    event.stopPropagation();
+  });
+  overlay.appendChild(textarea);
+  inner.replaceChildren(overlay);
+  requestAnimationFrame(() => { textarea.focus(); textarea.setSelectionRange(textarea.value.length, textarea.value.length); });
+}
+
+function commitTextEdit() {
+  if (!S._editingId) return;
+  const id = S._editingId;
+  S._editingId = null;
+  const item = getEl2(id);
+  if (item && Array.isArray(item.paragraphs)) {
+    const count = String(item.text || '').split('\n').length;
+    item.paragraphs = item.paragraphs.slice(0, count);
+    while (item.paragraphs.length < count) item.paragraphs.push({});
+  }
+  saveHist();
+  render();
+}
+
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;').replace(/'/g,'&#39;'); }
 function h2r(hex) {
   let h = hex.replace('#', '');
   if (h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
@@ -1577,68 +1733,23 @@ function getEl2(id) { return elMap.get(id); }
 // ═══════════════════════════════════════════════════════════════
 // INLINE TEXT EDITING
 // ═══════════════════════════════════════════════════════════════
-function startTextEdit(id) {
-  // Coerce id to number — dataset IDs are strings, element IDs are numbers
-  id = Number(id);
-  if (S._editingId) commitTextEdit();
-  const el2 = getEl2(id);
-  if (!el2 || el2.locked) return;
-  S._editingId = id;
+// ═══════════════════════════════════════════════════════════════
 
-  const dom = el.cv.querySelector(`[data-id="${id}"]`);
-  if (!dom) return;
-  dom.style.overflow = 'visible';
 
-  const inner = dom.querySelector('.gel-inner');
-  inner.innerHTML = '';
 
-  const overlay = document.createElement('div');
-  overlay.className = 'text-editor-overlay';
-  const vaMap = {top:'flex-start', bottom:'flex-end', center:'center'};
-  const haMap = {left:'flex-start', right:'flex-end', center:'center'};
-  overlay.style.cssText = `position:absolute;inset:0;z-index:50;display:flex;align-items:${vaMap[el2.valign||'center']||'center'};justify-content:${haMap[el2.align||'center']||'center'};padding:${el2.pad||12}px`;
-
-  const ta = document.createElement('textarea');
-  ta.className = 'text-editor-area';
-  ta.value = el2.text || '';
+function _textTaCss(el2) {
   const fam = el2.fontFamily || "'DM Sans',sans-serif";
-  ta.style.cssText = `width:100%;height:100%;background:transparent;border:none;outline:none;resize:none;font-family:${escHtml(fam)};font-size:${el2.fs||16}px;font-weight:${el2.fw||'500'};font-style:${el2.italic?'italic':'normal'};color:${escHtml(el2.tc||'#fff')};text-align:${el2.align||'center'};letter-spacing:${el2.ls||0}px;line-height:${el2.lh||1.45};text-shadow:${escHtml((el2.tsh||'0 1px 6px rgba(0,0,0,.4)').replace(/"/g,"'"))};word-break:break-word;white-space:pre-wrap;overflow:hidden;caret-color:${escHtml(el2.tc||'#fff')}`;
-  ta.setAttribute('placeholder', '输入文字...');
-
-  ta.addEventListener('blur',   () => { el2.text = ta.value; commitTextEdit(); });
-  ta.addEventListener('keydown', e => {
-    if (e.key === 'Escape') { el2.text = ta.value; commitTextEdit(); }
-    // Ctrl/Cmd+Enter commits the edit and saves history (Enter alone = newline)
-    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); el2.text = ta.value; commitTextEdit(); }
-    e.stopPropagation();
-  });
-  ta.addEventListener('input', () => { el2.text = ta.value; });
-
-  overlay.appendChild(ta);
-  inner.appendChild(overlay);
-  dom.classList.add('sel');
-  dom.style.outline = '2px solid ' + getComputedStyle(document.documentElement).getPropertyValue('--success').trim();
-  dom.style.outlineOffset = '2px';
-
-  requestAnimationFrame(() => { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); });
+  return `width:100%;height:100%;background:transparent;border:none;outline:none;resize:none;font-family:${escHtml(fam)};font-size:${el2.fs||16}px;font-weight:${el2.fw||'500'};font-style:${el2.italic?'italic':'normal'};color:${escHtml(el2.tc||'#fff')};text-align:${el2.align||'center'};letter-spacing:${el2.ls||0}px;line-height:${el2.lh||1.45};text-shadow:${escHtml((el2.tsh||'0 1px 6px rgba(0,0,0,.4)').replace(/"/g,"'"))};word-break:break-word;white-space:pre-wrap;overflow:hidden;caret-color:${escHtml(el2.tc||'#fff')}`;
 }
 
-function commitTextEdit() {
-  if (!S._editingId) return;
-  const id = S._editingId;
-  S._editingId = null;
-  const dom = el.cv.querySelector(`[data-id="${id}"]`);
-  if (dom) { dom.style.outline = ''; dom.style.outlineOffset = ''; }
-  saveHist();
-  render();
-}
+// Keep the floating toolbar in sync while the overlay textarea is being edited.
 
 // ═══════════════════════════════════════════════════════════════
 // DRAG & RESIZE
 // ═══════════════════════════════════════════════════════════════
 function onDS(e) {
-  if (e.target.classList.contains('rh')) return;
   if (S._editingId) return;
+  if (e.target.classList.contains('rh')) return;
   const id = +e.currentTarget.dataset.id;
   const el2 = getEl2(id);
   if (!el2 || el2.locked) return;
@@ -1668,17 +1779,20 @@ function onDS(e) {
   }
   render();
 
-  // Elastic press feedback (subtle scale-down on grab)
+  // Elastic press feedback (subtle scale-down on grab) — keep rotation composed in
   const pressDom = el.cv.querySelector(`[data-id="${id}"]`);
   if (pressDom) {
+    const pEl = getEl2(id);
     pressDom.style.transition = 'transform 0.15s ease-out';
-    pressDom.style.transform = 'scale(0.98)';
+    pressDom.style.transform = (pEl && pEl.rot ? `rotate(${pEl.rot}deg) ` : '') + 'scale(0.98)';
   }
 
   // Merge history: clear future states so undo jumps straight to pre-drag
   S.history = S.history.slice(0, S.hIdx + 1);
   S._drag = id;
   S._didDrag = false;
+  S._dupOnDrop = e.altKey; // Alt+drag duplicates the element on drop
+  S._dupStart = e.altKey ? { x: el2.x, y: el2.y } : null; // pre-drag origin for restore
   const scale = S.zoom / 100;
   const rect = el.cv.getBoundingClientRect();
   S._dragOX = (e.clientX - rect.left) / scale - el2.x;
@@ -1688,6 +1802,9 @@ function onDS(e) {
     pressDom.classList.add('dragging');
     pressDom.style.transition = '';
   }
+  // Store pointer-up timestamp on the DOM so the click handler can check whether
+  // this click is within the drag-dead zone (pointerup → click fires before rAF).
+  if (pressDom) pressDom.dataset._didDragAt = Date.now();
   if (e.pointerId !== undefined) {
     S._lastPointerId = e.pointerId;
     S._lastPointerEl = e.currentTarget;
@@ -1697,7 +1814,6 @@ function onDS(e) {
 }
 
 function onRS(e) {
-  if (S._editingId) return;
   const h = e.currentTarget;
   const id = +h.closest('.gel').dataset.id;
   const el2 = getEl2(id);
@@ -1742,7 +1858,7 @@ document.addEventListener('touchend', e => {
 // max scroll speed is 12px per frame (≈720px/s at 60fps).
 let _autoScrollRAF = 0;
 function _autoScrollCanvas(clientX, clientY) {
-  const scrollEl = document.getElementById('canvas-scroll');
+  const scrollEl = el.scroll;
   if (!scrollEl) return;
   const rect = scrollEl.getBoundingClientRect();
   const EDGE = 48;
@@ -1949,24 +2065,48 @@ function onMouseUp() {
       e2.y = Math.max(-e2.h + 20, Math.min(S.imgH - 20, e2.y));
     });
   }
+  // Alt+drag duplication: the clone keeps the drop position while the original
+  // snaps back to its pre-drag spot. Only for a single-element real drag so the
+  // multi-select delta-move path is left untouched.
+  if (S._drag && S._dupOnDrop && S._didDrag && dragId && S.selSet.size === 1) {
+    const src = getEl2(dragId);
+    if (src && !src.locked && S._dupStart) {
+      const c = JSON.parse(JSON.stringify(src));
+      c.id = S.nid++;
+      c.locked = false;
+      S.els.push(c);
+      src.x = S._dupStart.x; src.y = S._dupStart.y;
+      S.sel = c.id;
+      S.selSet.clear();
+      S.selSet.add(c.id);
+    }
+  }
   if (S._drag || S._resize) {
     saveHist();
   }
   S._drag = null;
+  S._dupOnDrop = false;
+  S._dupStart = null;
   // Delay resetting _didDrag so the subsequent click event (fires after pointerup)
   // can detect that a drag just happened and skip re-selecting.
+  // Fix Bug #1: also synchronously set a DOM timestamp so the click handler can
+  // compare times without relying on rAF — pointerup→click fires in the same tick.
   requestAnimationFrame(() => { S._didDrag = false; });
+  const dragDomAt = document.querySelector(`[data-id="${dragId}"]`);
+  if (dragDomAt) dragDomAt.dataset._didDragAt = Date.now();
   if (S._resize) { S._resize = null; }
   render();
   renderProps();
   // Remove dragging shadow class
   el.cv.querySelectorAll('.gel.dragging').forEach(d => d.classList.remove('dragging'));
-  // Elastic spring-back (scale 0.98 → 1 with overshoot)
+  // Elastic spring-back (scale 0.98 → 1 with overshoot) — restore the element's
+  // base rotation so the animation doesn't leave a bare scale transform behind.
   if (dragId) {
     const dragDom = el.cv.querySelector(`[data-id="${dragId}"]`);
+    const dEl = getEl2(dragId);
     if (dragDom) {
       dragDom.style.transition = 'transform 0.4s var(--ease-out)';
-      dragDom.style.transform = '';
+      dragDom.style.transform = (dEl && dEl.rot ? `rotate(${dEl.rot}deg)` : '');
       setTimeout(() => { if (dragDom) dragDom.style.transition = ''; }, 400);
     }
   }
@@ -1976,10 +2116,26 @@ function onMouseUp() {
 // KEYBOARD
 // ═══════════════════════════════════════════════════════════════
 let _arrowTimer = null;
+
+function _isEditableTarget(target) {
+  return target instanceof Element && !!target.closest('input, textarea, select, [contenteditable="true"], [contenteditable=""]');
+}
+// Paste image from the system clipboard (Ctrl/Cmd+V). Falls back to the same
+// loadFile() pipeline as file upload, including the replace-image confirmation.
+document.addEventListener('paste', e => {
+  if (_isEditableTarget(e.target)) return;
+  const items = e.clipboardData && e.clipboardData.items;
+  if (!items) return;
+  for (const it of items) {
+    if (it.type && it.type.startsWith('image/')) {
+      const file = it.getAsFile && it.getAsFile();
+      if (file) { e.preventDefault(); loadFile(file); }
+      break;
+    }
+  }
+});
 document.addEventListener('keydown', e => {
-  if (S._editingId) return;
-  const tag = document.activeElement.tagName;
-  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+  if (_isEditableTarget(e.target)) return;
 
   if (e.key === '?' && !e.ctrlKey && !e.metaKey) { showShortcuts(); e.preventDefault(); return; }
 
@@ -2025,15 +2181,29 @@ document.addEventListener('keydown', e => {
     selectAll(); e.preventDefault();
   } else if ((e.ctrlKey || e.metaKey) && e.key === 's') {
     saveProject(); e.preventDefault();
+  } else if ((e.ctrlKey || e.metaKey) && (e.key === '=' || e.key === '+' || e.key === '-' || e.key === '0')) {
+    // Ctrl/Cmd +/-/0: bump font size of every selected element; 0 resets to 16px.
+    if (S.selSet.size) {
+      e.preventDefault();
+      const delta = (e.key === '=' || e.key === '+') ? 2 : (e.key === '-' ? -2 : null);
+      S.selSet.forEach(id => {
+        const te = getEl2(id);
+        if (!te) return;
+        const cur = te.fs ?? 16;
+        te.fs = Math.max(8, Math.min(300, delta === null ? 16 : cur + delta));
+      });
+      render(); renderProps();
+      clearTimeout(_arrowTimer); _arrowTimer = setTimeout(scheduleHistSave, 400);
+    }
   } else if (e.key === 'Escape') {
     // Close panels / cancel export / cancel resize / deselect
     const sp = document.getElementById('shortcuts-panel');
     if (sp && sp.classList.contains('show')) { hideShortcuts(); e.preventDefault(); return; }
     if (el.expOvl.classList.contains('show')) { window._exportCancelled = true; e.preventDefault(); return; }
-    if (S._editingId) return; // text edit handles its own escape
+    if (null) return; // text edit handles its own escape
     if (S._resize || S._drag) { S._resize = null; S._drag = null; render(); renderProps(); e.preventDefault(); return; }
-    if (S.sel) { S.sel = null; S.selSet.clear(); render(); hideCtx(); e.preventDefault(); }
-  } else if (!S._editingId && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    if (S.sel) { S.sel = null; S.selSet.clear(); S._selectedParaId = null; S._selectedParaIdx = null; render(); hideCtx(); e.preventDefault(); }
+  } else if (!e.ctrlKey && !e.metaKey && !e.altKey) {
     // Tool shortcuts (work without selection, but not during text edit)
     if (e.key === 'v' || e.key === 'V') { setTool('select'); e.preventDefault(); }
     else if (e.key === 't' || e.key === 'T') { addEl('text'); e.preventDefault(); }
@@ -2095,6 +2265,7 @@ function addEl(type) {
     align: 'center', valign: 'center',
     fontFamily: "'DM Sans',sans-serif",
     locked: false,
+    tOp: 1, // text opacity (renamed from 'top' to avoid CSS naming collision)
   };
   S.els.push(el2);
   S.sel = el2.id;
@@ -2103,24 +2274,28 @@ function addEl(type) {
   saveHist();
   render();
   // Trigger materialize-in animation on the newly created DOM element
-  requestAnimationFrame(() => {
-    const dom = el.cv.querySelector(`[data-id="${el2.id}"]`);
-    if (dom) {
-      dom.classList.add('materialize-in');
-      const handler = function h() {
-        dom.classList.remove('materialize-in');
-        dom._matInHandler = null;
-        dom.removeEventListener('animationend', handler);
-      };
-      dom._matInHandler = handler;
-      dom.addEventListener('animationend', handler);
-    }
-  });
+  requestAnimationFrame(() => _materializeIn(el.cv.querySelector(`[data-id="${el2.id}"]`)));
 }
 
 // Track element IDs with pending delete animations — distinguishes "animation in progress"
 // from "undo cancelled the delete". render() won't clear materialize-out for these.
 const _pendingDelete = new Set();
+
+// Shared entrance animation for newly added elements (addEl / applyPreset).
+// Stores the handler on the DOM so _cleanupAnimListeners can detach it.
+// animationDelay is expected to be set by the caller before invoking this function.
+function _materializeIn(dom) {
+  if (!dom || dom._matInHandler) return;
+  dom.classList.add('materialize-in');
+  const handler = function h() {
+    dom.classList.remove('materialize-in');
+    dom.style.animationDelay = '';
+    dom._matInHandler = null;
+    dom.removeEventListener('animationend', handler);
+  };
+  dom._matInHandler = handler;
+  dom.addEventListener('animationend', handler);
+}
 
 // Clean up animationend listeners on elements being deleted to prevent memory leaks.
 // When an element is removed before its animationend fires, the handler would leak.
@@ -2140,7 +2315,6 @@ function _cleanupAnimListeners() {
 function delSel() {
   if (!S.sel) return;
   // If deleting the element currently being edited, commit (or abandon) the edit first
-  if (S._editingId && S.selSet.has(S._editingId)) commitTextEdit();
   const idsToRemove = [...S.selSet];
   if (!idsToRemove.length && S.sel) idsToRemove.push(S.sel);
   // Play materialize-out animation on all targeted DOM elements
@@ -2186,7 +2360,6 @@ function delSel() {
 
 function delById(id) {
   // If deleting the element currently being edited, commit the edit first
-  if (S._editingId === id) commitTextEdit();
   const dom = el.cv.querySelector(`[data-id="${id}"]`);
   if (dom) {
     // Animate out and remove after animation completes
@@ -2219,23 +2392,25 @@ function delById(id) {
 
 function clearAll() {
   if (!S.els.length) return;
-  if (!confirm(`确认清空全部 ${S.els.length} 个元素？此操作可通过撤销恢复。`)) return;
-  // Clean up shadow store for all elements
-  S.els.forEach(e => _shdCleanup(e.id));
-  S.els = []; S.sel = null; S.selSet.clear();
-  _pendingDelete.clear();
-  // Cancel ALL pending timers to avoid stale updates
-  clearTimeout(_propsTimer);
-  clearTimeout(_layersTimer);
-  clearTimeout(_spTimer);
-  clearTimeout(_autosaveTimer);
-  clearTimeout(_arrowTimer);
-  if (_autoScrollRAF) { cancelAnimationFrame(_autoScrollRAF); _autoScrollRAF = 0; }
-  if (_rafId) { cancelAnimationFrame(_rafId); _rafId = null; _pendingHistSave = false; }
-  _cleanupAnimListeners();
-  _dirty = false; // clearAll is a destructive action, not a modification requiring save warning
-  saveHist();
-  render();
+  const doClear = () => {
+    // Clean up shadow store for all elements
+    S.els.forEach(e => _shdCleanup(e.id));
+    S.els = []; S.sel = null; S.selSet.clear();
+    _pendingDelete.clear();
+    // Cancel ALL pending timers to avoid stale updates
+    clearTimeout(_propsTimer);
+    clearTimeout(_layersTimer);
+    clearTimeout(_spTimer);
+    clearTimeout(_autosaveTimer);
+    clearTimeout(_arrowTimer);
+    if (_autoScrollRAF) { cancelAnimationFrame(_autoScrollRAF); _autoScrollRAF = 0; }
+    if (_rafId) { cancelAnimationFrame(_rafId); _rafId = null; _pendingHistSave = false; }
+    _cleanupAnimListeners();
+    _dirty = false; // clearAll is a destructive action, not a modification requiring save warning
+    saveHist();
+    render();
+  };
+  _askConfirm(`确认清空全部 ${S.els.length} 个元素？此操作可通过撤销恢复。`, doClear);
 }
 
 function dupSel() {
@@ -2246,7 +2421,10 @@ function dupSel() {
     if (!src) return;
     const c = JSON.parse(JSON.stringify(src));
     c.id = S.nid++;
-    c.x += 20; c.y += 20;
+    // Offset by 20px but clamp back inside the canvas so duplicates near the edge
+    // don't land off-canvas where they're impossible to grab.
+    c.x = Math.max(-c.w + 20, Math.min(S.imgW - 20, c.x + 20));
+    c.y = Math.max(-c.h + 20, Math.min(S.imgH - 20, c.y + 20));
     c.locked = false;
     S.els.push(c);
     newIds.push(c.id);
@@ -2398,7 +2576,7 @@ function applyPreset(key) {
     tsh: p.tsh || '0 1px 6px rgba(0,0,0,.4)',
     ls: 0, lh: 1.45, pad: 12, italic: false, underline: false,
     align: 'center', valign: 'center', fontFamily: "'DM Sans',sans-serif",
-    locked: false,
+    locked: false, tOp: 1,
   };
   S.els.push(el2);
   // Preserve multi-selection if active; otherwise select the new element
@@ -2415,19 +2593,7 @@ function applyPreset(key) {
   const presetBtn = document.querySelector(`.preset[onclick="applyPreset('${key}')"]`);
   if (presetBtn) { presetBtn.classList.add('pressed'); setTimeout(() => presetBtn.classList.remove('pressed'), 260); }
   // Trigger materialize-in animation
-  requestAnimationFrame(() => {
-    const dom = el.cv.querySelector(`[data-id="${el2.id}"]`);
-    if (dom) {
-      dom.classList.add('materialize-in');
-      const handler = function h() {
-        dom.classList.remove('materialize-in');
-        dom._matInHandler = null;
-        dom.removeEventListener('animationend', handler);
-      };
-      dom._matInHandler = handler;
-      dom.addEventListener('animationend', handler);
-    }
-  });
+  requestAnimationFrame(() => _materializeIn(el.cv.querySelector(`[data-id="${el2.id}"]`)));
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2436,9 +2602,12 @@ function applyPreset(key) {
 function showCtx(e, id) {
   el.ctxMenu.classList.add('show');
   let x = e.clientX, y = e.clientY;
-  const mw = 180, mh = 220;
+  // Measure real menu size — hardcoding under-estimates overflow off the bottom
+  // of the viewport, leaving the last item(s) unreachable.
+  const mw = el.ctxMenu.offsetWidth  || 180;
+  const mh = el.ctxMenu.offsetHeight || 320;
   // Use the same isPhone definition as the responsive handler
-  const isPhone = window.innerWidth <= 768 && window.innerHeight >= window.innerWidth;
+  const isPhone = _isPhone();
   // Account for fixed top toolbar (~48px) on mobile and bottom toolbar (~52px + safe-area)
   const topOffset = isPhone ? 48 : 0;
   const bottomOffset = isPhone ? 52 : 0;
@@ -2512,11 +2681,58 @@ function _llDrop(e) {
   saveHist();
   render();
 }
-// Layer-list drag & drop is container-scoped — bind once at load; the per-item
-// DOM is rebuilt on every renderLayers() without touching these listeners.
+// Layer-list drag & drop / select / delete are container-scoped (event delegation):
+// the per-item DOM is rebuilt on every renderLayers() but listeners are bound once.
+// Drag events bubble, so the container sees dragstart/dragend from any child .li.
 el.ll.addEventListener('dragover', _llDragOver);
 el.ll.addEventListener('dragleave', _llDragLeave);
 el.ll.addEventListener('drop', _llDrop);
+el.ll.addEventListener('dragstart', e => {
+  const li = e.target.closest('.li');
+  if (!li) return;
+  const id = +li.dataset.elId;
+  if (!getEl2(id)) return;
+  S._dragLayerId = id;
+  li.style.opacity = '0.4';
+  e.dataTransfer.effectAllowed = 'move';
+});
+el.ll.addEventListener('dragend', e => {
+  const li = e.target.closest('.li');
+  S._dragLayerId = null;
+  if (li) li.style.opacity = '';
+  el.ll.querySelectorAll('.li').forEach(d => d.style.borderTop = '');
+});
+function selectLayerById(id) {
+  id = Number(id);
+  if (!getEl2(id)) return;
+  if (S._editingId && S._editingId !== id) commitTextEdit();
+  S.sel = id;
+  S.selSet.clear();
+  S.selSet.add(id);
+  render();
+}
+el.ll.addEventListener('click', e => {
+  const delBtn = e.target.closest('.ldel');
+  if (delBtn) { e.stopPropagation(); delById(+delBtn.dataset.delId); return; }
+  const li = e.target.closest('.li');
+  if (!li) return;
+  selectLayerById(+li.dataset.elId);
+});
+el.ll.addEventListener('keydown', e => {
+  const delBtn = e.target.closest('.ldel');
+  if (delBtn) {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); delById(+delBtn.dataset.delId); }
+    return;
+  }
+  const li = e.target.closest('.li');
+  if (!li || (e.key !== 'Enter' && e.key !== ' ')) return;
+  e.preventDefault();
+  const id = +li.dataset.elId;
+  S.sel = id;
+  S.selSet.clear();
+  S.selSet.add(id);
+  render();
+});
 function renderLayers() {
   if (!S.els.length) {
     el.ll.innerHTML = `<div class="empty-st"><svg width="26" height="26" viewBox="0 0 26 26" fill="none"><rect x="2" y="4" width="22" height="18" rx="3" stroke="currentColor" stroke-width="1.2"/></svg><p>还没有元素</p></div>`;
@@ -2530,19 +2746,10 @@ function renderLayers() {
     div.setAttribute('tabindex', '0');
     div.setAttribute('role', 'option');
     div.draggable = true;
-    // Store the original array index (not reversed)
+    // Store the original array index (not reversed) + element id for delegated events
     const origIdx = S.els.length - 1 - ri;
     div.dataset.layerIdx = origIdx;
-    div.addEventListener('dragstart', e => {
-      S._dragLayerId = el2.id;
-      div.style.opacity = '0.4';
-      e.dataTransfer.effectAllowed = 'move';
-    });
-    div.addEventListener('dragend', () => {
-      div.style.opacity = '';
-      S._dragLayerId = null;
-      el.ll.querySelectorAll('.li').forEach(d => d.style.borderTop = '');
-    });
+    div.dataset.elId = el2.id;
     const icls  = el2.type === 'glass' ? 'gi' : el2.type === 'card' ? 'ci' : 'ti';
     const isvg  = el2.type === 'text'
       ? `<svg width="10" height="10" viewBox="0 0 16 16" fill="none"><path d="M3 4h10M8 4v8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`
@@ -2552,29 +2759,14 @@ function renderLayers() {
     const nm     = el2.type === 'glass' ? '毛玻璃' : el2.type === 'card' ? '深色卡片' : '文字';
     const lockIcon = el2.locked ? `<svg width="10" height="10" viewBox="0 0 16 16" fill="none" style="vertical-align:middle;margin-right:2px;opacity:.6"><rect x="3" y="7" width="10" height="8" rx="2" stroke="currentColor" stroke-width="1.3"/><path d="M5 7V5a3 3 0 016 0v2" stroke="currentColor" stroke-width="1.3"/></svg>` : '';
     const preview = el2.text ? ` — ${escHtml(el2.text.slice(0, 6))}${el2.text.length > 6 ? '…' : ''}` : '';
-    div.innerHTML = `<div class="lic ${icls}">${isvg}</div><div class="ln">${lockIcon}${nm}#${el2.id}${preview}</div><div class="ldel" tabindex="0" role="button" aria-label="删除图层" onclick="event.stopPropagation();delById(${el2.id})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopPropagation();delById(${el2.id})}"><svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M3 5h10M6 5V3h4v2M5 5l.6 8h4.8L11 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></div>`;
+    div.innerHTML = `<div class="lic ${icls}">${isvg}</div><div class="ln">${lockIcon}${nm}#${el2.id}${preview}</div><div class="ldel" tabindex="0" role="button" aria-label="删除图层" data-del-id="${el2.id}"><svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M3 5h10M6 5V3h4v2M5 5l.6 8h4.8L11 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></div>`;
     div.addEventListener('click', e => {
-      if (!e.target.closest('.ldel')) {
-        if (S._editingId && S._editingId !== el2.id) commitTextEdit();
-        S.sel = el2.id;
-        S.selSet.clear();
-        S.selSet.add(el2.id);
-        render();
-      }
-    });
-    div.addEventListener('keydown', e => {
-      if (e.key === 'Enter' && !e.target.closest('.ldel')) {
-        if (S._editingId && S._editingId !== el2.id) commitTextEdit();
-        S.sel = el2.id;
-        S.selSet.clear();
-        S.selSet.add(el2.id);
-        render();
-      }
+      if (e.target.closest('.ldel')) return;
+      e.stopPropagation();
+      selectLayerById(el2.id);
     });
     el.ll.appendChild(div);
   });
-  // Drop target listeners are bound once at init (see _bindLayerDnD) — the layer
-  // items are rebuilt on every render but the container listeners persist.
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2620,10 +2812,56 @@ function _renderPropsImpl() {
   // ── Section: Text ──
   let st = '';
   st += `<div class="pg"><div class="pl">文字内容</div>
-    <textarea class="pi" rows="2" style="resize:vertical;line-height:1.5" title="输入要显示的文字内容"
+    <textarea class="pi" rows="2" style="resize:vertical;line-height:1.5" title="输入要显示的文字内容（每行按 Enter 换段）"
       oninput="sp(${el2.id},'text',this.value,true)"
       onchange="sp(${el2.id},'text',this.value)">${(el2.text||'').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</textarea>
   </div>`;
+
+  // ── Paragraph style editor (per-line overrides) — any element with multi-line text ──
+  // Note: fs/tc/fw are computed here since they are only local to applyStyle()
+  const _fs  = el2.fs  ?? 16;
+  const _tc  = el2.tc  || '#ffffff';
+  const _fw  = el2.fw  || '500';
+  const _paraStyles = el2.paragraphs || [];
+  const _paraFontOpts = [...FONTS, ...S.localFonts.map(f => ({label: f.name, value: f.family}))];
+  const _paraCount  = (el2.text || '').split('\n').length;
+  if (_paraCount > 1) {
+    const _psHtmlLines = [];
+    for (let i = 0; i < _paraCount; i++) {
+      const ps = _paraStyles[i] || {};
+      const previewText = (el2.text || '').split('\n')[i] || '';
+      const pPreview = previewText.length > 20 ? previewText.slice(0,20) + '…' : previewText;
+      const pFs   = ps.fs  ?? _fs;
+      const pTc   = ps.tc  ?? _tc;
+      const pFw   = ps.fw  || _fw;
+      const pFam  = ps.fontFamily || el2.fontFamily || "'DM Sans',sans-serif";
+      const pItl  = ps.italic ? 'italic' : '';
+      const _isActive = S._selectedParaId === el2.id && S._selectedParaIdx === i;
+      _psHtmlLines.push(`<div class="para-row${_isActive ? ' selected' : ''}" data-para-id="${el2.id}" data-para-idx="${i}" onclick="selectParaRow(${el2.id},${i})" style="display:flex;align-items:center;gap:4px;padding:3px 4px;transition:var(--tr)">
+        <input type="color" value="${pTc}" onchange="event.stopPropagation();setParaStyle(${el2.id},${i},'tc',this.value);renderProps()" style="width:24px;height:20px;padding:0;border:1px solid var(--border2);border-radius:4px;background:var(--surface3);cursor:pointer" title="段落 ${i+1} 颜色" onclick="event.stopPropagation()">
+        <input type="number" value="${pFs}" min="8" max="200" step="1"
+          onchange="event.stopPropagation();setParaStyle(${el2.id},${i},'fs',+this.value);renderProps()"
+          style="width:48px;padding:2px 4px;background:var(--surface2);border:1px solid var(--border2);border-radius:4px;color:var(--text);font-size:11px;font-family:var(--font-mono)" title="段落 ${i+1} 字号" onclick="event.stopPropagation()">
+        <button class="mini-btn" style="padding:2px 6px;font-size:10px;${pFw==='700'?'background:var(--accent-glow);color:var(--accent2)':''}"
+          onclick="event.stopPropagation();toggleParaBold(${el2.id},${i});renderProps()"
+          title="段落 ${i+1} 加粗">B</button>
+        <button class="mini-btn" style="padding:2px 6px;font-size:10px;font-style:italic;${pItl==='italic'?'background:var(--accent-glow);color:var(--accent2)':''}"
+          onclick="event.stopPropagation();setParaStyle(${el2.id},${i},'italic',!getEl2(${el2.id})?.paragraphs?.[${i}]?.italic);renderProps()"
+          title="段落 ${i+1} 斜体">I</button>
+        <select class="psel" style="width:92px;min-width:0;padding:2px 4px;font-size:10px" onclick="event.stopPropagation()"
+          onchange="event.stopPropagation();setParaStyle(${el2.id},${i},'fontFamily',this.value);renderProps()" title="段落 ${i+1} 字体">
+          ${_paraFontOpts.map(f => `<option value="${f.value}" ${pFam === f.value ? 'selected' : ''}>${f.label}</option>`).join('')}
+        </select>
+        <span style="font-size:10px;color:var(--text-hint);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(pPreview)}</span>
+      </div>`);
+    }
+    st += `<div class="pg"><div class="pl">段落样式` +
+      (S._selectedParaId === el2.id ? ' <span style="color:var(--accent2)">● 已选段落 ' + (S._selectedParaIdx !== null ? S._selectedParaIdx + 1 : '') + '</span>' : '') +
+      ` <span style="font-size:9px;opacity:.5">点击行选中，每行独立字体/颜色/字号/粗细</span></div>` +
+      '<div style="display:flex;flex-direction:column;gap:4px;margin-top:4px">' +
+      _psHtmlLines.join('') +
+      '</div></div>';
+  }
 
   const fontOpts = [...FONTS, ...S.localFonts.map(f => ({label: f.name, value: f.family}))];
   const curFontVal = el2.fontFamily || "'DM Sans',sans-serif";
@@ -2675,6 +2913,8 @@ function _renderPropsImpl() {
   st += rng(el2.id,'字体大小','fs', el2.fs  ?? 16, 8, 120, 'px');
   st += rng(el2.id,'行高',    'lh', Math.round((el2.lh ?? 1.45) * 100), 80, 250, '%');
   st += rng(el2.id,'字间距',  'ls', el2.ls  ?? 0, -2, 20, 'px');
+  st += rng(el2.id,'旋转',    'rot', el2.rot ?? 0, -180, 180, '°');
+  st += rng(el2.id,'文字不透明度','tOp', Math.round((el2.tOp ?? 1) * 100), 0, 100, '%');
   h += _sec('text', '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="vertical-align:middle;margin-right:3px;opacity:.7"><path d="M3 4h10M8 4v8M6 12h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>文字', '文字内容、字体、样式、对齐', st);
 
   // ── Section: Colors & Shadows ──
@@ -2875,6 +3115,8 @@ const TF = {
   'op':  v => v / 100,
   'bop': v => v / 100,
   'lh':  v => v / 100,
+  // tOp stores text opacity (renamed from 'top' to avoid collision with CSS top)
+  'tOp': v => v / 100,
 };
 
 function rng(id, label, key, val, min, max, unit, _unused, dec) {
@@ -2942,6 +3184,12 @@ function sp(id, key, val, noHist) {
   const el2 = getEl2(id);
   if (!el2) return;
   el2[key] = val;
+  // Sync paragraphs array whenever text content changes (via panel or programmatic update)
+  if (key === 'text' && el2.paragraphs) {
+    const newCount = String(val).split('\n').length;
+    while (el2.paragraphs.length > newCount) el2.paragraphs.pop();
+    while (el2.paragraphs.length < newCount) el2.paragraphs.push({});
+  }
   const dom = el.cv.querySelector(`[data-id="${id}"]`);
   if (dom) applyStyle(dom, el2);
   requestLayersRender();
@@ -2961,6 +3209,10 @@ function slp(id, key, raw, lblId, unit, dec) {
   if (dom) applyStyle(dom, el2);
   const lbl = document.getElementById(lblId);
   if (lbl) lbl.textContent = (dec > 0 ? raw.toFixed(dec) : Math.round(raw)) + unit;
+  // Fix Bug #4: renderProps() while dragging so all panel controls stay in sync.
+  // Debounce to avoid rebuilding the full panel on every single mousemove tick.
+  clearTimeout(_propsTimer);
+  _propsTimer = setTimeout(renderProps, 50);
   requestLayersRender();
   clearTimeout(_spTimer);
   _spTimer = setTimeout(scheduleHistSave, 600);
@@ -2973,6 +3225,48 @@ function tp(id, key) {
   const dom = el.cv.querySelector(`[data-id="${id}"]`);
   if (dom) applyStyle(dom, el2);
   saveHist();
+  renderProps();
+}
+
+// Set a per-paragraph style override (fs, tc, fw, italic, fontFamily).
+// Ensures the paragraphs array exists, then writes into the right index.
+function setParaStyle(id, paraIdx, key, val) {
+  const el2 = getEl2(id);
+  if (!el2) return;
+  if (!Array.isArray(el2.paragraphs)) el2.paragraphs = [];
+  if (!el2.paragraphs[paraIdx]) el2.paragraphs[paraIdx] = {};
+  // Coerce types per key
+  if (key === 'fs')   { el2.paragraphs[paraIdx][key] = Math.max(8, Math.min(200, Number(val) || 16)); }
+  else if (key === 'tc') { el2.paragraphs[paraIdx][key] = String(val).trim(); }
+  else if (key === 'fw') { el2.paragraphs[paraIdx][key] = String(val); }
+  else if (key === 'italic') { el2.paragraphs[paraIdx][key] = !!val; }
+  else { el2.paragraphs[paraIdx][key] = val; }
+  const dom = el.cv.querySelector(`[data-id="${id}"]`);
+  if (dom) applyStyle(dom, el2);
+  requestLayersRender();
+  clearTimeout(_spTimer);
+  _spTimer = setTimeout(scheduleHistSave, 600);
+}
+
+// Toggle bold on/off for a single paragraph (UI button handler).
+function toggleParaBold(id, paraIdx) {
+  const el2 = getEl2(id);
+  if (!el2) return;
+  const ps = (el2.paragraphs || [])[paraIdx] || {};
+  const newVal = ps.fw !== '700' ? '700' : '500';
+  setParaStyle(id, paraIdx, 'fw', newVal);
+}
+
+// Select a specific paragraph row within an element.
+// Clicking the same row again deselects; clicking another row switches.
+function selectParaRow(id, idx) {
+  if (S._selectedParaId === id && S._selectedParaIdx === idx) {
+    S._selectedParaId = null;
+    S._selectedParaIdx = null;
+  } else {
+    S._selectedParaId = id;
+    S._selectedParaIdx = idx;
+  }
   renderProps();
 }
 
@@ -3048,7 +3342,7 @@ function _doAutosave() {
 }
 
 function saveHist() {
-  const snap = JSON.stringify({ els: S.els, sel: S.sel, selSet: [...S.selSet] });
+  const snap = JSON.stringify({ els: S.els, sel: S.sel, selSet: [...S.selSet], zoom: S.zoom });
   // Skip if state hasn't changed (prevents duplicate undo steps)
   if (S.history.length > 0 && S.history[S.hIdx] === snap) return;
   S.history = S.history.slice(0, S.hIdx + 1);
@@ -3069,6 +3363,12 @@ window.addEventListener('beforeunload', e => {
   }
 });
 
+// backgrounding/leaving the tab is a reliable moment to flush autosave — the
+// IndexedDB write is much more likely to complete here than during beforeunload.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') _doAutosave();
+});
+
 // On page load, offer to restore autosaved work (IndexedDB, with legacy
 // localStorage fallback so pre-migration autosaves are still recoverable).
 (function _checkAutosave() {
@@ -3077,35 +3377,34 @@ window.addEventListener('beforeunload', e => {
     const ageMin = Math.round((Date.now() - (data.ts || 0)) / 60000);
     if (ageMin > 1440) { _idb.del('gs_autosave').catch(()=>{}); return; } // expire after 24h
     setTimeout(() => {
-      if (confirm(`检测到 ${ageMin} 分钟前的未保存工作（${data.els.length} 个元素），是否恢复？`)) {
-        S.imgSrc = data.imgSrc;
-        S.imgNatW = data.imgNatW; S.imgNatH = data.imgNatH;
-        S.imgW = data.imgW; S.imgH = data.imgH;
-        S.nid = data.nid || 1;
-        S.els = data.els;
+      _askConfirm(`检测到 ${ageMin} 分钟前的未保存工作（${data.els.length} 个元素），是否恢复？`, () => {
+        const restoredEls = _sanitizeElements(data.els);
+        const restoredSrc = typeof data.imgSrc === 'string' && data.imgSrc.startsWith('data:image/') ? data.imgSrc : null;
+        const dim = value => Number.isFinite(Number(value)) && Number(value) > 0 && Number(value) <= 20000 ? Number(value) : 0;
+        if (!restoredSrc || !restoredEls.length || !dim(data.imgNatW) || !dim(data.imgNatH)) {
+          toast('❌ 自动保存数据无效，已忽略');
+          _idb.del('gs_autosave').catch(()=>{});
+          return;
+        }
+        S.imgSrc = restoredSrc;
+        S.imgNatW = dim(data.imgNatW); S.imgNatH = dim(data.imgNatH);
+        S.imgW = dim(data.imgW) || S.imgNatW; S.imgH = dim(data.imgH) || S.imgNatH;
+        S.els = restoredEls;
+        S.nid = Math.max(1, Number.isFinite(+data.nid) ? +data.nid : 1, ...S.els.map(item => item.id)) + 1;
         S.sel = null;
-        S.selSet = new Set(data.selSet || []);
+        const restoredIds = new Set(S.els.map(item => item.id));
+        S.selSet = new Set((Array.isArray(data.selSet) ? data.selSet : []).map(Number).filter(id => restoredIds.has(id)));
         _pendingDelete.clear();
         // Verify image is valid, then set up UI
         const img = new Image();
         img.onload = () => {
-          el.dz.style.display = 'none';
-          el.cv.style.display = 'block';
-          el.cv.classList.add('loaded');
-          el.cvToolbar.style.display = '';
-          el.sbDim.textContent = `${S.imgNatW} × ${S.imgNatH}`;
           el.sbHint.textContent = '双击元素编辑文字 · 长按更多操作 · 单点选中';
-          // fitCanvas() internally calls setZoom() → applyZoom() — no double-call
-          fitCanvas();
-          S.history = []; S.hIdx = -1;
-          saveHist();
-          _dirty = false; // restored work is not "unsaved" until user makes new changes
-          render();
+          _enterWorkspace();
           toast('✓ 已恢复自动保存的工作');
         };
         img.onerror = () => { toast('❌ 自动保存的图片无法加载'); };
         img.src = S.imgSrc;
-      }
+      });
     }, 600); // delay to let UI initialize first
   }
   _idb.get('gs_autosave').then(saved => {
@@ -3118,30 +3417,32 @@ window.addEventListener('beforeunload', e => {
 })();
 
 function undo() {
+  if (S._editingId) S._editingId = null;
   if (S.hIdx <= 0) { toast('已到最早记录'); return; }
   if (S._drag || S._resize) { S._drag = null; S._resize = null; S._didDrag = false; }
   // Cancel any pending delete animations — undo restores the elements
   _pendingDelete.clear();
   // Discard any in-progress text edit — the saved state may not match current DOM
-  if (S._editingId) { S._editingId = null; }
   S.hIdx--;
   const s = JSON.parse(S.history[S.hIdx]);
   S.els = s.els; S.sel = s.sel;
   S.selSet = new Set(s.selSet || []);
+  if (s.zoom !== undefined) { S.zoom = s.zoom; setZoom(S.zoom); }
   render();
   renderProps();
   toast('↩ 已撤销');
 }
 
 function redo() {
+  if (S._editingId) S._editingId = null;
   if (S.hIdx >= S.history.length - 1) { toast('没有可重做的操作'); return; }
   if (S._drag || S._resize) { S._drag = null; S._resize = null; S._didDrag = false; }
   _pendingDelete.clear();
-  if (S._editingId) { S._editingId = null; }
   S.hIdx++;
   const s = JSON.parse(S.history[S.hIdx]);
   S.els = s.els; S.sel = s.sel;
   S.selSet = new Set(s.selSet || []);
+  if (s.zoom !== undefined) { S.zoom = s.zoom; setZoom(S.zoom); }
   render();
   renderProps();
   toast('↪ 已重做');
@@ -3149,6 +3450,9 @@ function redo() {
 
 function updateUndoInfo() {
   el.undoInfo.textContent = S.history.length > 1 ? `${S.hIdx + 1}/${S.history.length}` : '';
+  const canUndo = S.hIdx > 0, canRedo = S.hIdx < S.history.length - 1;
+  document.querySelectorAll('#btn-undo-top, #btn-undo-btm').forEach(b => { b.disabled = !canUndo; });
+  document.querySelectorAll('#btn-redo-top, #btn-redo-btm').forEach(b => { b.disabled = !canRedo; });
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -3195,20 +3499,20 @@ function _sanitizeEl(raw, fallbackId) {
   return {
     id: Number.isFinite(id) && id > 0 ? id : fallbackId,
     type,
-    x: num(raw.x, 0), y: num(raw.y, 0),
-    w: Math.max(1, num(raw.w, 100)), h: Math.max(1, num(raw.h, 40)),
-    r: Math.max(0, num(raw.r, 12)),
+    x: Math.max(-50000, Math.min(50000, num(raw.x, 0))), y: Math.max(-50000, Math.min(50000, num(raw.y, 0))),
+    w: Math.max(1, Math.min(20000, num(raw.w, 100))), h: Math.max(1, Math.min(20000, num(raw.h, 40))),
+    r: Math.max(0, Math.min(10000, num(raw.r, 12))),
     bg: cssVal(raw.bg, type === 'card' ? '#000000' : '#ffffff', 32),
     tc: cssVal(raw.tc, '#F9F6ED', 32),
-    fs: num(raw.fs, type === 'text' ? 22 : 16),
+    fs: Math.max(8, Math.min(400, num(raw.fs, type === 'text' ? 22 : 16))),
     fw: fwSet.has(String(raw.fw)) ? String(raw.fw) : '500',
-    op: num(raw.op, type === 'card' ? 0.65 : (type === 'text' ? 0.12 : 0.2)),
-    blur: num(raw.blur, type === 'card' ? 4 : (type === 'text' ? 0 : 18)),
-    br: num(raw.br, 100),
-    sat: num(raw.sat, type === 'glass' ? 140 : 100),
-    bw: num(raw.bw, 1),
+    op: Math.max(0, Math.min(1, num(raw.op, type === 'card' ? 0.65 : (type === 'text' ? 0.12 : 0.2)))),
+    blur: Math.max(0, Math.min(200, num(raw.blur, type === 'card' ? 4 : (type === 'text' ? 0 : 18)))),
+    br: Math.max(20, Math.min(300, num(raw.br, 100))),
+    sat: Math.max(0, Math.min(300, num(raw.sat, type === 'glass' ? 140 : 100))),
+    bw: Math.max(0, Math.min(20, num(raw.bw, 1))),
     bc: cssVal(raw.bc, type === 'card' ? '#000000' : '#ffffff', 32),
-    bop: num(raw.bop, type === 'card' ? 0.1 : (type === 'glass' ? 0.35 : 0.2)),
+    bop: Math.max(0, Math.min(1, num(raw.bop, type === 'card' ? 0.1 : (type === 'glass' ? 0.35 : 0.2)))),
     ca: Math.min(5, Math.max(0, num(raw.ca, 0))),
     text: str(raw.text, '', 4000),
     tsh: cssVal(raw.tsh, type === 'text' ? '0 2px 10px rgba(0,0,0,.5)' : '0 1px 6px rgba(0,0,0,.4)', 120),
@@ -3221,12 +3525,41 @@ function _sanitizeEl(raw, fallbackId) {
     valign: ['top', 'center', 'bottom'].includes(raw.valign) ? raw.valign : 'center',
     fontFamily: fontStr(raw.fontFamily, "'DM Sans',sans-serif", 120),
     locked: bool(raw.locked),
+    rot: Math.max(-360, Math.min(360, num(raw.rot, 0))),
+    tOp: Math.min(1, Math.max(0, num(raw.tOp ?? raw.top, 1))),
+    paragraphs: Array.isArray(raw.paragraphs) ? raw.paragraphs.slice(0, 500).map(p => {
+      const item = p && typeof p === 'object' ? p : {};
+      return {
+        fs: Math.max(8, Math.min(400, num(item.fs, type === 'text' ? 22 : 16))),
+        tc: cssVal(item.tc, '#F9F6ED', 32),
+        fw: fwSet.has(String(item.fw)) ? String(item.fw) : '500',
+        italic: bool(item.italic),
+        underline: bool(item.underline),
+        fontFamily: fontStr(item.fontFamily, "'DM Sans',sans-serif", 120),
+        tOp: Math.min(1, Math.max(0, num(item.tOp, 1))),
+      };
+    }) : [],
   };
+}
+function _sanitizeElements(rawEls) {
+  if (!Array.isArray(rawEls)) return [];
+  const used = new Set();
+  let nextId = 1;
+  return rawEls.map((raw, index) => {
+    const item = _sanitizeEl(raw, index + 1);
+    if (!item) return null;
+    while (used.has(item.id) || item.id <= 0) item.id = nextId++;
+    used.add(item.id);
+    nextId = Math.max(nextId, item.id + 1);
+    return item;
+  }).filter(Boolean);
 }
 
 function loadProjectFile(input) {
   const file = input.files[0];
   if (!file) return;
+  if (file.size > 15 * 1024 * 1024) { toast('❌ 项目文件超过 15MB，无法安全加载'); input.value = ''; return; }
+  if (S._editingId) commitTextEdit();
   const reader = new FileReader();
   reader.onload = ev => {
     try {
@@ -3235,39 +3568,33 @@ function loadProjectFile(input) {
       if (!proj.version) {
         proj.selSet = proj.selSet || [proj.sel];
       }
-      S.els = Array.isArray(proj.els)
-        ? proj.els.map((e, i) => _sanitizeEl(e, -(i + 1))).filter(Boolean)
-        : [];
-      S.nid    = Math.max(1, proj.nid, ...S.els.map(e => e.id)) + 1;
-      S.imgW   = Number.isFinite(Number(proj.imgW))   ? +proj.imgW   : 0;
-      S.imgH   = Number.isFinite(Number(proj.imgH))   ? +proj.imgH   : 0;
-      S.imgNatW = Number.isFinite(Number(proj.imgNatW)) ? +proj.imgNatW : 0;
-      S.imgNatH = Number.isFinite(Number(proj.imgNatH)) ? +proj.imgNatH : 0;
-      S.imgSrc = (typeof proj.imgSrc === 'string' && proj.imgSrc.startsWith('data:image/')) ? proj.imgSrc : null;
+      const projectImgSrc = typeof proj.imgSrc === 'string' && proj.imgSrc.startsWith('data:image/') ? proj.imgSrc : null;
+      const projectDim = value => Number.isFinite(Number(value)) && Number(value) > 0 && Number(value) <= 20000 ? Number(value) : 0;
+      if (!projectImgSrc || !projectDim(proj.imgW) || !projectDim(proj.imgH) || !projectDim(proj.imgNatW) || !projectDim(proj.imgNatH)) {
+        throw new Error('invalid project image metadata');
+      }
+      S.els = _sanitizeElements(proj.els);
+      // Math.max with undefined/NaN propagates NaN — old projects without nid
+      // would set S.nid=NaN and poison every subsequently created element id.
+      S.nid    = Math.max(1, (Number.isFinite(+proj.nid) ? +proj.nid : 1), ...S.els.map(e => e.id)) + 1;
+      S.imgW = projectDim(proj.imgW);
+      S.imgH = projectDim(proj.imgH);
+      S.imgNatW = projectDim(proj.imgNatW);
+      S.imgNatH = projectDim(proj.imgNatH);
+      S.imgSrc = projectImgSrc;
       S.sel    = null;
       const validIds = new Set(S.els.map(e => e.id));
       S.selSet = new Set((Array.isArray(proj.selSet) ? proj.selSet : []).filter(id => validIds.has(Number(id))));
       _pendingDelete.clear();
 
-      if (S.imgSrc) {
-        el.dz.style.display    = 'none';
-        el.cv.style.display    = 'block';
-        el.cv.classList.add('loaded');
-        el.cvToolbar.style.display = '';
-        el.sbDim.textContent = `${S.imgNatW} × ${S.imgNatH}`;
-      }
-      // Clamp elements to loaded canvas bounds FIRST — fitCanvas() needs correct bounds
+      // Clamp elements to loaded canvas bounds FIRST — _enterWorkspace's fitCanvas
+      // and render need correct bounds before layout runs.
       S.els.forEach(el2 => {
         el2.x = Math.max(-el2.w + 20, Math.min(S.imgW - 20, el2.x));
         el2.y = Math.max(-el2.h + 20, Math.min(S.imgH - 20, el2.y));
       });
-      fitCanvas();
-      S.history = [];
-      S.hIdx = -1;
-      saveHist();
-      _dirty = false; // loading a project file is not an "unsaved change"
+      if (S.imgSrc) _enterWorkspace();
       _idb.del('gs_autosave').catch(()=>{}); // clear stale autosave
-      render();
       const knownFamilies = new Set([
         ...FONTS.map(f => f.value),
         ...S.localFonts.map(f => f.family),
@@ -3286,6 +3613,7 @@ function loadProjectFile(input) {
       toast('❌ 加载失败：文件格式错误');
     }
   };
+  reader.onerror = () => toast('❌ 项目文件读取失败');
   reader.readAsText(file);
   input.value = '';
 }
@@ -3486,17 +3814,40 @@ async function exportImg() {
     const sr = Math.min((el2.r ?? 12) * avgS, Math.min(ew, eh) / 2);
     const isBoxed = (el2.type === 'glass' || el2.type === 'card');
 
+    // ── 0. Element rotation ──
+    // Everything drawn below lives in a coordinate space rotated around the
+    // element's center so canvas output matches the DOM's transform:rotate.
+    // Shadow and CA are special-cased below: shadow mask is fine to rotate
+    // (matches Figma-style tools), the CA blit re-undoes the rotation so its
+    // axis-aligned rect stays glued to the rotated element.
+    const rotDeg = el2.rot || 0;
+    const rotRad = rotDeg * Math.PI / 180;
+    const hasRot = Math.abs(rotDeg) > 0.01;
+    if (hasRot) {
+      const rcx = ex + ew / 2, rcy = ey + eh / 2;
+      ctx.save();
+      ctx.translate(rcx, rcy);
+      ctx.rotate(rotRad);
+      ctx.translate(-rcx, -rcy);
+    }
+
     // ── 1. Sample backdrop for blur (BEFORE shadow, so shadow isn't in blur) ──
     const blurVal = (el2.blur !== undefined && el2.blur !== null) ? el2.blur : (el2.type === 'card' ? 4 : 18);
     let blurredTmp = null, bRx = 0, bRy = 0, bRw = 0, bRh = 0;
     if (isBoxed && blurVal >= 0) {
       const rawRadius = blurVal * avgS;
       const bRadius = Math.min(Math.round(rawRadius), 300);
-      const pad = Math.max(bRadius * 2, 2);
-      bRx = Math.max(0, Math.floor(ex - pad));
-      bRy = Math.max(0, Math.floor(ey - pad));
-      bRw = Math.min(ec.width  - bRx, Math.ceil(ew + pad * 2));
-      bRh = Math.min(ec.height - bRy, Math.ceil(eh + pad * 2));
+      // Sample an axis-aligned box that fully covers the element after rotation
+      // (the rotated rect's axis-aligned bounding box), padded by the blur radius.
+      const hw = ew / 2, hh = eh / 2;
+      const extW = hasRot ? Math.abs(hw * Math.cos(rotRad)) + Math.abs(hh * Math.sin(rotRad)) : hw;
+      const extH = hasRot ? Math.abs(hw * Math.sin(rotRad)) + Math.abs(hh * Math.cos(rotRad)) : hh;
+      const pad = Math.max(bRadius * 3 + 2, 4);
+      const bCx = ex + hw, bCy = ey + hh;
+      bRx = Math.max(0, Math.floor(bCx - extW - pad));
+      bRy = Math.max(0, Math.floor(bCy - extH - pad));
+      bRw = Math.min(ec.width  - bRx, Math.ceil((extW + pad) * 2));
+      bRh = Math.min(ec.height - bRy, Math.ceil((extH + pad) * 2));
 
       // Use ctx.filter with combined blur+saturate+brightness in a single pass —
       // matches CSS backdrop-filter exactly (same Gaussian blur algorithm,
@@ -3507,6 +3858,8 @@ async function exportImg() {
       const brVal  = el2.br  && el2.br  !== 100 ? el2.br  : 100;
       blurredTmp = _expCanvas('blur', bRw, bRh);
       const tc = blurredTmp.getContext('2d');
+      tc.imageSmoothingEnabled = true;
+      tc.imageSmoothingQuality = 'high';
       const parts = [];
       if (bRadius > 0) parts.push(`blur(${bRadius}px)`);
       if (satVal !== 100) parts.push(`saturate(${satVal}%)`);
@@ -3612,89 +3965,101 @@ async function exportImg() {
 
     // ── Text ──────────────────────────────────────────────────
     if (el2.text) {
-      // Text metrics live in the same coordinate space as ex/ey/ew/eh,
-      // so they must scale by the same (sx+sy)/2 factor, not just exportScale.
-      const fsize = (el2.fs ?? 16) * avgS;
       const fam   = el2.fontFamily || "'DM Sans',sans-serif";
+      const paraStyles = el2.paragraphs || [];
+      const paragraphs = el2.text.split('\n');
+
       ctx.save();
-      // Clip text to element bounds for ALL types — DOM uses .el-inner overflow:hidden
       rrPath(ctx, ex, ey, ew, eh, sr);
       ctx.clip();
 
-      ctx.font         = canvasFontStr(el2.italic, el2.fw, fsize, fam);
-      ctx.fillStyle    = el2.tc || '#ffffff';
-      ctx.textAlign    = el2.align || 'center';
-      ctx.textBaseline = 'top';
-
-      // Shadow — parse CSS text-shadow string robustly
-      // Supports: rgba/rgb/hsla/hsl/hex/named colors, inset keyword (ignored on canvas)
+      // Shadow (global)
       const tshRaw = (el2.tsh || '0 1px 6px rgba(0,0,0,.4)')
         .replace(/^"|"$/g, '').replace(/\binset\b/gi, '').trim();
-      // Match: offsetX offsetY blur color (color can be rgba/rgb/hsla/hsl/hex/named)
-      const m = tshRaw.match(
+      const sm = tshRaw.match(
         /(-?[\d.]+)px?\s+(-?[\d.]+)px?\s+([\d.]+)px?\s*(rgba?\([^)]+\)|hsla?\([^)]+\)|#[\da-fA-F]{3,8}|[a-zA-Z]+)/i
       );
-      if (m) {
-        ctx.shadowOffsetX = +m[1] * avgS;
-        ctx.shadowOffsetY = +m[2] * avgS;
-        ctx.shadowBlur    = +m[3] * avgS;
-        ctx.shadowColor   = m[4];
+      if (sm) {
+        ctx.shadowOffsetX = +sm[1] * avgS;
+        ctx.shadowOffsetY = +sm[2] * avgS;
+        ctx.shadowBlur    = +sm[3] * avgS;
+        ctx.shadowColor   = sm[4];
       } else {
-        // fallback: no shadow (don't leave stale shadow state)
-        ctx.shadowOffsetX = 0;
-        ctx.shadowOffsetY = 0;
-        ctx.shadowBlur    = 0;
-        ctx.shadowColor   = 'transparent';
+        ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
+        ctx.shadowBlur    = 0; ctx.shadowColor = 'transparent';
       }
 
-      const lsVal  = (el2.ls  ?? 0)    * avgS;
-      const lineH  = (el2.lh  ?? 1.45) * fsize;
-      const padPx  = (el2.pad ?? 12)   * avgS;
+      const lsVal  = (el2.ls  ?? 0) * avgS;
+      const lhRatio = (el2.lh  ?? 1.45);
+      const padPx  = (el2.pad ?? 12) * avgS;
       const maxW   = ew - padPx * 2;
       const textX  = el2.align === 'left'
         ? ex + padPx
         : el2.align === 'right'
         ? ex + ew - padPx
         : ex + ew / 2;
-      const lines  = wrapLines(ctx, el2.text, maxW, lsVal);
-      const totalH = lines.length * lineH;
-      let startY;
-      if (el2.valign === 'top')        startY = ey + padPx;
-      else if (el2.valign === 'bottom') startY = ey + eh - padPx - totalH;
-      else                              startY = ey + eh / 2 - totalH / 2;
 
-      // CSS centers text within each line box; Canvas textBaseline='top' draws at the
-      // top of the em square. Add (lineH - fsize)/2 to shift text down to match CSS.
-      const textVOffset = (lineH - fsize) / 2;
+      // Pre-compute per-paragraph layout info for vertical alignment
+      const paraInfos = paragraphs.map((para, pi) => {
+        const ps = paraStyles[pi] || {};
+        const psFs = Math.max(8, (ps.fs ?? el2.fs ?? 16)) * avgS;
+        const psFw = ps.fw || el2.fw || '500';
+        const psFam = ps.fontFamily || fam;
+        const psItl = ps.italic ? 'italic' : '';
+        // wrapLines relies on ctx.measureText, so assign the exact paragraph font first.
+        ctx.font = canvasFontStr(psItl === 'italic', psFw, psFs, psFam);
+        const psLineH = lhRatio * psFs;
+        const psLines = wrapLines(ctx, para, maxW, lsVal);
+        return { ps, psFs, psLineH, psLines };
+      });
+      const totalH = paraInfos.reduce((s, p) => s + p.psLines.length * p.psLineH, 0);
+      let curY;
+      if (el2.valign === 'top')        curY = ey + padPx;
+      else if (el2.valign === 'bottom') curY = ey + eh - padPx - totalH;
+      else                              curY = ey + eh / 2 - totalH / 2;
 
-      lines.forEach((line, li) => {
-        const ly = startY + li * lineH + textVOffset;
-        drawTextWithSpacing(ctx, line, textX, ly, lsVal);
+      // Render each paragraph with its own style
+      paraInfos.forEach(pi => {
+        const { ps, psFs, psLineH, psLines } = pi;
+        const psItl  = ps.italic ? 'italic' : '';
+        const psFw   = ps.fw || el2.fw || '500';
+        const psTc   = ps.tc || el2.tc || '#ffffff';
+        const psFam  = ps.fontFamily || fam;
+        const psAlpha = ps.tOp ?? el2.tOp ?? 1;
+        const textVOffset = (psLineH - psFs) / 2;
+        const psUnderline = ps.underline !== undefined ? ps.underline : (el2.underline || false);
 
-        // Underline (canvas has no textDecoration, draw manually)
-        if (el2.underline && line) {
-          ctx.save();
-          ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
-          ctx.shadowBlur = 0; ctx.shadowColor = 'transparent';
-          const tw = measureWithSpacing(ctx, line, lsVal);
-          const ux = ctx.textAlign === 'center' ? textX - tw / 2
-                   : ctx.textAlign === 'right'  ? textX - tw : textX;
-          // Measure ascent with alphabetic baseline (fontBoundingBoxAscent is from
-          // baseline to font top), then restore to 'top' for drawing.
-          ctx.textBaseline = 'alphabetic';
-          const m = ctx.measureText(line);
-          const ascent = m.fontBoundingBoxAscent || m.actualBoundingBoxAscent || fsize * 0.8;
+        psLines.forEach(line => {
+          const ly = curY + textVOffset;
+          ctx.font         = canvasFontStr(psItl === 'italic', psFw, psFs, psFam);
+          ctx.fillStyle    = psTc;
+          ctx.globalAlpha  = psAlpha;
+          ctx.textAlign    = el2.align || 'center';
           ctx.textBaseline = 'top';
-          // Baseline sits at ly + ascent; underline just below baseline
-          const uy = ly + ascent + Math.max(1, fsize * 0.05);
-          ctx.strokeStyle = el2.tc || '#ffffff';
-          ctx.lineWidth   = Math.max(1, fsize * 0.06);
-          ctx.beginPath();
-          ctx.moveTo(ux, uy);
-          ctx.lineTo(ux + tw, uy);
-          ctx.stroke();
-          ctx.restore();
-        }
+          drawTextWithSpacing(ctx, line, textX, ly, lsVal);
+
+          if (psUnderline && line) {
+            ctx.save();
+            ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
+            ctx.shadowBlur = 0; ctx.shadowColor = 'transparent';
+            const tw = measureWithSpacing(ctx, line, lsVal);
+            const ux = ctx.textAlign === 'center' ? textX - tw / 2
+                     : ctx.textAlign === 'right'  ? textX - tw : textX;
+            ctx.textBaseline = 'alphabetic';
+            const am = ctx.measureText(line);
+            const ascent = am.fontBoundingBoxAscent || am.actualBoundingBoxAscent || psFs * 0.8;
+            ctx.textBaseline = 'top';
+            const uy = ly + ascent + Math.max(1, psFs * 0.05);
+            ctx.strokeStyle = psTc;
+            ctx.lineWidth   = Math.max(1, psFs * 0.06);
+            ctx.beginPath();
+            ctx.moveTo(ux, uy);
+            ctx.lineTo(ux + tw, uy);
+            ctx.stroke();
+            ctx.restore();
+          }
+          curY += psLineH;
+        });
       });
 
       ctx.restore();
@@ -3749,9 +4114,18 @@ async function exportImg() {
         oc.drawImage(src, 0, 0);
         oc.globalCompositeOperation = 'source-over';
 
+        // Undo the element rotation so the axis-aligned CA output stays glued to
+        // the (possibly rotated) element rect in absolute export coordinates.
+        if (hasRot) {
+          ctx.save();
+          const rcx = ex + ew / 2, rcy = ey + eh / 2;
+          ctx.translate(rcx, rcy); ctx.rotate(-rotRad); ctx.translate(-rcx, -rcy);
+        }
         ctx.drawImage(out, rx, ry);
+        if (hasRot) ctx.restore();
       }
     }
+    if (hasRot) ctx.restore();
   }
 
   bar.style.width = '90%';
@@ -3760,11 +4134,24 @@ async function exportImg() {
   if (window._exportCancelled) { ov.classList.remove('show'); toast('已取消导出'); return; }
 
   const a = document.createElement('a');
-  a.download = `glass-studio-${exportScale}x-${Date.now()}.png`;
+  // toBlob avoids the ~1.37× memory spike of toDataURL's base64 encoding.
+  const fmt  = S.exportFmt === 'jpeg' ? 'jpeg' : 'png';
+  const mime = fmt === 'jpeg' ? 'image/jpeg' : 'image/png';
+  const ext  = fmt === 'jpeg' ? 'jpg' : 'png';
+  a.download = `glass-studio-${exportScale}x-${Date.now()}.${ext}`;
+  // JPEG has no alpha channel — composite the canvas over a white backdrop first.
+  let blobSrc = ec;
+  if (fmt === 'jpeg') {
+    const bg = _expCanvas('fmt-bg', ec.width, ec.height);
+    const bc = bg.getContext('2d');
+    bc.fillStyle = '#ffffff';
+    bc.fillRect(0, 0, bg.width, bg.height);
+    bc.drawImage(ec, 0, 0);
+    blobSrc = bg;
+  }
   try {
-    // toBlob avoids the ~1.37× memory spike of toDataURL's base64 encoding.
     const blob = await new Promise((resolve, reject) => {
-      ec.toBlob(b => { if (b) resolve(b); else reject(new Error('empty blob')); }, 'image/png');
+      blobSrc.toBlob(b => { if (b) resolve(b); else reject(new Error('empty blob')); }, mime, fmt === 'png' ? undefined : 0.92);
     });
     const url = URL.createObjectURL(blob);
     a.href = url;
@@ -3777,9 +4164,9 @@ async function exportImg() {
     ov.classList.remove('show');
     console.error('Export failed (Blob method):', err);
     try {
-      const dataUrl = ec.toDataURL('image/png');
+      const dataUrl = blobSrc.toDataURL(mime);
       a.href = dataUrl;
-      a.download = `glass-studio-${exportScale}x-${Date.now()}.png`;
+      a.download = `glass-studio-${exportScale}x-${Date.now()}.${ext}`;
       a.click();
       bar.style.width = '100%';
       setTimeout(() => {
@@ -3916,11 +4303,11 @@ function yield() {
 // Mouse-wheel zoom on canvas scroll area (centered on cursor)
 // Supports Ctrl/Cmd+wheel (standard) and Alt+wheel (mac-friendly, avoids
 // conflict with macOS "Zoom screen" accessibility gesture on Ctrl+wheel)
-document.getElementById('canvas-scroll').addEventListener('wheel', e => {
+el.scroll.addEventListener('wheel', e => {
   if (!S.imgSrc) return;
   if (e.ctrlKey || e.metaKey || e.altKey) {
     e.preventDefault();
-    const scrollEl = document.getElementById('canvas-scroll');
+    const scrollEl = el.scroll;
     // Record content point under cursor before zoom
     const oldScale = S.zoom / 100;
     const rect = scrollEl.getBoundingClientRect();
@@ -3964,17 +4351,8 @@ document.addEventListener('touchend', e => {
 });
 
 // ═══════════════════════════════════════════════════════════════
-// FONT PICKER (local fonts — merged from original)
+// LOCAL FONTS
 // ═══════════════════════════════════════════════════════════════
-function showFontPicker() {
-  renderFontList();
-  el.fontPick.classList.add('show');
-}
-
-function hideFontPicker() {
-  el.fontPick.classList.remove('show');
-}
-
 async function loadLocalFonts(input) {
   const files = Array.from(input.files);
   if (!files.length) { input.value = ''; return; }
@@ -4011,6 +4389,7 @@ async function loadLocalFonts(input) {
 
 function renderFontList() {
   const list = document.getElementById('local-fonts-list');
+  if (!list) return; // the legacy font-picker panel was removed; list only exists there
   if (!S.localFonts.length) {
     list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px">暂无本地字体</div>';
     return;
@@ -4034,13 +4413,6 @@ function selectFont(family, dom) {
   renderFontList();
   if (dom) toast(`已应用：${dom.textContent.trim()}`);
 }
-
-document.addEventListener('click', e => {
-  const fp = el.fontPick;
-  if (fp && fp.classList.contains('show') && !fp.contains(e.target)) {
-    fp.classList.remove('show');
-  }
-});
 
 // ═══════════════════════════════════════════════════════════════
 // LONG-PRESS CONTEXT MENU (mobile)
@@ -4129,11 +4501,15 @@ function hideShortcuts() {
 // ═══════════════════════════════════════════════════════════════
 
 // ── Responsive layout helper ──
+// Single source of truth for "phone" detection (used by context menu, responsive
+// layout, export defaults, etc.). Portrait phone: ≤768px wide AND taller than wide.
+function _isPhone() {
+  return window.innerWidth <= 768 && window.innerHeight >= window.innerWidth;
+}
 function _applyResponsive() {
   const w = window.innerWidth;
   const h = window.innerHeight;
-  // Phone = ≤768px width AND taller than wide (portrait orientation)
-  const isPhone = w <= 768 && h >= w;
+  const isPhone = _isPhone();
   // Panel toggle visibility
   const panelBtn = document.getElementById('panel-toggle');
   if (panelBtn) panelBtn.style.display = isPhone ? 'flex' : '';
