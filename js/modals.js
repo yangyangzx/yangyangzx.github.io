@@ -738,18 +738,26 @@ function doSaveSplit(calc, count) {
     return Slippage.toLogSnapshot(model, { source: slippageBase.source });
   }
 
-  function createBatchCosts(pos) {
-    const atStop = createSnapshot(pos, calc.stopLoss);
+  function createBatchCosts(pos, batchStopLoss) {
+    // 优先使用分批独立止损价；未设置则回退到全局 calc.stopLoss
+    var actualStopLoss = batchStopLoss != null ? parseFloat(batchStopLoss) : calc.stopLoss;
+    const atStop = createSnapshot(pos, actualStopLoss);
     const atTarget = createSnapshot(pos, calc.targetPrice);
     // 计划快照沿用主计算器约定：有目标时以目标路径衡量计划成本，否则使用止损路径。
     const planning = atTarget || atStop;
     const quantity = pos / calc.effectiveEntryPrice;
     const fee = calcRoundTripFee(quantity, planning.effectiveEntryPrice, planning.effectiveExitPrice, feeRate);
-    return { fee: fee, slippage: { planning: planning, atStop: atStop, atTarget: atTarget } };
+    return { fee: fee, slippage: { planning: planning, atStop: atStop, atTarget: atTarget }, stopLoss: actualStopLoss };
   }
 
   const now = new Date();
-  const makeEntry = (pos, costs, risk, groupLabel) => ({
+  // 读取分批独立止损信息（由 calculate() 写入 calc._splitBatches）
+  const splitBatches = calc._splitBatches || [];
+  const hasIndepSL = splitBatches.length >= 2 && splitBatches.some(function(b) {
+    return b.stopLoss && !isNaN(parseFloat(b.stopLoss));
+  });
+
+  const makeEntry = (pos, costs, risk, groupLabel, batchIdx) => ({
     time: now.toISOString(),
     symbol: calc.symbol,
     direction: calc.direction,
@@ -757,7 +765,7 @@ function doSaveSplit(calc, count) {
     stopType: calc.stopType || (document.getElementById('stopType')?.value || 'stop-market'),
     entryPrice: calc.entryPrice,
     effectiveEntryPrice: calc.effectiveEntryPrice,
-    stopLoss: calc.stopLoss,
+    stopLoss: costs.stopLoss,  // 使用批次独立止损或全局止损
     targetPrice: calc.targetPrice,
     positionSize: parseFloat(pos.toFixed(2)),
     leverage: calc.leverage,
@@ -782,12 +790,17 @@ function doSaveSplit(calc, count) {
   for (let i = 0; i < count; i++) {
     const isLast = (i === count - 1);
     const pos = isLast ? remainderPos : splitPos;
-    const costs = createBatchCosts(pos);
+    // 分批模式下优先使用独立止损价，未设置则回退全局
+    var batchStopLoss = null;
+    if (hasIndepSL && splitBatches[i] && splitBatches[i].stopLoss && !isNaN(parseFloat(splitBatches[i].stopLoss))) {
+      batchStopLoss = parseFloat(splitBatches[i].stopLoss);
+    }
+    const costs = createBatchCosts(pos, batchStopLoss);
     const perRisk = calc.riskAmount / count;
     const remainderRisk = calc.riskAmount - perRisk * (count - 1);
     const risk = isLast ? remainderRisk : perRisk;
     const label = i === 0 ? '主' : ('第' + (i + 1) + '笔');
-    const entry = makeEntry(pos, costs, risk, label);
+    const entry = makeEntry(pos, costs, risk, label, i);
     splitEntries.push({
       index: i + 1,
       positionSize: parseFloat(pos.toFixed(2)),
@@ -796,6 +809,7 @@ function doSaveSplit(calc, count) {
       slippage: costs.slippage,
       riskAmount: parseFloat(risk.toFixed(2)),
       label: label,
+      stopLoss: costs.stopLoss,  // 记录每笔实际使用的止损价
     });
     logs.push(entry);
   }

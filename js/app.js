@@ -64,6 +64,8 @@ document.addEventListener('DOMContentLoaded', function() {
   // loadLogs() 已由 navigation.js 在 DOMContentLoaded 中调用，此处不再重复
   // 将已保存的设置值同步到开仓计算器表单（本金、风险比例、杠杆）
   if (typeof syncSettingsToForm === 'function') syncSettingsToForm();
+  // 刷新检查清单标签文字（使其与当前设置一致）
+  if (typeof refreshChecklistLabels === 'function') refreshChecklistLabels();
   updateLastUpdate();
   populateFilterOptions();
   updateBackupTime();

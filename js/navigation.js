@@ -109,6 +109,10 @@ function onViewActivated(viewName) {
     if (typeof syncSymbolDatalist === 'function') {
       syncSymbolDatalist();
     }
+    // 刷新检查清单标签文字，使其与最新设置一致
+    if (typeof refreshChecklistLabels === 'function') {
+      refreshChecklistLabels();
+    }
   }
   // 风控中心：渲染风险指标
   if (viewName === 'risk') {

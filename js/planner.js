@@ -39,11 +39,17 @@ function calcReverseTP() {
     return;
   }
 
-  // 优先使用加权止损距离（分批模式下）
-  // 优先使用 _lastCalc 中的精确止损距离（含 ATR 模式），避免从 round 后的 stopLoss 反推精度丢失
+  // 优先使用 _lastCalc 中的精确止损距离（含 ATR 模式和分批加权模式），
+  // 避免从 round 后的 stopLoss 反推精度丢失
   var stopDistance;
-  if (calc && calc.stopDistance != null) {
-    stopDistance = calc.stopDistance;
+  if (calc) {
+    // ATR 模式：stopDistance 由 ATR × multiplier 计算得出，已存入 calc.stopDistance
+    // 分掰模式：stopDistance 可能为 weightedStopDistance（独立止损）或全局 stopDistance
+    if (calc.stopDistance != null) {
+      stopDistance = calc.stopDistance;
+    } else {
+      stopDistance = Math.abs(entryPrice - stopLoss);
+    }
   } else {
     stopDistance = Math.abs(entryPrice - stopLoss);
   }
@@ -103,14 +109,10 @@ function calcReverseSL() {
   }
 
   // 根据目标价与期望盈亏比反推止损距离
+  // calcReverseSL 的目的是"给定目标价和期望RR，反推止损价"
+  // 不应受 calc.stopDistance（ATR 或分批结果）影响，否则失去反推意义
   var targetDistance = Math.abs(targetPrice - entryPrice);
-  // 优先使用加权止损距离（分批模式下）
-  var stopDistance;
-  if (calc && calc.splitMode && calc.weightedStopDistance != null) {
-    stopDistance = calc.weightedStopDistance;
-  } else {
-    stopDistance = targetDistance / desiredRR;
-  }
+  var stopDistance = targetDistance / desiredRR;
 
   var stopLoss;
   if (direction === 'long') {
@@ -146,8 +148,8 @@ function autoCalcMultiTP() {
     entryPrice = calc.effectiveEntryPrice || calc.entryPrice;
     stopLoss = calc.stopLoss;
     direction = calc.direction;
-    // 优先使用加权止损距离（分批模式下），否则使用全局 stopDistance
-    stopDistance = calc.splitMode && calc.weightedStopDistance != null ? calc.weightedStopDistance : calc.stopDistance;
+    // 优先使用 calc.stopDistance（含 ATR 模式和分批加权模式）
+    stopDistance = calc.stopDistance != null ? calc.stopDistance : 0;
   } else {
     entryPrice = parseFloat(document.getElementById('entryPrice').value);
     stopLoss = parseFloat(document.getElementById('stopLoss').value);
@@ -157,6 +159,7 @@ function autoCalcMultiTP() {
   }
 
   if (isNaN(entryPrice) || entryPrice <= 0 || stopDistance <= 0) {
+    showToast('无法计算止盈位：请先点击「计算仓位」确保有有效的止损距离', 'warn');
     return;
   }
 
@@ -200,14 +203,21 @@ function updateMultiTP() {
     entryPrice = calc.effectiveEntryPrice || calc.entryPrice;
     stopLoss = calc.stopLoss;
     direction = calc.direction;
-    // 优先使用加权止损距离（分批模式下），否则使用全局 stopDistance
-    stopDistance = calc.splitMode && calc.weightedStopDistance != null ? calc.weightedStopDistance : calc.stopDistance;
+    // 优先使用 calc.stopDistance（含 ATR 模式和分批加权模式）
+    stopDistance = calc.stopDistance != null ? calc.stopDistance : 0;
   } else {
     entryPrice = parseFloat(document.getElementById('entryPrice').value);
     stopLoss = parseFloat(document.getElementById('stopLoss').value);
     direction = document.getElementById('direction').value;
-    stopDistance = !isNaN(entryPrice) && !isNaN(stopLoss) && entryPrice > 0 && stopLoss > 0
-      ? Math.abs(entryPrice - stopLoss) : 0;
+    // 方向校验：止损价必须与方向相反，否则 stopDistance = 0
+    if (direction === 'long' && (!isNaN(stopLoss) && stopLoss >= entryPrice)) {
+      stopDistance = 0;
+    } else if (direction === 'short' && (!isNaN(stopLoss) && stopLoss <= entryPrice)) {
+      stopDistance = 0;
+    } else {
+      stopDistance = !isNaN(entryPrice) && !isNaN(stopLoss) && entryPrice > 0 && stopLoss > 0
+        ? Math.abs(entryPrice - stopLoss) : 0;
+    }
   }
 
   // 更新三档剩余仓位百分比
@@ -445,11 +455,15 @@ function updateChecklist() {
   // 【增强8】当日未超日亏损上限（新增检查项，基于设置中的 dailyLossLimit）
   updateCheckItemWithResult('checkDailyLoss', function() {
     // 没有设置或本金无法确定时跳过检查
-    if (!settings.dailyLossLimit || !calc || calc.capital == null || calc.capital <= 0) {
+    if (!settings.dailyLossLimit || !calc) {
       return null; // 不适用
     }
+    // 与 checkDailyLossLimit() 保持一致：优先使用 getAccountCapital()，兜底到 calc.capital
+    var capital = (typeof getAccountCapital === 'function') ? getAccountCapital() : null;
+    if (!capital || capital <= 0) capital = (calc.capital != null && calc.capital > 0) ? calc.capital : null;
+    if (!capital) return null;
     var dailyLossPct = settings.dailyLossLimit;
-    var dailyLossLimit = calc.capital * (dailyLossPct / 100);
+    var dailyLossLimit = capital * (dailyLossPct / 100);
     var todayStatus = getTodayLossStatus();
     var todayLoss = Math.abs(todayStatus.todayLoss); // 今日总亏损额（绝对值）
     var passed = todayLoss < dailyLossLimit;
@@ -527,6 +541,35 @@ function updateChecklist() {
       calc.checklistResults = {};
     }
     for (var k in checklistResults) calc.checklistResults[k] = checklistResults[k];
+  }
+}
+
+/**
+ * 动态刷新检查清单标签文字，使其与当前设置一致
+ * 通过 data-default 属性保留静态 fallback 文本
+ */
+function refreshChecklistLabels() {
+  var settings = loadSettings();
+  var rules = [
+    { id: 'checkRiskPct',      key: 'riskPercent',        format: function(v) { return '单笔风险 ≤ 账户 ' + v + '%'; } },
+    { id: 'checkRR',           key: 'minRRRatio',         format: function(v) { return '盈亏比 ≥ ' + v + ':1'; } },
+    { id: 'checkMindset',      key: 'mindsetMinScore',    format: function(v) { return '心态评分 ≥ ' + v + '（平静/良好）'; } },
+    { id: 'checkPortfolioHeat', key: 'riskHeatMax',       format: function(v) { return '组合热量安全（≤ ' + v + '%）'; } }
+  ];
+  for (var i = 0; i < rules.length; i++) {
+    var r = rules[i];
+    var el = document.getElementById(r.id);
+    if (!el) continue;
+    var span = el.querySelector('span:last-child');
+    if (!span) continue;
+    var rawVal = settings[r.key];
+    if (rawVal != null && rawVal !== '') {
+      span.textContent = r.format(rawVal);
+    } else {
+      // 恢复 data-default 原始文本
+      var def = span.getAttribute('data-default');
+      if (def) span.textContent = def;
+    }
   }
 }
 
