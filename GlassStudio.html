@@ -1676,15 +1676,19 @@ function applyStyle(dom, el2, forceRebuild) {
   const previous = inner.firstChild;
   const expectedText = rawText || placeholder;
   const lines = rawText.split('\n');
-  const styles = Array.isArray(el2.paragraphs) && el2.paragraphs.length === lines.length ? el2.paragraphs : null;
+  // Always read paragraph styles directly from el2.paragraphs for consistent rendering.
+  // The old check (paragraphs.length === lines.length) caused colors to revert when the
+  // text was edited and line count changed, because `styles` became null and per-span
+  // overrides were never applied.
+  const paraStyles = Array.isArray(el2.paragraphs) ? el2.paragraphs : null;
   // 首次设置某段样式时，paragraphs 会由稀疏数组变成与行数等长的数组；原节点却仍是纯文本。
   // 必须重建为逐段 span，否则 setParaStyle 虽写入模型但画布不会出现任何视觉变化。
   const existingSpans = previous ? previous.querySelectorAll(':scope > span') : [];
-  const shouldRebuild = forceRebuild || !previous || previous.className !== 'el-text' || previous.textContent !== expectedText || !!(styles && existingSpans.length !== lines.length);
+  const shouldRebuild = forceRebuild || !previous || previous.className !== 'el-text' || previous.textContent !== expectedText || !!(paraStyles && existingSpans.length !== lines.length);
   // 样式更新不应依赖文字内容变化。已有逐段节点时同步字体、颜色和字号。
   if (!shouldRebuild) {
     _applyTextNodeStyle(previous, el2);
-    if (styles) existingSpans.forEach((span, index) => _applyTextNodeStyle(span, el2, styles[index] || {}));
+    if (paraStyles) existingSpans.forEach((span, index) => _applyTextNodeStyle(span, el2, paraStyles[index] || {}));
     return;
   }
 
@@ -1697,12 +1701,13 @@ function applyStyle(dom, el2, forceRebuild) {
     textNode.style.fontSize = '11px';
   } else {
     const paragraphs = rawText.split('\n');
-    const paragraphStyles = Array.isArray(el2.paragraphs) && el2.paragraphs.length === paragraphs.length ? el2.paragraphs : null;
-    if (paragraphStyles) {
+    // Use paraStyles directly (never null when paragraphs array exists)
+    // to ensure per-paragraph styles are always applied even when line count changed
+    if (paraStyles && paraStyles.length > 0) {
       paragraphs.forEach((paragraph, index) => {
         if (index) textNode.appendChild(document.createTextNode('\n'));
         const span = document.createElement('span');
-        _applyTextNodeStyle(span, el2, paragraphStyles[index] || {});
+        _applyTextNodeStyle(span, el2, paraStyles[index] || {});
         span.textContent = paragraph;
         textNode.appendChild(span);
       });
