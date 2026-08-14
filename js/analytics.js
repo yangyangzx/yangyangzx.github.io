@@ -181,10 +181,7 @@ function renderEquityChart(closed) {
     type: 'line',
     data: {
       labels: _eqLabels,
-      datasets: [{
-        label: '累计权益 (USDT)',
-        data: _eqData,
-        borderColor: cc.barBorder,
+      datasets: [createLineDataset('累计权益 (USDT)', _eqData, cc, {
         backgroundColor: function(context) {
           var chart = context.chart;
           var gctx = chart.ctx;
@@ -193,60 +190,21 @@ function renderEquityChart(closed) {
           gradient.addColorStop(1, 'rgba(59, 130, 246, 0.02)');
           return gradient;
         },
-        fill: true,
-        tension: 0.25,
-        pointRadius: 3,
-        pointHoverRadius: 5,
         pointBackgroundColor: cc.positivePoint,
         pointBorderColor: 'rgba(255,255,255,0.6)',
-        pointBorderWidth: 1.5,
-        borderWidth: 2.5
-      }]
+        pointBorderWidth: 1.5
+      })]
     },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
+    options: createStandardOptions(cc, {
       plugins: {
-        legend: {
-          display: true,
-          position: 'top',
-          align: 'end',
-          labels: {
-            color: cc.tickColor,
-            font: { size: 12 },
-            usePointStyle: true,
-            pointStyleWidth: 12,
-            padding: 12
-          }
-        },
-        tooltip: {
-          backgroundColor: cc.tooltipBg,
-          titleColor: cc.tooltipTitle,
-          bodyColor: cc.tooltipBody,
-          borderColor: cc.gridColor,
-          borderWidth: 1,
-          padding: 12,
-          callbacks: {
-            label: function(ctx) { return ctx.parsed.y.toFixed(2) + ' USDT'; }
-          }
-        }
+        legend: { position: 'top', align: 'end' },
+        tooltip: { callbacks: { label: function(ctx) { return ctx.parsed.y.toFixed(2) + ' USDT'; } } }
       },
       scales: {
-        x: {
-          grid: { color: cc.gridColor },
-          ticks: { color: cc.tickColor, maxTicksLimit: 12, font: { size: 12 }, maxRotation: 0 }
-        },
-        y: {
-          grid: { color: cc.gridColor },
-          ticks: {
-            color: cc.tickColor,
-            font: { size: 12 },
-            callback: function(v) { return v.toFixed(0); }
-          }
-        }
-      },
-      interaction: { mode: 'index', intersect: false }
-    }
+        x: { grid: { color: cc.gridColor }, ticks: { maxTicksLimit: 12, font: { size: 12 }, maxRotation: 0 } },
+        y: { grid: { color: cc.gridColor }, ticks: { font: { size: 12 }, callback: function(v) { return v.toFixed(0); } } }
+      }
+    })
   });
 }
 
@@ -346,43 +304,12 @@ function renderStrategyChart(closed) {
     type: 'bar',
     data: {
       labels: labels,
-      datasets: [{
-        label: '平均盈亏 (USDT)',
-        data: data,
-        backgroundColor: bgColors,
-        borderRadius: 6,
-        borderWidth: 1,
-        borderColor: cc.barBorder,
-      }]
+      datasets: [createBarDataset('平均盈亏 (USDT)', data, cc, { backgroundColor: bgColors })]
     },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: cc.tooltipBg,
-          titleColor: cc.tooltipTitle,
-          bodyColor: cc.tooltipBody,
-          borderColor: cc.gridColor,
-          borderWidth: 1,
-          padding: 12,
-          callbacks: {
-            label: function(ctx) { return '平均盈亏 ' + ctx.parsed.y.toFixed(2) + ' USDT'; }
-          }
-        }
-      },
-      scales: {
-        x: {
-          grid: { display: false },
-          ticks: { color: cc.tickColor, font: { size: 12 }, maxRotation: 45 }
-        },
-        y: {
-          grid: { color: cc.gridColor },
-          ticks: { color: cc.tickColor, font: { size: 12 } }
-        }
-      }
-    }
+    options: createStandardOptions(cc, {
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(ctx) { return '平均盈亏 ' + ctx.parsed.y.toFixed(2) + ' USDT'; } } } },
+      scales: { x: { grid: { display: false }, ticks: { maxRotation: 45 } } }
+    })
   });
 
   renderStrategyTable(rows);
@@ -575,43 +502,12 @@ function renderPatternChart(closed) {
     type: 'bar',
     data: {
       labels: labels,
-      datasets: [{
-        label: '平均盈亏 (USDT)',
-        data: data,
-        backgroundColor: bgColors,
-        borderRadius: 6,
-        borderWidth: 1,
-        borderColor: cc.barBorder,
-      }]
+      datasets: [createBarDataset('平均盈亏 (USDT)', data, cc, { backgroundColor: bgColors })]
     },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: cc.tooltipBg,
-          titleColor: cc.tooltipTitle,
-          bodyColor: cc.tooltipBody,
-          borderColor: cc.gridColor,
-          borderWidth: 1,
-          padding: 12,
-          callbacks: {
-            label: function(ctx) { return '平均盈亏 ' + ctx.parsed.y.toFixed(2) + ' USDT'; }
-          }
-        }
-      },
-      scales: {
-        x: {
-          grid: { display: false },
-          ticks: { color: cc.tickColor, font: { size: 12 }, maxRotation: 45 }
-        },
-        y: {
-          grid: { color: cc.gridColor },
-          ticks: { color: cc.tickColor, font: { size: 12 } }
-        }
-      }
-    }
+    options: createStandardOptions(cc, {
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(ctx) { return '平均盈亏 ' + ctx.parsed.y.toFixed(2) + ' USDT'; } } } },
+      scales: { x: { grid: { display: false }, ticks: { maxRotation: 45 } } }
+    })
   });
 
   renderPatternTable(rows);
@@ -714,43 +610,12 @@ function renderSessionChart(closed) {
     type: 'bar',
     data: {
       labels: labels,
-      datasets: [{
-        label: '总盈亏 (USDT)',
-        data: data,
-        backgroundColor: bgColors,
-        borderRadius: 6,
-        borderWidth: 1,
-        borderColor: cc.barBorder,
-      }]
+      datasets: [createBarDataset('总盈亏 (USDT)', data, cc, { backgroundColor: bgColors })]
     },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: cc.tooltipBg,
-          titleColor: cc.tooltipTitle,
-          bodyColor: cc.tooltipBody,
-          borderColor: cc.gridColor,
-          borderWidth: 1,
-          padding: 12,
-          callbacks: {
-            label: function(ctx) { return '总盈亏 ' + ctx.parsed.y.toFixed(2) + ' USDT'; }
-          }
-        }
-      },
-      scales: {
-        x: {
-          grid: { display: false },
-          ticks: { color: cc.tickColor, font: { size: 12 } }
-        },
-        y: {
-          grid: { color: cc.gridColor },
-          ticks: { color: cc.tickColor, font: { size: 12 } }
-        }
-      }
-    }
+    options: createStandardOptions(cc, {
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(ctx) { return '总盈亏 ' + ctx.parsed.y.toFixed(2) + ' USDT'; } } } },
+      scales: { x: { grid: { display: false } } }
+    })
   });
 }
 
@@ -781,93 +646,50 @@ function renderMAEMFEScatter(closed) {
   var ctx = canvas.getContext('2d');
   var cc = utils.getChartColors();
   var c = utils.getCanvasColors();
+  var scatterOpts = createStandardOptions(cc, {
+    plugins: {
+      legend: { position: 'top', labels: { font: { size: 13 }, padding: 16 } },
+      tooltip: { callbacks: { label: function(ctx) { return 'MAE: ' + ctx.parsed.x.toFixed(2) + '% | MFE: ' + ctx.parsed.y.toFixed(2) + '%'; } } }
+    },
+    scales: {
+      x: { title: { display: true, text: 'MAE %（绝对值）', color: cc.tickColor } },
+      y: { title: { display: true, text: 'MFE %', color: cc.tickColor } }
+    }
+  });
+  scatterOpts.plugins = [{
+    id: 'idealZone',
+    afterDraw: function(chart) {
+      var ctx2 = chart.ctx;
+      var xAxis = chart.scales.x;
+      var yAxis = chart.scales.y;
+      if (yAxis.max >= 5) {
+        var xMin = xAxis.getPixelForValue(0);
+        var xMax = xAxis.getPixelForValue(5);
+        var yMin = yAxis.getPixelForValue(Math.min(5, yAxis.max));
+        var yMax = yAxis.getPixelForValue(yAxis.max);
+        ctx2.save();
+        ctx2.fillStyle = c.up.replace('0.95', '0.06');
+        ctx2.fillRect(xMin, yMin, xMax - xMin, yMax - yMin);
+        ctx2.strokeStyle = c.up.replace('0.95', '0.2');
+        ctx2.lineWidth = 1;
+        ctx2.setLineDash([6, 4]);
+        ctx2.strokeRect(xMin, yMin, xMax - xMin, yMax - yMin);
+        ctx2.setLineDash([]);
+        ctx2.fillStyle = c.up.replace('0.95', '0.5');
+        ctx2.font = '11px sans-serif';
+        ctx2.textAlign = 'left';
+        ctx2.fillText('理想区域', xMin + 6, yMin + 16);
+        ctx2.restore();
+      }
+    }
+  }];
   _analyticsCharts['chartMAEMFE'] = new Chart(ctx, {
     type: 'scatter',
     data: {
-      datasets: [{
-        label: '盈利单',
-        data: points.filter(function(p) { return p.isWin; }),
-        backgroundColor: cc.scatterWin,
-        pointRadius: 5,
-        pointHoverRadius: 10,
-        pointBorderColor: cc.legendText,
-        pointBorderWidth: 2
-      }, {
-        label: '亏损单',
-        data: points.filter(function(p) { return !p.isWin; }),
-        backgroundColor: cc.scatterLoss,
-        pointRadius: 5,
-        pointHoverRadius: 10,
-        pointBorderColor: cc.legendText,
-        pointBorderWidth: 2
-      }]
+      datasets: [createScatterDataset('盈利单', points.filter(function(p) { return p.isWin; }), cc.scatterWin),
+                 createScatterDataset('亏损单', points.filter(function(p) { return !p.isWin; }), cc.scatterLoss)]
     },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: {
-          position: 'top',
-          labels: { color: cc.legendText, font: { size: 13 }, usePointStyle: true, padding: 16 }
-        },
-        tooltip: {
-          backgroundColor: cc.tooltipBg,
-          titleColor: cc.tooltipTitle,
-          bodyColor: cc.tooltipBody,
-          borderColor: cc.gridColor,
-          borderWidth: 1,
-          padding: 12,
-          callbacks: {
-            label: function(ctx) { return 'MAE: ' + ctx.parsed.x.toFixed(2) + '% | MFE: ' + ctx.parsed.y.toFixed(2) + '%'; }
-          }
-        }
-      },
-      scales: {
-        x: {
-          title: { display: true, text: 'MAE %（绝对值）', color: cc.tickColor },
-          grid: { color: cc.gridColor },
-          ticks: { color: cc.tickColor, font: { size: 12 } }
-        },
-        y: {
-          title: { display: true, text: 'MFE %', color: cc.tickColor },
-          grid: { color: cc.gridColor },
-          ticks: { color: cc.tickColor, font: { size: 12 } }
-        }
-      }
-    },
-    plugins: [{
-      id: 'idealZone',
-      afterDraw: function(chart) {
-        var ctx2 = chart.ctx;
-        var xAxis = chart.scales.x;
-        var yAxis = chart.scales.y;
-
-        // 理想区域：MAE < 5% 且 MFE > 5%（左上角，仅当 y 轴范围覆盖 ≥5 时绘制）
-        if (yAxis.max >= 5) {
-          var xMin = xAxis.getPixelForValue(0);
-          var xMax = xAxis.getPixelForValue(5);
-          var yMin = yAxis.getPixelForValue(Math.min(5, yAxis.max));
-          var yMax = yAxis.getPixelForValue(yAxis.max);
-
-          ctx2.save();
-          ctx2.fillStyle = c.up.replace('0.95', '0.06');
-          ctx2.fillRect(xMin, yMin, xMax - xMin, yMax - yMin);
-          ctx2.strokeStyle = c.up.replace('0.95', '0.2');
-          ctx2.lineWidth = 1;
-          ctx2.setLineDash([6, 4]);
-          ctx2.strokeRect(xMin, yMin, xMax - xMin, yMax - yMin);
-          ctx2.setLineDash([]);
-
-          // 标签
-          ctx2.fillStyle = c.up.replace('0.95', '0.5');
-          ctx2.font = '11px sans-serif';
-          ctx2.textAlign = 'left';
-          ctx2.fillText('理想区域', xMin + 6, yMin + 16);
-
-          ctx2.restore();
-        }
-      }
-    }]
+    options: scatterOpts
   });
 }
 
@@ -1028,69 +850,34 @@ function renderCloseTypeChart(closed) {
   ensureChartContainer(canvas);
 
   var ctx = canvas.getContext('2d');
+  var barLabelOpts = createStandardOptions(cc, {
+    plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(ctx) { return ctx.parsed.y + ' 笔 (' + pcts[ctx.dataIndex] + '%)'; } } } },
+    scales: { x: { grid: { display: false }, ticks: { maxRotation: 45 } }, y: { ticks: { stepSize: 1, callback: function(v) { return Number.isInteger(v) ? v : ''; } } } }
+  });
+  barLabelOpts.plugins = [{
+    id: 'barLabels',
+    afterDatasetsDraw: function(chart) {
+      var ctx2 = chart.ctx;
+      var meta = chart.getDatasetMeta(0);
+      ctx2.save();
+      ctx2.font = '10px sans-serif';
+      ctx2.textAlign = 'center';
+      ctx2.fillStyle = cc.canvasText;
+      for (var i = 0; i < meta.data.length; i++) {
+        var bar = meta.data[i];
+        ctx2.fillText(data[i] + '笔', bar.x, bar.y - 14);
+        ctx2.fillText(pcts[i] + '%', bar.x, bar.y - 2);
+      }
+      ctx2.restore();
+    }
+  }];
   _analyticsCharts['closeTypeChart'] = new Chart(ctx, {
     type: 'bar',
     data: {
       labels: labels,
-      datasets: [{
-        label: '笔数',
-        data: data,
-        backgroundColor: bgColors,
-        borderRadius: 6,
-        borderWidth: 1,
-        borderColor: cc.barBorder,
-      }]
+      datasets: [createBarDataset('笔数', data, cc, { backgroundColor: bgColors, borderRadius: 3 })]
     },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: cc.tooltipBg,
-          titleColor: cc.tooltipTitle,
-          bodyColor: cc.tooltipBody,
-          borderColor: cc.gridColor,
-          borderWidth: 1,
-          padding: 12,
-          callbacks: {
-            label: function(ctx) { return ctx.parsed.y + ' 笔 (' + pcts[ctx.dataIndex] + '%)'; }
-          }
-        }
-      },
-      scales: {
-        x: {
-          grid: { display: false },
-          ticks: { color: cc.tickColor, font: { size: 12 }, maxRotation: 45 }
-        },
-        y: {
-          grid: { color: cc.gridColor },
-          ticks: {
-            color: cc.tickColor,
-            font: { size: 12 },
-            stepSize: 1,
-            callback: function(v) { return Number.isInteger(v) ? v : ''; }
-          }
-        }
-      }
-    },
-    plugins: [{
-      id: 'barLabels',
-      afterDatasetsDraw: function(chart) {
-        var ctx2 = chart.ctx;
-        var meta = chart.getDatasetMeta(0);
-        ctx2.save();
-        ctx2.font = '10px sans-serif';
-        ctx2.textAlign = 'center';
-        ctx2.fillStyle = cc.canvasText;
-        for (var i = 0; i < meta.data.length; i++) {
-          var bar = meta.data[i];
-          ctx2.fillText(data[i] + '笔', bar.x, bar.y - 14);
-          ctx2.fillText(pcts[i] + '%', bar.x, bar.y - 2);
-        }
-        ctx2.restore();
-      }
-    }]
+    options: barLabelOpts
   });
 }
 
@@ -1197,47 +984,12 @@ function renderDailyPnlChart(closed) {
     type: 'bar',
     data: {
       labels: labels,
-      datasets: [{
-        label: '日盈亏 (USDT)',
-        data: data,
-        backgroundColor: bgColors,
-        borderRadius: 3,
-        borderWidth: 1,
-        borderColor: cc.barBorder,
-      }]
+      datasets: [createBarDataset('日盈亏 (USDT)', data, cc, { backgroundColor: bgColors, borderRadius: 3 })]
     },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: cc.tooltipBg,
-          titleColor: cc.tooltipTitle,
-          bodyColor: cc.tooltipBody,
-          borderColor: cc.gridColor,
-          borderWidth: 1,
-          padding: 12,
-          callbacks: {
-            title: function(ctx) { return keys[ctx[0].dataIndex]; },
-            label: function(ctx) {
-              var k = keys[ctx.dataIndex];
-              return '盈亏 ' + ctx.parsed.y.toFixed(2) + ' USDT · ' + daily[k].count + ' 笔';
-            }
-          }
-        }
-      },
-      scales: {
-        x: {
-          grid: { display: false },
-          ticks: { color: cc.tickColor, font: { size: 10 }, maxRotation: 45, maxTicksLimit: 15 }
-        },
-        y: {
-          grid: { color: cc.gridColor },
-          ticks: { color: cc.tickColor, font: { size: 11 }, callback: function(v) { return v.toFixed(0); } }
-        }
-      }
-    }
+    options: createStandardOptions(cc, {
+      plugins: { legend: { display: false }, tooltip: { callbacks: { title: function(ctx) { return keys[ctx[0].dataIndex]; }, label: function(ctx) { var k = keys[ctx.dataIndex]; return '盈亏 ' + ctx.parsed.y.toFixed(2) + ' USDT · ' + daily[k].count + ' 笔'; } } } },
+      scales: { x: { grid: { display: false }, ticks: { font: { size: 10 }, maxRotation: 45, maxTicksLimit: 15 } }, y: { ticks: { font: { size: 11 }, callback: function(v) { return v.toFixed(0); } } } }
+    })
   });
 }
 
@@ -1287,48 +1039,12 @@ function renderDayOfWeekChart(closed) {
     type: 'bar',
     data: {
       labels: labels,
-      datasets: [{
-        label: '周几盈亏 (USDT)',
-        data: data,
-        backgroundColor: bgColors,
-        borderRadius: 6,
-        borderWidth: 1,
-        borderColor: cc.barBorder,
-      }]
+      datasets: [createBarDataset('周几盈亏 (USDT)', data, cc, { backgroundColor: bgColors })]
     },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: cc.tooltipBg,
-          titleColor: cc.tooltipTitle,
-          bodyColor: cc.tooltipBody,
-          borderColor: cc.gridColor,
-          borderWidth: 1,
-          padding: 12,
-          callbacks: {
-            label: function(ctx) {
-              var di = ctx.dataIndex;
-              var g = groups[di];
-              var wr = g.count > 0 ? (g.wins / g.count * 100).toFixed(1) : '—';
-              return '盈亏 ' + ctx.parsed.y.toFixed(2) + ' U · ' + g.count + ' 笔 · 胜率 ' + wr + '%';
-            }
-          }
-        }
-      },
-      scales: {
-        x: {
-          grid: { display: false },
-          ticks: { color: cc.tickColor, font: { size: 12 } }
-        },
-        y: {
-          grid: { color: cc.gridColor },
-          ticks: { color: cc.tickColor, font: { size: 11 }, callback: function(v) { return v.toFixed(0); } }
-        }
-      }
-    }
+    options: createStandardOptions(cc, {
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(ctx) { var di = ctx.dataIndex; var g = groups[di]; var wr = g.count > 0 ? (g.wins / g.count * 100).toFixed(1) : '—'; return '盈亏 ' + ctx.parsed.y.toFixed(2) + ' U · ' + g.count + ' 笔 · 胜率 ' + wr + '%'; } } } },
+      scales: { x: { grid: { display: false } }, y: { ticks: { callback: function(v) { return v.toFixed(0); } } } }
+    })
   });
 }
 
@@ -1400,49 +1116,12 @@ function renderHoldDurationChart(closed) {
     type: 'bar',
     data: {
       labels: labels,
-      datasets: [{
-        label: '笔数',
-        data: data,
-        backgroundColor: bgColors,
-        borderRadius: 6,
-        borderWidth: 1,
-        borderColor: cc.barBorder,
-      }]
+      datasets: [createBarDataset('笔数', data, cc, { backgroundColor: bgColors })]
     },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: cc.tooltipBg,
-          titleColor: cc.tooltipTitle,
-          bodyColor: cc.tooltipBody,
-          borderColor: cc.gridColor,
-          borderWidth: 1,
-          padding: 12,
-          callbacks: {
-            label: function(ctx) {
-              var b = ctx.dataIndex;
-              var total = counts.reduce(function(a, c) { return a + c; }, 0);
-              var pct = total > 0 ? (counts[b] / total * 100).toFixed(1) : '0';
-              var wr = pnlByBucket[b].count > 0 ? (pnlByBucket[b].wins / pnlByBucket[b].count * 100).toFixed(1) : '—';
-              return '笔数 ' + counts[b] + ' (' + pct + '%) · 胜率 ' + wr + '%';
-            }
-          }
-        }
-      },
-      scales: {
-        x: {
-          grid: { display: false },
-          ticks: { color: cc.tickColor, font: { size: 11 } }
-        },
-        y: {
-          grid: { color: cc.gridColor },
-          ticks: { color: cc.tickColor, font: { size: 11 }, stepSize: 1 }
-        }
-      }
-    }
+    options: createStandardOptions(cc, {
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(ctx) { var b = ctx.dataIndex; var total = counts.reduce(function(a, c) { return a + c; }, 0); var pct = total > 0 ? (counts[b] / total * 100).toFixed(1) : '0'; var wr = pnlByBucket[b].count > 0 ? (pnlByBucket[b].wins / pnlByBucket[b].count * 100).toFixed(1) : '—'; return '笔数 ' + counts[b] + ' (' + pct + '%) · 胜率 ' + wr + '%'; } } } },
+      scales: { x: { grid: { display: false } }, y: { ticks: { stepSize: 1 } } }
+    })
   });
 }
 
@@ -1493,46 +1172,12 @@ function renderMonthlyPnlChart(closed) {
     type: 'bar',
     data: {
       labels: labels,
-      datasets: [{
-        label: '月盈亏 (USDT)',
-        data: data,
-        backgroundColor: bgColors,
-        borderRadius: 6,
-        borderWidth: 1,
-        borderColor: cc.barBorder,
-      }]
+      datasets: [createBarDataset('月盈亏 (USDT)', data, cc, { backgroundColor: bgColors })]
     },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: cc.tooltipBg,
-          titleColor: cc.tooltipTitle,
-          bodyColor: cc.tooltipBody,
-          borderColor: cc.gridColor,
-          borderWidth: 1,
-          padding: 12,
-          callbacks: {
-            label: function(ctx) {
-              var k = keys[ctx.dataIndex];
-              return '盈亏 ' + ctx.parsed.y.toFixed(2) + ' U · ' + monthly[k].count + ' 笔';
-            }
-          }
-        }
-      },
-      scales: {
-        x: {
-          grid: { display: false },
-          ticks: { color: cc.tickColor, font: { size: 10 }, maxRotation: 45, maxTicksLimit: 12 }
-        },
-        y: {
-          grid: { color: cc.gridColor },
-          ticks: { color: cc.tickColor, font: { size: 11 }, callback: function(v) { return v.toFixed(0); } }
-        }
-      }
-    }
+    options: createStandardOptions(cc, {
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(ctx) { var k = keys[ctx.dataIndex]; return '盈亏 ' + ctx.parsed.y.toFixed(2) + ' U · ' + monthly[k].count + ' 笔'; } } } },
+      scales: { x: { grid: { display: false }, ticks: { font: { size: 10 }, maxRotation: 45, maxTicksLimit: 12 } }, y: { ticks: { callback: function(v) { return v.toFixed(0); } } } }
+    })
   });
 }
 
@@ -1648,71 +1293,18 @@ function renderMindsetAnalysis(closed) {
     type: 'bar',
     data: {
       labels: labels,
-      datasets: [{
-        label: '平均盈亏 (USDT)',
-        data: avgPnlData,
-        backgroundColor: avgPnlData.map(function(v) { return v >= 0 ? cc.barWin : cc.barLoss; }),
-        borderRadius: 6,
-        borderWidth: 1,
-        borderColor: cc.barBorder,
-        yAxisID: 'y'
-      }, {
-        label: '胜率 (%)',
-        data: winRateData,
-        type: 'line',
-        borderColor: cc.barBorder,
-        backgroundColor: cc.barBorder,
-        pointRadius: 5,
-        pointHoverRadius: 8,
-        borderWidth: 2,
-        yAxisID: 'y1'
-      }]
+      datasets: [
+        createBarDataset('平均盈亏 (USDT)', avgPnlData, cc, { backgroundColor: avgPnlData.map(function(v) { return v >= 0 ? cc.barWin : cc.barLoss; }), yAxisID: 'y' }),
+        createLineDataset('胜率 (%)', winRateData, cc, { type: 'line', yAxisID: 'y1' })
+      ]
     },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: {
-          position: 'top',
-          labels: { color: cc.tickColor, font: { size: 12 }, usePointStyle: true }
-        },
-        tooltip: {
-          backgroundColor: cc.tooltipBg,
-          titleColor: cc.tooltipTitle,
-          bodyColor: cc.tooltipBody,
-          borderColor: cc.gridColor,
-          borderWidth: 1,
-          padding: 12,
-          callbacks: {
-            afterLabel: function(ctx) {
-              return '笔数: ' + countData[ctx.dataIndex];
-            }
-          }
-        }
-      },
+    options: createStandardOptions(cc, {
+      plugins: { tooltip: { callbacks: { afterLabel: function(ctx) { return '笔数: ' + countData[ctx.dataIndex]; } } } },
       scales: {
-        x: {
-          grid: { color: cc.gridColor },
-          ticks: { color: cc.tickColor, font: { size: 12 } }
-        },
-        y: {
-          type: 'linear',
-          position: 'left',
-          grid: { color: cc.gridColor },
-          ticks: { color: cc.tickColor, font: { size: 11 }, callback: function(v) { return v.toFixed(0); } },
-          title: { display: true, text: '平均盈亏 (USDT)', color: cc.tickColor }
-        },
-        y1: {
-          type: 'linear',
-          position: 'right',
-          grid: { drawOnChartArea: false },
-          ticks: { color: cc.tickColor, font: { size: 11 }, callback: function(v) { return v + '%'; } },
-          title: { display: true, text: '胜率', color: cc.tickColor },
-          min: 0,
-          max: 100
-        }
+        y: { position: 'left', ticks: { callback: function(v) { return v.toFixed(0); } }, title: { display: true, text: '平均盈亏 (USDT)', color: cc.tickColor } },
+        y1: { type: 'linear', position: 'right', grid: { drawOnChartArea: false }, ticks: { callback: function(v) { return v + '%'; } }, title: { display: true, text: '胜率', color: cc.tickColor }, min: 0, max: 100 }
       }
-    }
+    })
   });
 
   // 绘制表格
@@ -1860,50 +1452,13 @@ function renderMarketConditionAnalysis(closed) {
     type: 'bar',
     data: {
       labels: labels,
-      datasets: [{
-        label: '平均盈亏 (USDT)',
-        data: data,
-        backgroundColor: bgColors,
-        borderRadius: 6,
-        borderWidth: 1,
-        borderColor: cc.barBorder
-      }]
+      datasets: [createBarDataset('平均盈亏 (USDT)', data, cc, { backgroundColor: bgColors })]
     },
-    options: {
+    options: createStandardOptions(cc, {
       indexAxis: 'y',
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: cc.tooltipBg,
-          titleColor: cc.tooltipTitle,
-          bodyColor: cc.tooltipBody,
-          borderColor: cc.gridColor,
-          borderWidth: 1,
-          padding: 12,
-          callbacks: {
-            title: function(ctx) {
-              return topRows[ctx[0].dataIndex].key;
-            },
-            label: function(ctx) {
-              var r = topRows[ctx.dataIndex];
-              return '平均盈亏 ' + ctx.parsed.x.toFixed(2) + ' U · 胜率 ' + r.winRate.toFixed(1) + '% · ' + r.count + ' 笔';
-            }
-          }
-        }
-      },
-      scales: {
-        x: {
-          grid: { color: cc.gridColor },
-          ticks: { color: cc.tickColor, font: { size: 11 }, callback: function(v) { return v.toFixed(0); } }
-        },
-        y: {
-          grid: { display: false },
-          ticks: { color: cc.tickColor, font: { size: 11 } }
-        }
-      }
-    }
+      plugins: { legend: { display: false }, tooltip: { callbacks: { title: function(ctx) { return topRows[ctx[0].dataIndex].key; }, label: function(ctx) { var r = topRows[ctx.dataIndex]; return '平均盈亏 ' + ctx.parsed.x.toFixed(2) + ' U · 胜率 ' + r.winRate.toFixed(1) + '% · ' + r.count + ' 笔'; } } } },
+      scales: { x: { ticks: { callback: function(v) { return v.toFixed(0); } } }, y: { grid: { display: false } } }
+    })
   });
 
   // 绘制表格

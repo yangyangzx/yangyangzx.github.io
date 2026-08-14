@@ -126,46 +126,15 @@ function renderLossReasonPie(closed) {
     type: 'doughnut',
     data: {
       labels: labels,
-      datasets: [{
-        data: data,
-        backgroundColor: bgColors,
-        borderColor: cc.barBorder,
-        borderWidth: 3
-      }]
+      datasets: [{ data: data, backgroundColor: bgColors, borderColor: cc.barBorder, borderWidth: 3 }]
     },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
+    options: createStandardOptions(cc, {
       plugins: {
-        legend: {
-          position: 'right',
-          labels: {
-            color: cc.tickColor,
-            font: { size: 12 },
-            padding: 12,
-            usePointStyle: true,
-            pointStyleWidth: 10
-          }
-        },
-        tooltip: {
-          backgroundColor: cc.tooltipBg,
-          titleColor: cc.tooltipTitle,
-          bodyColor: cc.tickColor,
-          borderColor: cc.gridColor,
-          borderWidth: 1,
-          padding: 12,
-          callbacks: {
-            label: function(ctx) {
-              var total = ctx.dataset.data.reduce(function(a, b) { return a + b; }, 0);
-              var pct = ((ctx.parsed / total) * 100).toFixed(1);
-              var pnl = reasonPnl[ctx.label] || 0;
-              return ctx.label + ': ' + ctx.parsed + ' 次 (' + pct + '%)  累计 ' + pnl.toFixed(0) + ' USDT';
-            }
-          }
-        }
+        legend: { position: 'right', labels: { font: { size: 12 }, padding: 12, usePointStyle: true, pointStyleWidth: 10 } },
+        tooltip: { callbacks: { label: function(ctx) { var total = ctx.dataset.data.reduce(function(a, b) { return a + b; }, 0); var pct = ((ctx.parsed / total) * 100).toFixed(1); var pnl = reasonPnl[ctx.label] || 0; return ctx.label + ': ' + ctx.parsed + ' 次 (' + pct + '%)  累计 ' + pnl.toFixed(0) + ' USDT'; } } }
       },
       cutout: '55%'
-    }
+    })
   });
 }
 
@@ -231,39 +200,12 @@ function renderStrategyRank(closed) {
     type: 'bar',
     data: {
       labels: labels,
-      datasets: [{
-        label: '总盈亏 (USDT)',
-        data: data,
-        backgroundColor: bgColors,
-        borderRadius: 6,
-        borderWidth: 1,
-        borderColor: cc.barBorder
-      }]
+      datasets: [createBarDataset('总盈亏 (USDT)', data, cc, { backgroundColor: bgColors })]
     },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: cc.tooltipBg,
-          titleColor: cc.tooltipTitle,
-          bodyColor: cc.tickColor,
-          borderColor: cc.gridColor,
-          borderWidth: 1,
-          padding: 12,
-          callbacks: {
-            label: function(ctx) {
-              return '总盈亏 ' + ctx.parsed.y.toFixed(2) + ' USDT';
-            }
-          }
-        }
-      },
-      scales: {
-        x: { grid: { display: false }, ticks: { color: cc.tickColor, font: { size: 12 }, maxRotation: 45 } },
-        y: { grid: { color: cc.gridColor }, ticks: { color: cc.tickColor, font: { size: 12 } } }
-      }
-    }
+    options: createStandardOptions(cc, {
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(ctx) { return '总盈亏 ' + ctx.parsed.y.toFixed(2) + ' USDT'; } } } },
+      scales: { x: { grid: { display: false }, ticks: { maxRotation: 45 } } }
+    })
   });
 
   // 渲染排名榜
@@ -340,41 +282,15 @@ function renderOrderTypeChart(closed) {
         label: '胜率 %',
         data: wrData,
         backgroundColor: wrColors,
+        borderRadius: 6,
         borderWidth: 1,
-        yAxisID: 'y'
+        borderColor: cc.barBorder
       }]
     },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: cc.tooltipBg,
-          titleColor: cc.tooltipTitle,
-          bodyColor: cc.tickColor,
-          borderColor: cc.gridColor,
-          borderWidth: 1,
-          padding: 12,
-          callbacks: {
-            label: function(ctx) {
-              var idx = ctx.dataIndex;
-              return '胜率: ' + wrData[idx].toFixed(1) + '% | 盈亏: ' +
-                (pnlData[idx] >= 0 ? '+' : '') + pnlData[idx].toFixed(2) + ' USDT';
-            }
-          }
-        }
-      },
-      scales: {
-        x: { grid: { display: false }, ticks: { color: cc.tickColor, font: { size: 12 } } },
-        y: {
-          beginAtZero: true,
-          max: 100,
-          grid: { color: cc.gridColor },
-          ticks: { color: cc.tickColor, font: { size: 12 }, callback: function(v) { return v + '%'; } }
-        }
-      }
-    }
+    options: createStandardOptions(cc, {
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(ctx) { var idx = ctx.dataIndex; return '胜率: ' + wrData[idx].toFixed(1) + '% | 盈亏: ' + (pnlData[idx] >= 0 ? '+' : '') + pnlData[idx].toFixed(2) + ' USDT'; } } } },
+      scales: { x: { grid: { display: false }, ticks: { maxRotation: 45 } }, y: { beginAtZero: true, max: 100, ticks: { callback: function(v) { return v + '%'; } } } }
+    })
   });
 }
 
@@ -450,34 +366,17 @@ function renderEmotionAnalysis(closed) {
     data: {
       labels: labels,
       datasets: [
-        { label: '盈利笔数', data: winData, backgroundColor: cc.barWin, borderRadius: 6, borderWidth: 1, borderColor: cc.barBorder },
-        { label: '亏损笔数', data: lossData, backgroundColor: cc.barLoss, borderRadius: 6, borderWidth: 1, borderColor: cc.barBorder }
+        createBarDataset('盈利笔数', winData, cc, { backgroundColor: cc.barWin }),
+        createBarDataset('亏损笔数', lossData, cc, { backgroundColor: cc.barLoss })
       ]
     },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
+    options: createStandardOptions(cc, {
       plugins: {
-        legend: {
-          position: 'top',
-          labels: { color: cc.tickColor, font: { size: 12 }, usePointStyle: true, padding: 12 }
-        },
-        tooltip: {
-          backgroundColor: cc.tooltipBg,
-          titleColor: cc.tooltipTitle,
-          bodyColor: cc.tickColor,
-          borderColor: cc.gridColor,
-          borderWidth: 1,
-          padding: 12,
-          mode: 'index',
-          intersect: false
-        }
+        legend: { position: 'top', labels: { font: { size: 12 }, padding: 12 } },
+        tooltip: { mode: 'index', intersect: false }
       },
-      scales: {
-        x: { grid: { display: false }, ticks: { color: cc.tickColor, font: { size: 12 }, maxRotation: 45 } },
-        y: { grid: { color: cc.gridColor }, ticks: { color: cc.tickColor, font: { size: 12 }, stepSize: 1 } }
-      }
-    }
+      scales: { x: { grid: { display: false }, ticks: { maxRotation: 45 } }, y: { ticks: { stepSize: 1 } } }
+    })
   });
 
   // 渲染情绪关联表格
@@ -592,76 +491,22 @@ function renderExecutionQuality(closed) {
   }
 
   var ctx = canvas.getContext('2d');
-  _reviewCharts['chartExecutionQuality'] = new Chart(ctx, {
+    _reviewCharts['chartExecutionQuality'] = new Chart(ctx, {
     type: 'bar',
     data: {
       labels: labels,
-      datasets: [{
-        label: '平均盈亏 (USDT)',
-        data: avgPnlData,
-        backgroundColor: avgPnlData.map(function(v) { return v >= 0 ? cc.barWin : cc.barLoss; }),
-        borderRadius: 6,
-        borderWidth: 1,
-        borderColor: cc.barBorder,
-        yAxisID: 'y'
-      }, {
-        label: '平均R倍数',
-        data: avgRrData,
-        type: 'line',
-        borderColor: '#f59e0b',
-        backgroundColor: '#f59e0b',
-        pointRadius: 6,
-        pointHoverRadius: 10,
-        borderWidth: 3,
-        yAxisID: 'y1'
-      }]
+      datasets: [
+        createBarDataset('平均盈亏 (USDT)', avgPnlData, cc, { backgroundColor: avgPnlData.map(function(v) { return v >= 0 ? cc.barWin : cc.barLoss; }), yAxisID: 'y' }),
+        createLineDataset('平均R倍数', avgRrData, cc, { type: 'line', yAxisID: 'y1', borderColor: cc.accentWarning, backgroundColor: cc.accentWarning, pointRadius: 6, pointHoverRadius: 10, borderWidth: 3 })
+      ]
     },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: {
-          position: 'top',
-          labels: { color: cc.tickColor, font: { size: 12 }, usePointStyle: true }
-        },
-        tooltip: {
-          backgroundColor: cc.tooltipBg,
-          titleColor: cc.tooltipTitle,
-          bodyColor: cc.tooltipBody,
-          borderColor: cc.gridColor,
-          borderWidth: 1,
-          padding: 12,
-          callbacks: {
-            afterLabel: function(ctx) {
-              var idx = ctx.dataIndex;
-              var s = execStats[keys[idx]];
-              return '笔数: ' + s.count + ' | 胜率: ' + winRateData[idx] + '%';
-            }
-          }
-        }
-      },
+    options: createStandardOptions(cc, {
+      plugins: { tooltip: { callbacks: { afterLabel: function(ctx) { var idx = ctx.dataIndex; var s = execStats[keys[idx]]; return '笔数: ' + s.count + ' | 胜率: ' + winRateData[idx] + '%'; } } } },
       scales: {
-        x: {
-          grid: { color: cc.gridColor },
-          ticks: { color: cc.tickColor, font: { size: 12 } }
-        },
-        y: {
-          type: 'linear',
-          position: 'left',
-          grid: { color: cc.gridColor },
-          ticks: { color: cc.tickColor, font: { size: 11 }, callback: function(v) { return v.toFixed(0); } },
-          title: { display: true, text: '平均盈亏 (USDT)', color: cc.tickColor }
-        },
-        y1: {
-          type: 'linear',
-          position: 'right',
-          grid: { drawOnChartArea: false },
-          ticks: { color: '#f59e0b', font: { size: 11 }, callback: function(v) { return v.toFixed(1) + 'R'; } },
-          title: { display: true, text: '平均R倍数', color: '#f59e0b' },
-          min: 0
-        }
+        y: { position: 'left', ticks: { callback: function(v) { return v.toFixed(0); } }, title: { display: true, text: '平均盈亏 (USDT)', color: cc.tickColor } },
+        y1: { type: 'linear', position: 'right', grid: { drawOnChartArea: false }, ticks: { color: cc.accentWarning, font: { size: 11 }, callback: function(v) { return v.toFixed(1) + 'R'; } }, title: { display: true, text: '平均R倍数', color: cc.accentWarning }, min: 0 }
       }
-    }
+    })
   });
 
   // 绘制表格

@@ -281,6 +281,7 @@
       barWarn:       style.getPropertyValue('--chart-bar-warn').trim(),
       barLoss:       style.getPropertyValue('--chart-bar-loss').trim(),
       barNeutral:    style.getPropertyValue('--chart-bar-neutral').trim(),
+      accentWarning: style.getPropertyValue('--chart-accent-warning').trim(),
       scatterWin:    style.getPropertyValue('--chart-scatter-win').trim(),
       scatterLoss:   style.getPropertyValue('--chart-scatter-loss').trim(),
       canvasText:    style.getPropertyValue('--chart-canvas-text').trim()
