@@ -18,6 +18,11 @@
   transition: box-shadow var(--dur-slow) var(--ease-out);
 }
 
+/* 计算结果入场动效 */
+#resultArea.result-animate .result-box {
+  animation: resultReveal 350ms var(--ease-out) forwards;
+}
+
 .result-box.warn {
   border-left-color: var(--color-warning);
 }

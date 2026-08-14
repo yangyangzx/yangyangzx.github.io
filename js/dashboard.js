@@ -46,6 +46,52 @@ function _fmtPct(val) {
   return val.toFixed(1) + '%';
 }
 
+// ==================== P0-8: 数值计数器动画工具 ====================
+window._animateDashValue = function(el, targetText, duration) {
+  duration = duration || 400;
+  var startText = el.dataset.animCurrent || el.getAttribute('data-anim-target') || targetText;
+  // 尝试解析数字（从纯数字文本或 data-anim-target）
+  var parseNum = function(s) {
+    if (!s) return NaN;
+    var m = s.match(/[-+]?\d+\.?\d*/);
+    return m ? parseFloat(m[0]) : NaN;
+  };
+  var numStart = parseNum(startText);
+  var numTarget = parseNum(targetText);
+  if (isNaN(numStart) || isNaN(numTarget)) { delete el.dataset.animCurrent; return; }
+  var suffix = targetText.replace(/[-+]?\d+\.?\d*/g, '').trim();
+  var isPct = targetText.indexOf('%') >= 0;
+  // 保留 HTML 内容（箭头 span）的前缀
+  var prefix = '';
+  if (el.innerHTML) {
+    var m2 = el.innerHTML.match(/^(<[^>]+>)*\s*/);
+    if (m2) prefix = m2[0];
+  }
+  var startTime = null;
+  function step(ts) {
+    if (!startTime) startTime = ts;
+    var progress = Math.min((ts - startTime) / duration, 1);
+    var ease = progress === 1 ? 1 : 1 - Math.pow(2, -10 * progress);
+    var current = numStart + (numTarget - numStart) * ease;
+    var formatted;
+    if (isPct) {
+      formatted = current.toFixed(1) + '%';
+    } else {
+      formatted = current.toFixed(2) + suffix;
+    }
+    el.innerHTML = prefix + formatted;
+    el.dataset.animCurrent = current;
+    el.dataset.animTarget = targetText;
+    if (progress < 1) requestAnimationFrame(step);
+    else {
+      el.innerHTML = prefix + targetText;
+      delete el.dataset.animCurrent;
+      delete el.dataset.animTarget;
+    }
+  }
+  requestAnimationFrame(step);
+};
+
 // ==================== 卡片 1：今日 PnL ====================
 function _renderTodayPnl() {
   var todayStr = window.utils.toLocalDateStr(new Date().toISOString());
@@ -77,8 +123,11 @@ function _renderTodayPnl() {
   var cls = totalPnl > 0 ? 'pnl-positive' : (totalPnl < 0 ? 'pnl-negative' : 'pnl-neutral');
   valueEl.className = 'dash-card-value ' + cls;
 
-  var arrow = totalPnl > 0 ? '<span class="pnl-arrow-up">&#9650;</span>' : (totalPnl < 0 ? '<span class="pnl-arrow-down">&#9660;</span>' : '');
-  valueEl.innerHTML = arrow + ' ' + _fmtUSDT(totalPnl);
+  var arrow = totalPnl > 0 ? '<span class="pnl-arrow-up">&#9650;</span>' : (totalPnl < 0 ? '<span class="pnl-arrow-down">&#9660;</span> ' : '');
+  var displayTxt = _fmtUSDT(totalPnl);
+  // P0-8: 数值计数器动画
+  window._animateDashValue(valueEl, displayTxt, 350);
+  valueEl.innerHTML = arrow + ' ' + displayTxt;
   subEl.textContent = '共 ' + count + ' 笔已平仓';
 
   var card = document.getElementById('dashTodayPnl');
@@ -239,6 +288,8 @@ function _renderLossStreak() {
 
   valueEl.textContent = streak;
   valueEl.className = 'dash-card-value';
+  // P0-8: 连亏数值动画
+  window._animateDashValue(valueEl, String(streak), 300);
 
   var tag = '';
   var tip = '';

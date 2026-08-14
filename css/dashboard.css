@@ -196,6 +196,7 @@
   background: var(--color-danger-bg);
   color: var(--color-danger);
   font-weight: var(--font-weight-medium);
+  animation: streakPulse 1.5s ease-in-out infinite;
 }
 
 .streak-tip {

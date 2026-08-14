@@ -16,29 +16,29 @@
 /* iOS: avoid double-tap zoom stealing taps on controls (delays/breaks button clicks) */
 button,input,select,textarea,a,label,summary,.hb,.bt,.preset,.ctx-item{touch-action:manipulation}
 :root{
-  --bg:#0F0F0F;--surface:#161616;--surface2:#1c1c1c;--surface3:#242424;
-  --border:rgba(249,246,237,0.07);--border2:rgba(249,246,237,0.13);--border3:rgba(249,246,237,0.22);
-  --text:#F9F6ED;--text-muted:rgba(249,246,237,0.55);--text-hint:rgba(249,246,237,0.35);
-  --accent:#097757;--accent2:#0c9a6e;--accent-glow:rgba(9,119,87,0.13);
+  --bg:#090909;--surface:#111111;--surface2:#181818;--surface3:#222222;
+  --border:rgba(249,246,237,0.06);--border2:rgba(249,246,237,0.12);--border3:rgba(249,246,237,0.20);
+  --text:#F9F6ED;--text-muted:rgba(249,246,237,0.52);--text-hint:rgba(249,246,237,0.32);
+  --accent:#097757;--accent2:#0c9a6e;--accent-glow:rgba(9,119,87,0.12);
   --brown:#46271E;--brown-light:rgba(70,39,30,0.5);
-  --shadow-sm:0 1px 4px rgba(0,0,0,.12);--shadow-md:0 4px 16px rgba(0,0,0,.2);--shadow-lg:0 8px 32px rgba(0,0,0,.28);--shadow-xl:0 16px 48px rgba(0,0,0,.4);
+  --shadow-sm:0 1px 4px rgba(0,0,0,.15);--shadow-md:0 4px 20px rgba(0,0,0,.25);--shadow-lg:0 8px 40px rgba(0,0,0,.35);--shadow-xl:0 16px 56px rgba(0,0,0,.45);
   --success:#22d3a0;--danger:#f87171;--warn:#fbbf24;
   --info:#60a5fa;--info-hover:rgba(96,165,250,0.10);--info-border:rgba(96,165,250,0.30);
   --space-xs:4px;--space-sm:8px;--space-md:12px;--space-lg:16px;--space-xl:24px;--space-xxl:48px;
   --font-ui:'DM Sans',sans-serif;--font-display:'Syne',sans-serif;
   --radius-xs:2px;--radius-sm:6px;--radius-md:8px;--radius-lg:12px;--radius-xl:16px;--radius-2xl:24px;--radius-pill:50px;--radius-full:9999px;
-  --glass-icon-bg:rgba(34,211,160,.12);--card-icon-bg:rgba(70,39,30,.4);--text-icon-bg:rgba(9,119,87,.15);
-  --sec-text-accent:rgba(34,211,160,.15);--sec-text-border:rgba(34,211,160,.25);
-  --sec-colors-accent:rgba(197,176,244,.15);--sec-colors-border:rgba(197,176,244,.30);
-  --sec-appearance-accent:rgba(244,237,214,.12);--sec-appearance-border:rgba(244,237,214,.25);
-  --sec-position-accent:rgba(96,165,250,.12);--sec-position-border:rgba(96,165,250,.25);
-  --sec-actions-accent:rgba(248,113,113,.08);--sec-actions-border:rgba(248,113,113,.20);
+  --glass-icon-bg:rgba(220,238,177,.12);--card-icon-bg:rgba(70,39,30,.45);--text-icon-bg:rgba(197,176,244,.15);
+  --sec-text-accent:rgba(220,238,177,.10);--sec-text-border:rgba(220,238,177,.22);
+  --sec-colors-accent:rgba(197,176,244,.10);--sec-colors-border:rgba(197,176,244,.22);
+  --sec-appearance-accent:rgba(200,230,205,.10);--sec-appearance-border:rgba(200,230,205,.22);
+  --sec-position-accent:rgba(244,237,214,.10);--sec-position-border:rgba(244,237,214,.22);
+  --sec-actions-accent:rgba(243,201,182,.08);--sec-actions-border:rgba(243,201,182,.18);
   --color-accent-ink:#F9F6ED;
   --accent-hover:#0db578;
   --danger-hover:rgba(248,113,113,0.10);--danger-border:rgba(248,113,113,0.30);
   --warn-hover:rgba(251,191,36,0.10);--warn-border:rgba(251,191,36,0.30);
-  --guide-accent:rgba(9,119,87,0.70);
-  --accent-border:rgba(9,119,87,0.40);--accent-border-hover:rgba(9,119,87,0.45);
+  --guide-accent:rgba(34,211,160,0.65);
+  --accent-border:rgba(9,119,87,0.38);--accent-border-hover:rgba(9,119,87,0.50);
   --empty-icon-color:rgba(249,246,237,0.21);
   --overlay-bg:rgba(15,15,15,0.60);
   --font-mono:'JetBrains Mono','Fira Code',monospace;
@@ -74,12 +74,13 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 /* Scroll edge gradient mask — replaces hard border-bottom with soft fade */
 #header::after{
   content:'';position:absolute;bottom:0;left:0;right:0;height:10px;
-  background:linear-gradient(to bottom,var(--border),transparent);
+  background:linear-gradient(to bottom,rgba(249,246,237,0.06),transparent);
   pointer-events:none;z-index:1
 }
 #header::-webkit-scrollbar{height:3px}
+#header::-webkit-scrollbar-track{background:transparent}
 #header::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
-.logo{font-family:var(--font-display);font-size:16px;font-weight:700;letter-spacing:-.02em;white-space:nowrap}
+.logo{font-family:var(--font-display);font-size:16px;font-weight:700;letter-spacing:-.022em;white-space:nowrap}
 .logo span{color:var(--accent2)}
 .h-sep{width:1px;height:20px;background:var(--border2);margin:0 4px;flex-shrink:0}
 .hg{display:flex;align-items:center;gap:2px}
@@ -94,8 +95,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .hb:disabled,.tb:disabled{opacity:.35;cursor:default;box-shadow:none}
 .hb:disabled:hover,.tb:disabled:hover{background:transparent;color:var(--text-muted);box-shadow:none}
 .hb:active{transform:scale(0.97);transition-duration:60ms}
-.hb.primary{background:var(--accent);color:var(--color-accent-ink);border-color:transparent;transition:var(--tr)}
-.hb.primary:hover{background:var(--accent-hover);box-shadow:0 0 0 3px rgba(9,119,87,0.25)}
+.hb.primary{background:var(--accent);color:var(--color-accent-ink);border-color:transparent;transition:var(--tr);box-shadow:0 1px 8px rgba(9,119,87,.25)}
+.hb.primary:hover{background:var(--accent-hover);box-shadow:0 2px 14px rgba(9,119,87,.35)}
 .hb.danger-btn:hover{background:var(--danger-hover);color:var(--danger);border-color:var(--danger-border)}
 .hb.warn-btn:hover{background:var(--warn-hover);color:var(--warn);border-color:var(--warn-border)}
 .hb.info-btn:hover{background:var(--info-hover);color:var(--info);border-color:var(--info-border)}
@@ -109,6 +110,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   overflow-x:auto;flex-shrink:0
 }
 #presets-bar::-webkit-scrollbar{height:3px}
+#presets-bar::-webkit-scrollbar-track{background:transparent}
 #presets-bar::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
 .preset-label{font-size:10.5px;color:var(--text-hint);white-space:nowrap;align-self:center;margin-right:6px;flex-shrink:0}
 .preset-group{display:flex;gap:5px;align-items:center}
@@ -120,11 +122,12 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   cursor:pointer;transition:var(--tr)
 }
 .preset:hover{border-color:var(--accent);background:var(--accent-glow);box-shadow:0 0 0 3px rgba(9,119,87,0.12)}
-.preset:active{transform:scale(0.96)}
-.preset.pressed{animation: presetPop 0.25s ease-out}
+.preset:active{transform:scale(0.96) translateY(1px)}
+.preset.pressed{animation: presetPop 0.3s ease-out}
 @keyframes presetPop{
-  0%{background:var(--accent-glow);transform:scale(0.94)}
-  100%{background:var(--surface2);transform:scale(1)}
+  0%{background:var(--accent-glow);transform:scale(0.94);box-shadow:0 0 0 3px rgba(9,119,87,0.2)}
+  60%{transform:scale(1.03)}
+  100%{background:var(--surface2);transform:scale(1);box-shadow:none}
 }
 .preset-dot{width:10px;height:10px;border-radius:var(--radius-sm);flex-shrink:0}
 .preset span{font-size:11px;color:var(--text-muted);white-space:nowrap}
@@ -169,8 +172,9 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 }
 #canvas-toolbar{
   display:flex;align-items:center;gap:8px;padding:var(--space-sm) 12px;
-  background:rgba(20,20,24,.8);border-bottom:1px solid var(--border);
-  flex-shrink:0;backdrop-filter:blur(8px)
+  background:rgba(17,17,17,.88);border-bottom:1px solid var(--border);
+  flex-shrink:0;backdrop-filter:blur(12px);
+  box-shadow:0 1px 0 rgba(0,0,0,.2)
 }
 #canvas-toolbar.hidden{display:none}
 #canvas-toolbar .label{font-size:11px;color:var(--text-hint);flex-shrink:0}
@@ -204,11 +208,12 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   overflow:auto;position:relative;padding:40px;
   background-image:linear-gradient(var(--border) 1px,transparent 1px),
                     linear-gradient(90deg,var(--border) 1px,transparent 1px);
-  background-size:40px 40px
+  background-size:48px 48px
 }
 #canvas-scroll::-webkit-scrollbar{width:6px;height:6px}
+#canvas-scroll::-webkit-scrollbar-track{background:transparent}
 #canvas-scroll::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px}
-#canvas-scroll::-webkit-scrollbar-corner{background:var(--bg)}
+#canvas-scroll::-webkit-scrollbar-corner{background:transparent}
 
 #cv{position:relative;box-shadow:var(--shadow-xl),0 0 0 1px var(--border2);border-radius:3px;transform-origin:center center;transition:transform 140ms var(--ease-out),opacity 250ms var(--ease-out);opacity:0}
 #cv.loaded{opacity:1}
@@ -223,22 +228,30 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   display:flex;flex-direction:column;align-items:center;justify-content:center;
   gap:14px;width:480px;height:320px;
   border:1.5px dashed rgba(9,119,87,.4);border-radius:var(--radius-2xl);
-  background:rgba(9,119,87,.04);cursor:pointer;transition:var(--tr)
+  background:rgba(9,119,87,.04);cursor:pointer;transition:var(--tr);
+  position:relative;overflow:hidden
 }
-#dz-inner:hover,#dz-inner.drag-on{border-color:var(--accent);background:rgba(9,119,87,.1);box-shadow:0 0 0 4px rgba(9,119,87,0.1)}
+#dz-inner::before{
+  content:'';position:absolute;inset:-1px;border-radius:var(--radius-2xl);
+  background:linear-gradient(135deg,rgba(9,119,87,.15),transparent,rgba(220,238,177,.12));
+  opacity:0;transition:opacity 250ms var(--ease-out);pointer-events:none;z-index:-1
+}
+#dz-inner:hover::before,#dz-inner.drag-on::before{opacity:1}
+#dz-inner:hover,#dz-inner.drag-on{border-color:var(--accent);background:rgba(9,119,87,.07);box-shadow:0 0 0 5px rgba(9,119,87,0.10)}
 #dz-inner.drag-on{animation:dzPulse 1.2s ease-in-out infinite}
 @keyframes dzPulse{
-  0%,100%{box-shadow:0 0 0 0 rgba(9,119,87,.25)}
-  50%{box-shadow:0 0 0 8px rgba(9,119,87,0)}
+  0%,100%{box-shadow:0 0 0 0 rgba(9,119,87,.20),inset 0 0 0 1px rgba(9,119,87,.10)}
+  50%{box-shadow:0 0 0 10px rgba(9,119,87,0),inset 0 0 20px 2px rgba(9,119,87,.06)}
 }
 #dz p{font-size:13.5px;color:var(--text-muted)}
 #dz small{font-size:11.5px;color:var(--accent2)}
 #ubm{
   padding:var(--space-sm) var(--space-xl);background:var(--accent);color:var(--color-accent-ink);border:none;
   border-radius:var(--radius-pill);cursor:pointer;font-size:13px;
-  font-family:var(--font-ui);transition:var(--tr)
+  font-family:var(--font-ui);transition:var(--tr);
+  box-shadow:0 2px 12px rgba(9,119,87,.3)
 }
-#ubm:hover{background:var(--accent-hover)}
+#ubm:hover{background:var(--accent-hover);box-shadow:0 4px 20px rgba(9,119,87,.4)}
 #ubm:active{transform:scale(0.97)}
 
 /* ── Guide Lines ── */
@@ -261,6 +274,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 #rp-layers .pt{font-size:10px;font-weight:500;letter-spacing:.09em;text-transform:uppercase;color:var(--text-hint);margin-bottom:8px}
 #ll{max-height:170px;overflow-y:auto;display:flex;flex-direction:column;gap:2px}
 #ll::-webkit-scrollbar{width:3px}
+#ll::-webkit-scrollbar-track{background:transparent}
 #ll::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
 .li{
   display:flex;align-items:center;gap:6px;padding:var(--space-xs) var(--space-sm);
@@ -269,14 +283,14 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 }
 .li:hover{background:var(--surface2);box-shadow:0 0 0 2px var(--accent-glow)}
 .li:active{transform:scale(0.98)}
-.li.sel{background:rgba(9,119,87,.12);border-color:rgba(9,119,87,.3)}
+.li.sel{background:rgba(220,238,177,.08);border-color:rgba(220,238,177,.25);box-shadow:inset 2px 0 0 rgba(220,238,177,.4)}
 .para-row{border:1px solid transparent;border-radius:4px}
 .para-row:hover{background:var(--surface2)}
-.para-row.selected{background:var(--accent-glow);border-color:var(--accent-border)}
+.para-row.selected{background:rgba(220,238,177,.08);border-color:rgba(220,238,177,.25);box-shadow:inset 2px 0 0 rgba(220,238,177,.3)}
 .lic{width:22px;height:22px;border-radius:4px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.lic.gi{background:var(--glass-icon-bg);border:1px solid rgba(34,211,160,.3)}
-.lic.ci{background:var(--card-icon-bg);border:1px solid rgba(255,255,255,.1)}
-.lic.ti{background:var(--text-icon-bg);border:1px solid rgba(9,119,87,.3)}
+.lic.gi{background:var(--glass-icon-bg);border:1px solid rgba(220,238,177,.35)}
+.lic.ci{background:var(--card-icon-bg);border:1px solid rgba(255,255,255,.12)}
+.lic.ti{background:var(--text-icon-bg);border:1px solid rgba(197,176,244,.35)}
 .ln{font-size:11.5px;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ldel{
   width:20px;height:20px;display:flex;align-items:center;justify-content:center;
@@ -285,6 +299,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .ldel:hover{color:var(--danger)}
 #pscroll{flex:1;overflow-y:auto;padding:var(--space-md) 12px}
 #pscroll::-webkit-scrollbar{width:3px}
+#pscroll::-webkit-scrollbar-track{background:transparent}
 #pscroll::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
 
 /* ── Props ── */
@@ -312,22 +327,22 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 .divider{height:1px;background:var(--border);margin:10px 0}
 
 /* ── Collapsible Sections ── */
-.sec{margin-bottom:var(--space-xs);border-radius:var(--radius-lg);background:rgba(249,246,237,0.025)}
+.sec{margin-bottom:var(--space-xs);border-radius:var(--radius-lg);background:rgba(249,246,237,0.025);border:1px solid transparent;transition:border-color 200ms var(--ease-out)}
 .sec-hd{display:flex;align-items:center;gap:6px;padding:8px var(--space-md);cursor:pointer;font-size:11px;font-weight:600;color:var(--text);user-select:none;border-radius:var(--radius-lg);transition:background 120ms var(--ease-out),border-color 120ms var(--ease-out)}
 .sec-hd:hover{background:rgba(249,246,237,0.08)}
 .sec.collapsed .sec-hd{border-radius:var(--radius-lg)}
 .sec-content{border-radius:0 0 var(--radius-lg) var(--radius-lg)}
-/* Color-block sections — Figma DESIGN.md inspired pastel accents */
-.sec.sec-text .sec-hd{background:var(--sec-text-accent);border:1px solid var(--sec-text-border);border-bottom:none}
-.sec.sec-text .sec-content{background:var(--sec-text-accent)}
-.sec.sec-colors .sec-hd{background:var(--sec-colors-accent);border:1px solid var(--sec-colors-border);border-bottom:none}
-.sec.sec-colors .sec-content{background:var(--sec-colors-accent)}
-.sec.sec-appearance .sec-hd{background:var(--sec-appearance-accent);border:1px solid var(--sec-appearance-border);border-bottom:none}
-.sec.sec-appearance .sec-content{background:var(--sec-appearance-accent)}
-.sec.sec-position .sec-hd{background:var(--sec-position-accent);border:1px solid var(--sec-position-border);border-bottom:none}
-.sec.sec-position .sec-content{background:var(--sec-position-accent)}
-.sec.sec-actions .sec-hd{background:var(--sec-actions-accent);border:1px solid var(--sec-actions-border);border-bottom:none}
-.sec.sec-actions .sec-content{background:var(--sec-actions-accent)}
+/* Color-block sections — Figma DESIGN.md pastel palette */
+.sec.sec-text .sec-hd{background:rgba(220,238,177,.12);border:1px solid rgba(220,238,177,.25);border-bottom:none}
+.sec.sec-text .sec-content{background:rgba(220,238,177,.06)}
+.sec.sec-colors .sec-hd{background:rgba(197,176,244,.12);border:1px solid rgba(197,176,244,.25);border-bottom:none}
+.sec.sec-colors .sec-content{background:rgba(197,176,244,.06)}
+.sec.sec-appearance .sec-hd{background:rgba(200,230,205,.12);border:1px solid rgba(200,230,205,.25);border-bottom:none}
+.sec.sec-appearance .sec-content{background:rgba(200,230,205,.06)}
+.sec.sec-position .sec-hd{background:rgba(244,237,214,.12);border:1px solid rgba(244,237,214,.25);border-bottom:none}
+.sec.sec-position .sec-content{background:rgba(244,237,214,.06)}
+.sec.sec-actions .sec-hd{background:rgba(243,201,182,.10);border:1px solid rgba(243,201,182,.22);border-bottom:none}
+.sec.sec-actions .sec-content{background:rgba(243,201,182,.05)}
 .sec-arrow{font-size:7px;opacity:.4;transition:transform 0.2s var(--ease-out)}
 .sec.collapsed .sec-arrow{transform:rotate(-90deg)}
 /* Smooth expand/collapse using grid-template-rows: 0→1 trick */
@@ -365,8 +380,8 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 /* ── Elements ── */
 .gel{position:absolute;cursor:move;user-select:none;overflow-wrap:break-word;word-break:break-word;touch-action:none;transition:outline-color 150ms var(--ease-out),outline-offset 150ms var(--ease-out)}
 /* ── Materialize animation (Apple Design) ── */
-.gel.materialize-in{animation:matIn 0.35s cubic-bezier(0.25,1,0.5,1) forwards}
-.gel.materialize-out{animation:matOut 0.25s cubic-bezier(0.4,0,1,1) forwards;pointer-events:none}
+.gel.materialize-in{animation:matIn 0.4s cubic-bezier(0.25,1,0.5,1) forwards}
+.gel.materialize-out{animation:matOut 0.28s cubic-bezier(0.4,0,1,1) forwards;pointer-events:none}
 @keyframes matIn{
   from{opacity:0;transform:scale(0.92);filter:blur(8px)}
   to{opacity:1;transform:scale(1);filter:blur(0)}
@@ -375,7 +390,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
   from{opacity:1;transform:scale(1);filter:blur(0)}
   to{opacity:0;transform:scale(0.92);filter:blur(8px)}
 }
-.gel.sel{outline:2px solid var(--accent);outline-offset:2px;box-shadow:0 0 0 4px var(--accent-glow);transition:outline 150ms var(--ease-out),box-shadow 150ms var(--ease-out)}
+.gel.sel{outline:2px solid var(--accent);outline-offset:2px;box-shadow:0 0 0 5px rgba(9,119,87,0.15),0 4px 20px rgba(0,0,0,.3);transition:outline 150ms var(--ease-out),box-shadow 150ms var(--ease-out)}
 .gel-inner{width:100%;height:100%;display:flex;align-items:center;justify-content:center;padding:12px;overflow:hidden}
 .el-text{word-break:break-word;white-space:pre-wrap;pointer-events:none;width:100%;text-align:center;line-height:1}
 /* ── Resize handles ── */
@@ -397,7 +412,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 .rh.mr{top:calc(50% - 4px);right:-4px;cursor:e-resize}
 .gel.locked{cursor:default;opacity:0.7;transition:opacity 200ms var(--ease-out)}
 .gel.locked .rh{display:none!important}
-.gel.dragging{box-shadow:0 12px 40px rgba(0,0,0,.5),0 0 0 1px var(--border2);transition:box-shadow 140ms var(--ease-out);will-change:left,top,width,height,backdrop-filter}
+.gel.dragging{box-shadow:0 16px 48px rgba(0,0,0,.55),0 0 0 1px var(--border2);transition:box-shadow 140ms var(--ease-out);will-change:left,top,width,height,backdrop-filter}
 /* Staggered entrance: new elements fade/scale in sequentially */
 .gel:nth-child(1 of .gel){animation-delay:0ms}
 .gel:nth-child(2 of .gel){animation-delay:60ms}
@@ -407,12 +422,12 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 #ctx-menu{
   position:fixed;background:var(--surface2);border:1px solid var(--border2);
   border-radius:var(--radius-lg);padding:5px;z-index:200;min-width:160px;
-  box-shadow:var(--shadow-md);
+  box-shadow:var(--shadow-lg),0 0 0 1px rgba(249,246,237,0.04);
   opacity:0;visibility:hidden;pointer-events:none;
-  transform:scale(0.94) translateY(4px);transform-origin:top left;
-  transition:opacity 160ms var(--ease-out),transform 180ms var(--ease-out),visibility 160ms,box-shadow 160ms var(--ease-out)
+  transform:scale(0.95) translateY(4px);transform-origin:top left;
+  transition:opacity 180ms var(--ease-out),transform 200ms var(--ease-out),visibility 180ms,box-shadow 180ms var(--ease-out)
 }
-#ctx-menu.show{opacity:1;visibility:visible;pointer-events:auto;transform:scale(1) translateY(0);box-shadow:var(--shadow-lg)}
+#ctx-menu.show{opacity:1;visibility:visible;pointer-events:auto;transform:scale(1) translateY(0);box-shadow:var(--shadow-xl),0 0 0 1px rgba(249,246,237,0.04)}
 .ctx-item{
   padding:6px 12px;font-size:12.5px;border-radius:6px;cursor:pointer;
   color:var(--text-muted);display:flex;align-items:center;gap:9px;transition:var(--tr)
@@ -424,7 +439,8 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 /* ── Status Bar ── */
 #sb{
   height:32px;background:var(--surface);border-top:1px solid var(--border);
-  display:flex;align-items:center;padding:0 var(--space-md);gap:12px;flex-shrink:0
+  display:flex;align-items:center;padding:0 var(--space-md);gap:12px;flex-shrink:0;
+  box-shadow:0 -1px 0 rgba(0,0,0,.15)
 }
 .sbi{font-size:10.5px;color:var(--text-hint);display:flex;align-items:center;gap:4px}
 .sbi b{color:var(--text-muted);font-weight:400}
@@ -432,17 +448,17 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 
 /* ── Shortcuts Panel ── */
 #shortcuts-panel{
-  position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(0.95);
+  position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(0.96);
   background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius-2xl);
   padding:24px 28px;z-index:600;min-width:360px;
-  box-shadow:var(--shadow-lg);
+  box-shadow:var(--shadow-xl),0 0 0 1px rgba(249,246,237,0.04);
   opacity:0;visibility:hidden;pointer-events:none;
-  transition:opacity 160ms var(--ease-out),transform 160ms var(--ease-out),visibility 160ms
+  transition:opacity 180ms var(--ease-out),transform 200ms var(--ease-out),visibility 180ms
 }
 #shortcuts-panel.show{opacity:1;visibility:visible;pointer-events:auto;transform:translate(-50%,-50%) scale(1)}
 #shortcuts-panel h3{font-family:var(--font-display);font-size:15px;margin-bottom:14px;color:var(--text)}
 #shortcuts-panel .sc-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 16px}
-#shortcuts-panel .sc-item{display:flex;justify-content:space-between;align-items:center;font-size:11.5px;padding:5px 0;border-bottom:1px solid var(--border)}
+#shortcuts-panel .sc-item{display:flex;justify-content:space-between;align-items:center;font-size:11.5px;padding:5px 0;border-bottom:1px solid rgba(249,246,237,0.05)}
 #shortcuts-panel .sc-item:last-child{border-bottom:none}
 #shortcuts-panel .sc-key{background:var(--surface2);border:1px solid var(--border2);border-radius:4px;padding:2px 6px;font-size:10px;color:var(--accent2);font-family:var(--font-mono);white-space:nowrap}
 #shortcuts-panel .sc-close{position:absolute;top:12px;right:14px;background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:16px}
@@ -464,8 +480,8 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 .confirm-box{
   background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius-2xl);
   padding:22px 24px;max-width:340px;width:calc(100vw - 48px);
-  box-shadow:var(--shadow-lg);display:flex;flex-direction:column;gap:16px;
-  transform:scale(0.95);transition:transform 160ms var(--ease-out)
+  box-shadow:var(--shadow-lg),0 0 0 1px rgba(249,246,237,0.04);display:flex;flex-direction:column;gap:16px;
+  transform:scale(0.96);transition:transform 180ms var(--ease-out)
 }
 #confirm-overlay.show .confirm-box{transform:scale(1)}
 #confirm-msg{font-size:13px;color:var(--text);line-height:1.6;margin:0}
@@ -482,35 +498,37 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 #toast{
   position:fixed;bottom:40px;left:50%;
   background:var(--surface2);color:var(--text);border:1px solid var(--border2);
-  padding:8px 18px;border-radius:var(--radius-pill);font-size:12.5px;z-index:800;
-  transform:translateX(-50%) translateY(6px) scale(0.96);transform-origin:center;
-  transition:opacity 180ms var(--ease-out),transform 200ms var(--ease-out),visibility 0ms 200ms;
-  pointer-events:none;opacity:0;visibility:hidden;white-space:normal;max-width:360px
+  padding:8px 20px;border-radius:var(--radius-pill);font-size:12.5px;z-index:800;
+  transform:translateX(-50%) translateY(8px) scale(0.96);transform-origin:center;
+  transition:opacity 220ms var(--ease-out),transform 240ms var(--ease-out),visibility 0ms 220ms;
+  pointer-events:none;opacity:0;visibility:hidden;white-space:normal;max-width:360px;
+  box-shadow:0 4px 24px rgba(0,0,0,.3)
 }
-#toast.show{opacity:1;transform:translateX(-50%) translateY(0) scale(1);visibility:visible;transition:opacity 180ms var(--ease-out),transform 200ms var(--ease-out),visibility 0ms 0s}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0) scale(1);visibility:visible;transition:opacity 220ms var(--ease-out),transform 260ms var(--ease-out),visibility 0ms 0s}
 #toast.success{border-color:rgba(34,211,160,.4);background:rgba(34,211,160,.12);color:#22d3a0}
 #toast.error  {border-color:rgba(248,113,113,.4);background:rgba(248,113,113,.12);color:#f87171}
 #toast.warn   {border-color:rgba(251,191,36,.4);background:rgba(251,191,36,.12);color:#fbbf24}
 
 /* ── Export Overlay ── */
 #exp-overlay{
-  position:fixed;inset:0;background:rgba(15,15,15,.88);
+  position:fixed;inset:0;background:rgba(9,9,9,.90);
   display:flex;align-items:center;justify-content:center;z-index:9998;
-  backdrop-filter:blur(4px);
+  backdrop-filter:blur(6px);
   opacity:0;visibility:hidden;pointer-events:none;
-  transition:opacity 160ms var(--ease-out),visibility 160ms
+  transition:opacity 180ms var(--ease-out),visibility 180ms
 }
 #exp-overlay.show{opacity:1;visibility:visible;pointer-events:auto}
 #exp-box{color:var(--accent);
   background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius-2xl);
-  padding:28px 36px;display:flex;flex-direction:column;align-items:center;gap:16px;
-  transform:scale(0.95);transform-origin:center;
-  transition:transform 160ms var(--ease-out)
+  padding:32px 40px;display:flex;flex-direction:column;align-items:center;gap:18px;
+  transform:scale(0.96);transform-origin:center;
+  transition:transform 180ms var(--ease-out);
+  box-shadow:var(--shadow-xl),0 0 0 1px rgba(249,246,237,0.04)
 }
 #exp-overlay.show #exp-box{transform:scale(1)}
 #exp-msg{font-size:14px;color:var(--text)}
-#exp-bar-wrap{width:240px;height:5px;background:var(--surface2);border-radius:4px;overflow:hidden}
-#exp-bar{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent-hover));border-radius:4px;width:0%;transition:width 300ms var(--ease-out)}
+#exp-bar-wrap{width:240px;height:5px;background:var(--surface3);border-radius:4px;overflow:hidden;box-shadow:inset 0 1px 3px rgba(0,0,0,.2)}
+#exp-bar{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:4px;width:0%;transition:width 400ms var(--ease-out);box-shadow:0 0 8px rgba(9,119,87,.4)}
 #exp-cancel:hover{background:var(--surface3);color:var(--text)}
 
 /* ── Scrollbar Global ── */
@@ -760,37 +778,37 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
     <div class="preset" onclick="applyPreset('frosted-clear')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('frosted-clear')"><div class="preset-dot" style="background:transparent;border:1px solid rgba(249,246,237,0.35)"></div><span>透明毛玻璃</span></div>
     <div class="preset" onclick="applyPreset('frosted-light')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('frosted-light')"><div class="preset-dot" style="background:rgba(249,246,237,0.5);border:1px solid rgba(249,246,237,0.6)"></div><span>白色毛玻璃</span></div>
     <div class="preset" onclick="applyPreset('frosted-dark')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('frosted-dark')"><div class="preset-dot" style="background:rgba(15,15,15,0.6);border:1px solid rgba(249,246,237,0.15)"></div><span>深色磨砂</span></div>
-    <div class="preset" onclick="applyPreset('frosted-green')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('frosted-green')"><div class="preset-dot" style="background:rgba(9,119,87,0.3)"></div><span>绿色毛玻璃</span></div>
+    <div class="preset" onclick="applyPreset('frosted-mint')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('frosted-mint')"><div class="preset-dot" style="background:rgba(200,230,205,0.5);border:1px solid rgba(200,230,205,0.6)"></div><span>薄荷毛玻璃</span></div>
+  </div>
+  <div class="preset-sep"></div>
+  <div class="preset-group">
+    <div class="preset" onclick="applyPreset('glass-lime')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('glass-lime')"><div class="preset-dot" style="background:linear-gradient(to bottom,#dceeb1,transparent);border:1px solid rgba(220,238,177,0.5)"></div><span>青柠渐变</span></div>
+    <div class="preset" onclick="applyPreset('glass-lilac')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('glass-lilac')"><div class="preset-dot" style="background:linear-gradient(to bottom,#c5b0f4,transparent);border:1px solid rgba(197,176,244,0.5)"></div><span>薰衣草渐变</span></div>
+    <div class="preset" onclick="applyPreset('glass-cream')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('glass-cream')"><div class="preset-dot" style="background:linear-gradient(to bottom,#f4ecd6,transparent);border:1px solid rgba(244,237,214,0.5)"></div><span>奶油渐变</span></div>
+    <div class="preset" onclick="applyPreset('glass-mint')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('glass-mint')"><div class="preset-dot" style="background:linear-gradient(to bottom,#c8e6cd,transparent);border:1px solid rgba(200,230,205,0.5)"></div><span>薄荷渐变</span></div>
+    <div class="preset" onclick="applyPreset('glass-coral')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('glass-coral')"><div class="preset-dot" style="background:linear-gradient(to bottom,#f3c9b6,transparent);border:1px solid rgba(243,201,182,0.5)"></div><span>珊瑚渐变</span></div>
+  </div>
+  <div class="preset-sep"></div>
+  <div class="preset-group">
+    <div class="preset" onclick="applyPreset('glass-navy')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('glass-navy')"><div class="preset-dot" style="background:linear-gradient(to bottom,#1f1d3d,transparent);border:1px solid rgba(31,29,61,0.6)"></div><span>深靛渐变</span></div>
+    <div class="preset" onclick="applyPreset('glass-sunset')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('glass-sunset')"><div class="preset-dot" style="background:linear-gradient(to right,rgba(232,160,191,0.45),rgba(155,126,212,0.25));border:1px solid rgba(232,160,191,0.5)"></div><span>日落渐变</span></div>
+    <div class="preset" onclick="applyPreset('glass-depth')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('glass-depth')"><div class="preset-dot" style="background:linear-gradient(to bottom,rgba(30,58,95,0.5),transparent);border:1px solid rgba(30,58,95,0.6)"></div><span>深海渐变</span></div>
+    <div class="preset" onclick="applyPreset('glass-sage')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('glass-sage')"><div class="preset-dot" style="background:linear-gradient(to top right,rgba(168,197,160,0.4),transparent);border:1px solid rgba(168,197,160,0.5)"></div><span>鼠尾草渐变</span></div>
+    <div class="preset" onclick="applyPreset('glass-brand')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('glass-brand')"><div class="preset-dot" style="background:linear-gradient(to top,rgba(9,119,87,0.4),transparent);border:1px solid rgba(9,119,87,0.5)"></div><span>品牌绿玻</span></div>
+    <div class="preset" onclick="applyPreset('glass-pink')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('glass-pink')"><div class="preset-dot" style="background:linear-gradient(to bottom,#efd4d4,transparent);border:1px solid rgba(239,212,212,0.5)"></div><span>玫瑰渐变</span></div>
   </div>
   <div class="preset-sep"></div>
   <div class="preset-group">
     <div class="preset" onclick="applyPreset('notification')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('notification')"><div class="preset-dot" style="background:rgba(15,15,15,0.75);border:1px solid rgba(249,246,237,0.1)"></div><span>通知卡片</span></div>
-    <div class="preset" onclick="applyPreset('title-card')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('title-card')"><div class="preset-dot" style="background:rgba(9,119,87,0.25)"></div><span>标题卡片</span></div>
+    <div class="preset" onclick="applyPreset('navy-card')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('navy-card')"><div class="preset-dot" style="background:rgba(31,29,61,0.75);border:1px solid rgba(31,29,61,0.3)"></div><span>靛蓝卡片</span></div>
+    <div class="preset" onclick="applyPreset('title-card')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('title-card')"><div class="preset-dot" style="background:rgba(9,119,87,0.3)"></div><span>标题卡片</span></div>
     <div class="preset" onclick="applyPreset('tag')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('tag')"><div class="preset-dot" style="background:rgba(9,119,87,0.3);border-radius:50%"></div><span>标签贴纸</span></div>
   </div>
   <div class="preset-sep"></div>
   <div class="preset-group">
     <div class="preset" onclick="applyPreset('circle-light')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('circle-light')"><div class="preset-dot" style="background:rgba(249,246,237,0.35);border:1px solid rgba(249,246,237,0.5);border-radius:50%"></div><span>圆形白玻</span></div>
     <div class="preset" onclick="applyPreset('circle-dark')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('circle-dark')"><div class="preset-dot" style="background:rgba(15,15,15,0.6);border:1px solid rgba(249,246,237,0.15);border-radius:50%"></div><span>圆形深玻</span></div>
-    <div class="preset" onclick="applyPreset('circle-blue')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('circle-blue')"><div class="preset-dot" style="background:rgba(9,119,87,0.25);border-radius:50%"></div><span>圆形绿玻</span></div>
-  </div>
-  <div class="preset-sep"></div>
-  <div class="preset-group">
-    <div class="preset" onclick="applyPreset('glass-fade')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('glass-fade')">
-      <div class="preset-dot" style="background:linear-gradient(to bottom,rgba(255,255,255,0.5),transparent);border:1px solid rgba(249,246,237,0.3)"></div><span>渐变白玻</span>
-    </div>
-    <div class="preset" onclick="applyPreset('glass-brand')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('glass-brand')">
-      <div class="preset-dot" style="background:linear-gradient(to top,rgba(9,119,87,0.4),transparent);border:1px solid rgba(9,119,87,0.5)"></div><span>品牌绿玻</span>
-    </div>
-    <div class="preset" onclick="applyPreset('glass-sunset')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('glass-sunset')">
-      <div class="preset-dot" style="background:linear-gradient(to right,rgba(232,160,191,0.45),rgba(155,126,212,0.25));border:1px solid rgba(232,160,191,0.5)"></div><span>日落渐变</span>
-    </div>
-    <div class="preset" onclick="applyPreset('glass-depth')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('glass-depth')">
-      <div class="preset-dot" style="background:linear-gradient(to bottom,rgba(30,58,95,0.5),transparent);border:1px solid rgba(30,58,95,0.6)"></div><span>深海渐变</span>
-    </div>
-    <div class="preset" onclick="applyPreset('glass-sage')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('glass-sage')">
-      <div class="preset-dot" style="background:linear-gradient(to top right,rgba(168,197,160,0.4),transparent);border:1px solid rgba(168,197,160,0.5)"></div><span>鼠尾草渐变</span>
-    </div>
+    <div class="preset" onclick="applyPreset('circle-mint')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('circle-mint')"><div class="preset-dot" style="background:rgba(200,230,205,0.35);border-radius:50%"></div><span>圆形薄荷</span></div>
   </div>
   <div class="preset-sep"></div>
   <div class="preset-group">
@@ -1439,14 +1457,14 @@ function render() {
       const newEl = {
         id: S.nid++, type: 'text',
         x: cx - w / 2, y: cy - h / 2,
-        w, h, r: 14,
+        w, h, r: 12,
         bg: '#ffffff', tc: '#F9F6ED',
         fs: 22, fw: '700',
-        op: 0.12, blur: 0, br: 100, sat: 100,
-        bw: 1, bc: '#ffffff', bop: 0.2,
+        op: 0.08, blur: 0, br: 100, sat: 100,
+        bw: 0, bc: '#ffffff', bop: 0,
         ca: 0,
         text: '', tsh: '0 2px 10px rgba(0,0,0,.5)',
-        ls: 0, lh: 1.45, pad: 12,
+        ls: 0, lh: 1.45, pad: 14,
         italic: false, underline: false,
         align: 'center', valign: 'center',
         fontFamily: "'DM Sans',sans-serif",
@@ -2438,26 +2456,25 @@ function addEl(type) {
     id: S.nid++, type,
     x: cx - w/2,
     y: cy - h/2,
-    w, h, r: 14,
-    bg: type === 'card' ? '#000000' : '#ffffff',
+    w, h, r: type === 'text' ? 12 : 14,
+    bg: type === 'card' ? '#111111' : '#ffffff',
     tc: '#F9F6ED',
     fs: type === 'text' ? 22 : 16,
     fw: type === 'text' ? '700' : '500',
-    op:  type === 'card' ? .65 : .12,
-    blur: type === 'text' ? 0 : (type === 'glass' ? 20 : 4),
-    br: 100, sat: type === 'glass' ? 150 : 100,
-    bw: 1, bc: type === 'card' ? '#000000' : '#ffffff',
-    bop: type === 'card' ? .1 : .2,
+    op:  type === 'card' ? .25 : .18,
+    blur: type === 'text' ? 0 : (type === 'glass' ? 22 : 4),
+    br: 100, sat: type === 'glass' ? 145 : 100,
+    bw: 1, bc: type === 'card' ? '#111111' : '#ffffff',
+    bop: type === 'card' ? .12 : .22,
     ca: 0,
     text: type === 'text' ? '双击编辑文字' : (type === 'card' ? '卡片内容' : '毛玻璃内容'),
     tsh: type === 'text' ? '0 2px 10px rgba(0,0,0,.5)' : '0 1px 6px rgba(0,0,0,.4)',
-    ls: 0, lh: 1.45, pad: 12,
+    ls: 0, lh: 1.45, pad: type === 'text' ? 14 : 12,
     italic: false, underline: false,
     align: 'center', valign: 'center',
     fontFamily: "'DM Sans',sans-serif",
     locked: false,
-    tOp: 1, // text opacity (renamed from 'top' to avoid CSS naming collision)
-    gd: null, // gradient overlay (null = solid color)
+    tOp: 1, gd: null,
   };
   S.els.push(el2);
   S.sel = el2.id;
@@ -2748,34 +2765,46 @@ function setTool(t) {
 // PRESETS
 // ═══════════════════════════════════════════════════════════════
 const PRESETS = {
-  // ── Frosted Glass Presets ──────────────────────────────────────────────────
-  // Opacity/blur/border tuned to Apple macOS / Microsoft Fluent / Tailwind standards
-  'frosted-clear':  {type:'glass',bg:'#ffffff',op:0,  blur:20,sat:150,bop:0.18,tc:'#F9F6ED',fs:16,fw:'500',r:14,w:240,h:120},
-  'frosted-light':  {type:'glass',bg:'#ffffff',op:0.1,blur:20,sat:150,bop:0.2,tc:'#1a1a1a',fs:16,fw:'500',r:14,w:240,h:120},
-  'frosted-dark':   {type:'glass',bg:'#0F0F0F',op:0.2,blur:18,sat:120,bop:0.15,tc:'#F9F6ED',fs:16,fw:'500',r:14,w:240,h:120},
-  'frosted-green':  {type:'glass',bg:'#097757',op:0.15,blur:16,sat:150,bop:0.3,tc:'#ffffff',fs:16,fw:'500',r:14,w:240,h:120},
-  // ── Gradient Glass Presets ─────────────────────────────────────────────────
-  // All gradients use a single base color with an opaque-to-transparent stop.
-  // Element-level op controls overall transparency; stop opacity is baked into
-  // the gradient stops (0 = invisible, 1 = full color strength).
-  'glass-fade':     {type:'glass',bg:'#ffffff',op:0.25,blur:20,sat:140,bop:0.2,tc:'#F9F6ED',fs:16,fw:'500',r:14,w:240,h:120,
+  // ── Frosted Glass Presets (DESIGN.md lime family) ────────────────────────────
+  'frosted-clear':  {type:'glass',bg:'#ffffff',op:0,  blur:22,sat:150,bop:0.18,tc:'#F9F6ED',fs:16,fw:'500',r:14,w:240,h:120},
+  'frosted-light':  {type:'glass',bg:'#ffffff',op:0.1,blur:22,sat:150,bop:0.2,tc:'#1a1a1a',fs:16,fw:'500',r:14,w:240,h:120},
+  'frosted-dark':   {type:'glass',bg:'#0F0F0F',op:0.2,blur:20,sat:120,bop:0.15,tc:'#F9F6ED',fs:16,fw:'500',r:14,w:240,h:120},
+  'frosted-mint':   {type:'glass',bg:'#c8e6cd',op:0.18,blur:18,sat:130,bop:0.28,tc:'#1f1d3d',fs:16,fw:'500',r:14,w:240,h:120},
+  // ── Pastel Gradient Presets (DESIGN.md color-block palette) ──────────────────
+  'glass-lime':     {type:'glass',bg:'#dceeb1',op:0.22,blur:20,sat:130,bop:0.22,tc:'#1f1d3d',fs:16,fw:'500',r:16,w:280,h:110,
+                     gd:{angle:180,stops:[{color:'#dceeb1',opacity:0.45},{color:'#dceeb1',opacity:0}]}},
+  'glass-lilac':    {type:'glass',bg:'#c5b0f4',op:0.20,blur:20,sat:140,bop:0.20,tc:'#1f1d3d',fs:16,fw:'500',r:16,w:280,h:110,
+                     gd:{angle:180,stops:[{color:'#c5b0f4',opacity:0.42},{color:'#c5b0f4',opacity:0}]}},
+  'glass-cream':    {type:'glass',bg:'#f4ecd6',op:0.22,blur:18,sat:110,bop:0.22,tc:'#1f1d3d',fs:16,fw:'500',r:16,w:280,h:110,
+                     gd:{angle:180,stops:[{color:'#f4ecd6',opacity:0.44},{color:'#f4ecd6',opacity:0}]}},
+  'glass-mint':     {type:'glass',bg:'#c8e6cd',op:0.20,blur:18,sat:120,bop:0.20,tc:'#1f1d3d',fs:16,fw:'500',r:16,w:280,h:110,
+                     gd:{angle:180,stops:[{color:'#c8e6cd',opacity:0.42},{color:'#c8e6cd',opacity:0}]}},
+  'glass-coral':    {type:'glass',bg:'#f3c9b6',op:0.18,blur:18,sat:140,bop:0.22,tc:'#1f1d3d',fs:16,fw:'500',r:16,w:280,h:110,
+                     gd:{angle:180,stops:[{color:'#f3c9b6',opacity:0.40},{color:'#f3c9b6',opacity:0}]}},
+  'glass-pink':     {type:'glass',bg:'#efd4d4',op:0.18,blur:18,sat:130,bop:0.22,tc:'#1f1d3d',fs:16,fw:'500',r:16,w:280,h:110,
+                     gd:{angle:180,stops:[{color:'#efd4d4',opacity:0.40},{color:'#efd4d4',opacity:0}]}},
+  'glass-navy':     {type:'glass',bg:'#1f1d3d',op:0.28,blur:20,sat:100,bop:0.18,tc:'#f4ecd6',fs:16,fw:'500',r:16,w:280,h:110,
+                     gd:{angle:180,stops:[{color:'#1f1d3d',opacity:0.55},{color:'#1f1d3d',opacity:0}]}},
+  // ── Brand Green Presets (existing, improved) ────────────────────────────────
+  'glass-fade':     {type:'glass',bg:'#ffffff',op:0.25,blur:22,sat:140,bop:0.2,tc:'#F9F6ED',fs:16,fw:'500',r:14,w:240,h:120,
                     gd:{angle:180,stops:[{color:'#ffffff',opacity:0.5},{color:'#ffffff',opacity:0}]}},
-  'glass-brand':    {type:'glass',bg:'#097757',op:0.2,blur:18,sat:150,bop:0.25,tc:'#ffffff',fs:16,fw:'500',r:14,w:240,h:100,
-                    gd:{angle:0,stops:[{color:'#097757',opacity:0.4},{color:'#097757',opacity:0}]}},
+  'glass-brand':    {type:'glass',bg:'#097757',op:0.22,blur:20,sat:150,bop:0.28,tc:'#ffffff',fs:16,fw:'500',r:14,w:240,h:100,
+                    gd:{angle:0,stops:[{color:'#097757',opacity:0.42},{color:'#097757',opacity:0}]}},
   'glass-sunset':   {type:'glass',bg:'#e8a0bf',op:0.18,blur:18,sat:140,bop:0.22,tc:'#F9F6ED',fs:16,fw:'500',r:16,w:260,h:110,
                     gd:{angle:90,stops:[{color:'#e8a0bf',opacity:0.45},{color:'#9b7ed4',opacity:0.25},{color:'#e8a0bf',opacity:0}]}},
-  'glass-depth':    {type:'glass',bg:'#1e3a5f',op:0.22,blur:20,sat:130,bop:0.15,tc:'#F9F6ED',fs:16,fw:'500',r:14,w:240,h:120,
-                    gd:{angle:180,stops:[{color:'#1e3a5f',opacity:0.5},{color:'#1e3a5f',opacity:0}]}},
-  'glass-sage':     {type:'glass',bg:'#a8c5a0',op:0.18,blur:16,sat:130,bop:0.2,tc:'#F9F6ED',fs:16,fw:'500',r:14,w:220,h:100,
-                    gd:{angle:315,stops:[{color:'#a8c5a0',opacity:0.4},{color:'#a8c5a0',opacity:0}]}},
-  // ── Card / Notification Presets ────────────────────────────────────────────
-  'notification':   {type:'card',bg:'#0F0F0F',op:0.2,blur:20,bop:0.12,tc:'#F9F6ED',fs:15,fw:'500',r:18,w:260,h:90},
-  'title-card':     {type:'glass',bg:'#097757',op:0.18,blur:22,sat:150,bop:0.35,tc:'#ffffff',fs:22,fw:'700',r:16,w:300,h:80},
-  'tag':            {type:'glass',bg:'#097757',op:0.18,blur:12,sat:140,bop:0.28,tc:'#ffffff',fs:14,fw:'500',r:22,w:140,h:44},
+  'glass-depth':    {type:'glass',bg:'#1e3a5f',op:0.24,blur:22,sat:130,bop:0.15,tc:'#F9F6ED',fs:16,fw:'500',r:14,w:240,h:120,
+                    gd:{angle:180,stops:[{color:'#1e3a5f',opacity:0.50},{color:'#1e3a5f',opacity:0}]}},
+  'glass-sage':     {type:'glass',bg:'#a8c5a0',op:0.20,blur:18,sat:130,bop:0.22,tc:'#F9F6ED',fs:16,fw:'500',r:14,w:220,h:100,
+                    gd:{angle:315,stops:[{color:'#a8c5a0',opacity:0.40},{color:'#a8c5a0',opacity:0}]}},
+  // ── Card / Notification Presets ─────────────────────────────────────────────
+  'notification':   {type:'card',bg:'#111111',op:0.25,blur:22,bop:0.12,tc:'#F9F6ED',fs:15,fw:'500',r:18,w:260,h:90},
+  'title-card':     {type:'glass',bg:'#097757',op:0.20,blur:24,sat:150,bop:0.38,tc:'#ffffff',fs:22,fw:'700',r:16,w:300,h:80},
+  'tag':            {type:'glass',bg:'#097757',op:0.20,blur:14,sat:140,bop:0.30,tc:'#ffffff',fs:14,fw:'500',r:22,w:140,h:44},
+  'navy-card':      {type:'card',bg:'#1f1d3d',op:0.30,blur:20,bop:0.14,tc:'#f4ecd6',fs:15,fw:'500',r:18,w:260,h:90},
   // ── Circle Presets ─────────────────────────────────────────────────────────
-  'circle-light':   {type:'glass',bg:'#ffffff',op:0.12,blur:16,sat:160,bop:0.22,ca:0,tc:'#1a1a1a',fs:14,fw:'500',r:999,w:160,h:160},
-  'circle-dark':    {type:'glass',bg:'#0F0F0F',op:0.2,blur:14,sat:130,bop:0.15,ca:0,tc:'#F9F6ED',fs:14,fw:'500',r:999,w:160,h:160},
-  'circle-blue':    {type:'glass',bg:'#097757',op:0.15,blur:16,sat:170,bop:0.3,ca:0,tc:'#ffffff',fs:14,fw:'500',r:999,w:160,h:160},
+  'circle-light':   {type:'glass',bg:'#ffffff',op:0.14,blur:18,sat:160,bop:0.22,ca:0,tc:'#1a1a1a',fs:14,fw:'500',r:999,w:160,h:160},
+  'circle-dark':    {type:'glass',bg:'#0F0F0F',op:0.22,blur:16,sat:130,bop:0.15,ca:0,tc:'#F9F6ED',fs:14,fw:'500',r:999,w:160,h:160},
+  'circle-mint':    {type:'glass',bg:'#c8e6cd',op:0.18,blur:16,sat:140,bop:0.28,ca:0,tc:'#1f1d3d',fs:14,fw:'500',r:999,w:160,h:160},
   // ── Text Presets ───────────────────────────────────────────────────────────
   'big-text':       {type:'text',tc:'#F9F6ED',fs:36,fw:'700',w:320,h:100},
 };
@@ -3762,17 +3791,17 @@ function _sanitizeEl(raw, fallbackId) {
     x: Math.max(-50000, Math.min(50000, num(raw.x, 0))), y: Math.max(-50000, Math.min(50000, num(raw.y, 0))),
     w: Math.max(1, Math.min(20000, num(raw.w, 100))), h: Math.max(1, Math.min(20000, num(raw.h, 40))),
     r: Math.max(0, Math.min(10000, num(raw.r, 12))),
-    bg: cssVal(raw.bg, type === 'card' ? '#000000' : '#ffffff', 32),
+    bg: cssVal(raw.bg, type === 'card' ? '#111111' : '#ffffff', 32),
     tc: cssVal(raw.tc, '#F9F6ED', 32),
     fs: Math.max(8, Math.min(400, num(raw.fs, type === 'text' ? 22 : 16))),
     fw: fwSet.has(String(raw.fw)) ? String(raw.fw) : '500',
-    op: Math.max(0, Math.min(1, num(raw.op, type === 'card' ? 0.65 : (type === 'text' ? 0.12 : 0.2)))),
-    blur: Math.max(0, Math.min(200, num(raw.blur, type === 'card' ? 4 : (type === 'text' ? 0 : 18)))),
+    op: Math.max(0, Math.min(1, num(raw.op, type === 'card' ? 0.25 : (type === 'text' ? 0.08 : 0.18)))),
+    blur: Math.max(0, Math.min(200, num(raw.blur, type === 'card' ? 4 : (type === 'text' ? 0 : 22)))),
     br: Math.max(20, Math.min(300, num(raw.br, 100))),
-    sat: Math.max(0, Math.min(300, num(raw.sat, type === 'glass' ? 140 : 100))),
+    sat: Math.max(0, Math.min(300, num(raw.sat, type === 'glass' ? 145 : 100))),
     bw: Math.max(0, Math.min(20, num(raw.bw, 1))),
-    bc: cssVal(raw.bc, type === 'card' ? '#000000' : '#ffffff', 32),
-    bop: Math.max(0, Math.min(1, num(raw.bop, type === 'card' ? 0.1 : (type === 'glass' ? 0.35 : 0.2)))),
+    bc: cssVal(raw.bc, type === 'card' ? '#111111' : '#ffffff', 32),
+    bop: Math.max(0, Math.min(1, num(raw.bop, type === 'card' ? 0.12 : (type === 'glass' ? 0.22 : 0.2)))),
     ca: Math.min(5, Math.max(0, num(raw.ca, 0))),
     text: str(raw.text, '', 4000),
     tsh: cssVal(raw.tsh, type === 'text' ? '0 2px 10px rgba(0,0,0,.5)' : '0 1px 6px rgba(0,0,0,.4)', 120),

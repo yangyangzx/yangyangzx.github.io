@@ -231,13 +231,29 @@
   font-size: 13px;
   font-weight: var(--font-weight-medium);
   box-shadow: var(--shadow-lg);
-  animation: toastIn var(--dur-normal), toastOut var(--dur-normal) 2.5s forwards;
+  animation: toastInBottom var(--dur-normal), toastOutBottom var(--dur-normal) 2.5s forwards;
   max-width: 360px;
   pointer-events: auto;
   background: var(--glass-bg-heavy);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
   border: 1px solid var(--glass-border);
+}
+
+@keyframes toastInBottom {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes toastOutBottom {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(12px); }
+}
+
+/* 保留旧动画名向后兼容，但不再使用 */
+@keyframes toastInOld {
+  from { opacity: 0; transform: translateX(40px); }
+  to   { opacity: 1; transform: translateX(0); }
 }
 
 .toast.success {

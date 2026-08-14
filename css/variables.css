@@ -156,17 +156,22 @@
      排版系统
      ═══════════════════════════════════════ */
   --font-xs:    11px;
-  --font-sm:    12.5px;
-  --font-base:  14px;
-  --font-md:    16px;
-  --font-lg:    19px;
-  --font-xl:    23px;
-  --font-2xl:   29px;
-  --font-3xl:   35px;
+  --font-sm:    13px;
+  --font-base:  15px;
+  --font-md:    17px;
+  --font-lg:    20px;
+  --font-xl:    24px;
+  --font-2xl:   30px;
+  --font-3xl:   36px;
   --font-weight-normal:   400;
   --font-weight-medium:   500;
   --font-weight-semibold: 600;
   --font-weight-bold:     700;
+
+  /* Apple 风格标题权重 & 追踪 */
+  --font-weight-title: 600;
+  --letter-tight:  -0.02em;
+  --letter-spread:  0.06em;
 
   /* ═══════════════════════════════════════
      间距系统（4pt 倍数）
@@ -227,6 +232,14 @@
   /* ——— Switch 组件 ——— */
   --switch-bg:         oklch(60% 0.015 250 / 0.40);
   --switch-bg-checked: var(--color-primary-bg);
+
+  /* ——— 新动画关键帧（补充） ——— */
+  /* viewCardIn: 视图卡片交错入场 */
+  /* formFieldIn: 表单字段交错入场 */
+  /* streakPulse: 连亏计数脉冲警告 */
+  /* emptyFloat: 空状态浮动 */
+  /* successPop: 成功按钮微弹 */
+  /* btnGlowPulse: 按钮 loading 微光 */
 }
 
 /* ———— 浅色主题模式 ———— */
@@ -357,15 +370,16 @@
   }
   .modal-content,
   .view.active,
-  .dash-card,
-  .review-card,
   .card,
+  .review-card,
   .nav-item,
   .toast,
   .result-card.margin-danger,
   .mindset-reminder,
   .close-panel-row,
-  .detail-row {
+  .detail-row,
+  .form-section.animating .form-group,
+  .empty-icon {
     animation: reducedFadeIn 150ms linear forwards !important;
   }
   @keyframes reducedFadeIn {
@@ -495,4 +509,56 @@
     border-left-color: var(--color-primary);
     box-shadow: 0 0 12px oklch(52% 0.18 250 / 0.12);
   }
+}
+
+/* ═══════════════════════════════════════
+   新增动画关键帧
+   ═══════════════════════════════════════ */
+
+/* viewCardIn: 视图内卡片交错入场 */
+@keyframes viewCardIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* formFieldIn: 折叠面板字段交错入场 */
+@keyframes formFieldIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* streakPulse: 连亏计数脉冲警告 */
+@keyframes streakPulse {
+  0%, 100% { box-shadow: 0 0 0 0 oklch(58% 0.20 25 / 0.20); }
+  50%       { box-shadow: 0 0 0 6px oklch(58% 0.20 25 / 0); }
+}
+
+/* emptyFloat: 空状态微妙浮动 */
+@keyframes emptyFloat {
+  0%, 100% { transform: translateY(0); opacity: 0.4; }
+  50%       { transform: translateY(-6px); opacity: 0.6; }
+}
+
+/* successPop: 成功按钮微弹反馈 */
+@keyframes successPop {
+  0%, 100% { transform: scale(1); }
+  50%       { transform: scale(1.03); }
+}
+
+/* btnGlowPulse: loading 按钮微光 */
+@keyframes btnGlowPulse {
+  0%, 100% { box-shadow: 0 0 0 3px oklch(58% 0.18 248 / 0.10); }
+  50%       { box-shadow: 0 0 0 5px oklch(58% 0.18 248 / 0.18); }
+}
+
+/* navIndicatorIn: 导航指示条弹簧动画 */
+@keyframes navIndicatorIn {
+  from { height: 0; opacity: 0; top: 50%; }
+  to   { height: 20px; opacity: 1; top: 50%; }
+}
+
+/* resultReveal: 计算结果卡片入场 */
+@keyframes resultReveal {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }

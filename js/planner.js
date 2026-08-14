@@ -354,6 +354,13 @@ function getTodayLossStatus() {
  * 增强版：新增日亏损上限检查、心态评分检查，支持可配止损阈值，检查结果持久化至日志
  */
 function updateChecklist() {
+  // P0-10: 检查清单逐条入场动效
+  var cc = document.getElementById('checklistCard');
+  if (cc) {
+    cc.classList.remove('checklist-anim');
+    void cc.offsetWidth;
+    cc.classList.add('checklist-anim');
+  }
   if (window._lastCalcDirty) { showToast('计算器参数已变更，请先点击「计算仓位」更新结果', 'warn'); return; }
   var calc = window._lastCalc;
 

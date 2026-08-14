@@ -109,15 +109,15 @@ body {
   flex-wrap: wrap;
   gap: var(--space-sm);
   margin-bottom: var(--space-xl);
-  font-weight: var(--font-weight-bold);
+  font-weight: var(--font-weight-title);
   font-size: var(--font-lg);
   color: var(--color-text);
 }
 
 .card-header h2 {
-  font-weight: var(--font-weight-bold);
+  font-weight: var(--font-weight-title);
   font-size: var(--font-xl);
-  letter-spacing: -0.02em;
+  letter-spacing: var(--letter-tight);
   display: flex;
   align-items: center;
   gap: 10px;
@@ -137,7 +137,7 @@ body {
   font-size: var(--font-sm);
   font-weight: var(--font-weight-medium);
   color: var(--color-primary);
-  letter-spacing: 0.2px;
+  letter-spacing: var(--letter-spread);
   transition: var(--transition-fast);
   /* 可点击文字不换行 — gate 49 */
   white-space: nowrap;
@@ -225,7 +225,7 @@ body {
   border: 1.5px solid var(--glass-border);
   border-radius: var(--radius-md);
   padding: 11px 16px;
-  font-size: 14px;
+  font-size: var(--font-base);
   transition: border-color var(--dur-short) var(--ease-out),
               background-color var(--dur-short) var(--ease-out),
               box-shadow var(--dur-short) var(--ease-out),
@@ -249,7 +249,7 @@ body {
   background: var(--glass-bg);
   z-index: 2;
   /* 移除 box-shadow ring，改用 outline — gate 39 */
-  box-shadow: none;
+  box-shadow: 0 0 0 3px oklch(58% 0.18 248 / 0.12);
 }
 
 .form-group input:focus-visible,
@@ -288,7 +288,7 @@ body {
   border: 1.5px solid var(--glass-border);
   border-radius: var(--radius-md);
   padding: 11px 16px;
-  font-size: 14px;
+  font-size: var(--font-base);
   transition: border-color var(--dur-short) var(--ease-out),
               background-color var(--dur-short) var(--ease-out),
               box-shadow var(--dur-short) var(--ease-out);
@@ -304,7 +304,7 @@ body {
 .form-group textarea:focus {
   border-color: var(--color-primary);
   background: var(--glass-bg);
-  box-shadow: none;
+  box-shadow: 0 0 0 3px oklch(58% 0.18 248 / 0.12);
 }
 
 .form-group textarea:focus-visible {
@@ -540,8 +540,10 @@ body {
 /* ─── 按钮 loading / success 状态 ─── */
 .btn[data-state="loading"] {
   pointer-events: none;
-  opacity: 0.7;
+  opacity: 0.75;
   cursor: wait;
+  box-shadow: 0 0 0 3px oklch(58% 0.18 248 / 0.10);
+  animation: btnGlowPulse 1.5s ease-in-out infinite;
 }
 .btn[data-state="loading"]::after {
   content: '';
@@ -563,6 +565,7 @@ body {
   pointer-events: none;
   opacity: 0.85;
   cursor: default;
+  animation: successPop 1500ms forwards;
 }
 .btn[data-state="success"]::after {
   content: '✓';
@@ -679,6 +682,39 @@ body {
 .btn-ripple:active::after {
   transform: translate(-50%, -50%) scale(1);
   opacity: 1;
+}
+
+/* ─── 主操作按钮涟漪扩展 ─── */
+.btn-primary,
+.btn-success,
+.btn-danger-outline {
+  overflow: hidden;
+  position: relative;
+}
+
+.btn-primary::after,
+.btn-success::after,
+.btn-danger-outline::after {
+  content: '';
+  position: absolute;
+  width: 200%;
+  height: 200%;
+  top: 50%;
+  left: 50%;
+  background: radial-gradient(circle, oklch(94% 0.006 250 / 0.18) 0%, transparent 60%);
+  border-radius: 50%;
+  transform: translate(-50%, -50%) scale(0);
+  transition: transform 400ms var(--ease-out), opacity 400ms var(--ease-out);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.btn-primary:active::after,
+.btn-success:active::after,
+.btn-danger-outline:active::after {
+  transform: translate(-50%, -50%) scale(1);
+  opacity: 1;
+  transition: transform 0s, opacity 0s;
 }
 
 /* ═══════════════════════════════════════
@@ -943,6 +979,35 @@ body {
   opacity: 1;
   pointer-events: auto;
 }
+
+/* ═══════════════════════════════════════
+   视图卡片交错入场（view active 时触发）
+   仅作用于无自身 materialIn 动画的通用 .card，
+   .review-card 和 .dash-card 已有独立入场动画，不在此处重复处理。
+   ═══════════════════════════════════════ */
+.view.active .card {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.view.active .card:nth-child(1) { animation: viewCardIn 300ms 60ms var(--ease-out) forwards; }
+.view.active .card:nth-child(2) { animation: viewCardIn 300ms 120ms var(--ease-out) forwards; }
+.view.active .card:nth-child(3) { animation: viewCardIn 300ms 180ms var(--ease-out) forwards; }
+.view.active .card:nth-child(n+4) { animation: viewCardIn 300ms 240ms var(--ease-out) forwards; }
+
+/* ═══════════════════════════════════════
+   表单折叠字段交错入场
+   由 JS toggleFormSection 添加 .animating 类触发，避免页面加载时自动播放
+   ═══════════════════════════════════════ */
+.form-section.animating:not(.collapsed) .form-section-content .form-group {
+  opacity: 0;
+  transform: translateY(4px);
+  animation: formFieldIn 200ms var(--ease-out) forwards;
+}
+
+.form-section.animating:not(.collapsed) .form-section-content .form-group:nth-child(1) { animation-delay: 40ms; }
+.form-section.animating:not(.collapsed) .form-section-content .form-group:nth-child(2) { animation-delay: 80ms; }
+.form-section.animating:not(.collapsed) .form-section-content .form-group:nth-child(n+3) { animation-delay: 120ms; }
 
 .form-section-optional {
   font-weight: var(--font-weight-normal);
