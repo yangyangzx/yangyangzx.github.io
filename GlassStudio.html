@@ -776,6 +776,24 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
   </div>
   <div class="preset-sep"></div>
   <div class="preset-group">
+    <div class="preset" onclick="applyPreset('glass-fade')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('glass-fade')">
+      <div class="preset-dot" style="background:linear-gradient(to bottom,rgba(255,255,255,0.5),transparent);border:1px solid rgba(249,246,237,0.3)"></div><span>渐变白玻</span>
+    </div>
+    <div class="preset" onclick="applyPreset('glass-brand')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('glass-brand')">
+      <div class="preset-dot" style="background:linear-gradient(to top,rgba(9,119,87,0.4),transparent);border:1px solid rgba(9,119,87,0.5)"></div><span>品牌绿玻</span>
+    </div>
+    <div class="preset" onclick="applyPreset('glass-sunset')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('glass-sunset')">
+      <div class="preset-dot" style="background:linear-gradient(to right,rgba(232,160,191,0.45),rgba(155,126,212,0.25));border:1px solid rgba(232,160,191,0.5)"></div><span>日落渐变</span>
+    </div>
+    <div class="preset" onclick="applyPreset('glass-depth')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('glass-depth')">
+      <div class="preset-dot" style="background:linear-gradient(to bottom,rgba(30,58,95,0.5),transparent);border:1px solid rgba(30,58,95,0.6)"></div><span>深海渐变</span>
+    </div>
+    <div class="preset" onclick="applyPreset('glass-sage')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('glass-sage')">
+      <div class="preset-dot" style="background:linear-gradient(to top right,rgba(168,197,160,0.4),transparent);border:1px solid rgba(168,197,160,0.5)"></div><span>鼠尾草渐变</span>
+    </div>
+  </div>
+  <div class="preset-sep"></div>
+  <div class="preset-group">
     <div class="preset" onclick="applyPreset('big-text')" tabindex="0" role="button" onkeydown="if(event.key==='Enter')applyPreset('big-text')"><div class="preset-dot" style="background:transparent;border:1px dashed rgba(249,246,237,0.35)"></div><span>大标题文字</span></div>
   </div>
 </div>
@@ -986,16 +1004,16 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 
 <!-- Context Menu -->
 <div id="ctx-menu">
-  <div class="ctx-item" tabindex="0" role="menuitem" onclick="ctxAction('dup')"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="5" y="5" width="9" height="9" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M11 5V4a1 1 0 00-1-1H3a1 1 0 00-1 1v7a1 1 0 001 1h1" stroke="currentColor" stroke-width="1.4"/></svg>复制元素</div>
-  <div class="ctx-item" tabindex="0" role="menuitem" onclick="ctxAction('lock')"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="3" y="7" width="10" height="8" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M5 7V5a3 3 0 016 0v2" stroke="currentColor" stroke-width="1.4"/></svg>锁定/解锁</div>
-  <div class="ctx-item" tabindex="0" role="menuitem" onclick="ctxAction('fwd')"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 2v6M5 5l3-3 3 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>上移一层</div>
-  <div class="ctx-item" tabindex="0" role="menuitem" onclick="ctxAction('bwd')"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 14v-6M11 11l-3 3-3-3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>下移一层</div>
+  <div class="ctx-item" tabindex="0" role="menuitem" onclick="ctxAction('dup')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();ctxAction('dup')}"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="5" y="5" width="9" height="9" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M11 5V4a1 1 0 00-1-1H3a1 1 0 00-1 1v7a1 1 0 001 1h1" stroke="currentColor" stroke-width="1.4"/></svg>复制元素</div>
+  <div class="ctx-item" tabindex="0" role="menuitem" onclick="ctxAction('lock')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();ctxAction('lock')}"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="3" y="7" width="10" height="8" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M5 7V5a3 3 0 016 0v2" stroke="currentColor" stroke-width="1.4"/></svg>锁定/解锁</div>
+  <div class="ctx-item" tabindex="0" role="menuitem" onclick="ctxAction('fwd')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();ctxAction('fwd')}"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 2v6M5 5l3-3 3 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>上移一层</div>
+  <div class="ctx-item" tabindex="0" role="menuitem" onclick="ctxAction('bwd')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();ctxAction('bwd')}"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 14v-6M11 11l-3 3-3-3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>下移一层</div>
   <div class="ctx-item" tabindex="0" role="menuitem" onclick="ctxAction('front')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();ctxAction('front')}"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 2v6M5 5l3-3 3 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>置顶</div>
   <div class="ctx-item" tabindex="0" role="menuitem" onclick="ctxAction('back')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();ctxAction('back')}"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 14v-6M11 11l-3 3-3-3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>置底</div>
   <div class="ctx-item" tabindex="0" role="menuitem" onclick="ctxAction('hcenter')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();ctxAction('hcenter')}"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 1v14M4 5h8M4 11h8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>水平居中</div>
   <div class="ctx-item" tabindex="0" role="menuitem" onclick="ctxAction('vcenter')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();ctxAction('vcenter')}"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M1 8h14M5 4v8M11 4v8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>垂直居中</div>
   <div class="ctx-sep"></div>
-  <div class="ctx-item danger" tabindex="0" role="menuitem" onclick="ctxAction('del')"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3 5h10M6 5V3h4v2M5 5l.6 8h4.8L11 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>删除</div>
+  <div class="ctx-item danger" tabindex="0" role="menuitem" onclick="ctxAction('del')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();ctxAction('del')}"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3 5h10M6 5V3h4v2M5 5l.6 8h4.8L11 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>删除</div>
 </div>
 
 <!-- Export Panel (simplified - no format choice, quality is fixed as proven) -->
@@ -1089,6 +1107,7 @@ const S = {
   els: [],
   sel: null,         // single selection
   selSet: new Set(), // multi selection
+  _prevSel: null,    // previous single selection — used by render() to detect selection changes
   nid: 1,
   history: [],
   hIdx: -1,
@@ -1259,6 +1278,16 @@ function loadFile(file) {
   if (!file || !file.type.startsWith('image/')) { toast('仅支持图片文件', 3000); return; }
   if (file.size > 40 * 1024 * 1024) { toast('图片超过 40MB，请先压缩后再导入', 4000); return; }
   if (S._editingId) commitTextEdit();
+  // Reset gesture state so a pending long-press or pinch from the previous image
+  // doesn't carry over and interfere with the new image session.
+  _lpFired = false;
+  _lpActive = false;
+  clearTimeout(_lpTimer);
+  _lpTimer = null;
+  _pinchStartDist = null;
+  _pinchStartZoom = null;
+  S._dupOnDrop = false;
+  S._dupStart = null;
   // Read + apply the image; shared with the "replace image" confirmation below.
   const applyImage = () => {
     const reader = new FileReader();
@@ -1422,6 +1451,7 @@ function render() {
         align: 'center', valign: 'center',
         fontFamily: "'DM Sans',sans-serif",
         locked: false, tOp: 1,
+        gd: null,
       };
       S.els.push(newEl);
       S.sel = newEl.id;
@@ -1429,7 +1459,7 @@ function render() {
       S.selSet.add(newEl.id);
       saveHist();
       render();
-      // Immediately enter text edit mode so the user can type
+      startTextEdit(newEl.id);
     });
     el.cv.addEventListener('contextmenu', e => {
       if (e.target === el.cv || e.target === imgEl) {
@@ -1470,8 +1500,24 @@ function render() {
   renderLayers();
   clearTimeout(_layersTimer);
   _renderLayersPending = false;
-  // renderProps() is already debounced via _propsTimer — only call when not inside a panel edit
-  if (!document.activeElement || !el.pscroll.contains(document.activeElement)) {
+  // Force panel refresh when selection changed (even if panel control has focus).
+  // Without this, clicking a new element while a panel input is focused leaves the
+  // panel showing the old element's properties until the next unrelated render.
+  const _selChanged = (S.sel !== S._prevSel);
+  // When selection changes to a different element, clear paragraph editor state
+  // so the new element's panel starts with no pre-selected paragraph.
+  if (_selChanged && S._selectedParaId !== null) {
+    S._selectedParaId = null;
+    S._selectedParaIdx = null;
+  }
+  S._prevSel = S.sel;
+  if (_selChanged) {
+    // Selection changed: force IMMEDIATE panel rebuild, bypassing debounce.
+    // This prevents the user from interacting with stale controls while the
+    // old element's gradient editor is still visible.
+    clearTimeout(_propsTimer);
+    _renderPropsImpl();
+  } else if (!document.activeElement || !el.pscroll.contains(document.activeElement)) {
     renderProps();
   }
   el.sbCnt.textContent = S.els.length;
@@ -1486,6 +1532,10 @@ el.cv.addEventListener('dblclick', e => {
   e.preventDefault();
   e.stopImmediatePropagation();
   startTextEdit(item.id);
+  // stopImmediatePropagation() (called above) prevents ALL remaining listeners
+  // on every element in the path — both capture and bubble. No need for an
+  // explicit stopPropagation() here; the bubble-phase .gel dblclick handler
+  // (which we also removed) would not fire regardless.
 }, true);
 function mkDOM(el2) {
   const dom = document.createElement('div');
@@ -1536,13 +1586,6 @@ function mkDOM(el2) {
     render();
     e.stopPropagation();
   });
-  dom.addEventListener('dblclick', e => {
-    const current = getEl2(+dom.dataset.id);
-    if (!current || current.locked) return;
-    e.preventDefault();
-    e.stopPropagation();
-    startTextEdit(current.id);
-  });
   dom.addEventListener('contextmenu', e => {
     e.preventDefault();
     e.stopPropagation();
@@ -1591,7 +1634,17 @@ function applyStyle(dom, el2, forceRebuild) {
     const borderRgb = h2r(el2.bc || (isGlass ? '#ffffff' : '#000000'));
     const borderOpacity = Math.max(0, Math.min(1, Number(el2.bop ?? (isGlass ? 0.35 : 0.1))));
     const filter = `${blur > 0 ? `blur(${blur}px) ` : ''}${saturation !== 100 ? `saturate(${saturation}%) ` : ''}${brightness !== 100 ? `brightness(${brightness}%)` : ''}`.trim();
-    dom.style.background = `rgba(${rgb.r},${rgb.g},${rgb.b},${opacity})`;
+
+    // ── Background: gradient or solid ──
+    const gd = gdGet(el2);
+    const gradCSS = gdCSS(gd, Number(el2.w) || 240, Number(el2.h) || 120, opacity);
+    if (gradCSS) {
+      dom.style.background = gradCSS;
+      // When gradient is active, element opacity is controlled by the gradient stops.
+      // We still apply backdrop-filter for the glass blur effect.
+    } else {
+      dom.style.background = `rgba(${rgb.r},${rgb.g},${rgb.b},${opacity})`;
+    }
     dom.style.backdropFilter = filter;
     dom.style.webkitBackdropFilter = filter;
     dom.style.border = borderWidth > 0 ? `${borderWidth}px solid rgba(${borderRgb.r},${borderRgb.g},${borderRgb.b},${borderOpacity})` : 'none';
@@ -1705,7 +1758,15 @@ function startTextEdit(id) {
   textarea.style.cssText = 'width:100%;height:100%;background:transparent;border:none;outline:none;resize:none;overflow:hidden;word-break:break-word;white-space:pre-wrap;';
   _applyTextNodeStyle(textarea, item);
   textarea.style.pointerEvents = 'auto';
-  textarea.addEventListener('input', () => { item.text = textarea.value; });
+  textarea.addEventListener('input', () => {
+    item.text = textarea.value;
+    // Sync paragraphs array in real-time so the panel stays current while typing
+    if (item.paragraphs) {
+      const count = item.text.split('\n').length;
+      while (item.paragraphs.length > count) item.paragraphs.pop();
+      while (item.paragraphs.length < count) item.paragraphs.push({});
+    }
+  });
   textarea.addEventListener('blur', () => commitTextEdit());
   textarea.addEventListener('keydown', event => {
     if (event.key === 'Escape') { event.preventDefault(); commitTextEdit(); }
@@ -1738,7 +1799,113 @@ function h2r(hex) {
   const v = parseInt(h, 16);
   return { r:(v>>16)&255, g:(v>>8)&255, b:v&255 };
 }
-// id → element index. Rebuilt on every render (S.els is the source of truth),
+
+// ── Gradient helpers ──────────────────────────────────────────────────────────
+// gd (gradient) stores { angle, stops:[{color, opacity}] } on glass/card els.
+// angle is CSS deg (0=up, 90=right, 180=down, 270=left).
+// opacity per stop is 0..1 applied to the color (not the element-level op).
+function gdGet(el) {
+  return el && el.gd ? { angle: el.gd.angle, stops: el.gd.stops.map(s => ({color:s.color, opacity:s.opacity})) } : null;
+}
+function gdSet(el, gd) {
+  if (!gd) { delete el.gd; return; }
+  el.gd = { angle: gd.angle, stops: gd.stops.map(s => ({color:s.color, opacity:s.opacity})) };
+}
+// Build a CSS linear-gradient string for DOM rendering.
+// When op=0 the gradient is invisible — backdrop blur alone provides the glass effect.
+function gdCSS(gd, elemW, elemH, elemOp) {
+  if (!gd || gd.stops.length < 2) return null;
+  // Convert CSS deg to x1/y1/x2/y2
+  const rad = (gd.angle - 90) * Math.PI / 180;
+  const cx = elemW / 2, cy = elemH / 2;
+  const len = Math.max(elemW, elemH) * 0.75; // extend far enough to cover corners
+  const x0 = (cx - Math.cos(rad) * len/2).toFixed(2);
+  const y0 = (cy - Math.sin(rad) * len/2).toFixed(2);
+  const x1 = (cx + Math.cos(rad) * len/2).toFixed(2);
+  const y1 = (cy + Math.sin(rad) * len/2).toFixed(2);
+  // Convert stop opacity to rgba so CSS gradient treats it as alpha, not position
+  const pts = gd.stops.map(s => {
+    const rgb = h2r(s.color);
+    const a = elemOp !== undefined ? s.opacity * elemOp : s.opacity;
+    return `rgba(${rgb.r},${rgb.g},${rgb.b},${a})`;
+  }).join(', ');
+  return `linear-gradient(${gd.angle}deg, ${pts})`;
+}
+// Build a Canvas 2D linear gradient (coordinates in element-local px).
+function gdCanvas(ctx, gd, x, y, w, h, elemOp) {
+  if (!gd || gd.stops.length < 2) return null;
+  const rad = (gd.angle - 90) * Math.PI / 180;
+  const cx = x + w/2, cy = y + h/2;
+  const len = Math.max(w, h) * 0.75;
+  const x0 = cx - Math.cos(rad) * len/2;
+  const y0 = cy - Math.sin(rad) * len/2;
+  const x1 = cx + Math.cos(rad) * len/2;
+  const y1 = cy + Math.sin(rad) * len/2;
+  const grad = ctx.createLinearGradient(x0, y0, x1, y1);
+  // Convert stop opacity to rgba for canvas addColorStop
+  gd.stops.forEach((s, i) => {
+    const rgb = h2r(s.color);
+    const a = elemOp !== undefined ? s.opacity * elemOp : s.opacity;
+    grad.addColorStop(i / (gd.stops.length - 1), `rgba(${rgb.r},${rgb.g},${rgb.b},${a})`);
+  });
+  return grad;
+}
+
+// ── Gradient editing commands (called from panel HTML) ────────────────────────
+function gdToggle(id) {
+  const el2 = getEl2(Number(id));
+  if (!el2) return;
+  if (el2.gd) {
+    delete el2.gd;
+  } else {
+    // Create default gradient: top-to-bottom white fade
+    el2.gd = { angle: 180, stops: [{color: el2.bg || '#ffffff', opacity: 0.5}, {color: el2.bg || '#ffffff', opacity: 0}] };
+  }
+  const dom = el.cv.querySelector(`[data-id="${id}"]`);
+  if (dom) applyStyle(dom, el2);
+  requestLayersRender();
+  renderProps();
+  clearTimeout(_spTimer);
+  _spTimer = setTimeout(scheduleHistSave, 600);
+}
+
+function gdSetAngle(id, angle) {
+  const el2 = getEl2(Number(id));
+  if (!el2 || !el2.gd) return;
+  el2.gd.angle = Math.max(0, Math.min(360, angle));
+  const dom = el.cv.querySelector(`[data-id="${id}"]`);
+  if (dom) applyStyle(dom, el2);
+  requestLayersRender();
+  renderProps(); // refresh panel to show updated gradient preview
+  clearTimeout(_spTimer);
+  _spTimer = setTimeout(scheduleHistSave, 600);
+}
+
+function gdSetStopColor(id, idx, color) {
+  const el2 = getEl2(Number(id));
+  if (!el2 || !el2.gd || !el2.gd.stops[idx]) return;
+  el2.gd.stops[idx].color = color.replace('#', '').length === 3
+    ? '#' + color[1]+color[1]+color[2]+color[2]+color[3]+color[3]
+    : color;
+  const dom = el.cv.querySelector(`[data-id="${id}"]`);
+  if (dom) applyStyle(dom, el2);
+  requestLayersRender();
+  renderProps(); // refresh panel to show updated gradient preview
+  clearTimeout(_spTimer);
+  _spTimer = setTimeout(scheduleHistSave, 600);
+}
+
+function gdSetStopOpacity(id, idx, pct) {
+  const el2 = getEl2(Number(id));
+  if (!el2 || !el2.gd || !el2.gd.stops[idx]) return;
+  el2.gd.stops[idx].opacity = Math.max(0, Math.min(1, pct / 100));
+  const dom = el.cv.querySelector(`[data-id="${id}"]`);
+  if (dom) applyStyle(dom, el2);
+  requestLayersRender();
+  renderProps(); // refresh panel to show updated gradient preview
+  clearTimeout(_spTimer);
+  _spTimer = setTimeout(scheduleHistSave, 600);
+}
 // turning getEl2 from O(n) linear scan into O(1) map lookup. All S.els mutations
 // are followed by a render() call, so the map never goes stale outside renders.
 const elMap = new Map();
@@ -2242,6 +2409,7 @@ function selectAll() {
   S.els.forEach(e => S.selSet.add(e.id));
   S.sel = S.els.length > 0 ? S.els[S.els.length - 1].id : null;
   render();
+  renderProps(); // ensure props panel reflects multi-select state immediately
 }
 
 function toggleLock() {
@@ -2284,6 +2452,7 @@ function addEl(type) {
     fontFamily: "'DM Sans',sans-serif",
     locked: false,
     tOp: 1, // text opacity (renamed from 'top' to avoid CSS naming collision)
+    gd: null, // gradient overlay (null = solid color)
   };
   S.els.push(el2);
   S.sel = el2.id;
@@ -2361,7 +2530,12 @@ function delSel() {
         removed = true;
       }
     });
-    if (removed) { S.sel = null; S.selSet.clear(); }
+    if (removed) {
+      S.sel = null;
+      S.selSet.clear();
+      S._selectedParaId = null;
+      S._selectedParaIdx = null;
+    }
     saveHist(); render();
   };
   if (pending === 0) { finish(); return; }
@@ -2388,9 +2562,9 @@ function delById(id) {
         _pendingDelete.delete(id);
         S.els = S.els.filter(e => e.id !== id);
         _shdCleanup(id);
-        if (S.sel === id) { S.sel = null; }
+        if (S.sel === id) { S.sel = null; S._selectedParaId = null; S._selectedParaIdx = null; }
         S.selSet.delete(id);
-        if (S.selSet.size === 0) S.sel = null;
+        if (S.selSet.size === 0) { S.sel = null; S._selectedParaId = null; S._selectedParaIdx = null; }
         saveHist(); render();
       }
     };
@@ -2415,6 +2589,13 @@ function clearAll() {
     S.els.forEach(e => _shdCleanup(e.id));
     S.els = []; S.sel = null; S.selSet.clear();
     _pendingDelete.clear();
+    // Reset long-press and pinch state to prevent stale gestures affecting new session
+    _lpFired = false;
+    _lpActive = false;
+    clearTimeout(_lpTimer);
+    _lpTimer = null;
+    _pinchStartDist = null;
+    _pinchStartZoom = null;
     // Cancel ALL pending timers to avoid stale updates
     clearTimeout(_propsTimer);
     clearTimeout(_layersTimer);
@@ -2488,25 +2669,30 @@ function sendBwd() {
 
 function toFront() {
   if (!S.sel) { toast('请先选中一个元素'); return; }
-  // Bring to front: move selected elements to end of S.els (top of z-order)
+  // Bring to front: move selected elements to end of S.els (top of z-order).
+  // Sort by descending current index so we process topmost first, preserving
+  // relative z-order among selected elements when they all reach the top.
   const selIds = S.selSet.size ? [...S.selSet] : (S.sel ? [S.sel] : []);
   if (!selIds.length) return;
-  selIds.forEach(id => {
-    const e = getEl2(id);
-    if (e) { S.els = S.els.filter(x => x.id !== id); S.els.push(e); }
+  const indices = selIds.map(id => S.els.findIndex(e => e.id === id)).sort((a, b) => b - a);
+  indices.forEach(i => {
+    const e = S.els[i];
+    if (e) { S.els.splice(i, 1); S.els.push(e); }
   });
   saveHist(); render();
 }
 
 function toBack() {
   if (!S.sel) { toast('请先选中一个元素'); return; }
-  // Send to back: move selected elements to start of S.els (bottom of z-order)
+  // Send to back: move selected elements to start of S.els (bottom of z-order).
+  // Sort by ascending current index so we process bottommost first, preserving
+  // relative z-order among selected elements when they all reach the bottom.
   const selIds = S.selSet.size ? [...S.selSet] : (S.sel ? [S.sel] : []);
   if (!selIds.length) return;
-  // Reverse so original order is preserved when unshifting
-  selIds.reverse().forEach(id => {
-    const e = getEl2(id);
-    if (e) { S.els = S.els.filter(x => x.id !== id); S.els.unshift(e); }
+  const indices = selIds.map(id => S.els.findIndex(e => e.id === id)).sort((a, b) => a - b);
+  indices.forEach(i => {
+    const e = S.els[i];
+    if (e) { S.els.splice(i, 1); S.els.unshift(e); }
   });
   saveHist(); render();
 }
@@ -2559,20 +2745,34 @@ function setTool(t) {
 const PRESETS = {
   // ── Frosted Glass Presets ──────────────────────────────────────────────────
   // Opacity/blur/border tuned to Apple macOS / Microsoft Fluent / Tailwind standards
-  'frosted-clear':  {type:'glass',bg:'#ffffff',op:0,  blur:20,sat:150,bop:0.18,tc:'#F9F6ED',fs:16,fw:'500',r:14,w:240,h:120,tsh:'0 2px 12px rgba(0,0,0,.6)'},
-  'frosted-light':  {type:'glass',bg:'#ffffff',op:0.1,blur:20,sat:150,bop:0.2,tc:'#1a1a1a',fs:16,fw:'500',r:14,w:240,h:120,tsh:'0 1px 4px rgba(0,0,0,.15)'},
-  'frosted-dark':   {type:'glass',bg:'#0F0F0F',op:0.4,blur:18,sat:120,bop:0.15,tc:'#F9F6ED',fs:16,fw:'500',r:14,w:240,h:120},
-  'frosted-green':  {type:'glass',bg:'#097757',op:0.18,blur:16,sat:150,bop:0.3,tc:'#ffffff',fs:16,fw:'500',r:14,w:240,h:120},
+  'frosted-clear':  {type:'glass',bg:'#ffffff',op:0,  blur:20,sat:150,bop:0.18,tc:'#F9F6ED',fs:16,fw:'500',r:14,w:240,h:120},
+  'frosted-light':  {type:'glass',bg:'#ffffff',op:0.1,blur:20,sat:150,bop:0.2,tc:'#1a1a1a',fs:16,fw:'500',r:14,w:240,h:120},
+  'frosted-dark':   {type:'glass',bg:'#0F0F0F',op:0.2,blur:18,sat:120,bop:0.15,tc:'#F9F6ED',fs:16,fw:'500',r:14,w:240,h:120},
+  'frosted-green':  {type:'glass',bg:'#097757',op:0.15,blur:16,sat:150,bop:0.3,tc:'#ffffff',fs:16,fw:'500',r:14,w:240,h:120},
+  // ── Gradient Glass Presets ─────────────────────────────────────────────────
+  // All gradients use a single base color with an opaque-to-transparent stop.
+  // Element-level op controls overall transparency; stop opacity is baked into
+  // the gradient stops (0 = invisible, 1 = full color strength).
+  'glass-fade':     {type:'glass',bg:'#ffffff',op:0.25,blur:20,sat:140,bop:0.2,tc:'#F9F6ED',fs:16,fw:'500',r:14,w:240,h:120,
+                    gd:{angle:180,stops:[{color:'#ffffff',opacity:0.5},{color:'#ffffff',opacity:0}]}},
+  'glass-brand':    {type:'glass',bg:'#097757',op:0.2,blur:18,sat:150,bop:0.25,tc:'#ffffff',fs:16,fw:'500',r:14,w:240,h:100,
+                    gd:{angle:0,stops:[{color:'#097757',opacity:0.4},{color:'#097757',opacity:0}]}},
+  'glass-sunset':   {type:'glass',bg:'#e8a0bf',op:0.18,blur:18,sat:140,bop:0.22,tc:'#F9F6ED',fs:16,fw:'500',r:16,w:260,h:110,
+                    gd:{angle:90,stops:[{color:'#e8a0bf',opacity:0.45},{color:'#9b7ed4',opacity:0.25},{color:'#e8a0bf',opacity:0}]}},
+  'glass-depth':    {type:'glass',bg:'#1e3a5f',op:0.22,blur:20,sat:130,bop:0.15,tc:'#F9F6ED',fs:16,fw:'500',r:14,w:240,h:120,
+                    gd:{angle:180,stops:[{color:'#1e3a5f',opacity:0.5},{color:'#1e3a5f',opacity:0}]}},
+  'glass-sage':     {type:'glass',bg:'#a8c5a0',op:0.18,blur:16,sat:130,bop:0.2,tc:'#F9F6ED',fs:16,fw:'500',r:14,w:220,h:100,
+                    gd:{angle:315,stops:[{color:'#a8c5a0',opacity:0.4},{color:'#a8c5a0',opacity:0}]}},
   // ── Card / Notification Presets ────────────────────────────────────────────
-  'notification':   {type:'card',bg:'#0F0F0F',op:0.72,blur:6,bop:0.12,tc:'#F9F6ED',fs:15,fw:'500',r:18,w:260,h:90},
+  'notification':   {type:'card',bg:'#0F0F0F',op:0.2,blur:20,bop:0.12,tc:'#F9F6ED',fs:15,fw:'500',r:18,w:260,h:90},
   'title-card':     {type:'glass',bg:'#097757',op:0.18,blur:22,sat:150,bop:0.35,tc:'#ffffff',fs:22,fw:'700',r:16,w:300,h:80},
   'tag':            {type:'glass',bg:'#097757',op:0.18,blur:12,sat:140,bop:0.28,tc:'#ffffff',fs:14,fw:'500',r:22,w:140,h:44},
   // ── Circle Presets ─────────────────────────────────────────────────────────
-  'circle-light':   {type:'glass',bg:'#ffffff',op:0.15,blur:16,sat:160,bop:0.22,ca:0,tc:'#1a1a1a',fs:14,fw:'500',r:999,w:160,h:160,tsh:'0 1px 4px rgba(0,0,0,.15)'},
-  'circle-dark':    {type:'glass',bg:'#0F0F0F',op:0.4,blur:14,sat:130,bop:0.15,ca:0,tc:'#F9F6ED',fs:14,fw:'500',r:999,w:160,h:160},
-  'circle-blue':    {type:'glass',bg:'#097757',op:0.18,blur:16,sat:170,bop:0.3,ca:0,tc:'#ffffff',fs:14,fw:'500',r:999,w:160,h:160},
+  'circle-light':   {type:'glass',bg:'#ffffff',op:0.12,blur:16,sat:160,bop:0.22,ca:0,tc:'#1a1a1a',fs:14,fw:'500',r:999,w:160,h:160},
+  'circle-dark':    {type:'glass',bg:'#0F0F0F',op:0.2,blur:14,sat:130,bop:0.15,ca:0,tc:'#F9F6ED',fs:14,fw:'500',r:999,w:160,h:160},
+  'circle-blue':    {type:'glass',bg:'#097757',op:0.15,blur:16,sat:170,bop:0.3,ca:0,tc:'#ffffff',fs:14,fw:'500',r:999,w:160,h:160},
   // ── Text Presets ───────────────────────────────────────────────────────────
-  'big-text':       {type:'text',tc:'#F9F6ED',fs:36,fw:'700',tsh:'0 4px 20px rgba(0,0,0,.7)',w:320,h:100},
+  'big-text':       {type:'text',tc:'#F9F6ED',fs:36,fw:'700',w:320,h:100},
 };
 
 function applyPreset(key) {
@@ -2595,6 +2795,7 @@ function applyPreset(key) {
     ls: 0, lh: 1.45, pad: 12, italic: false, underline: false,
     align: 'center', valign: 'center', fontFamily: "'DM Sans',sans-serif",
     locked: false, tOp: 1,
+    gd: p.gd || null,
   };
   S.els.push(el2);
   // Preserve multi-selection if active; otherwise select the new element
@@ -2728,6 +2929,7 @@ function selectLayerById(id) {
   S.selSet.clear();
   S.selSet.add(id);
   render();
+  renderProps(); // always refresh panel — even when clicking the already-selected layer
 }
 el.ll.addEventListener('click', e => {
   const delBtn = e.target.closest('.ldel');
@@ -2746,10 +2948,7 @@ el.ll.addEventListener('keydown', e => {
   if (!li || (e.key !== 'Enter' && e.key !== ' ')) return;
   e.preventDefault();
   const id = +li.dataset.elId;
-  S.sel = id;
-  S.selSet.clear();
-  S.selSet.add(id);
-  render();
+  selectLayerById(id);
 });
 function renderLayers() {
   if (!S.els.length) {
@@ -2951,6 +3150,40 @@ function _renderPropsImpl() {
   if (el2.type !== 'text') {
     let sa = '';
     sa += rng(el2.id,'透明度',   'op',   Math.round((el2.op  ?? 0.25) * 100), 0, 100, '%');
+    // ── Gradient overlay editor ──
+    const gd = gdGet(el2);
+    const hasGrad = gd && gd.stops.length >= 2;
+    const gdAngle = gd ? gd.angle : 180;
+    sa += `<div class="pg">
+      <div class="pl">渐变叠加</div>
+      <div style="display:flex;gap:4px;align-items:center;margin-bottom:6px">
+        <button class="mini-btn ${hasGrad ? 'on' : ''}" onclick="gdToggle(${el2.id})" title="启用/禁用渐变叠加">
+          ${hasGrad ? '◈ 渐变开启' : '◇ 渐变关闭'}
+        </button>
+        <select class="psel" style="width:72px" onchange="gdSetAngle(${el2.id},+this.value)" title="渐变角度" onclick="event.stopPropagation()">
+          <option value="0" ${gdAngle===0?'selected':''}>↑ 0°</option>
+          <option value="45" ${gdAngle===45?'selected':''}>↗ 45°</option>
+          <option value="90" ${gdAngle===90?'selected':''}>→ 90°</option>
+          <option value="135" ${gdAngle===135?'selected':''}>↘ 135°</option>
+          <option value="180" ${gdAngle===180?'selected':''}>↓ 180°</option>
+          <option value="225" ${gdAngle===225?'selected':''}>↙ 225°</option>
+          <option value="270" ${gdAngle===270?'selected':''}>← 270°</option>
+          <option value="315" ${gdAngle===315?'selected':''}>↖ 315°</option>
+        </select>
+      </div>`;
+    if (hasGrad) {
+      const previewGrad = gdCSS(gd, 200, 20);
+      sa += `<div style="height:20px;border-radius:4px;background:${previewGrad};margin-bottom:6px;border:1px solid var(--border2)"></div>`;
+      sa += `<div style="font-size:10px;color:var(--text-hint);margin-bottom:4px">色标（颜色 → 不透明度）</div>`;
+      gd.stops.forEach((stop, i) => {
+        sa += `<div style="display:flex;align-items:center;gap:4px;margin-bottom:3px">
+          <input type="color" value="${stop.color}" onchange="gdSetStopColor(${el2.id},${i},this.value)" style="width:24px;height:18px;padding:0;border:none;background:none;cursor:pointer">
+          <input type="range" min="0" max="100" value="${Math.round((stop.opacity ?? 1)*100)}" oninput="gdSetStopOpacity(${el2.id},${i},+this.value);renderProps()" style="flex:1">
+          <span style="font-size:10px;color:var(--accent2);width:32px;text-align:right">${Math.round((stop.opacity ?? 1)*100)}%</span>
+        </div>`;
+      });
+    }
+    sa += `</div>`;
     sa += rng(el2.id,'背景模糊', 'blur', el2.blur ?? 18, 0, 40, 'px');
     sa += rng(el2.id,'背景亮度', 'br',   el2.br   ?? 100, 70, 130, '%');
     sa += rng(el2.id,'色差',  'ca',  el2.ca ?? 0, 0, 5, '');
@@ -2960,7 +3193,7 @@ function _renderPropsImpl() {
     sa += shd(el2.id, '元素阴影', 'bs', el2.type==='glass' ? '0 8px 32px rgba(0,0,0,.35)' : '0 4px 24px rgba(0,0,0,.3)');
     sa += rng(el2.id,'圆角',  'r',   Math.min(el2.r ?? 12, 200),  0, 200, 'px');
     sa += rng(el2.id,'内边距','pad', el2.pad ?? 12, 4, 40, 'px');
-    h += _sec('appearance', '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="vertical-align:middle;margin-right:3px;opacity:.7"><rect x="1.5" y="1.5" width="13" height="13" rx="3" stroke="currentColor" stroke-width="1.3" stroke-dasharray="2 1.5"/></svg>玻璃外观', '透明度、模糊、亮度、饱和度、边框、阴影、圆角', sa);
+    h += _sec('appearance', '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="vertical-align:middle;margin-right:3px;opacity:.7"><rect x="1.5" y="1.5" width="13" height="13" rx="3" stroke="currentColor" stroke-width="1.3" stroke-dasharray="2 1.5"/></svg>玻璃外观', '透明度、渐变、模糊、亮度、饱和度、边框、阴影、圆角', sa);
   }
 
   // ── Section: Position & Size ──
@@ -3229,10 +3462,12 @@ function slp(id, key, raw, lblId, unit, dec) {
   if (dom) applyStyle(dom, el2);
   const lbl = document.getElementById(lblId);
   if (lbl) lbl.textContent = (dec > 0 ? raw.toFixed(dec) : Math.round(raw)) + unit;
-  // Fix Bug #4: renderProps() while dragging so all panel controls stay in sync.
-  // Debounce to avoid rebuilding the full panel on every single mousemove tick.
-  clearTimeout(_propsTimer);
-  _propsTimer = setTimeout(renderProps, 50);
+  // Only refresh panel when not dragging — while dragging the user should be able
+  // to interact with panel controls without constant rebuilds.
+  if (!S._drag && !S._resize) {
+    clearTimeout(_propsTimer);
+    _propsTimer = setTimeout(renderProps, 50);
+  }
   requestLayersRender();
   clearTimeout(_spTimer);
   _spTimer = setTimeout(scheduleHistSave, 600);
@@ -3547,6 +3782,18 @@ function _sanitizeEl(raw, fallbackId) {
     locked: bool(raw.locked),
     rot: Math.max(-360, Math.min(360, num(raw.rot, 0))),
     tOp: Math.min(1, Math.max(0, num(raw.tOp ?? raw.top, 1))),
+    // Gradient data — whitelist angle and parse stops safely
+    gd: (raw.gd && typeof raw.gd === 'object' && Array.isArray(raw.gd.stops) && raw.gd.stops.length >= 2)
+      ? {
+          angle: Math.max(0, Math.min(360, num(raw.gd.angle, 180))),
+          stops: raw.gd.stops.filter(s => s && typeof s === 'object')
+            .slice(0, 5)
+            .map(s => ({
+              color: cssVal(s.color, '#ffffff', 32),
+              opacity: Math.max(0, Math.min(1, num(s.opacity, 1))),
+            })),
+        }
+      : null,
     paragraphs: Array.isArray(raw.paragraphs) ? raw.paragraphs.slice(0, 500).map(p => {
       const item = p && typeof p === 'object' ? p : {};
       return {
@@ -3933,7 +4180,14 @@ async function exportImg() {
       ctx.clip();
       const fillRgb = h2r(el2.bg || (el2.type === 'glass' ? '#ffffff' : '#000000'));
       const fillOp  = el2.op ?? (el2.type === 'glass' ? 0.2 : 0.65);
-      ctx.fillStyle = `rgba(${fillRgb.r},${fillRgb.g},${fillRgb.b},${fillOp})`;
+      // Gradient fill: gdCanvas creates a linear gradient that respects angle
+      const gd = gdGet(el2);
+      const grad = gd && gd.stops.length >= 2 ? gdCanvas(ctx, gd, ex, ey, ew, eh, fillOp) : null;
+      if (grad) {
+        ctx.fillStyle = grad;
+      } else {
+        ctx.fillStyle = `rgba(${fillRgb.r},${fillRgb.g},${fillRgb.b},${fillOp})`;
+      }
       ctx.fillRect(ex, ey, ew, eh);
       ctx.restore();
     }
@@ -4347,7 +4601,11 @@ el.scroll.addEventListener('wheel', e => {
 let _pinchStartDist = null;
 let _pinchStartZoom = null;
 document.addEventListener('touchstart', e => {
-  if (!S.imgSrc || S.els.length === 0) return;
+  if (!S.imgSrc) return;
+  // Also prevent pinch zoom while a drag or resize is actively in progress.
+  // The old guard `S.els.length === 0` incorrectly blocked pinch zoom whenever
+  // any element existed, even if nothing was selected and the user just wanted to zoom.
+  if (S._drag || S._resize) return;
   // Only handle two-finger gestures on the canvas area
   if (e.touches.length !== 2) return;
   const t0 = e.touches[0], t1 = e.touches[1];
@@ -4438,15 +4696,13 @@ function selectFont(family, dom) {
 // LONG-PRESS CONTEXT MENU (mobile)
 // ═══════════════════════════════════════════════════════════════
 let _lpTimer = null;
-let _lpElement = null;
-let _lpFired = false;
+  let _lpFired = false;
 // Flag set by long-press to prevent the subsequent click/touchend from hiding ctx-menu
 let _lpActive = false;
 
 document.addEventListener('touchstart', e => {
   // Clear any existing timer
   clearTimeout(_lpTimer);
-  _lpElement = null;
   _lpFired = false;
   _lpActive = false;
   // Start long-press timer (600ms) for ALL touch areas including canvas
@@ -4485,8 +4741,11 @@ document.addEventListener('touchmove', e => {
 document.addEventListener('touchend', e => {
   clearTimeout(_lpTimer);
   _lpTimer = null;
-  // Clear flag after a brief delay so the subsequent click event can observe it
-  requestAnimationFrame(() => { _lpActive = false; });
+  // Reset both flags immediately — the touchend handler that hides ctx menus
+  // (line 2678) checks _lpActive/_lpFired synchronously, so any rAF delay
+  // would cause menus to stick open on the same touch sequence.
+  _lpFired = false;
+  _lpActive = false;
 });
 // ═══════════════════════════════════════════════════════════════
 let toastTimer;
