@@ -95,9 +95,11 @@ function calculate() {
   let atrStopMode = false;
   const atrValue = parseFloat(document.getElementById('atrValue').value);
   var settings = loadSettings();
-  // 优先使用设置中的默认倍数，其次使用 DOM 中的值，最后回退到 2
+  // 优先使用表单开关，其次设置值；倍数同理
+  const formAtrEnabled = document.getElementById('formAtrStopEnabled');
+  const atrEnabled = (formAtrEnabled && formAtrEnabled.checked) || settings.atrStopEnabled === true;
   const atrMultiplier = parseFloat(document.getElementById('atrMultiplier').value) || settings.atrDefaultMultiplier || 2;
-  if (settings.atrStopEnabled && !isNaN(atrValue) && atrValue > 0) {
+  if (atrEnabled && !isNaN(atrValue) && atrValue > 0) {
     var atrStopResult = calcATRStop(effectiveEntryPrice, atrValue, atrMultiplier, direction);
     if (atrStopResult) {
       stopLoss = atrStopResult.stopPrice;
@@ -332,15 +334,21 @@ function calculate() {
   // ===== 仓位硬上限：所有未平仓日志的保证金均须相加 =====
   // 拆分保存的同 groupId 条目是同一计划的分段仓位，不是重复记录，不能去重。
   var usedMargin = 0;
+  var consumedCapital = 0; // 已消耗的总资金：保证金 + 滑点成本
   var openPositions = logs.filter(function(l) { return !l.closeType || l.closeType === ''; });
   for (var i = 0; i < openPositions.length; i++) {
     var pos = openPositions[i];
     var lev = Number(pos.leverage);
     if (isNaN(lev) || lev <= 0) lev = 1;
     var ps = Number(pos.positionSize);
-    if (!isNaN(ps) && ps > 0) usedMargin += ps / lev;
+    if (!isNaN(ps) && ps > 0) {
+      usedMargin += ps / lev;
+      consumedCapital += ps / lev;
+    }
+    // 滑点成本在开仓时已支付，从可用资金中扣除
+    consumedCapital += parseFloat(pos.slippageCost) || 0;
   }
-  var availableCapital = capital - usedMargin;
+  var availableCapital = capital - consumedCapital;
   if (availableCapital < 0) availableCapital = 0;
   const maxPos = availableCapital * Math.max(leverage, 1);
   var cappedByMargin = false, capMsg = '';
@@ -408,8 +416,8 @@ function calculate() {
     if (_settings && _settings.mmr != null) mmr = _settings.mmr / 100;
 
     liquidationPrice = window.utils.calcLiquidationPrice(effectiveEntryPrice, direction, leverage, mmr);
-    const isInvalid = (direction === 'long' && stopLoss < liquidationPrice) ||
-                      (direction === 'short' && stopLoss > liquidationPrice);
+    const isInvalid = (direction === 'long' && stopLoss <= liquidationPrice) ||
+                      (direction === 'short' && stopLoss >= liquidationPrice);
     if (isInvalid) {
       cappedByLiquidation = true;
       liqMsg = '止损 ' + stopLoss.toFixed(5) + ' 在强平价 ' + liquidationPrice.toFixed(5) + ' ' + (direction === 'long' ? '之下' : '之上') + '，价格到达止损前仓位将被强制平仓。请收紧止损距离或降低杠杆后重新计算。';
@@ -450,7 +458,6 @@ function calculate() {
       capMsg = (capMsg ? capMsg + ' ' : '') + '<span class="warning-tag alert"><i class="fas fa-exclamation-triangle"></i> ' + concentrationCheck.warning + '</span>';
     }
   }
-  let actualMargin = positionSize / effLev;
 
   // ===== P0-01：心态评分影响仓位 =====
   const mindsetScore = parseInt(document.getElementById('mindsetScore').value) || 3;
@@ -460,11 +467,17 @@ function calculate() {
   }
   if (mindsetAdjust.adjustment < 1) {
     positionSize = positionSize * mindsetAdjust.adjustment;
+    adjPos = adjPos * mindsetAdjust.adjustment;
     riskAmount = riskAmount * mindsetAdjust.adjustment;
     riskPercent = riskAmount / capital;
-    // 同步心态调整到 adjPos，避免连亏+心态叠加时 finalPosForDisplay 虚高
-    adjPos = adjPos * mindsetAdjust.adjustment;
   }
+
+  // 统一有效仓位和风险：展示层和日志层使用同一数值
+  // adjPos = 连亏打折后的仓位；当 lossStreak<3 时 adjPos === positionSize
+  const effectivePositionSize = lossStreak >= 3 ? adjPos : positionSize;
+  const effectiveRiskAmount = effectivePositionSize * stopDistance / effectiveEntryPrice;
+  const effectiveRiskPercent = effectiveRiskAmount / capital;
+  const effectiveMargin = effectivePositionSize / effLev;
 
   let adjMsg = '';
   if (lossStreak >= 3) {
@@ -476,10 +489,6 @@ function calculate() {
   } else if (lossStreak >= 2) {
     adjMsg = '连续亏损 ' + lossStreak + ' 笔，注意风险控制';
   }
-
-  // positionSize / adjPos 已在上方按心态系数同步调整，不能再次乘以 adjustment。
-  const finalPosForDisplay = lossStreak >= 3 ? adjPos : positionSize;
-  const finalMargin = finalPosForDisplay / effLev;
   const stopPct = stopDistance / effectiveEntryPrice * 100;
 
   // ===== 止损距离色标 =====
@@ -497,7 +506,7 @@ function calculate() {
   let feeRate = parseFloat(document.getElementById('feeRate').value) || 0;
   if (feeRate <= 0) feeRate = orderType === 'limit' ? 0.04 : 0.08;
 
-  const quantity = finalPosForDisplay / effectiveEntryPrice;
+  const quantity = effectivePositionSize / effectiveEntryPrice;
   const stopSlippageModel = Slippage.calculate({
     direction: direction,
     expectedEntryPrice: entryPrice,
@@ -555,16 +564,16 @@ function calculate() {
   }
 
   // ===== 三卡片：仓位 =====
-  posD.textContent = finalPosForDisplay.toFixed(2) + ' U';
+  posD.textContent = effectivePositionSize.toFixed(2) + ' U';
 
   // ===== 三卡片：保证金 =====
-  marginD.textContent = finalMargin.toFixed(2) + ' USDT';
+  marginD.textContent = effectiveMargin.toFixed(2) + ' USDT';
   if (leverage > 0) {
     levD.textContent = leverage + 'x 杠杆';
   } else {
     levD.textContent = '现货 (1x)';
   }
-  cardMargin.classList.toggle('margin-danger', finalMargin > capital);
+  cardMargin.classList.toggle('margin-danger', effectiveMargin > capital);
 
   // ===== 三卡片：盈亏比 =====
   let rrCheckResult = null;
@@ -597,11 +606,13 @@ function calculate() {
     targetDistD.style.display = 'none';
   }
 
-  // ===== 风险与成本行 L1：最大亏损 + 预估成本 =====
-  let riskClass = (riskPercent*100) <= 2 ? 'low' : ((riskPercent*100) <= 5 ? 'mid' : 'high');
-  let costL1HTML = '<span>最大亏损 <span class="cost-loss ' + riskClass + '">' + riskAmount.toFixed(2) + ' USDT (' + (riskPercent*100).toFixed(2) + '%)</span></span>';
-  if (totalFee > 0 || slippageCost > 0) {
-    costL1HTML += '<span>预估费用 ' + totalCost.toFixed(2) + ' USDT</span>';
+  // ===== 风险与成本行 L1：最大亏损 + 预估止损成本 =====
+  let riskClass = (effectiveRiskPercent*100) <= 2 ? 'low' : ((effectiveRiskPercent*100) <= 5 ? 'mid' : 'high');
+  // stopCost：用于与"最大亏损"并列，始终基于止损路径计算（不受目标价影响）
+  const stopCost = stopFee + stopSlippage.totalCost;
+  let costL1HTML = '<span>最大亏损 <span class="cost-loss ' + riskClass + '">' + effectiveRiskAmount.toFixed(2) + ' USDT (' + (effectiveRiskPercent*100).toFixed(2) + '%)</span></span>';
+  if (stopCost > 0) {
+    costL1HTML += '<span>止损预估费用 ' + stopCost.toFixed(2) + ' USDT</span>';
     costL1HTML += '<span>滑点 ' + planSlippageInput.entryTicks + '+' + planSlippageInput.exitTicks + ' ticks</span>';
   }
   if (atrStopMode) {
@@ -635,7 +646,7 @@ function calculate() {
         if (bsl <= 0) return; // 止损未设置，跳过
         // 使用原始风险额（ba% of riskAmount）而非被截断后的仓位，避免误导用户
         const bRisk = riskAmount * ba / 100;
-        const bpos = finalPosForDisplay * ba / 100;
+        const bpos = effectivePositionSize * ba / 100;
         const bstopDist = direction === 'long' ? bp - bsl : bsl - bp;
         // 实际损失取风险额和计算值的较小者（考虑仓位被截断的情况）
         const bloss = Math.min(bRisk, bstopDist > 0 ? (bstopDist * bpos / effectiveEntryPrice) : bRisk);
@@ -643,10 +654,10 @@ function calculate() {
         triggerHTML += '<div class="trigger-line"><span class="trigger-batch">#' + (i + 1) + '</span><span class="trigger-price">' + bsl.toFixed(5) + '</span><span class="trigger-arrow">→</span><span>损失</span><span class="trigger-loss">' + bloss.toFixed(2) + ' U (' + blossPct.toFixed(2) + '%)</span></div>';
       });
     } else {
-      triggerHTML = '<div class="trigger-line"><span class="trigger-price">' + (stopLoss ? parseFloat(stopLoss).toFixed(5) : '—') + '</span><span class="trigger-arrow">→</span><span>损失</span><span class="trigger-loss">' + riskAmount.toFixed(2) + ' USDT (' + (riskPercent * 100).toFixed(2) + '%)</span></div>';
+      triggerHTML = '<div class="trigger-line"><span class="trigger-price">' + (stopLoss ? parseFloat(stopLoss).toFixed(5) : '—') + '</span><span class="trigger-arrow">→</span><span>损失</span><span class="trigger-loss">' + effectiveRiskAmount.toFixed(2) + ' USDT (' + (effectiveRiskPercent * 100).toFixed(2) + '%)</span></div>';
     }
   } else {
-    triggerHTML = '<div class="trigger-line"><span class="trigger-price">' + (stopLoss ? parseFloat(stopLoss).toFixed(5) : '—') + '</span><span class="trigger-arrow">→</span><span>损失</span><span class="trigger-loss">' + riskAmount.toFixed(2) + ' USDT (' + (riskPercent * 100).toFixed(2) + '%)</span></div>';
+    triggerHTML = '<div class="trigger-line"><span class="trigger-price">' + (stopLoss ? parseFloat(stopLoss).toFixed(5) : '—') + '</span><span class="trigger-arrow">→</span><span>损失</span><span class="trigger-loss">' + effectiveRiskAmount.toFixed(2) + ' USDT (' + (effectiveRiskPercent * 100).toFixed(2) + '%)</span></div>';
   }
   if (triggerHTML) {
     triggerContent.innerHTML = triggerHTML;
@@ -661,7 +672,7 @@ function calculate() {
       let tbody = '';
       _splitBatches.forEach(function(b, i) {
         const bp = parseFloat(b.price), ba = parseFloat(b.alloc);
-        const bpos = !isNaN(bp) && !isNaN(ba) ? (finalPosForDisplay * ba / 100).toFixed(2) : '—';
+        const bpos = !isNaN(bp) && !isNaN(ba) ? (effectivePositionSize * ba / 100).toFixed(2) : '—';
         const bsl = b.stopLoss && !isNaN(parseFloat(b.stopLoss)) ? parseFloat(b.stopLoss).toFixed(5) : '—';
         tbody += '<tr><td>#' + (i + 1) + '</td><td>' + (isNaN(bp) ? '—' : bp) + '</td><td>' + (isNaN(ba) ? '—' : ba + '%') + '</td><td>' + bpos + ' U</td><td>' + bsl + '</td></tr>';
       });
@@ -679,9 +690,9 @@ function calculate() {
   if (cappedByLiquidation) wh = liqMsg + (wh ? '<br>' + wh : '');
   if (cappedByMargin) wh = capMsg + (wh ? '<br>' + wh : '');
   if (adjMsg) wh += '<div class="warning-tag" style="margin-top:6px;">' + adjMsg + '</div>';
-  if (!cappedByMargin && finalMargin > capital) {
-    const needLeverage = finalPosForDisplay / capital;
-    wh += '<div class="warning-tag alert" style="margin-top:6px;"><i class="fas fa-exclamation-triangle"></i> 保证金不足: 需 ' + finalMargin.toFixed(2) + ' USDT，本金仅 ' + capital.toFixed(2) + ' USDT。建议提高杠杆至 ≥ ' + needLeverage.toFixed(1) + 'x，或降低风险额 / 收紧止损</div>';
+  if (!cappedByMargin && effectiveMargin > capital) {
+    const needLeverage = effectivePositionSize /  capital;
+    wh += '<div class="warning-tag alert" style="margin-top:6px;"><i class="fas fa-exclamation-triangle"></i> 保证金不足: 需 ' + effectiveMargin.toFixed(2) + ' USDT，本金仅 ' + capital.toFixed(2) + ' USDT。建议提高杠杆至 ≥ ' + needLeverage.toFixed(1) + 'x，或降低风险额 / 收紧止损</div>';
   }
   warnD.innerHTML = wh;
   const resultBox = document.getElementById('resultBox');
@@ -706,7 +717,7 @@ function calculate() {
     stopLossAutoGenerated: stopLossAutoGenerated,
     lossStreak: lossStreak,
     targetPrice: isNaN(targetPrice) ? null : targetPrice,
-    positionSize: finalPosForDisplay,
+    positionSize: effectivePositionSize,
     stopDistance: stopDistance,
     stopPct: stopPct,
     liquidationPrice: liquidationPrice,
@@ -715,7 +726,7 @@ function calculate() {
     targetPct: targetPct,
     reason: getReason(),
     signals: getSignals(),
-    actualMargin: finalMargin,
+    actualMargin: effectiveMargin,
     fee: parseFloat(totalFee.toFixed(8)),
     feeRate: feeRate,
     // 兼容旧渲染字段；新逻辑统一优先读取 slippage 快照，绝不再次扣减该值。
@@ -819,6 +830,18 @@ function assertSavableCalculation() {
   if (window._lastCalcBlocker || (calc.blockers && calc.blockers.length)) {
     return { ok: false, message: '当前计划存在硬风控阻断，不能保存。' };
   }
+  // 软检查通过率拦截：可执行项通过率不足 90% 时阻止保存
+  var passCount = 0, totalExecutables = 0;
+  if (calc.checklistResults) {
+    for (var k in calc.checklistResults) {
+      if (calc.checklistResults[k] === 'skipped') continue;
+      totalExecutables++;
+      if (calc.checklistResults[k] === 'pass') passCount++;
+    }
+  }
+  if (totalExecutables > 0 && (passCount / totalExecutables) < 0.9) {
+    return { ok: false, message: '风控检查通过率仅 ' + Math.round(passCount / totalExecutables * 100) + '%，未达到 90% 最低要求，不能保存。' };
+  }
   return { ok: true, calc: calc };
 }
 
@@ -860,10 +883,10 @@ function saveLog() {
     groupId: null,
     groupLabel: null,
     reason: calc.reason || getReason(),
-    mindsetScore: parseInt(document.getElementById('mindsetScore').value) || 3,
+    mindsetScore: calc.mindsetScore != null ? calc.mindsetScore : (parseInt(document.getElementById('mindsetScore').value) || 3),
     strategyFramework: document.getElementById('strategyFramework').value,
     strategyPattern: document.getElementById('strategyPattern').value,
-    signals: getSignals(),
+    signals: calc.signals,
     session: document.getElementById('tradeSession') ? document.getElementById('tradeSession').value : '',           // L3: 交易时段
     marketCondition: document.getElementById('marketCondition') ? document.getElementById('marketCondition').value : '', // L3: 市场环境
     closeType: '',
@@ -891,6 +914,7 @@ function saveLog() {
   }
   openClosePanelIdx = -1;
   actionPanelIdx = -1;
+  window._lastCalcDirty = false;
   showToast('日志已保存', 'success');
   return true;
 }
@@ -1170,7 +1194,8 @@ function resetForm() {
   document.getElementById('stopLoss').value = '';
   document.getElementById('targetPrice').value = '';
   document.getElementById('atrValue').value = '';
-  document.getElementById('atrMultiplier').value = '2';
+  var _atrSettings = loadSettings();
+  document.getElementById('atrMultiplier').value = _atrSettings.atrDefaultMultiplier != null ? _atrSettings.atrDefaultMultiplier : 2;
   document.getElementById('lossStreak').value = '0';
   document.getElementById('orderType').value = 'market';
   var stEl = document.getElementById('stopType');
@@ -1211,6 +1236,7 @@ if (_splitMode) toggleSplitMode();
   const triggerRow = document.getElementById('triggerRow');
   if (triggerRow) triggerRow.style.display = 'none';
   window._lastCalc = null;
+  window._lastCalcBlocker = null;
 }
 
 function toggleFormSection(sectionId) {
@@ -1263,6 +1289,9 @@ function toggleFormSection(sectionId) {
   });
   var sld = document.getElementById('stopLossSlider');
   if (sld) sld.addEventListener('input', markCalculationDirty);
+  // 信号复选框变更同样需要重算，否则 checklist 与落库内容不一致
+  var sigBox = document.getElementById('signalCheckboxes');
+  if (sigBox) sigBox.addEventListener('change', markCalculationDirty);
 })();
 
 function syncSlippageModeUI() {
@@ -1292,6 +1321,12 @@ function syncSettingsToForm() {
   if (riskEl) riskEl.value = (settings.riskPercent || 2) + '%';
   var levEl = document.getElementById('leverage');
   if (levEl) levEl.value = String(settings.defaultLeverage || 0);
+  // ATR 默认倍数同步
+  var atrMultEl = document.getElementById('atrMultiplier');
+  if (atrMultEl) atrMultEl.value = settings.atrDefaultMultiplier != null ? settings.atrDefaultMultiplier : 2;
+  // ATR 启用状态同步（HTML 中 id="formAtrStopEnabled"）
+  var atrEnableEl = document.getElementById('formAtrStopEnabled');
+  if (atrEnableEl) atrEnableEl.checked = settings.atrStopEnabled === true;
 }
 
 /**
@@ -1393,6 +1428,7 @@ function applyKellyRisk() {
 
   // 标记表单已变更，清除缓存
   window._lastCalc = null;
+  window._lastCalcBlocker = null;
   window._lastCalcDirty = true;
   // 自动重新计算
   if (typeof calculate === 'function') {
@@ -1433,6 +1469,15 @@ function toggleKellyPanel() {
   }
 }
 window.toggleKellyPanel = toggleKellyPanel;
+
+/**
+ * ATR 开关切换：更新表单中 ATR 区域的视觉状态
+ */
+function toggleAutoATR() {
+  var enabled = document.getElementById('formAtrStopEnabled');
+  if (!enabled) return;
+  // 不自动触发计算，仅同步开关状态；用户输入 ATR 值后点「计算仓位」生效
+}
 
 /**
  * 更新凯利公式侧边栏卡片显示

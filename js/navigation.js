@@ -11,7 +11,7 @@ var _viewMap = {
   'settings':   'view-settings'
 };
 
-var _currentView = 'dashboard';
+var _currentView = 'planner';
 
 /**
  * 切换到指定视图
@@ -113,6 +113,10 @@ function onViewActivated(viewName) {
     if (typeof refreshChecklistLabels === 'function') {
       refreshChecklistLabels();
     }
+    // 刷新检查清单结果，显示当前状态（若无计算结果则显示提示）
+    if (typeof updateChecklist === 'function') {
+      updateChecklist();
+    }
   }
   // 风控中心：渲染风险指标
   if (viewName === 'risk') {
@@ -175,8 +179,8 @@ document.addEventListener('DOMContentLoaded', function() {
   if (hash && _viewMap[hash]) {
     switchView(hash);
   } else {
-    // 默认仪表盘
-    switchView('dashboard');
+    // 默认开仓计划
+    switchView('planner');
   }
 
   // 监听浏览器前进/后退

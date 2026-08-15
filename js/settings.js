@@ -537,4 +537,5 @@ function saveCustomSymbols() {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   _clearSettingsCache();
   syncSymbolDatalist();
+  showToast('品种列表已保存', 'success');
 }

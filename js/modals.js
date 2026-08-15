@@ -771,10 +771,10 @@ function doSaveSplit(calc, count) {
     leverage: calc.leverage,
     riskAmount: parseFloat(risk.toFixed(2)),
     reason: calc.reason || getReason(),
-    mindsetScore: parseInt(document.getElementById('mindsetScore').value) || 3,
+    mindsetScore: calc.mindsetScore != null ? calc.mindsetScore : (parseInt(document.getElementById('mindsetScore').value) || 3),
     strategyFramework: document.getElementById('strategyFramework').value,
     strategyPattern: document.getElementById('strategyPattern').value,
-    signals: calc.signals || getSignals(),
+    signals: calc.signals,
     closeType: '', closePrice: null, rMultiple: null, pnlAmount: null, pnlPercent: null,
     closeNote: '',
     fee: parseFloat(costs.fee.toFixed(8)),
@@ -784,6 +784,7 @@ function doSaveSplit(calc, count) {
     targetRR: calc.targetRR, groupId: groupId,
     groupLabel: groupLabel,
     splitEntries: [],  // F4: 记录分批明细
+    checklistResults: calc.checklistResults ? JSON.parse(JSON.stringify(calc.checklistResults)) : {},
   });
 
   const splitEntries = [];

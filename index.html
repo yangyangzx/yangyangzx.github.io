@@ -127,6 +127,7 @@
 
   <!-- ====== 开仓计划 ====== -->
   <section id="view-planner" class="view" role="region" aria-label="开仓计划">
+    <h2 class="view-title">开仓计划</h2>
     <div class="planner-grid">
       <!-- 左侧：计算器表单卡片（占 2 列） -->
       <div class="card planner-form-card">
@@ -245,6 +246,9 @@
                 <input type="number" id="atrValue" value="" step="0.00001" placeholder="ATR值" style="flex:1 1 80px;" />
                 <span style="color:var(--color-text-muted);font-size:13px;">×</span>
                 <input type="number" id="atrMultiplier" value="2" step="0.1" min="0.5" placeholder="倍数" style="flex:1 1 60px;" />
+                <label style="display:inline-flex;align-items:center;gap:4px;font-size:13px;color:var(--color-text-secondary);cursor:pointer;white-space:nowrap;">
+                  <input type="checkbox" id="formAtrStopEnabled" onchange="toggleAutoATR()" /> ATR
+                </label>
                 <button class="btn btn-ghost btn-sm" id="applyAtrBtn" style="flex:0 0 auto;padding:8px 14px;">应用</button>
               </div>
             </div>
@@ -570,55 +574,56 @@
           <div class="card-header">开仓前检查</div>
           <div class="checklist">
             <div class="check-item" id="checkRiskPct">
-              <span class="check-icon pending">○</span>
+              <span class="check-icon skipped">—</span>
               <span data-default="2">单笔风险 ≤ 账户 2%</span>
             </div>
             <div class="check-item" id="checkStopDist">
-              <span class="check-icon pending">○</span>
+              <span class="check-icon skipped">—</span>
               <span>止损距离合理（品种可配）</span>
             </div>
             <div class="check-item" id="checkLiqSafe">
-              <span class="check-icon pending">○</span>
+              <span class="check-icon skipped">—</span>
               <span>止损在强平价格之上（安全）</span>
             </div>
             <div class="check-item" id="checkLossStreak">
-              <span class="check-icon pending">○</span>
+              <span class="check-icon skipped">—</span>
               <span>连亏未触发熔断（＜3 笔）</span>
             </div>
             <div class="check-item" id="checkRR">
-              <span class="check-icon pending">○</span>
+              <span class="check-icon skipped">—</span>
               <span data-default="2">盈亏比 ≥ 2:1</span>
             </div>
             <div class="check-item" id="checkMargin">
-              <span class="check-icon pending">○</span>
+              <span class="check-icon skipped">—</span>
               <span>保证金 ≤ 本金 80%</span>
             </div>
             <div class="check-item" id="checkReason">
-              <span class="check-icon pending">○</span>
+              <span class="check-icon skipped">—</span>
               <span>入场理由已明确</span>
             </div>
             <!-- 【增强8】当日未超日亏损上限 -->
             <div class="check-item" id="checkDailyLoss">
-              <span class="check-icon pending">○</span>
+              <span class="check-icon skipped">—</span>
               <span>当日亏损未超上限</span>
             </div>
             <!-- 【增强9】心态评分检查 -->
             <div class="check-item" id="checkMindset">
-              <span class="check-icon pending">○</span>
+              <span class="check-icon skipped">—</span>
               <span data-default="3">心态评分 ≥ 3（平静/良好）</span>
             </div>
             <!-- Skills 融合：组合热量检查 -->
             <div class="check-item" id="checkPortfolioHeat">
-              <span class="check-icon pending">○</span>
+              <span class="check-icon skipped">—</span>
               <span data-default="6">组合热量安全（≤ 6%）</span>
             </div>
             <!-- Skills 融合：品种集中度检查 -->
             <div class="check-item" id="checkSymbolConc">
-              <span class="check-icon pending">○</span>
+              <span class="check-icon skipped">—</span>
               <span>品种集中度未超限</span>
             </div>
 
           </div>
+          <div id="checklistAtrNote" style="font-size:11px;color:var(--color-text-muted);padding:4px 8px;line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></div>
         </div>
       </div>
     </div>
@@ -1160,7 +1165,7 @@
   <script src="js/app.js?v=2.1"></script>
 <script src="js/version.js?v=2.1"></script>
 
-  <div id="toastContainer" style="position:fixed;bottom:24px;right:24px;z-index:400;display:flex;flex-direction:column;gap:8px;pointer-events:none;"></div>
+  <div id="toastContainer" style="position:fixed;top:24px;right:24px;z-index:400;display:flex;flex-direction:column;gap:8px;pointer-events:none;"></div>
 
   <script>
     if ('serviceWorker' in navigator) {

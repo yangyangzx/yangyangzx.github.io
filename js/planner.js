@@ -376,8 +376,8 @@ function updateChecklist() {
     var resultObj = checkFn();
 
     if (resultObj === null || resultObj.result === undefined) {
-      icon.textContent = '○';
-      icon.className = 'check-icon pending';
+      icon.textContent = '—';
+      icon.className = 'check-icon skipped';
       item.classList.remove('fail-row');
       return null;
     } else if (resultObj.result) {
@@ -394,12 +394,15 @@ function updateChecklist() {
     return resultObj.result;
   }
 
-  // 1. 单笔风险 ≤ 账户风险比例（设置值）
+  // 1. 单笔风险 ≤ 表单接受亏损比例（优先读表单值，其次系统设置）
   updateCheckItemWithResult('checkRiskPct', function() {
     if (!calc || calc.riskPercent == null) return null;
     var plRisk = calc.riskPercent * 100;
-    var settingVal = settings.riskPercent || 2;
-    return { result: plRisk <= settingVal, message: '风险 ' + plRisk.toFixed(1) + '% ≤ 设置 ' + settingVal + '%' };
+    // 直接读取表单中用户选择的亏损比例
+    var riskInputEl = document.getElementById('riskInput');
+    var formVal = riskInputEl ? parseFloat(riskInputEl.value.replace('%', '')) : NaN;
+    var allowed = !isNaN(formVal) && formVal > 0 ? formVal : (settings.riskPercent || 2);
+    return { result: plRisk <= allowed, message: '风险 ' + plRisk.toFixed(1) + '% ≤ 设置 ' + allowed + '%' };
   });
 
   // 2. 止损距离合理（可配阈值，原 ETH ≤2%/其他 ≤3% 改为从设置读取）
@@ -465,16 +468,14 @@ function updateChecklist() {
     if (!settings.dailyLossLimit || !calc) {
       return null; // 不适用
     }
-    // 与 checkDailyLossLimit() 保持一致：优先使用 getAccountCapital()，兜底到 calc.capital
+    // 优先使用 getAccountCapital()，兜底到 calc.capital
     var capital = (typeof getAccountCapital === 'function') ? getAccountCapital() : null;
     if (!capital || capital <= 0) capital = (calc.capital != null && calc.capital > 0) ? calc.capital : null;
     if (!capital) return null;
-    var dailyLossPct = settings.dailyLossLimit;
-    var dailyLossLimit = capital * (dailyLossPct / 100);
-    var todayStatus = getTodayLossStatus();
-    var todayLoss = Math.abs(todayStatus.todayLoss); // 今日总亏损额（绝对值）
-    var passed = todayLoss < dailyLossLimit;
-    return { result: passed, message: '今日亏损 ' + todayLoss.toFixed(2) + ' / 上限 ' + dailyLossLimit.toFixed(2) + ' (' + (todayLoss/dailyLossLimit*100).toFixed(0) + '%)' };
+    // 统一使用硬阻断同一函数 checkDailyLossLimit()；函数不存在时跳过（返回 null），不再使用旧口径兜底
+    var dailyCheck = (typeof checkDailyLossLimit === 'function') ? checkDailyLossLimit() : null;
+    if (!dailyCheck) return null;
+    return { result: !dailyCheck.blocked, message: '今日净盈亏 ' + dailyCheck.todayPnl.toFixed(2) + ' / 上限 ' + dailyCheck.limit.toFixed(2) + ' (' + dailyCheck.pctOfLimit.toFixed(0) + '%)' };
   });
 
   // 【增强9】心态评分检查（新增检查项，评分<3时警告）
@@ -539,15 +540,12 @@ function updateChecklist() {
           var className = icon.className;
           if (className && className.indexOf('pass') !== -1) checklistResults[id] = 'pass';
           else if (className && className.indexOf('fail') !== -1) checklistResults[id] = 'fail';
-          else checklistResults[id] = 'pending';
+          else checklistResults[id] = 'skipped';
         }
       }
     }
-    // 将检查结果合并到 _lastCalc 中（持久化字段）
-    if (typeof calc.checklistResults === 'undefined') {
-      calc.checklistResults = {};
-    }
-    for (var k in checklistResults) calc.checklistResults[k] = checklistResults[k];
+    // 完整覆写 checklistResults，清除历史残留的旧 ID
+    calc.checklistResults = checklistResults;
   }
 }
 
@@ -578,6 +576,19 @@ function refreshChecklistLabels() {
       if (def) span.textContent = def;
     }
   }
+  // 同步 ATR 开关状态到检查清单底部说明
+  var atrNote = document.getElementById('checklistAtrNote');
+  if (atrNote) {
+    var formAtrEnabled = document.getElementById('formAtrStopEnabled');
+    var atrOn = (formAtrEnabled && formAtrEnabled.checked) || settings.atrStopEnabled === true;
+    var atrMult = parseFloat(document.getElementById('atrMultiplier').value) || settings.atrDefaultMultiplier || 2;
+    atrNote.textContent = '当前生效规则：' +
+      (atrOn ? 'ATR 动态止损 ×' + atrMult.toFixed(1) + ' · ' : '') +
+      '盈亏比 ≥ ' + (settings.minRRRatio || 2) + ':1 · ' +
+      '心态评分 ≥ ' + (settings.mindsetMinScore || 3) +
+      ' · 组合热量 ≤ ' + (settings.riskHeatMax || 6) + '%';
+    atrNote.style.display = 'block';
+  }
 }
 
 function updateCheckItem(itemId, checkFn) {
@@ -587,8 +598,8 @@ function updateCheckItem(itemId, checkFn) {
   var result = checkFn();
 
   if (result === null) {
-    icon.textContent = '○';
-    icon.className = 'check-icon pending';
+    icon.textContent = '—';
+    icon.className = 'check-icon skipped';
     item.classList.remove('fail-row');
   } else if (result) {
     icon.textContent = '✓';

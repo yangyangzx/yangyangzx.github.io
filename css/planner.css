@@ -70,14 +70,15 @@
   width: 0;
   flex: 1 1 0;
   min-width: 0;
-  padding: 6px 8px;
+  padding: 8px 10px;
   background: var(--glass-bg-light);
   backdrop-filter: var(--glass-blur-light);
   -webkit-backdrop-filter: var(--glass-blur-light);
   border: 1px solid var(--glass-border);
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-sm);
   color: var(--color-text);
-  font-size: 12px;
+  font-size: var(--font-sm);
+  min-height: 36px;
 }
 
 #multiTPCard .tp-row .tp-rr {
@@ -106,6 +107,14 @@
   transform: translateX(-6px);
   transition: opacity 200ms var(--ease-out), transform 200ms var(--ease-out),
               background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: var(--font-sm);
+  color: var(--color-text-muted);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
 }
 
 #checklistCard.checklist-anim .check-item {
@@ -119,18 +128,6 @@
 #checklistCard.checklist-anim .check-item:nth-child(4) { transition-delay: 120ms; }
 #checklistCard.checklist-anim .check-item:nth-child(5) { transition-delay: 150ms; }
 #checklistCard.checklist-anim .check-item:nth-child(n+6) { transition-delay: 180ms; }
-
-#checklistCard .check-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--color-text-muted);
-  padding: 6px 8px;
-  border-radius: 6px;
-  background: var(--color-bg);
-  transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
-}
 
 #checklistCard .check-item .check-icon {
   font-size: 15px;
@@ -150,6 +147,11 @@
 
 #checklistCard .check-item .check-icon.pending {
   color: var(--color-text-muted);
+}
+
+#checklistCard .check-item .check-icon.skipped {
+  color: var(--color-text-muted);
+  opacity: 0.45;
 }
 
 #checklistCard .check-item.fail-row {
