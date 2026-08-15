@@ -1242,11 +1242,33 @@ const el = {
 
 // ── In-app confirm dialog (native confirm() is unreliable in sandboxed preview) ──
 let _confirmCb = null;
+// Keyboard focus trap index: keeps Tab/Shift+Tab cycling within the dialog so
+// focus never escapes to controls behind the overlay.
+let _confirmTrapIdx = -1;
 function _askConfirm(message, onOk, onCancel) {
   _confirmCb = onOk || null;
   el.confirmMsg.textContent = message;
   el.confirmOvl.classList.add('show');
+  _confirmTrapIdx = 0; // start at cancel button
+  setTimeout(() => { el.confirmCancel.focus(); }, 0);
 }
+// Trap Tab within the confirm dialog
+el.confirmOvl.addEventListener('keydown', e => {
+  if (e.key !== 'Tab') return;
+  const traps = [el.confirmCancel, el.confirmOk];
+  // Find currently focused element index inside the dialog
+  let idx = traps.indexOf(document.activeElement);
+  if (idx === -1) { idx = _confirmTrapIdx; }
+  if (e.shiftKey) {
+    idx = (idx - 1 + traps.length) % traps.length;
+    if (idx === traps.length - 1) { e.preventDefault(); idx = 0; }
+  } else {
+    idx = (idx + 1) % traps.length;
+    if (idx === 0) { e.preventDefault(); idx = traps.length - 1; }
+  }
+  _confirmTrapIdx = idx;
+  traps[idx].focus();
+});
 el.confirmOk.addEventListener('click', () => {
   el.confirmOvl.classList.remove('show');
   if (_confirmCb) { const cb = _confirmCb; _confirmCb = null; cb(); }
@@ -1344,6 +1366,7 @@ function loadFile(file) {
     _askConfirm('更换图片将清空所有元素，确认继续？', () => {
       S.els = []; S.sel = null; S.selSet.clear();
       _pendingDelete.clear();
+      _rebuildElMap();
       applyImage();
     });
   } else {
@@ -1421,7 +1444,6 @@ function applyZoom(pct, updateSlider) {
 // RENDER
 // ═══════════════════════════════════════════════════════════════
 function render() {
-  _rebuildElMap();
   // Size canvas to image — skip DOM writes when unchanged (avoid layout churn)
   const cvW = S.imgW + 'px', cvH = S.imgH + 'px';
   if (el.cv.style.width !== cvW) el.cv.style.width = cvW;
@@ -1476,6 +1498,7 @@ function render() {
       S.selSet.clear();
       S.selSet.add(newEl.id);
       saveHist();
+      _rebuildElMap();
       render();
       startTextEdit(newEl.id);
     });
@@ -1838,10 +1861,9 @@ function gdSet(el, gd) {
 // When op=0 the gradient is invisible — backdrop blur alone provides the glass effect.
 function gdCSS(gd, elemW, elemH, elemOp) {
   if (!gd || gd.stops.length < 2) return null;
-  // Convert CSS deg to x1/y1/x2/y2
   const rad = (gd.angle - 90) * Math.PI / 180;
   const cx = elemW / 2, cy = elemH / 2;
-  const len = Math.max(elemW, elemH) * 0.75; // extend far enough to cover corners
+  const len = Math.max(elemW, elemH) * 0.75;
   const x0 = (cx - Math.cos(rad) * len/2).toFixed(2);
   const y0 = (cy - Math.sin(rad) * len/2).toFixed(2);
   const x1 = (cx + Math.cos(rad) * len/2).toFixed(2);
@@ -1887,7 +1909,21 @@ function gdToggle(id) {
   const dom = el.cv.querySelector(`[data-id="${id}"]`);
   if (dom) applyStyle(dom, el2);
   requestLayersRender();
-  renderProps();
+  // In-place gradient section update — avoids full panel re-build (which was
+  // re-rendering every section including text editor, layer list etc.).
+  // Target selectors match the gradient controls injected by _renderPropsImpl.
+  const sw = document.getElementById(`clr-${id}-bg-sw`);
+  if (sw) sw.style.background = el2.gd ? 'none' : (el2.bg || '#ffffff');
+  const btn = document.getElementById(`gd-toggle-${id}`);
+  if (btn) {
+    btn.textContent = el2.gd ? '◈ 渐变开启' : '◇ 渐变关闭';
+    btn.classList.toggle('on', !!el2.gd);
+  }
+  const preview = document.getElementById(`gd-preview-${id}`);
+  if (preview) {
+    const gd = gdGet(el2);
+    preview.style.background = gdCSS(gd, 200, 20) || 'transparent';
+  }
   clearTimeout(_spTimer);
   _spTimer = setTimeout(scheduleHistSave, 600);
 }
@@ -2046,20 +2082,11 @@ function onRS(e) {
 
 document.addEventListener('pointermove', onMouseMove);
 document.addEventListener('pointerup',   onMouseUp);
-// Fallback touch handlers for devices where pointer events are unreliable
-// (some older Android browsers don't fully support Pointer Events)
-document.addEventListener('touchmove', e => {
-  if (!S._drag && !S._resize) return;
-  if (e.touches.length === 0) return;
-  e.preventDefault(); // Prevent scrolling while dragging/resizing
-  const t = e.touches[0];
-  // Synthesize a pointer-like event for onMouseMove
-  onMouseMove({ clientX: t.clientX, clientY: t.clientY, pointerId: -1 });
-}, { passive: false });
-document.addEventListener('touchend', e => {
-  if (!S._drag && !S._resize) return;
-  onMouseUp({ pointerId: -1 });
-}, { passive: false });
+// Fallback touch handlers removed — Pointer Events are supported by all
+// modern browsers (iOS 13+, Android Chrome 55+). Keeping both caused double-
+// firing on devices that support Pointer Events: pointerdown fires and sets
+// S._drag, then the touch handler also fires onMouseMove, creating a stale
+// drag state. The long-press context menu is handled by its own touch handlers.
 
 // Auto-scroll the canvas scroll container when the cursor approaches the viewport edge.
 // Uses rAF to throttle scroll updates to one per frame. The edge zone is 48px and
@@ -2287,6 +2314,7 @@ function onMouseUp() {
       S.sel = c.id;
       S.selSet.clear();
       S.selSet.add(c.id);
+      _rebuildElMap();
     }
   }
   if (S._drag || S._resize) {
@@ -2407,8 +2435,14 @@ document.addEventListener('keydown', e => {
     // Close panels / cancel export / cancel resize / deselect
     const sp = document.getElementById('shortcuts-panel');
     if (sp && sp.classList.contains('show')) { hideShortcuts(); e.preventDefault(); return; }
+    // Close in-app confirm dialog — cancel without firing the ok callback
+    if (el.confirmOvl.classList.contains('show')) {
+      el.confirmOvl.classList.remove('show');
+      _confirmCb = null; // discard pending action
+      e.preventDefault();
+      return;
+    }
     if (el.expOvl.classList.contains('show')) { window._exportCancelled = true; e.preventDefault(); return; }
-    if (null) return; // text edit handles its own escape
     if (S._resize || S._drag) { S._resize = null; S._drag = null; render(); renderProps(); e.preventDefault(); return; }
     if (S.sel) { S.sel = null; S.selSet.clear(); S._selectedParaId = null; S._selectedParaIdx = null; render(); hideCtx(); e.preventDefault(); }
   } else if (!e.ctrlKey && !e.metaKey && !e.altKey) {
@@ -2474,13 +2508,14 @@ function addEl(type) {
     align: 'center', valign: 'center',
     fontFamily: "'DM Sans',sans-serif",
     locked: false,
-    tOp: 1, gd: null,
+    tOp: 1, gd: null, rot: 0,
   };
   S.els.push(el2);
   S.sel = el2.id;
   S.selSet.clear();
   S.selSet.add(el2.id);
   saveHist();
+  _rebuildElMap();
   render();
   // Trigger materialize-in animation on the newly created DOM element
   requestAnimationFrame(() => _materializeIn(el.cv.querySelector(`[data-id="${el2.id}"]`)));
@@ -2558,6 +2593,7 @@ function delSel() {
       S._selectedParaId = null;
       S._selectedParaIdx = null;
     }
+    _rebuildElMap();
     saveHist(); render();
   };
   if (pending === 0) { finish(); return; }
@@ -2587,6 +2623,7 @@ function delById(id) {
         if (S.sel === id) { S.sel = null; S._selectedParaId = null; S._selectedParaIdx = null; }
         S.selSet.delete(id);
         if (S.selSet.size === 0) { S.sel = null; S._selectedParaId = null; S._selectedParaIdx = null; }
+        _rebuildElMap();
         saveHist(); render();
       }
     };
@@ -2600,6 +2637,7 @@ function delById(id) {
   if (S.sel === id) { S.sel = null; }
   S.selSet.delete(id);
   if (S.selSet.size === 0) S.sel = null;
+  _rebuildElMap();
   saveHist();
   render();
 }
@@ -2609,6 +2647,7 @@ function clearAll() {
   const doClear = () => {
     // Clean up shadow store for all elements
     S.els.forEach(e => _shdCleanup(e.id));
+    S._editingId = null; // commit or abandon any active text edit — prevents stale textarea from blocking new edits
     S.els = []; S.sel = null; S.selSet.clear();
     _pendingDelete.clear();
     // Reset long-press and pinch state to prevent stale gestures affecting new session
@@ -2627,6 +2666,7 @@ function clearAll() {
     if (_autoScrollRAF) { cancelAnimationFrame(_autoScrollRAF); _autoScrollRAF = 0; }
     if (_rafId) { cancelAnimationFrame(_rafId); _rafId = null; _pendingHistSave = false; }
     _cleanupAnimListeners();
+    _rebuildElMap(); // S.els is now empty — map must reflect this before render()
     _dirty = false; // clearAll is a destructive action, not a modification requiring save warning
     saveHist();
     render();
@@ -2653,6 +2693,7 @@ function dupSel() {
   S.selSet.clear();
   newIds.forEach(id => S.selSet.add(id));
   S.sel = newIds[newIds.length - 1] ?? null;
+  _rebuildElMap();
   saveHist();
   render();
 }
@@ -2701,6 +2742,7 @@ function toFront() {
     const e = S.els[i];
     if (e) { S.els.splice(i, 1); S.els.push(e); }
   });
+  _rebuildElMap();
   saveHist(); render();
 }
 
@@ -2716,6 +2758,7 @@ function toBack() {
     const e = S.els[i];
     if (e) { S.els.splice(i, 1); S.els.unshift(e); }
   });
+  _rebuildElMap();
   saveHist(); render();
 }
 
@@ -2828,8 +2871,7 @@ function applyPreset(key) {
     tsh: p.tsh || '0 1px 6px rgba(0,0,0,.4)',
     ls: 0, lh: 1.45, pad: 12, italic: false, underline: false,
     align: 'center', valign: 'center', fontFamily: "'DM Sans',sans-serif",
-    locked: false, tOp: 1,
-    gd: p.gd || null,
+    locked: false, tOp: 1, gd: p.gd || null, rot: 0,
   };
   S.els.push(el2);
   // Preserve multi-selection if active; otherwise select the new element
@@ -2839,6 +2881,7 @@ function applyPreset(key) {
     S.selSet.add(el2.id);
   }
   saveHist();
+  _rebuildElMap();
   render();
   const presetNameEl = document.querySelector(`.preset[onclick="applyPreset('${key}')"] span`);
   toast(`已添加「${presetNameEl ? presetNameEl.textContent : key}」`);
@@ -2931,6 +2974,7 @@ function _llDrop(e) {
   if (toIdx < 0 || fromIdx === toIdx) return;
   const [moved] = S.els.splice(toIdx, 1);
   S.els.splice(fromIdx, 0, moved);
+  _rebuildElMap();
   saveHist();
   render();
 }
@@ -3191,7 +3235,7 @@ function _renderPropsImpl() {
     sa += `<div class="pg">
       <div class="pl">渐变叠加</div>
       <div style="display:flex;gap:4px;align-items:center;margin-bottom:6px">
-        <button class="mini-btn ${hasGrad ? 'on' : ''}" onclick="gdToggle(${el2.id})" title="启用/禁用渐变叠加">
+        <button class="mini-btn gd-toggle-btn ${hasGrad ? 'on' : ''}" id="gd-toggle-${el2.id}" onclick="gdToggle(${el2.id})" title="启用/禁用渐变叠加">
           ${hasGrad ? '◈ 渐变开启' : '◇ 渐变关闭'}
         </button>
         <select class="psel" style="width:72px" onchange="gdSetAngle(${el2.id},+this.value)" title="渐变角度" onclick="event.stopPropagation()">
@@ -3207,7 +3251,7 @@ function _renderPropsImpl() {
       </div>`;
     if (hasGrad) {
       const previewGrad = gdCSS(gd, 200, 20);
-      sa += `<div style="height:20px;border-radius:4px;background:${previewGrad};margin-bottom:6px;border:1px solid var(--border2)"></div>`;
+      sa += `<div class="gd-preview-bar" id="gd-preview-${el2.id}" style="height:20px;border-radius:4px;background:${previewGrad};margin-bottom:6px;border:1px solid var(--border2)"></div>`;
       sa += `<div style="font-size:10px;color:var(--text-hint);margin-bottom:4px">色标（颜色 → 不透明度）</div>`;
       gd.stops.forEach((stop, i) => {
         sa += `<div style="display:flex;align-items:center;gap:4px;margin-bottom:3px">
@@ -3684,6 +3728,7 @@ document.addEventListener('visibilitychange', () => {
         const restoredIds = new Set(S.els.map(item => item.id));
         S.selSet = new Set((Array.isArray(data.selSet) ? data.selSet : []).map(Number).filter(id => restoredIds.has(id)));
         _pendingDelete.clear();
+        _rebuildElMap();
         // Verify image is valid, then set up UI
         const img = new Image();
         img.onload = () => {
@@ -3717,6 +3762,7 @@ function undo() {
   S.els = s.els; S.sel = s.sel;
   S.selSet = new Set(s.selSet || []);
   if (s.zoom !== undefined) { S.zoom = s.zoom; setZoom(S.zoom); }
+  _rebuildElMap();
   render();
   renderProps();
   toast('↩ 已撤销');
@@ -3732,6 +3778,7 @@ function redo() {
   S.els = s.els; S.sel = s.sel;
   S.selSet = new Set(s.selSet || []);
   if (s.zoom !== undefined) { S.zoom = s.zoom; setZoom(S.zoom); }
+  _rebuildElMap();
   render();
   renderProps();
   toast('↪ 已重做');
@@ -3878,6 +3925,7 @@ function loadProjectFile(input) {
       // Math.max with undefined/NaN propagates NaN — old projects without nid
       // would set S.nid=NaN and poison every subsequently created element id.
       S.nid    = Math.max(1, (Number.isFinite(+proj.nid) ? +proj.nid : 1), ...S.els.map(e => e.id)) + 1;
+      _rebuildElMap();
       S.imgW = projectDim(proj.imgW);
       S.imgH = projectDim(proj.imgH);
       S.imgNatW = projectDim(proj.imgNatW);
@@ -4107,7 +4155,9 @@ async function exportImg() {
     const pct = 15 + Math.round((i / Math.max(total - 1, 1)) * 72); // 15% → 87%
     bar.style.width = pct + '%';
     msg.textContent = `渲染第 ${i+1}/${S.els.length} 个元素...`;
-    await yield();
+    // Yield less frequently when there are many elements — every 5 items is
+    // enough to keep the progress bar responsive without excessive rIC/tick overhead.
+    if (i > 0 && i % 5 === 4) await yield();
     if (window._exportCancelled) { ov.classList.remove('show'); toast('已取消导出'); return; }
 
     const ex = el2.x * sx, ey = el2.y * sy, ew = el2.w * sx, eh = el2.h * sy;
@@ -4314,11 +4364,13 @@ async function exportImg() {
         const psFw = ps.fw || el2.fw || '500';
         const psFam = ps.fontFamily || fam;
         const psItl = ps.italic ? 'italic' : '';
+        // Cache the computed font string so we don't rebuild it per paragraph
+        const psFont = canvasFontStr(psItl === 'italic', psFw, psFs, psFam);
         // wrapLines relies on ctx.measureText, so assign the exact paragraph font first.
-        ctx.font = canvasFontStr(psItl === 'italic', psFw, psFs, psFam);
+        ctx.font = psFont;
         const psLineH = lhRatio * psFs;
         const psLines = wrapLines(ctx, para, maxW, lsVal);
-        return { ps, psFs, psLineH, psLines };
+        return { ps, psFs, psLineH, psLines, psFont };
       });
       const totalH = paraInfos.reduce((s, p) => s + p.psLines.length * p.psLineH, 0);
       let curY;
@@ -4328,18 +4380,15 @@ async function exportImg() {
 
       // Render each paragraph with its own style
       paraInfos.forEach(pi => {
-        const { ps, psFs, psLineH, psLines } = pi;
-        const psItl  = ps.italic ? 'italic' : '';
-        const psFw   = ps.fw || el2.fw || '500';
+        const { ps, psFs, psLineH, psLines, psFont } = pi;
         const psTc   = ps.tc || el2.tc || '#ffffff';
-        const psFam  = ps.fontFamily || fam;
         const psAlpha = ps.tOp ?? el2.tOp ?? 1;
         const textVOffset = (psLineH - psFs) / 2;
         const psUnderline = ps.underline !== undefined ? ps.underline : (el2.underline || false);
 
         psLines.forEach(line => {
           const ly = curY + textVOffset;
-          ctx.font         = canvasFontStr(psItl === 'italic', psFw, psFs, psFam);
+          ctx.font         = psFont; // use cached font string — no per-line re-build
           ctx.fillStyle    = psTc;
           ctx.globalAlpha  = psAlpha;
           ctx.textAlign    = el2.align || 'center';
@@ -4739,9 +4788,17 @@ document.addEventListener('touchstart', e => {
   clearTimeout(_lpTimer);
   _lpFired = false;
   _lpActive = false;
+  // Don't start long-press if a drag or resize is already active — pointer
+  // events are handling the gesture; a concurrent long-press timer would fire
+  // later and open the context menu on top of an in-progress drag.
+  if (S._drag || S._resize) return;
   // Start long-press timer (600ms) for ALL touch areas including canvas
   // (pointer events handle drag/resize, but long-press context menu is separate)
   const touch = e.touches[0];
+  // Also skip if the touch landed on an element — that triggers drag via pointer events,
+  // so a concurrent long-press would conflict.
+  const hitPt = document.elementFromPoint(touch.clientX, touch.clientY);
+  if (hitPt && hitPt.closest('.gel')) return;
   _lpTimer = setTimeout(() => {
     // Re-evaluate target in case user scrolled during the long press
     const hitPt = document.elementFromPoint(touch.clientX, touch.clientY);
