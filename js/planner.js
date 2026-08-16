@@ -281,6 +281,8 @@ function updateMultiTP() {
       var origPosSize = stopDistance > 0 && ep > 0 ? (riskAmt * ep / stopDistance) : (calc.positionSize || 0);
       var grossProfit = profitDistance * origPosSize / ep;
       var grossLoss = stopDistance * origPosSize / ep;
+      // calc.fee 为 round-trip 总手续费（开仓+平仓双向），止盈路径和止损路径各承担全部费用
+      // netProfit: 盈利扣除一次手续费；netLoss: 亏损叠加手续费（损失扩大）
       var fee = calc.fee || 0;
       var netProfit = grossProfit - fee;
       var netLoss = grossLoss + fee;

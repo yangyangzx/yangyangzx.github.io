@@ -397,14 +397,37 @@ function preCheckStorageCapacity(requiredBytes) {
 }
 
 /**
- * 估算localStorage剩余容量（粗略估算）
+ * 估算localStorage剩余容量
+ * 优先使用 navigator.storage.estimate()（Chrome/Edge/Firefox 支持），fallback 到探测方式
  * @returns {number} 估计的剩余字节数，-1表示无法确定
  */
 function estimateLocalStorageCapacity() {
+  // 优先使用现代 Storage API（精确且无副作用）
+  if (navigator.storage && navigator.storage.estimate) {
+    try {
+      var est = navigator.storage.estimate();
+      if (est && Number.isFinite(est.quota) && est.quota > 0) {
+        var used = est.usage || 0;
+        var remaining = est.quota - used;
+        // 减去本应用已知使用的 key 大小（更精确）
+        try {
+          for (var i = 0; i < localStorage.length; i++) {
+            var k = localStorage.key(i);
+            var v = localStorage.getItem(k);
+            if (k) used += k.length + (v ? v.length : 0);
+          }
+          remaining = est.quota - used;
+        } catch(e) {}
+        return Math.max(0, remaining);
+      }
+    } catch(e) {}
+  }
+
+  // Fallback: 探测方式写入测试数据来估算
   try {
     const testSizes = [1024, 10*1024, 100*1024, 1024*1024]; // 1KB, 10KB, 100KB, 1MB
     let capacity = 5 * 1024 * 1024; // 默认假设5MB
-    
+
     for (let size of testSizes) {
       try {
         const testKey = `__capacity_test_${size}__`;
@@ -418,7 +441,7 @@ function estimateLocalStorageCapacity() {
         break;
       }
     }
-    
+
     // 减去已使用空间
     let usedSpace = 0;
     for (let i = 0; i < localStorage.length; i++) {
@@ -428,7 +451,7 @@ function estimateLocalStorageCapacity() {
         usedSpace += (key.length + (value ? value.length : 0));
       }
     }
-    
+
     return Math.max(0, capacity - usedSpace);
   } catch (e) {
     console.warn('无法估算localStorage容量:', e);

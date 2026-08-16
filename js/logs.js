@@ -40,6 +40,13 @@ function calculateCloseSettlement(item, closePrice, feeOverride, legacySlippageO
     : Number(item.fee) || 0;
   if (!Number.isFinite(fee) || fee < 0) return null;
   var legacySlippageCost = getLegacySlippageCost(item, legacySlippageOverride);
+  // BUG#3 修复：检测数据不一致（同时存在 ticks-v1 滑点模型和旧式 slippageCost）
+  // 若两者共存说明 schema 迁移不完整，跳过 legacy 滑点扣减避免双重计费
+  var tickModel = isTickSlippageRecord(item);
+  if (tickModel && legacySlippageCost > 0) {
+    console.warn('[calculateCloseSettlement] 检测到 ticks-v1 滑点模型与旧式 slippageCost 共存，忽略旧式滑点:', item.slippageCost);
+    legacySlippageCost = 0;
+  }
   var netPnl = grossPnl - fee - legacySlippageCost;
   var leverage = Number(item.leverage);
   if (!Number.isFinite(leverage) || leverage <= 0) leverage = 1;

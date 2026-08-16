@@ -15,10 +15,19 @@
   'use strict';
 
   var SCHEMA = 'ticks-v1';
+  // BUG#12 修复：补充所有订单类型的滑点默认值，避免扩展类型回退到 market 默认
+  // limitBuy/limitSell 使用限价单模型；stopBuy/stopSell 使用止损单模型；stopLimit/trailingStop 使用保守默认
   var DEFAULT_TICKS_BY_ORDER_TYPE = Object.freeze({
-    market: { entry: 1, exit: 1 },
-    stop:   { entry: 2, exit: 2 },
-    limit:  { entry: 0, exit: 1 }
+    market:     { entry: 1, exit: 1 },
+    stop:       { entry: 2, exit: 2 },
+    limit:      { entry: 0, exit: 1 },
+    // 方向扩展（与 limit/stop 共享同一滑点模型）
+    limitBuy:   { entry: 0, exit: 1 },
+    limitSell:  { entry: 0, exit: 1 },
+    stopBuy:    { entry: 2, exit: 2 },
+    stopSell:   { entry: 2, exit: 2 },
+    stopLimit:  { entry: 2, exit: 2 },
+    trailingStop: { entry: 1, exit: 1 }
   });
 
   function finiteNumber(value, fallback) {

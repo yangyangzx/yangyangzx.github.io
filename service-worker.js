@@ -4,7 +4,7 @@
  */
 var CACHE_NAME = 'tradingdisc-v5-cache';
 // 缓存版本 - 每次更新代码时递增，强制浏览器重新缓存所有资源
-var CACHE_VERSION = 5;
+var CACHE_VERSION = 6;
 var VERSIONED_CACHE_NAME = CACHE_NAME + '-v' + CACHE_VERSION;
 var STATIC_ASSETS = [
   './',
@@ -43,7 +43,6 @@ var STATIC_ASSETS = [
   './js/review.js',
   './js/io.js',
   './js/dom-cache.js',
-  './js/render-utils.js',
   './js/app.js',
   './js/version.js',
   './img/logo.png',
