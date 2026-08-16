@@ -711,10 +711,8 @@ function saveSplit() {
 }
 
 function doSaveSplit(calc, count) {
-  const gate = typeof assertSavableCalculation === 'function'
-    ? assertSavableCalculation()
-    : { ok: !!(calc && calc.positionSize) };
-  if (!gate.ok) { showToast(gate.message || '当前计划不能拆分保存', 'warn'); return false; }
+  // calc 是 saveSplit 中已通过 assertSavableCalculation 验证的快照，
+  // 不再重新检查，避免用户在弹窗等待期间误触字段导致不必要的拦截
   if (!calc || !calc.entryPrice || calc.entryPrice <= 0 || !calc.slippage || !calc.slippage.atStop) {
     showToast('计算快照缺少统一滑点数据，请重新计算后再拆分保存', 'warn');
     return false;
