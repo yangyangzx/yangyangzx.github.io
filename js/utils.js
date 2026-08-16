@@ -134,22 +134,21 @@
     
     // 初始保证金率 = 1/杠杆
     const initialMarginRatio = 1 / leverage;
-    
+
     let liquidationPrice;
     if (direction === 'long') {
-      // 多头强平价格公式（USDT-M 逐仓，行业标准）
-      // LP = Entry × (1 - InitialMargin%) / (1 - MMR%)
-      // 其中 InitialMargin% = 1/Leverage
-      liquidationPrice = entryPrice * (1 - initialMarginRatio) / (1 - mmr);
+      // BUG 修复：使用币安/OKX 标准强平价格公式
+      // 正确公式: LP = Entry × (1 - IMR + MMR) / (1 - MMR)
+      // 原公式缺少 MMR 修正项，导致强平价被低估约 MMR% (约 0.5%)
+      liquidationPrice = entryPrice * (1 - initialMarginRatio + mmr) / (1 - mmr);
 
       // 合理性检查：多头强平价应低于入场价
       if (liquidationPrice >= entryPrice) {
         console.warn('calcLiquidationPrice: long liquidation price >= entry price, check parameters');
       }
     } else if (direction === 'short') {
-      // 空头强平价格公式（USDT-M 逐仓，行业标准）
-      // LP = Entry × (1 + InitialMargin%) / (1 + MMR%)
-      liquidationPrice = entryPrice * (1 + initialMarginRatio) / (1 + mmr);
+      // 正确公式: LP = Entry × (1 + IMR - MMR) / (1 + MMR)
+      liquidationPrice = entryPrice * (1 + initialMarginRatio - mmr) / (1 + mmr);
 
       // 合理性检查：空头强平价应高于入场价
       if (liquidationPrice <= entryPrice) {
