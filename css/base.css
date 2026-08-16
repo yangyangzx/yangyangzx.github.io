@@ -427,9 +427,14 @@ body {
 /* 隐藏原生 checkbox，用伪元素实现自定义勾选指示器 */
 .checkbox-group input[type="checkbox"] {
   position: absolute;
-  opacity: 0;
-  width: 0;
-  height: 0;
+  border: 0;
+  clip: rect(0 0 0 0);
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 /* 自定义勾选图标 */
