@@ -177,6 +177,12 @@ function confirmClose(idx) {
   logs[idx].closePrice = closePrice;
   if (isNewClose) {
     logs[idx].closeTime = new Date().toISOString();
+  }
+  // holdDuration 始终基于 time + closeTime 重算，确保修改时间后口径正确
+  if (logs[idx].time && logs[idx].closeTime && !isNewClose) {
+    var durMin2 = Math.round((new Date(logs[idx].closeTime) - new Date(logs[idx].time)) / 60000);
+    logs[idx].holdDuration = durMin2 >= 0 ? durMin2 : null;
+  } else if (isNewClose) {
     logs[idx].holdDuration = Math.round((new Date(logs[idx].closeTime) - new Date(logs[idx].time)) / 60000);
   }
   logs[idx].grossPnlAmount = parseFloat(settlement.grossPnl.toFixed(2));

@@ -523,8 +523,10 @@ function restoreAfterRender() {
 function renderLogs() {
   var tbody = document.getElementById('logBody');
 
-  // BUG#4 修复：每次重新渲染时清除 _closePriceEdited，防止跨会话状态残留导致自动填价失效
-  Object.keys(_closePriceEdited).forEach(function(k) { delete _closePriceEdited[k]; });
+  // 仅清除已关闭面板（非当前打开的）的标记，避免同会话内意外重置手动填价状态
+  Object.keys(_closePriceEdited).forEach(function(k) {
+    if (parseInt(k) !== openClosePanelIdx) delete _closePriceEdited[k];
+  });
 
   // 延迟绑定事件委托（首次调用时绑定一次）
   if (!_tbodyEventsBound) {

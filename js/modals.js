@@ -558,9 +558,9 @@ function saveEditLog(idx) {
   v = gv('emCloseType'); if (v !== undefined) item.closeType = v;
   v = gn('emClosePrice'); if (v !== undefined && v !== null) item.closePrice = v;
   // 编辑平仓数据时，若尚未有 closeTime 则自动写入
-  if (item.closeType && !item.closeTime) {
-    item.closeTime = new Date().toISOString();
-    // holdDuration 计算防御：time 无效时不写入
+  if (item.closeType) {
+    if (!item.closeTime) item.closeTime = new Date().toISOString();
+    // holdDuration 始终基于 time + closeTime 重算，确保修改时间后口径正确
     if (item.time && !isNaN(new Date(item.time).getTime()) && !isNaN(new Date(item.closeTime).getTime())) {
       var durMin = Math.round((new Date(item.closeTime) - new Date(item.time)) / 60000);
       item.holdDuration = durMin >= 0 ? durMin : null;
