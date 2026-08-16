@@ -416,8 +416,9 @@ function calculate() {
     if (_settings && _settings.mmr != null) mmr = _settings.mmr / 100;
 
     liquidationPrice = window.utils.calcLiquidationPrice(effectiveEntryPrice, direction, leverage, mmr);
-    const isInvalid = (direction === 'long' && stopLoss <= liquidationPrice) ||
-                      (direction === 'short' && stopLoss >= liquidationPrice);
+    // BUG#1 修复：止损价严格越过强平价时才阻断；等于时允许（用户仍可在强平前手动止损）
+    const isInvalid = (direction === 'long' && stopLoss < liquidationPrice) ||
+                      (direction === 'short' && stopLoss > liquidationPrice);
     if (isInvalid) {
       cappedByLiquidation = true;
       liqMsg = '止损 ' + stopLoss.toFixed(5) + ' 在强平价 ' + liquidationPrice.toFixed(5) + ' ' + (direction === 'long' ? '之下' : '之上') + '，价格到达止损前仓位将被强制平仓。请收紧止损距离或降低杠杆后重新计算。';
@@ -644,8 +645,8 @@ function calculate() {
         if (isNaN(bp) || isNaN(ba)) return;
         const bsl = b.stopLoss && !isNaN(parseFloat(b.stopLoss)) ? parseFloat(b.stopLoss) : (stopLoss || 0);
         if (bsl <= 0) return; // 止损未设置，跳过
-        // 使用原始风险额（ba% of riskAmount）而非被截断后的仓位，避免误导用户
-        const bRisk = riskAmount * ba / 100;
+        // BUG#2 修复：统一使用 effectiveRiskAmount（已截断）按批次比例拆分，避免与 bpos 口径不一致
+        const bRisk = effectiveRiskAmount * ba / 100;
         const bpos = effectivePositionSize * ba / 100;
         const bstopDist = direction === 'long' ? bp - bsl : bsl - bp;
         // 实际损失取风险额和计算值的较小者（考虑仓位被截断的情况）
@@ -1196,6 +1197,9 @@ function resetForm() {
   document.getElementById('atrValue').value = '';
   var _atrSettings = loadSettings();
   document.getElementById('atrMultiplier').value = _atrSettings.atrDefaultMultiplier != null ? _atrSettings.atrDefaultMultiplier : 2;
+  // BUG#9 修复：重置 ATR 开关状态为关闭，避免 reset 后仍启用 ATR 动态止损
+  var atrEnableEl = document.getElementById('formAtrStopEnabled');
+  if (atrEnableEl) atrEnableEl.checked = false;
   document.getElementById('lossStreak').value = '0';
   document.getElementById('orderType').value = 'market';
   var stEl = document.getElementById('stopType');

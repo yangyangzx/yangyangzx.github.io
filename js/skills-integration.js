@@ -238,7 +238,8 @@ function checkDailyLossLimit() {
   var dailyLossPct = settings.dailyLossLimit || 5;
   var dailyLossLimit = capital > 0 ? capital * (dailyLossPct / 100) : Infinity;
 
-  var overLimit = todayPnl <= -dailyLossLimit;
+  // BUG#5 修复：严格小于才阻断；恰好等于上限时允许继续交易
+  var overLimit = todayPnl < -dailyLossLimit;
   return {
     overLimit: overLimit,
     todayPnl: todayPnl,

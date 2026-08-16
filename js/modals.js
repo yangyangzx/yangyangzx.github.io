@@ -604,7 +604,9 @@ function saveEditLog(idx) {
   // ticks-v1 记录的执行字段改变后必须同步重建有效入场价、各路径滑点和计划费用。
   rebuildTickSlippageSnapshot(item);
   if (item.closeType && item.closePrice != null && typeof calculateCloseSettlement === 'function') {
-    var editedSettlement = calculateCloseSettlement(item, item.closePrice, item.actualCloseFee, item.actualExitLegacySlippageCost);
+    // BUG#6 修复：rebuildTickSlippageSnapshot 已更新 item.slippage，直接使用 item.fee 而非实际快照字段
+    // 避免保存后实际CloseFee已过时导致结算结果与当前数据不一致
+    var editedSettlement = calculateCloseSettlement(item, item.closePrice);
     if (!editedSettlement) {
       Object.assign(item, beforeEdit);
       showToast('编辑后的平仓结算无效，请检查价格、仓位和费用。', 'warn');

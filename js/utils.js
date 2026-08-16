@@ -224,14 +224,16 @@
     var _initCap = 0;
     if (opts.purePnl) {
       _initCap = 0;
-    } else if (sorted.length > 0 && sorted[0].capital != null && !isNaN(sorted[0].capital) && sorted[0].capital > 0) {
-      _initCap = sorted[0].capital;
     } else {
+      // BUG#7 修复：优先使用设置中的账户余额作为权益曲线起点，避免首笔日志 capital 快照偏移导致曲线失真
       var bal = (settingsOverride && settingsOverride.accountBalance > 0) ? settingsOverride.accountBalance : 0;
       if (!bal) {
-        try { var _s = loadSettings(); if (_s.accountBalance > 0) bal = _s.accountBalance; } catch(e) {}
+        try { var _s = loadSettings(); if (_s && _s.accountBalance > 0) bal = _s.accountBalance; } catch(e) {}
       }
       if (bal > 0) _initCap = bal;
+      else if (sorted.length > 0 && sorted[0].capital != null && !isNaN(sorted[0].capital) && sorted[0].capital > 0) {
+        _initCap = sorted[0].capital;
+      }
     }
 
     var data = [], cum = _initCap, peakVal = _initCap, maxDD = 0;

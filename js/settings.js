@@ -443,7 +443,7 @@ function importSettings() {
         // 特殊处理 customSymbols（合并而非覆盖）
         if (imported.customSymbols && Array.isArray(imported.customSymbols)) {
           var existingSyms = {};
-          for (var j = 0; j < current.customSymbols; j++) {
+          for (var j = 0; j < current.customSymbols.length; j++) {
             existingSyms[current.customSymbols[j].symbol] = true;
           }
           imported.customSymbols.forEach(function(s) {

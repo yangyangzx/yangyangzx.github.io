@@ -189,7 +189,7 @@ function onFilterChange() {
   // M9: 过滤器变更时重置面板索引，避免过滤后 panel 状态与当前列表不匹配
   openClosePanelIdx = -1;
   actionPanelIdx = -1;
-  _debouncedFilterChange();
+  // BUG#10 修复：移除递归调用 _debouncedFilterChange，避免防抖嵌套导致延迟翻倍
 }
 
 function applyPreset(preset) {

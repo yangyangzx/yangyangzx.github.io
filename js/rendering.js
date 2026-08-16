@@ -523,6 +523,9 @@ function restoreAfterRender() {
 function renderLogs() {
   var tbody = document.getElementById('logBody');
 
+  // BUG#4 修复：每次重新渲染时清除 _closePriceEdited，防止跨会话状态残留导致自动填价失效
+  Object.keys(_closePriceEdited).forEach(function(k) { delete _closePriceEdited[k]; });
+
   // 延迟绑定事件委托（首次调用时绑定一次）
   if (!_tbodyEventsBound) {
     bindTbodyEvents();

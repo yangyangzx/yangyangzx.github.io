@@ -246,20 +246,13 @@ function handleBatchCheck(idx, checked) {
 
 function batchSelectAll(checked) {
   _selectedIndices.clear();
-  if (checked) {
-    const tbody = document.getElementById('logBody');
-    if (tbody) {
-      tbody.querySelectorAll('.batch-checkbox[data-batch-idx]').forEach(function(cb) {
-        _selectedIndices.add(parseInt(cb.dataset.batchIdx, 10));
-      });
-    }
-  }
-  const tbody2 = document.getElementById('logBody');
-  if (tbody2) {
-    tbody2.querySelectorAll('.batch-checkbox[data-batch-idx]').forEach(function(cb) {
-      cb.checked = checked;
-    });
-  }
+  const tbody = document.getElementById('logBody');
+  if (!tbody) { updateBatchCount(); return; }
+  const cbs = tbody.querySelectorAll('.batch-checkbox[data-batch-idx]');
+  cbs.forEach(function(cb) {
+    cb.checked = checked;
+    if (checked) _selectedIndices.add(parseInt(cb.dataset.batchIdx, 10));
+  });
   updateBatchCount();
 }
 
