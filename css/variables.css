@@ -135,22 +135,22 @@
   --z-tooltip:    700;
 
   /* ═══════════════════════════════════════
-     圆角系统 — Apple 规范：xs/sm/md/lg/pill
+     圆角系统（4pt 倍数）
      ═══════════════════════════════════════ */
   --radius-xs:  4px;
   --radius-sm:  8px;
-  --radius-md:  11px;
+  --radius-md:  12px;
   --radius-lg:  16px;
   --radius-xl:  24px;
   --radius-full: 9999px;
 
   /* ═══════════════════════════════════════
-     阴影系统 — Apple: 仅产品图使用投影，UI 元素保持 flat
+     阴影系统 — OKLCH 黑色，非硬编码 rgba
      ═══════════════════════════════════════ */
-  --shadow-sm:  none;
-  --shadow-md:  none;
-  --shadow-lg:  none;
-  --shadow-xl:  none;
+  --shadow-sm:  0 1px 2px oklch(0% 0 0 / 0.20);
+  --shadow-md:  0 4px 16px oklch(0% 0 0 / 0.25), 0 1px 2px oklch(0% 0 0 / 0.12);
+  --shadow-lg:  0 12px 40px oklch(0% 0 0 / 0.30), 0 4px 12px oklch(0% 0 0 / 0.15);
+  --shadow-xl:  0 20px 60px oklch(0% 0 0 / 0.35), 0 8px 20px oklch(0% 0 0 / 0.20);
 
   /* ═══════════════════════════════════════
      排版系统
@@ -306,10 +306,10 @@
   --nav-bg:         oklch(98% 0.006 250 / 0.95);
   --nav-border:     oklch(70% 0.012 250 / 0.20);
 
-  --shadow-sm:  none;
-  --shadow-md:  none;
-  --shadow-lg:  none;
-  --shadow-xl:  none;
+  --shadow-sm:  0 1px 3px oklch(0% 0 0 / 0.06);
+  --shadow-md:  0 2px 8px oklch(0% 0 0 / 0.08), 0 1px 2px oklch(0% 0 0 / 0.04);
+  --shadow-lg:  0 6px 20px oklch(0% 0 0 / 0.10), 0 2px 6px oklch(0% 0 0 / 0.06);
+  --shadow-xl:  0 10px 30px oklch(0% 0 0 / 0.12), 0 4px 10px oklch(0% 0 0 / 0.08);
 
   /* Chart.js 浅色 */
   --chart-tooltip-bg:      oklch(100% 0.003 250 / 0.95);
