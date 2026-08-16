@@ -219,6 +219,8 @@ function confirmClose(idx) {
     return false;
   }
   openClosePanelIdx = -1;
+  // 平仓后刷新表格与统计数据
+  if (typeof renderLogs === 'function') renderLogs();
   return true;
 }
 

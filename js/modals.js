@@ -670,6 +670,8 @@ function saveEditLog(idx) {
     showToast('日志编辑未保存，已恢复到保存前状态。', 'error');
     return false;
   }
+  // 刷新表格与统计数据（表格更新后再关闭弹窗，避免闪烁）
+  if (typeof renderLogs === 'function') renderLogs();
   closeEditModal();
   return true;
 }
