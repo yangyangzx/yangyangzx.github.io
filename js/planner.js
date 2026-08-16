@@ -503,7 +503,7 @@ function updateChecklist() {
   updateCheckItemWithResult('checkSymbolConc', function() {
     if (!calc || !calc.capital || calc.capital <= 0 || !calc.positionSize) return null;
     var openPositions = getOpenPositions();
-    var concCheck = checkSymbolConcentration(calc.symbol, calc.positionSize, calc.leverage, calc.capital, openPositions, 7);
+    var concCheck = checkSymbolConcentration(calc.symbol, calc.positionSize, calc.leverage, calc.capital, openPositions);
     if (!concCheck || concCheck.maxPct === undefined) return null;
     var passed = concCheck.pass;
     return { result: passed, message: concCheck.warning || (passed ? '品种集中度正常' : '集中度超限') };
@@ -525,7 +525,9 @@ function updateChecklist() {
       hintEl.style.display = '';
     }
   } else if (hintEl) {
-    hintEl.style.display = 'none';
+    // 彻底移除，避免元素永久驻留 DOM；下次 _lastCalc 为 null 时重新创建
+    hintEl.remove();
+    hintEl = null;
   }
 
   // ========== 将检查结果持久化到 _lastCalc，供日志保存时使用 ==========

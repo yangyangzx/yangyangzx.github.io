@@ -115,7 +115,8 @@
   function resetForCalculation(ui) {
     if (!ui) throw new Error('必须先通过 getResultUI() 获取 UI 引用');
     if (ui.resultBox) {
-      ui.resultBox.classList.remove('warn', 'is-blocked', 'is-dirty');
+      // 清除所有状态类：warn（有警告）/ is-blocked（硬阻断）/ is-dirty（参数已变更）/ is-provisional（临时止损）
+      ui.resultBox.classList.remove('warn', 'is-blocked', 'is-dirty', 'is-provisional');
       ui.resultBox.setAttribute('aria-live', 'polite');
     }
     if (ui.warning) {
