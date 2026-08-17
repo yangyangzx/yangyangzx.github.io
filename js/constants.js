@@ -135,6 +135,9 @@ function getMarketConditionLabel(value) {
 // LOSS_REASON_OPTIONS 集中定义，避免多处硬编码
 const LOSS_REASON_OPTIONS = ['追涨杀跌','扛单/不设止损','过早止盈','逆势操作','情绪化加仓','频繁交易','未按计划执行','外部因素','技术面判断失误','止损设置过紧','黑天鹅事件'];
 
+// ENTRY_REASON_OPTIONS: 入场原因选项（多选）
+const ENTRY_REASON_OPTIONS = ['趋势突破','回调入场','震荡区间边界','支撑/压力位确认','均线信号','FVG入场','订单块入场','情绪反转','时间窗口','K线形态确认'];
+
 // TICK_SIZE_MAP: 各品种的最小价格变动单位（tick size）
 const TICK_SIZE_MAP = {
   'BTC': 0.1, 'ETH': 0.01, 'SOL': 0.001, 'GOLD': 0.01

@@ -333,7 +333,7 @@ function parseCSVImport(csvText) {
     for (var j = 0; j < headers.length; j++) {
       var h = headers[j];
       var v = values[j] || '';
-      if (h === 'emotions' || h === 'lossReason' || h === 'signals') {
+      if (h === 'emotions' || h === 'lossReason' || h === 'signals' || h === 'reason') {
         obj[h] = v ? v.split(';').filter(Boolean) : [];
       } else if (h === 'actions') {
         try { obj[h] = v ? JSON.parse(v) : []; } catch(e) { obj[h] = []; }

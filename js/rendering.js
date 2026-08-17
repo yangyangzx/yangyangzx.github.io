@@ -173,7 +173,7 @@ function buildRowsHTML(dl) {
         '<div class="ditem"><span class="dlabel">R倍数</span><span class="dval">' + rMultipleHtml + '</span></div>' +
         '<div class="ditem"><span class="dlabel">持仓时长</span><span class="dval" style="font-size:12px;color:var(--color-text-muted);">' + formatHoldDuration(item.closeTime, item.time) + '</span></div>' +
         '<div class="ditem"><span class="dlabel">备注</span><span class="dval">' + closeNoteDisplay + '</span></div>' +
-        '<div class="ditem"><span class="dlabel">入场原因</span><span class="dval">' + (esc(item.reason) || '—') + '</span></div>' +
+        '<div class="ditem"><span class="dlabel">入场原因</span><span class="dval">' + (item.reason ? (Array.isArray(item.reason) ? item.reason.map(function(r) { return '<span class="loss-reason-tag">' + esc(r) + '</span>'; }).join('') : esc(item.reason)) : '—') + '</span></div>' +
         '<div class="ditem"><span class="dlabel">本金快照</span><span class="dval">' + (item.capital != null ? item.capital : '—') + '</span></div>' +
         '<div class="ditem"><span class="dlabel">交易时段</span><span class="dval">' + esc(item.session || '—') + '</span></div>' +
         '<div class="ditem"><span class="dlabel">市场环境</span><span class="dval">' + esc(getMarketConditionLabel(item.marketCondition)) + '</span></div>' +

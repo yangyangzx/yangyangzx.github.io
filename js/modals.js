@@ -78,7 +78,17 @@ function openEditModal(idx) {
         '<div class="fp"><label>策略形态</label><select id="emStrategyPattern">' + patternOptions + '</select></div>' +
         '<div class="fp span-2"><label>信号K线确认</label>' + signalsHTML + '</div>' +
         splitDetailHTML +
-        '<div class="fp span-2"><label>入场原因</label><input type="text" id="emReason" value="' + esc(item.reason || '') + '" /></div>' +
+        '<div class="fp span-2"><label>入场原因<span style="font-size:11px;color:var(--color-text-muted);font-weight:400;">（可选·多选）</span></label>' +
+          '<div class="checkbox-group" id="emEntryReason" style="flex-wrap:wrap;gap:4px 12px;">' +
+            (function makeEntryReasonCheckboxes(selected) {
+              var arr = Array.isArray(selected) ? selected : (typeof selected === 'string' && selected ? [selected] : []);
+              var h = '';
+              ENTRY_REASON_OPTIONS.forEach(function(r) {
+                h += '<label style="font-size:13px;color:var(--color-text);white-space:nowrap;"><input type="checkbox" value="' + r + '"' + (arr.indexOf(r) !== -1 ? ' checked' : '') + ' /> ' + r + '</label>';
+              });
+              return h;
+            }(item.reason)) +
+          '</div></div>' +
         '<div class="fp"><label>交易时段</label><select id="emSession"><option value="">— 不选择 —</option>' +
           SESSION_OPTIONS.slice(1).map(function(o) { return '<option value="' + o.value + '"' + ((item.session || '') === o.value ? ' selected' : '') + '>' + o.label + '</option>'; }).join('') +
         '</select></div>' +
@@ -153,7 +163,7 @@ function openEditModal(idx) {
     const ids = ['emSymbol','emDirection','emOrderType','emEntryPrice','emStopLoss','emTargetPrice',
       'emPositionSize','emLeverage','emRiskAmount','emStrategyFramework','emStrategyPattern',
       'emCloseType','emClosePrice','emRMultiple','emPnlAmount','emPnlPercent','emFee','emSlippageCost',
-      'emCloseNote','emReason','emSession','emMarketCondition','emExitReason','emLowPrice','emHighPrice'];
+      'emCloseNote','emSession','emMarketCondition','emExitReason','emLowPrice','emHighPrice'];
     ids.forEach(function(id) {
       const el = document.getElementById(id);
       if (el) _emInitValues[id] = el.value;
@@ -174,6 +184,10 @@ function openEditModal(idx) {
       const cbs = document.querySelectorAll('#emEmotions input[type="checkbox"]');
       const arr = []; cbs.forEach(function(cb) { arr.push(cb.checked ? cb.value : ''); }); return arr.join(',');
     })();
+    _emInitValues['emEntryReason'] = (function() {
+      const cbs = document.querySelectorAll('#emEntryReason input[type="checkbox"]');
+      const arr = []; cbs.forEach(function(cb) { arr.push(cb.checked ? cb.value : ''); }); return arr.join(',');
+    })();
   })();
 
   // Check dirty before close
@@ -181,7 +195,7 @@ function openEditModal(idx) {
     const ids = ['emSymbol','emDirection','emOrderType','emEntryPrice','emStopLoss','emTargetPrice',
       'emPositionSize','emLeverage','emRiskAmount','emStrategyFramework','emStrategyPattern',
       'emCloseType','emClosePrice','emRMultiple','emPnlAmount','emPnlPercent','emFee','emSlippageCost',
-      'emCloseNote','emReason','emSession','emMarketCondition','emExitReason','emLowPrice','emHighPrice'];
+      'emCloseNote','emSession','emMarketCondition','emExitReason','emLowPrice','emHighPrice'];
     for (var i = 0; i < ids.length; i++) {
       var el = document.getElementById(ids[i]);
       if (el && el.value !== _emInitValues[ids[i]]) { window._editDirty = true; return; }
@@ -206,6 +220,11 @@ function openEditModal(idx) {
       var arr = []; cbs.forEach(function(cb) { arr.push(cb.checked ? cb.value : ''); }); return arr.join(',');
     })();
     if (ems !== _emInitValues['emEmotions']) { window._editDirty = true; return; }
+    var ecr = (function() {
+      var cbs = document.querySelectorAll('#emEntryReason input[type="checkbox"]');
+      var arr = []; cbs.forEach(function(cb) { arr.push(cb.checked ? cb.value : ''); }); return arr.join(',');
+    })();
+    if (ecr !== _emInitValues['emEntryReason']) { window._editDirty = true; return; }
   };
   // 若用户手动改动 PnL/百分比/R倍数，则停止自动重算
   ['emPnlAmount','emPnlPercent','emRMultiple'].forEach(function(id) {
@@ -574,7 +593,15 @@ function saveEditLog(idx) {
   v = gn('emFee'); if (v !== undefined && v !== null) item.fee = v;
   v = gn('emSlippageCost'); if (v !== undefined && v !== null) item.slippageCost = v;
   v = gv('emCloseNote'); if (v !== undefined) item.closeNote = v;
-  v = gv('emReason'); if (v !== undefined) item.reason = v;
+  // Entry reason — multi-select checkboxes
+  var erEl = document.getElementById('emEntryReason');
+  if (erEl) {
+    var ecbs = erEl.querySelectorAll('input[type="checkbox"]:checked');
+    var erasons = Array.from(ecbs).map(function(cb) { return cb.value; });
+    item.reason = erasons.length > 0 ? erasons : null;
+  } else {
+    v = gv('emReason'); if (v !== undefined) item.reason = v;
+  }
   // Execution score
   item.executionScore = (document.getElementById('emExecPlanEntry')?.checked ? 1 : 0) +
                         (document.getElementById('emExecStopLoss')?.checked ? 1 : 0) +
