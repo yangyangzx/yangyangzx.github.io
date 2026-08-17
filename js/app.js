@@ -81,9 +81,9 @@ document.addEventListener('DOMContentLoaded', function() {
   var strategyFrameworkEl = document.getElementById('strategyFramework');
   if (strategyFrameworkEl) strategyFrameworkEl.addEventListener('change', function() { populatePatternSelect(); });
 
-  var signalCheckboxesEl = document.getElementById('signalCheckboxes');
-  if (signalCheckboxesEl) signalCheckboxesEl.addEventListener('change', function(e) {
-    if (e.target.type==='checkbox') updateCheckboxStyle();
+  // 全局监听所有 checkbox 变化，自动更新视觉状态（支持编辑弹窗、close panel 等动态容器）
+  document.addEventListener('change', function(e) {
+    if (e.target.type === 'checkbox') updateCheckboxStyle();
   });
 
   var calcBtn = document.getElementById('calcBtn'); if (calcBtn) calcBtn.addEventListener('click', calculate);
