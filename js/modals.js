@@ -234,6 +234,8 @@ function openEditModal(idx) {
   window._emPnlManual = _pnlWasManual;
   var manualTag = document.getElementById('emPnlManualTag');
   if (manualTag) manualTag.style.display = _pnlWasManual ? 'inline' : 'none';
+  // 初始化所有 checkbox-group 的视觉状态
+  updateCheckboxStyle();
 }
 
 function closeEditModal() {
@@ -879,7 +881,11 @@ function populateFilterOptions() {
 
 // ==================== 复选框样式 ====================
 function updateCheckboxStyle() {
-  document.querySelectorAll('#signalCheckboxes label').forEach(lbl => {
-    lbl.classList.toggle('checked', lbl.querySelector('input[type="checkbox"]').checked);
+  // 更新所有 checkbox-group 容器的视觉状态（不仅限于 #signalCheckboxes）
+  document.querySelectorAll('.checkbox-group').forEach(function(group) {
+    group.querySelectorAll('label').forEach(function(lbl) {
+      var cb = lbl.querySelector('input[type="checkbox"]');
+      if (cb) lbl.classList.toggle('checked', cb.checked);
+    });
   });
 }

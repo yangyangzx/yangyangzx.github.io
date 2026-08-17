@@ -517,6 +517,8 @@ function restoreAfterRender() {
   }
   _closePanelKeyHandler = createClosePanelKeyDownHandler();
   document.addEventListener('keydown', _closePanelKeyHandler);
+  // 6. 恢复所有 checkbox-group 的视觉状态
+  updateCheckboxStyle();
 }
 
 // ==================== 主渲染函数（编排器） ====================
