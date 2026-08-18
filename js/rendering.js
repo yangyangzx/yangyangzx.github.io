@@ -271,7 +271,7 @@ function buildRowsHTML(dl) {
             '<textarea id="cpCloseNote_' + realIdx + '" placeholder="平仓总结、教训等...">' + esc(item.closeNote || '') + '</textarea>' +
           '</div>' +
           '<div class="fp span-2" style="padding-top:4px;border-top:1px solid var(--color-border-light);">' +
-            '<label>执行评分（0-3）<span id="cpExecScore_' + realIdx + '" style="margin-left:8px;font-weight:700;font-size:15px;color:var(--color-text-muted);">0</span></label>' +
+            '<label>执行评分（0-3）<span id="cpExecScore_' + realIdx + '" style="margin-left:8px;font-weight:700;font-size:15px;color:var(--color-text-muted);">—</span></label>' +
             '<div class="checkbox-group" style="padding-top:2px;" id="cpExecChecks_' + realIdx + '">' +
               '<label style="color:var(--color-text);"><input type="checkbox" value="planEntry" /> 按计划入场</label>' +
               '<label style="color:var(--color-text);"><input type="checkbox" value="stopLossIntact" /> 止损未被移动/破坏</label>' +
@@ -412,14 +412,14 @@ function bindTbodyEvents() {
     var id = e.target.id || '';
     var cpMatch = id.match(/^cpClosePrice_(\d+)$/);
     if (cpMatch) {
-      var idx = parseInt(cpMatch[1]);
+      var idx = parseInt(cpMatch[1], 10);
       _closePriceEdited[idx] = true;
       calcClosePnL(idx);
       return;
     }
     var maeMatch = id.match(/^(cpLowPrice|cpHighPrice)_(\d+)$/);
     if (maeMatch) {
-      calcMAEMFE(parseInt(maeMatch[2]));
+      calcMAEMFE(parseInt(maeMatch[2], 10));
     }
   });
 
@@ -428,7 +428,7 @@ function bindTbodyEvents() {
     var id = e.target.id || '';
     var cpTypeMatch = id.match(/^cpCloseType_(\d+)$/);
     if (cpTypeMatch) {
-      var idx = parseInt(cpTypeMatch[1]);
+      var idx = parseInt(cpTypeMatch[1], 10);
       var item = logs[idx];
       if (item && e.target.value === 'initialSL' && !_closePriceEdited[idx]) {
         var cpPriceEl = document.getElementById('cpClosePrice_' + idx);
@@ -527,7 +527,7 @@ function renderLogs() {
 
   // 仅清除已关闭面板（非当前打开的）的标记，避免同会话内意外重置手动填价状态
   Object.keys(_closePriceEdited).forEach(function(k) {
-    if (parseInt(k) !== openClosePanelIdx) delete _closePriceEdited[k];
+    if (parseInt(k, 10) !== openClosePanelIdx) delete _closePriceEdited[k];
   });
 
   // 延迟绑定事件委托（首次调用时绑定一次）

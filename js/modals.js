@@ -117,7 +117,7 @@ function openEditModal(idx) {
           '<label style="color:var(--color-text);"><input type="checkbox" id="emExecPlanEntry" value="planEntry"' + ((item.executionScore || 0) >= 1 ? ' checked' : '') + ' onchange="emUpdateExecScore()" /> 按计划入场</label>' +
           '<label style="color:var(--color-text);"><input type="checkbox" id="emExecStopLoss" value="stopLossIntact"' + ((item.executionScore || 0) >= 2 ? ' checked' : '') + ' onchange="emUpdateExecScore()" /> 止损未被移动/破坏</label>' +
           '<label style="color:var(--color-text);"><input type="checkbox" id="emExecPlanExit" value="planExit"' + ((item.executionScore || 0) >= 3 ? ' checked' : '') + ' onchange="emUpdateExecScore()" /> 按计划减仓/平仓</label>' +
-          '<span id="emExecScoreDisplay" style="margin-left:8px;font-weight:700;font-size:14px;color:var(--color-text-muted);">' + (item.executionScore || 0) + '/3</span>' +
+          '<span id="emExecScoreDisplay" style="margin-left:8px;font-weight:700;font-size:14px;color:var(--color-text-muted);">' + (item.executionScore != null ? item.executionScore + '/3' : '未评分') + '</span>' +
         '</div></div>' +
         '<div class="fp"><label>亏损原因</label>' +
           '<div class="checkbox-group" id="emLossReason" style="flex-wrap:wrap;gap:4px 12px;">' +
@@ -379,7 +379,7 @@ window.emRecalc = emRecalc;
 function emUpdateStars(score) {
   window._emMindsetScore = score;
   const stars = document.querySelectorAll('#editModal .star-rating-modal .star');
-  stars.forEach(s => s.classList.toggle('active', parseInt(s.dataset.val) <= score));
+  stars.forEach(s => s.classList.toggle('active', parseInt(s.dataset.val, 10) <= score));
   const lbl = document.getElementById('emMindsetLabel');
   if (lbl) lbl.textContent = MINDSET_LABELS[score] || '';
 }
@@ -602,10 +602,11 @@ function saveEditLog(idx) {
   } else {
     v = gv('emReason'); if (v !== undefined) item.reason = v;
   }
-  // Execution score
-  item.executionScore = (document.getElementById('emExecPlanEntry')?.checked ? 1 : 0) +
-                        (document.getElementById('emExecStopLoss')?.checked ? 1 : 0) +
-                        (document.getElementById('emExecPlanExit')?.checked ? 1 : 0);
+  // Execution score — null if unreviewed, 1-3 if explicitly rated
+  const emChecked = (document.getElementById('emExecPlanEntry')?.checked ? 1 : 0) +
+                    (document.getElementById('emExecStopLoss')?.checked ? 1 : 0) +
+                    (document.getElementById('emExecPlanExit')?.checked ? 1 : 0);
+  item.executionScore = emChecked > 0 ? emChecked : null;
   // MAE / MFE — 从极值价格计算百分比
   v = gn('emLowPrice'); if (v !== undefined) item.lowPrice = v; else if (document.getElementById('emLowPrice')?.value === '') item.lowPrice = null;
   v = gn('emHighPrice'); if (v !== undefined) item.highPrice = v; else if (document.getElementById('emHighPrice')?.value === '') item.highPrice = null;
@@ -710,7 +711,7 @@ window.saveEditLog = saveEditLog;
 function saveSplit() {
   const gate = typeof assertSavableCalculation === 'function'
     ? assertSavableCalculation()
-    : { ok: !!(window._lastCalc && window._lastCalc.positionSize), calc: window._lastCalc };
+    : { ok: !!(getCalc() && getCalc().positionSize), calc: getCalc() };
   if (!gate.ok) { showToast(gate.message || '请先点击「计算仓位」生成有效数据', 'warn'); return false; }
   const calc = gate.calc;
 
@@ -734,7 +735,7 @@ function saveSplit() {
 
   document.getElementById('splitConfirmBtn').addEventListener('click', function() {
     const n = document.getElementById('splitCountInput').value;
-    const count = parseInt(n);
+    const count = parseInt(n, 10);
     if (isNaN(count) || count < 2 || count > 10) { showToast('请输入 2~10 之间的数字','warn'); return; }
     overlay.remove();
     doSaveSplit(calc, count);
@@ -856,7 +857,7 @@ function doSaveSplit(calc, count) {
   }
   openClosePanelIdx = -1;
   actionPanelIdx = -1;
-  window._lastCalcDirty = false;
+  setCalcDirty(false);
   showToast('拆分保存成功，共 ' + count + ' 笔', 'success');
   return true;
 }

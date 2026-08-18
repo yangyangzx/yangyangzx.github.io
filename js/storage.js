@@ -7,7 +7,6 @@
 const STORAGE_CONFIG = {
   maxSizeBytes: 4 * 1024 * 1024, // 4MB安全限制（浏览器通常5-10MB）
   warningThreshold: 3 * 1024 * 1024, // 3MB警告阈值
-  emergencyBackupKey: 'trade_logs_emergency_backup',
   compressionEnabled: false // 暂不启用压缩，避免复杂性
 };
 
@@ -41,17 +40,19 @@ const StorageSecurity = {
   },
   
   /**
-   * 创建紧急备份
+   * 创建紧急备份（追加模式：带时间戳键名，避免覆写旧备份）
    */
   createEmergencyBackup() {
     try {
+      const ts = new Date().toISOString().replace(/[:.]/g, '-');
+      const backupKey = 'emergency_backup_' + ts;
       const backup = {
         timestamp: new Date().toISOString(),
         data: JSON.parse(JSON.stringify(logs)), // 深拷贝
         version: 'emergency_backup_v1'
       };
-      localStorage.setItem(STORAGE_CONFIG.emergencyBackupKey, JSON.stringify(backup));
-      console.log('紧急备份已创建:', backup.timestamp);
+      localStorage.setItem(backupKey, JSON.stringify(backup));
+      console.log('紧急备份已创建:', backupKey);
       return true;
     } catch (error) {
       console.error('创建紧急备份失败:', error);
@@ -121,6 +122,19 @@ function _migrateTimes(logArr) {
 function migrateLogsToCurrentSchema(rows, fromVersion) {
   var changed = false;
   if (fromVersion < 1) changed = _migrateTimes(rows) || changed;
+  // v2 → v3: executionScore 0（旧写入值）→ null（未评分）
+  if (fromVersion < 3) {
+    var migrated = 0;
+    for (var mi = 0; mi < rows.length; mi++) {
+      var row = rows[mi];
+      if (row.closeType && row.executionScore === 0) {
+        row.executionScore = null;
+        changed = true;
+        migrated++;
+      }
+    }
+    if (migrated > 0) console.log('[storage] v2→v3 migration: ' + migrated + ' executionScore 0→null');
+  }
   if (fromVersion < 2 && window.Slippage && typeof window.Slippage.migrateLegacyLog === 'function') {
     for (var i = 0; i < rows.length; i++) {
       changed = window.Slippage.migrateLegacyLog(rows[i]) || changed;
@@ -417,10 +431,10 @@ function estimateLocalStorageCapacity() {
             if (k) used += k.length + (v ? v.length : 0);
           }
           remaining = est.quota - used;
-        } catch(e) {}
+        } catch(e) { console.error('[storage-est]', e); }
         return Math.max(0, remaining);
       }
-    } catch(e) {}
+    } catch(e) { console.error('[storage-est-fallback]', e); }
   }
 
   // Fallback: 探测方式写入测试数据来估算

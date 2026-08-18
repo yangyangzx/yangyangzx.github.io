@@ -63,6 +63,20 @@ function switchView(viewName) {
     window._activeFilters = {};
   }
 
+  // 切出开仓计划时清理分批建仓残留状态，防止切换回来时历史数据干扰新计算
+  if (viewName !== 'planner') {
+    _splitMode = false;
+    _splitBatches = [];
+  }
+
+  // 切出仪表盘时销毁 equity 图表实例，防止重复创建累积内存
+  if (viewName !== 'dashboard') {
+    if (window._dashEquityChart && typeof window._dashEquityChart.destroy === 'function') {
+      window._dashEquityChart.destroy();
+      window._dashEquityChart = null;
+    }
+  }
+
   // 视图切换后的钩子：重新渲染该视图内的动态内容
   onViewActivated(viewName);
 }

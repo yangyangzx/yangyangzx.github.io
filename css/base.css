@@ -31,6 +31,27 @@ body {
   min-width: 0;
 }
 
+/* :focus-visible — gate 26 · 全局覆盖，确保所有交互元素有可见焦点 */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* :disabled — gate 26 · 三通道信号：opacity + cursor + pointer-events */
+input:disabled,
+select:disabled,
+textarea:disabled,
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+
 ::selection {
   background: var(--color-primary-bg);
   color: var(--color-primary-light);
@@ -854,7 +875,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  border-left: 5px solid var(--color-primary);
+  border-top: 3px solid var(--color-primary);
 }
 
 .result-box h3 {

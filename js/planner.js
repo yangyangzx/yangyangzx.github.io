@@ -4,8 +4,8 @@
  * 读取当前入场价、止损价、方向，根据期望盈亏比反推目标价
  */
 function calcReverseTP() {
-  if (window._lastCalcDirty) { showToast('计算器参数已变更，请先点击「计算仓位」更新结果', 'warn'); return; }
-  var calc = window._lastCalc;
+  if (getCalcDirty()) { showToast('计算器参数已变更，请先点击「计算仓位」更新结果', 'warn'); return; }
+  var calc = getCalc();
   var entryPrice, stopLoss, direction;
 
   if (calc && calc.entryPrice && calc.stopLoss) {
@@ -68,8 +68,8 @@ function calcReverseTP() {
  * 读取入场价、目标价、方向，根据期望盈亏比反推止损价
  */
 function calcReverseSL() {
-  if (window._lastCalcDirty) { showToast('计算器参数已变更，请先点击「计算仓位」更新结果', 'warn'); return; }
-  var calc = window._lastCalc;
+  if (getCalcDirty()) { showToast('计算器参数已变更，请先点击「计算仓位」更新结果', 'warn'); return; }
+  var calc = getCalc();
   var entryPrice, direction;
 
   if (calc && calc.entryPrice) {
@@ -139,8 +139,8 @@ function calcReverseSL() {
  * 如果用户已手动编辑过某个 TP 价格，则跳过该价位
  */
 function autoCalcMultiTP() {
-  if (window._lastCalcDirty) { showToast('计算器参数已变更，请先点击「计算仓位」更新结果', 'warn'); return; }
-  var calc = window._lastCalc;
+  if (getCalcDirty()) { showToast('计算器参数已变更，请先点击「计算仓位」更新结果', 'warn'); return; }
+  var calc = getCalc();
   var entryPrice, stopLoss, direction, stopDistance;
 
   if (calc && calc.entryPrice && calc.stopLoss) {
@@ -195,7 +195,7 @@ function autoCalcMultiTP() {
  * 更新多止盈位各段的盈亏比显示
  */
 function updateMultiTP() {
-  var calc = window._lastCalc;
+  var calc = getCalc();
   var entryPrice, stopLoss, direction, stopDistance;
 
   if (calc && calc.entryPrice && calc.stopLoss) {
@@ -363,8 +363,8 @@ function updateChecklist() {
     void cc.offsetWidth;
     cc.classList.add('checklist-anim');
   }
-  if (window._lastCalcDirty) { showToast('计算器参数已变更，请先点击「计算仓位」更新结果', 'warn'); return; }
-  var calc = window._lastCalc;
+  if (getCalcDirty()) { showToast('计算器参数已变更，请先点击「计算仓位」更新结果', 'warn'); return; }
+  var calc = getCalc();
 
   // 获取设置（包含可配的止损比例和日亏损上限等）
   var settings = typeof loadSettings === 'function' ? loadSettings() : {};
@@ -624,7 +624,7 @@ function updateCheckItem(itemId, checkFn) {
     if (_levEl && _levSettings && _levSettings.defaultLeverage != null) {
       _levEl.value = _levSettings.defaultLeverage;
     }
-  } catch(e) {}
+  } catch(e) { console.error('[planner]', e); }
 })();
 
 // ===== 方向切换 → 订单类型 label 联动 =====
@@ -659,5 +659,5 @@ function updateOrderTypeLabels() {
       // 初始同步
       updateOrderTypeLabels();
     }
-  } catch(e) {}
+  } catch(e) { console.error('[planner]', e); }
 })();

@@ -340,7 +340,7 @@ function _renderLiqWarn() {
     try {
       var raw = localStorage.getItem('trade_settings_v1');
       if (raw) { var s = JSON.parse(raw); if (s.mmr != null) mmr = s.mmr / 100; }
-    } catch(e) {}
+    } catch(e) { console.error('[dashboard]', e); }
     var liqPrice = window.utils.calcLiquidationPrice(entry, dir, lev, mmr);
     if (isNaN(liqPrice) || liqPrice <= 0) continue; // 强平价无效跳过
 

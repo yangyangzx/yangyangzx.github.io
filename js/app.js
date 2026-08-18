@@ -75,7 +75,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   var mindsetStarsEl = document.getElementById('mindsetStars');
   if (mindsetStarsEl) mindsetStarsEl.addEventListener('click', function(e) {
-    if (e.target.classList.contains('star')) { renderMindsetStars(parseInt(e.target.dataset.val)); }
+    if (e.target.classList.contains('star')) { renderMindsetStars(parseInt(e.target.dataset.val, 10)); }
   });
 
   var strategyFrameworkEl = document.getElementById('strategyFramework');
@@ -261,7 +261,7 @@ window.debugAnalysisData = function() {
       reg.waiting.postMessage({ type: 'SKIP_WAITING' });
       window.location.reload();
     }
-  }).catch(function() {});
+  }).catch(function(err) { console.warn('[SW] update check failed:', err); });
 
   navigator.serviceWorker.addEventListener('controllerchange', function() {
     // SW 控制器变更，页面已自动更新

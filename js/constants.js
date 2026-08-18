@@ -1,5 +1,5 @@
 const STORAGE_KEY = 'trade_logs_plus_v4';
-const SCHEMA_VERSION = 2;       // v2: 双侧 tick 滑点快照迁移
+const SCHEMA_VERSION = 3;       // v3: executionScore 0→null（未评分）迁移
 var logs = [];
 // ── 全局状态变量 ──
 var openClosePanelIdx = -1;         // 当前打开的平仓面板索引（-1 表示无）
@@ -18,7 +18,7 @@ function createClosePanelKeyDownHandler() {
     else if (e.key === 'Escape') { e.preventDefault(); openClosePanelIdx = -1; renderLogs(); }
   };
 }
-var _autoBackupIndex = (function() { try { const v = localStorage.getItem('trade_auto_backup_index'); return v !== null ? parseInt(v) : 0; } catch(e) { return 0; } })();
+var _autoBackupIndex = (function() { try { const v = localStorage.getItem('trade_auto_backup_index'); return v !== null ? parseInt(v, 10) : 0; } catch(e) { return 0; } })();
 var _activeFilters = { direction: '', symbol: '', strategy: '', status: '', pnl: '', time: '' };
 // NOTE: SCHEMA_VERSION also referenced in storage.js - keep consistent
 

@@ -129,12 +129,12 @@ function renderEquityChart(closed) {
   if (sortedClosed.length > 0 && sortedClosed[0].capital != null && !isNaN(sortedClosed[0].capital) && sortedClosed[0].capital > 0) {
     capital = sortedClosed[0].capital;
   } else {
-    try { var _abs = loadSettings(); if (_abs.accountBalance > 0) capital = _abs.accountBalance; } catch(e) {}
+    try { var _abs = loadSettings(); if (_abs.accountBalance > 0) capital = _abs.accountBalance; } catch(e) { console.error('[analytics]', e); }
   }
 
   // 检查设置中的 accountBalance 是否与推算值差异较大
   var _abSettings = null;
-  try { _abSettings = loadSettings(); } catch(e) {}
+  try { _abSettings = loadSettings(); } catch(e) { console.error('[analytics]', e); }
   var _noteEl = document.getElementById('equityBalanceNote');
   if (_abSettings && _abSettings.accountBalance > 0) {
     var _diff = Math.abs(_abSettings.accountBalance - capital);

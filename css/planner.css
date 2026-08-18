@@ -166,3 +166,11 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Gate 26: focus-visible — keyboard navigation */
+input:focus-visible,
+select:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}

@@ -28,7 +28,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 14px;
+  padding: 8px 14px;
   min-height: 44px;
 }
 
@@ -135,7 +135,7 @@
 }
 
 .settings-save-bar .btn {
-  padding: 10px 32px;
+  padding: 8px 32px;
   font-size: 14px;
   font-weight: var(--font-weight-semibold);
 }
@@ -161,7 +161,7 @@
               transform var(--dur-fast) var(--ease-out);
   /* 44px 最小触摸目标 */
   min-height: 44px;
-  padding: 10px 20px;
+  padding: 8px 20px;
 }
 
 .btn-outline:hover {
@@ -229,7 +229,7 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 10px 14px;
+  padding: 8px 14px;
   min-height: auto;
 }
 

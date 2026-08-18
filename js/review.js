@@ -423,13 +423,21 @@ function renderEmotionAnalysis(closed) {
 function renderExecutionQuality(closed) {
   var canvas = document.getElementById('chartExecutionQuality');
   var tableEl = document.getElementById('executionTableWrap');
-  if (!canvas || !tableEl) return;
+  if (!canvas || !tableEl) { console.warn('[review] executionQuality: canvas or table missing'); return; }
+
+  // Diagnostic: trace why chart may be empty
+  var withExec = closed.filter(function(l) { return l.executionScore != null; });
+  var hasScore13 = closed.filter(function(l) { return l.executionScore >= 1 && l.executionScore <= 3; });
+  console.log('[review] executionQuality: closed=' + closed.length +
+    ' withScore=' + withExec.length +
+    ' scores13=' + hasScore13.length +
+    ' rawScores=' + JSON.stringify(closed.map(function(l){ return l.executionScore; })));
 
   // 按执行分分组（0=未评分，1-3=已评分）
   var execStats = {};
   for (var i = 0; i < closed.length; i++) {
     var es = closed[i].executionScore;
-    if (es == null || es < 0 || es > 3) continue;
+    if (es == null || es === 0 || es > 3) continue;  // 0 = 未评分，跳过
     var pnl = safeParseNum(closed[i].pnlAmount);
     if (pnl == null) continue;
     var rm = safeParseNum(closed[i].rMultiple);
@@ -450,7 +458,11 @@ function renderExecutionQuality(closed) {
     var withExec = closed.filter(function(l) { return l.executionScore != null; }).length;
     var msg = '暂无执行评分数据';
     if (totalClosed > 0) {
-      msg += '（共 ' + totalClosed + ' 笔已平仓，其中 ' + withExec + ' 笔有执行评分）';
+      msg += '（共 ' + totalClosed + ' 笔已平仓，其中 ' + withExec.length + ' 笔有执行评分[1-3]）';
+      // Show migration hint if needed
+      if (withExec.length === 0) {
+        msg += ' · 提示：如历史评分显示为0分，请在系统设置中点击「立即备份」后手动清除浏览器数据并重新加载';
+      }
     } else {
       msg += '，请先完成至少一笔交易并在平仓时记录执行分';
     }
@@ -461,13 +473,21 @@ function renderExecutionQuality(closed) {
 
   // 整体基准
   var overallWins = 0, overallLosses = 0, overallPnl = 0, overallRr = 0, overallRrCount = 0;
-  for (var k = 0; k < keys.length; k++) {
-    var s = execStats[k];
+  for (var ki = 0; ki < keys.length; ki++) {
+    var s = execStats[keys[ki]];
     overallWins += s.wins;
     overallLosses += s.losses;
     overallPnl += s.totalPnl;
     overallRr += s.rrSum;
     overallRrCount += s.rrCount;
+  }
+  // Safety: verify all execStats entries exist before proceeding
+  for (var gi = 0; gi < keys.length; gi++) {
+    if (!execStats[keys[gi]]) {
+      console.error('[review] executionQuality: missing execStats[' + keys[gi] + ']');
+      _setReviewEmpty(canvas, '数据异常：执行评分统计丢失');
+      return;
+    }
   }
   var overallDecided = overallWins + overallLosses;
   var overallWinRate = overallDecided > 0 ? (overallWins / overallDecided * 100) : 0;
@@ -479,9 +499,9 @@ function renderExecutionQuality(closed) {
 
   var cc = utils.getChartColors();
   var labels = [], winRateData = [], avgPnlData = [], avgRrData = [];
-  for (var k = 0; k < keys.length; k++) {
-    var s = execStats[k];
-    labels.push('执行' + k + '分');
+  for (var ki = 0; ki < keys.length; ki++) {
+    var s = execStats[keys[ki]];
+    labels.push('执行' + keys[ki] + '分');
     var wr = (s.wins + s.losses) > 0 ? (s.wins / (s.wins + s.losses) * 100) : 0;
     var avgPnl = s.count > 0 ? (s.totalPnl / s.count) : 0;
     var avgRr = s.rrCount > 0 ? (s.rrSum / s.rrCount) : 0;
@@ -522,8 +542,8 @@ function renderExecutionQuality(closed) {
   tHtml += '<table class="analytics-table"><thead><tr>' +
     '<th>执行分</th><th>笔数</th><th>盈利/亏损</th><th>胜率</th><th>平均盈亏</th><th>平均R</th><th>vs整体</th></tr></thead><tbody>';
 
-  for (var k = 0; k < keys.length; k++) {
-    var s = execStats[k];
+  for (var ki = 0; ki < keys.length; ki++) {
+    var s = execStats[keys[ki]];
     var avgPnl = s.count > 0 ? (s.totalPnl / s.count) : 0;
     var wr = (s.wins + s.losses) > 0 ? (s.wins / (s.wins + s.losses) * 100) : 0;
     var avgRr = s.rrCount > 0 ? (s.rrSum / s.rrCount) : 0;
@@ -531,9 +551,10 @@ function renderExecutionQuality(closed) {
 
     var wrClass = wrDev > 0 ? 'col-pnl-pos' : (wrDev < 0 ? 'col-pnl-neg' : '');
     var pnlClass = avgPnl >= 0 ? 'col-pnl-pos' : 'col-pnl-neg';
+    var scoreLabel = keys[ki];
 
     tHtml += '<tr>' +
-      '<td style="text-align:center;font-weight:600;">' + k + ' <span style="font-size:11px;color:var(--color-text-muted);">/3</span></td>' +
+      '<td style="text-align:center;font-weight:600;">' + scoreLabel + ' <span style="font-size:11px;color:var(--color-text-muted);">/3</span></td>' +
       '<td class="col-num">' + s.count + '</td>' +
       '<td class="col-num">' + s.wins + '/' + s.losses + '</td>' +
       '<td class="col-num ' + wrClass + '">' + wr.toFixed(1) + '%</td>' +

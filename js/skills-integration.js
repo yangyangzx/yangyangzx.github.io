@@ -178,7 +178,7 @@ function checkSymbolConcentration(symbol, positionSize, leverage, capital, openP
   try {
     var settings = loadSettings();
     maxPct = settings.singleSymbolMaxPct || 10;
-  } catch(e) {}
+  } catch(e) { console.error('[concentration]', e); }
 
   // 集中度衡量的是“当前未平仓风险敞口”；已平仓交易不应持续占用保证金额度。
   var usedMargin = 0;
@@ -385,7 +385,7 @@ function autoFillKellyFromLogs() {
     }
     tipText += '；修改后手动覆盖';
     if (tipEl) tipEl.textContent = tipText;
-  } catch(e) {}
+  } catch(e) { console.error('[skills]', e); }
 }
 
 // ==================== 凯利自动填充 ====================
@@ -402,5 +402,5 @@ function autoFillKellyFromLogs() {
       };
     }
     // 注意：首次加载时的自动填充由 navigation.js 中的 loadLogs 后调用
-  } catch(e) {}
+  } catch(e) { console.error('[skills-init]', e); }
 })();

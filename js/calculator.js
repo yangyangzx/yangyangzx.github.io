@@ -1,5 +1,36 @@
 // ==================== 核心计算 ====================
-var _calculating = false;  // 防止 calculate() 重入及计算期间的脏事件污染
+var _calculating = false;
+
+// 计算结束清理：确保 _calculating 始终被复位
+function _calcCleanup() {
+  _calculating = false;
+}  // 防止 calculate() 重入及计算期间的脏事件污染
+
+// ==================== _lastCalc 私有化访问器 ====================
+// 内部状态，外部通过 getCalc / setCalcDirty 访问，避免直接篡改风控 Gate
+var _lastCalcStore = null;   // { symbol, entryPrice, ..., checklistResults }
+var _lastCalcDirtyStore = false;
+var _lastCalcBlockerStore = null;
+
+function getCalc()           { return _lastCalcStore; }
+function setCalc(v)          { _lastCalcStore = v; }
+function getCalcDirty()      { return _lastCalcDirtyStore; }
+function setCalcDirty(v)     { _lastCalcDirtyStore = !!v; }
+function getCalcBlocker()    { return _lastCalcBlockerStore; }
+function setCalcBlocker(v)   { _lastCalcBlockerStore = v; }
+
+// 保留 window 上的向后兼容引用（供外部模块直接读取），但写入必须走 setCalcDirty
+// 注意：window._lastCalcDirty 只读禁止外部赋值为 false 以绕过 Gate
+Object.defineProperty(window, '_lastCalcDirty', {
+  get: function() { return _lastCalcDirtyStore; },
+  set: function(v) {
+    // 仅允许设为 true（标记脏数据）；设为 false 是重置操作，仅内部函数可执行
+    if (v === true) { _lastCalcDirtyStore = true; }
+    else { console.warn('[_lastCalcDirty] 禁止外部将 dirty 标记重置为 false，请使用 setCalcDirty()'); }
+  },
+  enumerable: true,
+  configurable: false
+});
 
 function readPlanSlippage(symbol, orderType) {
   var modeEl = document.getElementById('slippageMode');
@@ -57,21 +88,22 @@ function calculate() {
   const triggerContent = document.getElementById('triggerContent');
   const warnD = ui.warning;
   CalculationUI.resetForCalculation(ui);
-  window._lastCalc = null;
-  window._lastCalcBlocker = null;
-  window._lastCalcDirty = false;
+  setCalc(null);
+  setCalcBlocker(null);
+  setCalcDirty(false);
   _calculating = true;
   const symbolEl = document.getElementById('symbol');
   const symbol = symbolEl ? symbolEl.value.trim() || 'N/A' : 'N/A';
   const entryPrice = getActiveEntryPrice();
   if (isNaN(entryPrice)) {
-    window._lastCalcDirty = true;
+    setCalcDirty(true);
     CalculationUI.renderValidationError(ui, '无效入场价', '请输入有效的入场价格。');
+    _calcCleanup();
     return null;
   }
   const capitalEl = document.getElementById('capital');
   const capital = capitalEl ? parseFloat(capitalEl.value) : 0;
-  if (!capital || capital <= 0) { showCalcError('无效本金', '请输入有效的本金金额'); return; }
+  if (!capital || capital <= 0) { showCalcError('无效本金', '请输入有效的本金金额'); _calcCleanup(); return; }
   const leverageEl = document.getElementById('leverage');
   const leverage = leverageEl ? Math.max(0, parseFloat(leverageEl.value) || 0) : 0;
   const directionEl = document.getElementById('direction');
@@ -83,7 +115,7 @@ function calculate() {
   const stopLossEl = document.getElementById('stopLoss');
   let stopLoss = stopLossEl ? parseFloat(stopLossEl.value) : NaN;
   const lossStreakEl = document.getElementById('lossStreak');
-  const lossStreak = lossStreakEl ? Math.max(0, parseInt(lossStreakEl.value) || 0) : 0;
+  const lossStreak = lossStreakEl ? Math.max(0, parseInt(lossStreakEl.value, 10) || 0) : 0;
   const targetPriceEl = document.getElementById('targetPrice');
   const targetPrice = targetPriceEl ? parseFloat(targetPriceEl.value) : NaN;
 
@@ -134,6 +166,7 @@ function calculate() {
   // ===== P0-01：日亏损硬止损检查 =====
   var dailyLossCheck = checkDailyLossLimit();
   if (dailyLossCheck.blocked) {
+    _calcCleanup();
     return renderHardBlock(
       'daily-loss-limit',
       '日亏损熔断',
@@ -144,6 +177,7 @@ function calculate() {
   // ===== P0-01：交易频率检查 =====
   var freqCheck = checkDailyTradeFrequency();
   if (freqCheck.blocked) {
+    _calcCleanup();
     return renderHardBlock(
       'daily-trade-limit',
       '交易频率熔断',
@@ -155,6 +189,7 @@ function calculate() {
   // ===== P0-01：组合热量检查 =====
   var heatCheck = calcPortfolioHeat();
   if (heatCheck.blocked) {
+    _calcCleanup();
     return renderHardBlock(
       'portfolio-heat-limit',
       '组合热量超限',
@@ -166,16 +201,16 @@ function calculate() {
   if (ui.riskHint) ui.riskHint.textContent = '';
 
   function showCalcError(title, msg) {
-    window._lastCalc = null;
-    window._lastCalcDirty = true;
+    setCalc(null);
+    setCalcDirty(true);
     CalculationUI.renderValidationError(ui, title, msg || '请修正输入后重新计算。');
   }
 
   function renderHardBlock(code, title, detail, raw) {
-    window._lastCalc = null;
-    window._lastCalcDirty = true;
-    window._lastCalcBlocker = { code: code, title: title, detail: detail, raw: raw || null, checkedAt: new Date().toISOString() };
-    CalculationUI.renderBlocker(ui, window._lastCalcBlocker);
+    setCalc(null);
+    setCalcDirty(true);
+    setCalcBlocker({ code: code, title: title, detail: detail, raw: raw || null, checkedAt: new Date().toISOString() });
+    CalculationUI.renderBlocker(ui, getCalcBlocker());
     showToast(detail, 'error');
     return null;
   }
@@ -184,6 +219,7 @@ function calculate() {
   const streakResult = _getTodayLossStreak();
   const currentStreak = streakResult.streak;
   if (currentStreak >= 3) {
+    _calcCleanup();
     return renderHardBlock(
       'loss-streak-limit',
       '连续亏损熔断',
@@ -192,9 +228,9 @@ function calculate() {
     );
   }
 
-  if (entryPrice <= 0) { showCalcError('无效入场价', '入场价必须大于 0'); return; }
-  if (isNaN(capital) || capital <= 0) { showCalcError('无效本金', '请输入本金'); return; }
-  if (isNaN(stopLoss) || stopLoss <= 0) { showCalcError('无效止损价', '请输入有效止损价格'); return; }
+  if (entryPrice <= 0) { showCalcError('无效入场价', '入场价必须大于 0'); _calcCleanup(); return; }
+  if (isNaN(capital) || capital <= 0) { showCalcError('无效本金', '请输入本金'); _calcCleanup(); return; }
+  if (isNaN(stopLoss) || stopLoss <= 0) { showCalcError('无效止损价', '请输入有效止损价格'); _calcCleanup(); return; }
 
   let riskAmount=0, riskPercent=0;
   const rawRisk = document.getElementById('riskInput').value.trim();
@@ -231,7 +267,7 @@ function calculate() {
     var kellyAvgWin = parseFloat(document.getElementById('kellyAvgWin')?.value);
     var kellyAvgLoss = parseFloat(document.getElementById('kellyAvgLoss')?.value);
     if (!isNaN(kellyWinRate) && !isNaN(kellyAvgWin) && !isNaN(kellyAvgLoss) && kellyAvgLoss > 0) {
-      var kellyLev = parseInt(document.getElementById('leverage').value) || 1;
+      var kellyLev = parseInt(document.getElementById('leverage').value, 10) || 1;
       var kellyResult = calcKelly(kellyWinRate, kellyAvgWin, kellyAvgLoss, capital, true, kellyLev);
       if (kellyResult && kellyResult.halfKellyPct > 0) {
         var kellyRisk = capital * kellyResult.halfKellyPct;
@@ -262,7 +298,7 @@ function calculate() {
         kellyHTML = '<span class="kelly-result-text" style="color:var(--color-warning);"><i class="fas fa-exclamation-triangle"></i> 策略期望值为负，不建议开仓（期望 ' + kellyResult.expectancy.toFixed(2) + ' USDT/笔）</span>';
       }
     }
-  } catch(e) {}
+  } catch(e) { console.error('[kelly]', e); }
 
   // BUG#2: 分批独立止损时，用各批止损距离的加权平均替代主止损计算 stopDistance
   let stopDistance=0, positionSize=0, valid=true, err='', rw='';
@@ -326,11 +362,15 @@ function calculate() {
   }
   if (!valid) { showCalcError(err, ''); return; }
 
-  // 零止损距离警告（止损距离 < 入场价 0.1%）
+  // 零止损距离硬阻断（止损距离 < 入场价 0.1%）：仓位会被放大到危险值，不允许继续计算
   if (stopDistance < effectiveEntryPrice * 0.001) {
-    showCalcError(
-      '止损距离极近（' + (stopDistance / effectiveEntryPrice * 100).toFixed(3) + '%），仓位会被放大到极大值。建议增大止损距离或降低风险比例后再计算。',
-      ''  // 不阻止计算
+    var _sdPct = (stopDistance / effectiveEntryPrice * 100).toFixed(3);
+    _calcCleanup();
+    return renderHardBlock(
+      'stop-distance-too-tight',
+      '止损距离过近',
+      '止损距离仅 ' + _sdPct + '%（入场价 × 0.1%），仓位会被放大到不可控规模。请增大止损距离或降低风险比例后重新计算。',
+      { stopDistance: stopDistance, entryPrice: effectiveEntryPrice, stopPct: _sdPct }
     );
   }
 
@@ -402,6 +442,7 @@ function calculate() {
 
   // 额度已耗尽时不能继续构造零数量滑点/费用模型，必须作为硬阻断结束计算。
   if (!Number.isFinite(positionSize) || positionSize <= 0) {
+    _calcCleanup();
     return renderHardBlock(
       'available-margin-limit',
       '可用保证金额度不足',
@@ -425,6 +466,7 @@ function calculate() {
     if (isInvalid) {
       cappedByLiquidation = true;
       liqMsg = '止损 ' + stopLoss.toFixed(5) + ' 在强平价 ' + liquidationPrice.toFixed(5) + ' ' + (direction === 'long' ? '之下' : '之上') + '，价格到达止损前仓位将被强制平仓。请收紧止损距离或降低杠杆后重新计算。';
+      _calcCleanup();
       return renderHardBlock('liquidation-stop-conflict', '止损越过强平价', liqMsg, {
         liquidationPrice: liquidationPrice,
         stopLoss: stopLoss,
@@ -449,6 +491,7 @@ function calculate() {
   if (!concentrationCheck.pass) {
     var allowedFinalPos = concentrationCheck.allowedNewMargin * effLev;
     if (allowedFinalPos <= 0) {
+      _calcCleanup();
       return renderHardBlock('symbol-concentration-limit', '品种集中度超限', concentrationCheck.warning || '该品种已无可用集中度额度，不能建立新计划。', concentrationCheck);
     }
     if (allowedFinalPos < finalPosBeforeMindset) {
@@ -464,9 +507,10 @@ function calculate() {
   }
 
   // ===== P0-01：心态评分影响仓位 =====
-  const mindsetScore = parseInt(document.getElementById('mindsetScore').value) || 3;
+  const mindsetScore = parseInt(document.getElementById('mindsetScore').value, 10) || 3;
   var mindsetAdjust = getMindsetAdjustment(mindsetScore);
   if (mindsetAdjust.blocked) {
+    _calcCleanup();
     return renderHardBlock('mindset-limit', '心态评分不足', mindsetAdjust.message || '当前心态评分不符合开仓规则。', mindsetAdjust);
   }
   if (mindsetAdjust.adjustment < 1) {
@@ -706,7 +750,7 @@ function calculate() {
   }
 
   const planningSlippage = targetSlippage || stopSlippage;
-  window._lastCalc = {
+  setCalc({
     symbol: symbol,
     entryPrice: entryPrice,
     effectiveEntryPrice: effectiveEntryPrice,
@@ -745,11 +789,11 @@ function calculate() {
     splitMode: _splitMode,
     weightedStopDistance: useWeightedStop ? stopDistance : null,
     atrStopMode: atrStopMode,
-    mindsetScore: parseInt(document.getElementById('mindsetScore').value) || 3,
+    mindsetScore: parseInt(document.getElementById('mindsetScore').value, 10) || 3,
     kellyData: kellyData,
     // 暴露分批明细供 saveSplit 使用（独立止损需逐笔保存）
     _splitBatches: _splitMode ? _splitBatches.slice() : null
-  };
+  });
   CalculationUI.renderCalculated(ui);
   // P0-5: 计算结果卡片入场动效
   var _ra = document.getElementById('resultArea');
@@ -821,17 +865,17 @@ function saveTradeAction(idx) {
 window.saveTradeAction = saveTradeAction;
 
 function assertSavableCalculation() {
-  const calc = window._lastCalc;
+  const calc = getCalc();
   if (!calc || !calc.positionSize || calc.positionSize <= 0) {
     return { ok: false, message: '请先点击「计算仓位」生成有效数据。' };
   }
-  if (window._lastCalcDirty) {
+  if (getCalcDirty()) {
     return { ok: false, message: '计划参数已变更，请重新计算后再保存。' };
   }
   if (calc.stopLossAutoGenerated) {
     return { ok: false, message: '当前止损为系统临时测算值，请确认或修改止损后重新计算再保存。' };
   }
-  if (window._lastCalcBlocker) {
+  if (getCalcBlocker()) {
     return { ok: false, message: '当前计划存在硬风控阻断，不能保存。' };
   }
   // 软检查：最多允许 1 个 fail；可执行项 < 2 时跳过通过率检查
@@ -887,7 +931,7 @@ function saveLog() {
     groupId: null,
     groupLabel: null,
     reason: calc.reason || getReason(),
-    mindsetScore: calc.mindsetScore != null ? calc.mindsetScore : (parseInt(document.getElementById('mindsetScore').value) || 3),
+    mindsetScore: calc.mindsetScore != null ? calc.mindsetScore : (parseInt(document.getElementById('mindsetScore').value, 10) || 3),
     strategyFramework: document.getElementById('strategyFramework').value,
     strategyPattern: document.getElementById('strategyPattern').value,
     signals: calc.signals,
@@ -918,7 +962,7 @@ function saveLog() {
   }
   openClosePanelIdx = -1;
   actionPanelIdx = -1;
-  window._lastCalcDirty = false;
+  setCalcDirty(false);
   showToast('日志已保存', 'success');
   return true;
 }
@@ -947,7 +991,7 @@ function toggleSplitMode() {
     document.getElementById('entryPrice').value = '';
     document.getElementById('entryPrice').readOnly = false;
     // 分批模式关闭后计算上下文改变，标记脏状态以强制用户重新计算
-    window._lastCalcDirty = true;
+    setCalcDirty(true);
     if (window.CalculationUI) {
       CalculationUI.renderDirty(CalculationUI.getResultUI());
     }
@@ -1180,7 +1224,7 @@ function resetForm() {
   try {
     var _symList = _settings.customSymbols;
     if (_symList && _symList.length > 0 && _symList[0].symbol) _symDefault = _symList[0].symbol;
-  } catch(e) {}
+  } catch(e) { console.error('[resetForm]', e); }
   document.getElementById('symbol').value = _symDefault;
   document.getElementById('entryPrice').value = '';
   // 从设置读取默认本金，否则用 1000
@@ -1249,9 +1293,9 @@ if (_splitMode) toggleSplitMode();
   if (targetDistD) targetDistD.style.display = 'none';
   const triggerRow = document.getElementById('triggerRow');
   if (triggerRow) triggerRow.style.display = 'none';
-  window._lastCalc = null;
-  window._lastCalcBlocker = null;
-  window._lastCalcDirty = false;
+  setCalc(null);
+  setCalcBlocker(null);
+  setCalcDirty(false);
   _calculating = false;
   // 同步重置按钮 UI 状态，防止残留脏态阻止保存按钮重新启用
   if (window.CalculationUI) {
@@ -1281,8 +1325,8 @@ function toggleFormSection(sectionId) {
 (function() {
   function markCalculationDirty() {
     if (_calculating) return;  // 计算进行中，忽略脏事件，避免竞态污染状态
-    window._lastCalcDirty = true;
-    if (window._lastCalc && window.CalculationUI) {
+    setCalcDirty(true);
+    if (getCalc() && window.CalculationUI) {
       window.CalculationUI.renderDirty(window.CalculationUI.getResultUI());
     }
   }
@@ -1354,7 +1398,7 @@ function syncSettingsToForm() {
  * 应用半凯利风险比例到开仓计划
  * 
  * 功能：
- * 1. 读取已计算的凯利数据（window._lastCalc.kellyData）
+ * 1. 读取已计算的凯利数据（getCalc().kellyData）
  * 2. 将半凯利比例四舍五入到最近的 0.5% 步进
  * 3. 自动计算并填入止损价（优先 ATR，其次凯利平均亏损）
  * 4. 触发重新计算仓位
@@ -1366,11 +1410,11 @@ function syncSettingsToForm() {
  * applyKellyRisk();
  */
 function applyKellyRisk() {
-  if (!window._lastCalc || !window._lastCalc.kellyData) {
+  if (!getCalc() || !getCalc().kellyData) {
     showToast('请先填写凯利数据并点击计算', 'warn');
     return;
   }
-  var kellyPct = window._lastCalc.kellyData.halfKellyPct;
+  var kellyPct = getCalc().kellyData.halfKellyPct;
   if (!kellyPct || kellyPct <= 0) {
     showToast('凯利计算结果为 0，无法应用', 'warn');
     return;
@@ -1378,7 +1422,7 @@ function applyKellyRisk() {
   var wasCapped = kellyPct > 0.10; // 实际上限为 10%，kellyPct > 0.10 表示被 Math.min(10, ...) 截断
   
   // 杠杆感知：调整凯利风险比例
-  var leverage = parseInt(document.getElementById('leverage').value) || 1;
+  var leverage = parseInt(document.getElementById('leverage').value, 10) || 1;
   var effectiveRisk = kellyPct * leverage;
   if (effectiveRisk > 0.10) {
     // 有效风险超过 10%，降低凯利建议
@@ -1401,7 +1445,7 @@ function applyKellyRisk() {
   var direction = document.getElementById('direction').value;
   var stopLossEl = document.getElementById('stopLoss');
   if (!isNaN(entryPrice) && entryPrice > 0 && stopLossEl && direction) {
-    var calc = window._lastCalc;
+    var calc = getCalc();
     var stopLoss = null;
 
     // 优先使用 ATR 止损（仅当 ATR 自动模式已启用）
@@ -1448,9 +1492,9 @@ function applyKellyRisk() {
   // =================================
 
   // 标记表单已变更，清除缓存
-  window._lastCalc = null;
-  window._lastCalcBlocker = null;
-  window._lastCalcDirty = true;
+  setCalc(null);
+  setCalcBlocker(null);
+  setCalcDirty(true);
   _calculating = false;
   // 自动重新计算
   if (typeof calculate === 'function') {
@@ -1507,7 +1551,7 @@ function toggleAutoATR() {
 function updateKellySidebar() {
   var card = document.getElementById('kellyCard');
   if (!card) return;
-  var data = window._lastCalc && window._lastCalc.kellyData;
+  var data = getCalc() && getCalc().kellyData;
   if (!data) {
     card.style.display = 'none';
     return;

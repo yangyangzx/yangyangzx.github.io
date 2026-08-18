@@ -222,7 +222,7 @@ function renderDrawdown(closedOverride) {
   if (closed.length > 0 && closed[0].capital != null && !isNaN(closed[0].capital) && closed[0].capital > 0) {
     capital = closed[0].capital;
   } else {
-    try { var _ddSettings = loadSettings(); if (_ddSettings.accountBalance > 0) capital = _ddSettings.accountBalance; } catch(e) {}
+    try { var _ddSettings = loadSettings(); if (_ddSettings.accountBalance > 0) capital = _ddSettings.accountBalance; } catch(e) { console.error('[risk]', e); }
   }
   var equity = capital;
   var peak = capital;
@@ -291,7 +291,7 @@ function renderLiqTable() {
   try {
     var raw = localStorage.getItem('trade_settings_v1');
     if (raw) { var s = JSON.parse(raw); if (s.mmr != null) mmr = s.mmr / 100; }
-  } catch(e) {}
+  } catch(e) { console.error('[risk]', e); }
 
   // 计算每笔强平价和安全距离（按聚合持仓）
   var rows = [];

@@ -194,7 +194,7 @@ function confirmClose(idx) {
   logs[idx].closeNote = closeNoteEl ? closeNoteEl.value.trim() : '';
   // Execution score
   const execChecks = document.getElementById('cpExecChecks_' + idx);
-  logs[idx].executionScore = execChecks ? execChecks.querySelectorAll('input[type="checkbox"]:checked').length : 0;
+  logs[idx].executionScore = execChecks ? execChecks.querySelectorAll('input[type="checkbox"]:checked').length || null : null;
   // MAE / MFE — 从极值价格计算百分比
   const lowEl = document.getElementById('cpLowPrice_' + idx);
   const highEl = document.getElementById('cpHighPrice_' + idx);
@@ -346,13 +346,13 @@ function updateBackupTime() {
       try {
         const t = JSON.parse(raw).time;
         if (!latestTime || t > latestTime) { latest = i; latestTime = t; }
-      } catch(e) {}
+      } catch(e) { console.error('[logs]', e); }
     }
   }
   // 兼容旧版单槽备份
   if (!latestTime) {
     const old = localStorage.getItem('trade_auto_backup');
-    if (old) { try { latestTime = JSON.parse(old).time; } catch(e) {} }
+    if (old) { try { latestTime = JSON.parse(old).time; } catch(e) { console.error('[logs-backup]', e); } }
   }
   const el = document.getElementById('lastBackupTime');
   if (el) el.textContent = latestTime ? ('上次备份: ' + latestTime) : '尚未备份';
