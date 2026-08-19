@@ -121,6 +121,50 @@ function _migrateTimes(logArr) {
 
 function migrateLogsToCurrentSchema(rows, fromVersion) {
   var changed = false;
+  // v3 → v4: entry reason 标准化，将旧字符串映射到 ENTRY_REASON_OPTIONS
+  if (fromVersion < 4 && typeof ENTRY_REASON_OPTIONS !== 'undefined') {
+    // 旧计算器选项 → 新标准选项的映射
+    var REASON_MAP = {
+      '突破': '趋势突破',
+      '回踩': '回调入场',
+      '形态': 'K线形态确认',
+      '趋势': '趋势突破',
+      '背离交易': '情绪反转',
+      '成交量异常': '订单块入场',
+      '新闻': null  // 无对应标准选项，保留原值
+    };
+    var migrated = 0;
+    for (var mi = 0; mi < rows.length; mi++) {
+      var row = rows[mi];
+      var r = row.reason;
+      if (r == null) continue;
+      // 如果是字符串，尝试映射
+      if (typeof r === 'string' && r !== '') {
+        var mapped = REASON_MAP[r];
+        if (mapped != null) {
+          row.reason = [mapped];
+          migrated++;
+        }
+        // mapped === null 时保留原字符串（如"新闻"等自定义值）
+      } else if (Array.isArray(r)) {
+        // 已经是数组，确保每个值都在标准选项中（含旧字符串映射）
+        var valid = [];
+        for (var ai = 0; ai < r.length; ai++) {
+          if (ENTRY_REASON_OPTIONS.indexOf(r[ai]) !== -1) {
+            valid.push(r[ai]);
+          } else {
+            // 尝试映射旧字符串到新标准选项
+            var mapped = REASON_MAP[r[ai]];
+            if (mapped != null) valid.push(mapped);
+          }
+        }
+        if (valid.length === 0 && r.length > 0) valid.push(r[0]); // fallback
+        row.reason = valid.length > 0 ? valid : null;
+      }
+    }
+    if (migrated > 0) console.log('[storage] v3→v4 migration: ' + migrated + ' reasons normalized');
+    changed = changed || migrated > 0;
+  }
   if (fromVersion < 1) changed = _migrateTimes(rows) || changed;
   // v2 → v3: executionScore 0（旧写入值）→ null（未评分）
   if (fromVersion < 3) {
@@ -152,6 +196,10 @@ function _safeRenderAfterStorageChange() {
   if (typeof renderLogs === 'function') renderLogs();
   if (typeof updateLastUpdate === 'function') updateLastUpdate();
   if (typeof populateFilterOptions === 'function') populateFilterOptions();
+  // 迁移后刷新复盘图表，避免显示旧数据
+  if (typeof destroyReviewCharts === 'function' && typeof renderReview === 'function') {
+    renderReview();
+  }
 }
 
 function loadLogs() {

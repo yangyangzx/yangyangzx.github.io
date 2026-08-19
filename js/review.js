@@ -7,7 +7,7 @@ var _reviewCharts = {};
  * 销毁复盘页面的所有图表实例
  */
 function destroyReviewCharts() {
-  var ids = ['chartLossReason', 'chartStrategyRank', 'chartOrderType', 'chartEmotion', 'chartExecutionQuality'];
+  var ids = ['chartLossReason', 'chartStrategyRank', 'chartOrderType', 'chartEmotion', 'chartExecutionQuality', 'chartEntryReason'];
   for (var i = 0; i < ids.length; i++) {
     if (_reviewCharts[ids[i]]) {
       _reviewCharts[ids[i]].destroy();
@@ -63,6 +63,8 @@ function renderReview() {
   renderOrderTypeChart(closed);
   renderEmotionAnalysis(closed);
   renderExecutionQuality(closed);
+  renderEntryReasonAnalysis(closed);
+  renderStrategyTips(closed);
 }
 
 // ==================== 卡片 1：亏损原因分布（环形图） ====================
@@ -566,4 +568,256 @@ function renderExecutionQuality(closed) {
   tHtml += '</tbody></table>';
   tHtml += '<p style="font-size:11px;color:var(--color-text-muted);margin-top:8px;">注：执行分越高表示执行越到位。vs整体表示该评分与整体基准的偏差。</p>';
   tableEl.innerHTML = tHtml;
+}
+
+// ==================== 卡片 6：入场原因胜率分析（柱状图） ====================
+
+function renderEntryReasonAnalysis(closed) {
+  var canvas = document.getElementById('chartEntryReason');
+  var tableEl = document.getElementById('entryReasonTableWrap');
+  if (!canvas) return;
+
+  if (!closed || closed.length === 0) {
+    _setReviewEmpty(canvas, '暂无交易数据');
+    if (tableEl) tableEl.innerHTML = '';
+    return;
+  }
+
+  // 按入场原因分组统计
+  var groups = {};
+  for (var i = 0; i < closed.length; i++) {
+    var reasons = closed[i].reason;
+    var pnl = safeParseNum(closed[i].pnlAmount);
+    if (pnl == null || !isFinite(pnl)) continue;
+
+    if (Array.isArray(reasons) && reasons.length > 0) {
+      for (var r = 0; r < reasons.length; r++) {
+        var key = reasons[r];
+        if (!groups[key]) groups[key] = { total: 0, wins: 0, losses: 0, pnlTotal: 0 };
+        groups[key].total++;
+        groups[key].pnlTotal += pnl;
+        if (pnl > 0) groups[key].wins++;
+        else if (pnl < 0) groups[key].losses++;
+      }
+    } else if (typeof reasons === 'string' && reasons !== '') {
+      // 兼容旧数据：字符串形式（迁移前的计算器数据）
+      if (!groups[reasons]) groups[reasons] = { total: 0, wins: 0, losses: 0, pnlTotal: 0 };
+      groups[reasons].total++;
+      groups[reasons].pnlTotal += pnl;
+      if (pnl > 0) groups[reasons].wins++;
+      else if (pnl < 0) groups[reasons].losses++;
+    } else {
+      var undefKey = '未标记';
+      if (!groups[undefKey]) groups[undefKey] = { total: 0, wins: 0, losses: 0, pnlTotal: 0 };
+      groups[undefKey].total++;
+      groups[undefKey].pnlTotal += pnl;
+      if (pnl > 0) groups[undefKey].wins++;
+      else if (pnl < 0) groups[undefKey].losses++;
+    }
+  }
+
+  var keys = Object.keys(groups);
+  if (keys.length === 0) {
+    _setReviewEmpty(canvas, '无入场原因数据');
+    if (tableEl) tableEl.innerHTML = '';
+    return;
+  }
+
+  // 过滤样本不足（≥ 3 笔）
+  var validKeys = keys.filter(function(k) { return groups[k].total >= 3; });
+  if (validKeys.length === 0) {
+    _setReviewEmpty(canvas, '入场原因样本不足（每类至少需 3 笔）');
+    if (tableEl) tableEl.innerHTML = '';
+    return;
+  }
+
+  // 计算整体胜率作为基准
+  var overallWins = 0, overallDecided = 0, overallPnl = 0;
+  for (var k = 0; k < keys.length; k++) {
+    overallWins += groups[keys[k]].wins;
+    overallDecided += groups[keys[k]].wins + groups[keys[k]].losses;
+    overallPnl += groups[keys[k]].pnlTotal;
+  }
+  var overallWinRate = overallDecided > 0 ? (overallWins / overallDecided * 100) : 0;
+  var overallAvgPnl = overallDecided > 0 ? (overallPnl / overallDecided) : 0;
+
+  // 按总盈亏降序排序（更合理的排序：考虑样本量和盈亏综合）
+  validKeys.sort(function(a, b) {
+    return groups[b].pnlTotal - groups[a].pnlTotal;
+  });
+
+  _clearReviewEmpty(canvas);
+
+  var cc = utils.getChartColors();
+  var labels = [], wrData = [], pnlData = [];
+  for (var j = 0; j < validKeys.length; j++) {
+    var g = groups[validKeys[j]];
+    var decided = g.wins + g.losses;
+    labels.push(validKeys[j] + ' (' + g.total + ')');
+    wrData.push(decided > 0 ? parseFloat((g.wins / decided * 100).toFixed(1)) : 0);
+    pnlData.push(parseFloat(g.pnlTotal.toFixed(2)));
+  }
+
+  var wrColors = wrData.map(function(v) { return v >= 50 ? cc.barWin : cc.barLoss; });
+
+  var ctx = canvas.getContext('2d');
+  _reviewCharts['chartEntryReason'] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: '胜率 %',
+        data: wrData,
+        backgroundColor: wrColors,
+        borderRadius: 6,
+        borderWidth: 1,
+        borderColor: cc.barBorder
+      }]
+    },
+    options: createStandardOptions(cc, {
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: function(ctx) { var idx = ctx.dataIndex; return '胜率: ' + wrData[idx].toFixed(1) + '% | 盈亏: ' + (pnlData[idx] >= 0 ? '+' : '') + pnlData[idx].toFixed(2) + ' USDT'; } } }
+      },
+      scales: { x: { grid: { display: false }, ticks: { maxRotation: 45 } }, y: { beginAtZero: true, max: 100, ticks: { callback: function(v) { return v + '%'; } } } }
+    })
+  });
+
+  // 渲染详细表格
+  if (!tableEl) return;
+  var tHtml = '<div class="emotion-table-wrap"><table class="emotion-table"><thead><tr>';
+  tHtml += '<th>入场原因</th><th>交易笔数</th><th>盈利/亏损</th><th>胜率(%)</th><th>平均盈亏</th><th>总盈亏(USDT)</th><th>vs整体胜率</th>';
+  tHtml += '</tr></thead><tbody>';
+  for (var t = 0; t < validKeys.length; t++) {
+    var key = validKeys[t];
+    var g = groups[key];
+    var decided = g.wins + g.losses;
+    var winRate = decided > 0 ? (g.wins / decided * 100) : 0;
+    var avgPnl = g.total > 0 ? (g.pnlTotal / g.total) : 0;
+    var dev = winRate - overallWinRate;
+
+    var wrClass = winRate >= 50 ? 'col-pnl-pos' : 'col-pnl-neg';
+    var pnlClass = avgPnl >= 0 ? 'col-pnl-pos' : 'col-pnl-neg';
+    var devDesc = '';
+    if (Math.abs(dev) < 5) {
+      devDesc = '<span style="color:var(--color-text-muted);">持平</span>';
+    } else if (dev > 0) {
+      devDesc = '<span style="color:var(--color-pnl-positive);">+' + dev.toFixed(1) + '%</span>';
+    } else {
+      devDesc = '<span style="color:var(--color-pnl-negative);">' + dev.toFixed(1) + '%</span>';
+    }
+
+    tHtml += '<tr>';
+    tHtml += '<td>' + esc(key) + '</td>';
+    tHtml += '<td class="col-num">' + g.total + '</td>';
+    tHtml += '<td class="col-num">' + g.wins + '/' + g.losses + '</td>';
+    tHtml += '<td class="col-num ' + wrClass + '">' + winRate.toFixed(1) + '</td>';
+    tHtml += '<td class="' + pnlClass + '">' + (avgPnl >= 0 ? '+' : '') + avgPnl.toFixed(2) + '</td>';
+    tHtml += '<td class="' + pnlClass + '">' + (g.pnlTotal >= 0 ? '+' : '') + g.pnlTotal.toFixed(2) + '</td>';
+    tHtml += '<td>' + devDesc + '</td>';
+    tHtml += '</tr>';
+  }
+  tHtml += '</tbody></table>';
+  tHtml += '<p style="font-size:11px;color:var(--color-text-muted);margin-top:8px;">注：vs整体胜率表示该入场原因胜率与全部入场原因整体胜率的偏差。样本≥3笔才显示。</p>';
+  tableEl.innerHTML = tHtml;
+}
+
+// ==================== 卡片 7：策略质量提示（基于入场原因） ====================
+
+function renderStrategyTips(closed) {
+  var tipEl = document.getElementById('strategyTipsWrap');
+  if (!tipEl) return;
+
+  // 收集每个入场原因的统计
+  var reasonStats = {};
+  for (var i = 0; i < closed.length; i++) {
+    var reasons = closed[i].reason;
+    var pnl = safeParseNum(closed[i].pnlAmount);
+    if (pnl == null || !isFinite(pnl)) continue;
+
+    if (Array.isArray(reasons) && reasons.length > 0) {
+      for (var r = 0; r < reasons.length; r++) {
+        var key = reasons[r];
+        if (!reasonStats[key]) reasonStats[key] = { count: 0, wins: 0, losses: 0, pnlTotal: 0 };
+        reasonStats[key].count++;
+        reasonStats[key].pnlTotal += pnl;
+        if (pnl > 0) reasonStats[key].wins++;
+        else if (pnl < 0) reasonStats[key].losses++;
+      }
+    } else if (typeof reasons === 'string' && reasons !== '') {
+      // 兼容旧数据：字符串形式
+      if (!reasonStats[reasons]) reasonStats[reasons] = { count: 0, wins: 0, losses: 0, pnlTotal: 0 };
+      reasonStats[reasons].count++;
+      reasonStats[reasons].pnlTotal += pnl;
+      if (pnl > 0) reasonStats[reasons].wins++;
+      else if (pnl < 0) reasonStats[reasons].losses++;
+    }
+  }
+
+  var keys = Object.keys(reasonStats);
+  if (keys.length === 0) {
+    tipEl.innerHTML = '<div style="text-align:center;color:var(--color-text-muted);padding:16px;">暂无入场原因数据，请先记录交易</div>';
+    return;
+  }
+
+  // 计算整体基准
+  var totalWins = 0, totalDecided = 0, totalPnl = 0;
+  for (var k = 0; k < keys.length; k++) {
+    totalWins += reasonStats[keys[k]].wins;
+    totalDecided += reasonStats[keys[k]].wins + reasonStats[keys[k]].losses;
+    totalPnl += reasonStats[keys[k]].pnlTotal;
+  }
+  var overallWinRate = totalDecided > 0 ? (totalWins / totalDecided * 100) : 0;
+
+  // 为每个入场原因生成提示（偏差 >= 10% 才算显著）
+  var tips = [];
+  for (var t = 0; t < keys.length; t++) {
+    var s = reasonStats[keys[t]];
+    var decided = s.wins + s.losses;
+    if (decided < 3) continue; // 样本不足跳过
+    var winRate = (s.wins / decided * 100);
+    var pnlRate = (s.pnlTotal / s.count).toFixed(2);
+    var dev = winRate - overallWinRate;
+
+    if (dev >= 10) {
+      tips.push({ reason: keys[t], level: 'good', winRate: winRate, dev: dev, avgPnl: pnlRate });
+    } else if (dev <= -10) {
+      tips.push({ reason: keys[t], level: 'bad', winRate: winRate, dev: dev, avgPnl: pnlRate });
+    }
+  }
+
+  // 按偏差绝对值排序
+  tips.sort(function(a, b) { return Math.abs(b.dev) - Math.abs(a.dev); });
+
+  if (tips.length === 0) {
+    tipEl.innerHTML = '<div style="text-align:center;color:var(--color-text-muted);padding:16px;">数据样本不足，无法生成策略提示（需要 ≥3 笔同类入场原因）</div>';
+    return;
+  }
+
+  // 渲染提示卡片
+  var html = '';
+  var goodTips = tips.filter(function(t) { return t.level === 'good'; });
+  var badTips = tips.filter(function(t) { return t.level === 'bad'; });
+
+  // 正面提示
+  for (var gt = 0; gt < goodTips.length; gt++) {
+    var gtip = goodTips[gt];
+    html += '<div class="strategy-tip-item strategy-tip-good">';
+    html += '<i class="fas fa-check-circle"></i>';
+    html += '<span class="strategy-tip-reason">' + esc(gtip.reason) + '</span>';
+    html += '<span class="strategy-tip-text">胜率 <b>' + gtip.winRate.toFixed(1) + '%</b>，比整体高 +' + gtip.dev.toFixed(1) + '%，平均盈亏 <b>+' + gtip.avgPnl + '</b> USDT</span>';
+    html += '</div>';
+  }
+
+  // 负面提示
+  for (var bt = 0; bt < badTips.length; bt++) {
+    var btip = badTips[bt];
+    html += '<div class="strategy-tip-item strategy-tip-bad">';
+    html += '<i class="fas fa-exclamation-triangle"></i>';
+    html += '<span class="strategy-tip-reason">' + esc(btip.reason) + '</span>';
+    html += '<span class="strategy-tip-text">胜率 <b>' + btip.winRate.toFixed(1) + '%</b>，比整体低 ' + btip.dev.toFixed(1) + '%，建议减少该类型入场</span>';
+    html += '</div>';
+  }
+
+  tipEl.innerHTML = html;
 }

@@ -1,5 +1,5 @@
 const STORAGE_KEY = 'trade_logs_plus_v4';
-const SCHEMA_VERSION = 3;       // v3: executionScore 0→null（未评分）迁移
+const SCHEMA_VERSION = 4;       // v4: entry reason 标准化迁移（旧字符串→标准选项）
 var logs = [];
 // ── 全局状态变量 ──
 var openClosePanelIdx = -1;         // 当前打开的平仓面板索引（-1 表示无）

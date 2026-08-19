@@ -1279,7 +1279,7 @@ if (_splitMode) toggleSplitMode();
   document.getElementById('strategyPattern').innerHTML = '<option value="">— 不选择 —</option>';
   document.querySelectorAll('#signalCheckboxes input[type="checkbox"]').forEach(cb => { cb.checked = false; });
   updateCheckboxStyle();
-  document.getElementById('reasonSelect').value = '突破';
+  document.getElementById('reasonSelect').value = '趋势突破';
   document.getElementById('reasonCustom').value = '';
   document.getElementById('positionDisplay').textContent = '—';
   document.getElementById('detailDisplay') && (document.getElementById('detailDisplay').textContent = '输入参数后点击「计算仓位」');

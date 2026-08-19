@@ -428,14 +428,16 @@
               <label><i class="fas fa-pen-fancy"></i> 入场原因</label>
               <div class="flex-row">
                 <select id="reasonSelect">
-                  <option value="突破">突破</option>
-                  <option value="回踩">回踩支撑/阻力</option>
-                  <option value="形态">形态突破</option>
-                  <option value="新闻">新闻/事件</option>
-                  <option value="趋势">趋势跟随</option>
-                  <option value="背离交易">背离交易</option>
-                  <option value="成交量异常">成交量异常</option>
-                  <option value="其他">其他</option>
+                  <option value="趋势突破">趋势突破</option>
+                  <option value="回调入场">回调入场</option>
+                  <option value="震荡区间边界">震荡区间边界</option>
+                  <option value="支撑/压力位确认">支撑/压力位确认</option>
+                  <option value="均线信号">均线信号</option>
+                  <option value="FVG入场">FVG入场</option>
+                  <option value="订单块入场">订单块入场</option>
+                  <option value="情绪反转">情绪反转</option>
+                  <option value="时间窗口">时间窗口</option>
+                  <option value="K线形态确认">K线形态确认</option>
                 </select>
                 <input type="text" id="reasonCustom" placeholder="自定义原因 (可选)" />
               </div>
@@ -965,6 +967,31 @@
             <canvas id="chartExecutionQuality"></canvas>
           </div>
           <div class="review-content" id="executionTableWrap"></div>
+        </div>
+      </div>
+
+      <!-- 入场原因胜率分析 -->
+      <div class="review-card">
+        <div class="review-card-header">
+          <span class="review-card-icon"><i class="fas fa-crosshairs"></i></span>
+          <span class="review-card-title">入场原因胜率分析</span>
+        </div>
+        <div class="review-card-body">
+          <div class="review-chart-container">
+            <canvas id="chartEntryReason"></canvas>
+          </div>
+          <div class="review-content" id="entryReasonTableWrap"></div>
+        </div>
+      </div>
+
+      <!-- 策略质量提示 -->
+      <div class="review-card">
+        <div class="review-card-header">
+          <span class="review-card-icon"><i class="fas fa-lightbulb"></i></span>
+          <span class="review-card-title">策略质量提示</span>
+        </div>
+        <div class="review-card-body">
+          <div class="review-content" id="strategyTipsWrap"></div>
         </div>
       </div>
     </div>
