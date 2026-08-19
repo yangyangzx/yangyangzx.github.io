@@ -300,6 +300,8 @@ function importLogs() {
             showToast('已导入 ' + data.length + ' 条日志', 'success');
             renderLogs();
             renderSettings();
+            // P0-6: 导入后刷新仪表盘
+            if (typeof renderDashboard === 'function') renderDashboard();
           } else {
             showToast('JSON 格式不正确（应为数组）', 'error');
           }
@@ -361,6 +363,8 @@ function parseCSVImport(csvText) {
   showToast('已导入 ' + imported.length + ' 条日志', 'success');
   if (typeof renderLogs === 'function') renderLogs();
   renderSettings();
+  // P0-6: 导入后刷新仪表盘
+  if (typeof renderDashboard === 'function') renderDashboard();
 }
 
 function parseCSVLine(line) {

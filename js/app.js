@@ -73,6 +73,23 @@ document.addEventListener('DOMContentLoaded', function() {
 
   var directionEl = document.getElementById('direction'); if (directionEl) directionEl.addEventListener('change', function() { filterOrderTypes(this.value); });
 
+  // P0-6 FIX: 页面可见性变化时刷新仪表盘，防止多标签页数据延迟导致 Heat / PnL / 强平预警显示过时
+  var _dashRefreshTimer = null;
+  function _refreshDashOnVisible() {
+    if (document.hidden) return;
+    if (typeof renderDashboard === 'function') renderDashboard();
+  }
+  document.addEventListener('visibilitychange', function() {
+    if (!document.hidden) {
+      clearTimeout(_dashRefreshTimer);
+      _dashRefreshTimer = setTimeout(_refreshDashOnVisible, 100);
+    }
+  });
+  // 页面卸载时清理 timer，防止定时器泄漏
+  window.addEventListener('beforeunload', function() {
+    clearTimeout(_dashRefreshTimer);
+  });
+
   var mindsetStarsEl = document.getElementById('mindsetStars');
   if (mindsetStarsEl) mindsetStarsEl.addEventListener('click', function(e) {
     if (e.target.classList.contains('star')) { renderMindsetStars(parseInt(e.target.dataset.val, 10)); }

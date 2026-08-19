@@ -234,7 +234,7 @@ function checkDailyLossLimit() {
   }
 
   var settings = loadSettings();
-  var capital = getAccountCapital() || settings.accountBalance;
+  var capital = getAccountCapital();
   var dailyLossPct = settings.dailyLossLimit || 5;
   var dailyLossLimit = capital > 0 ? capital * (dailyLossPct / 100) : Infinity;
 

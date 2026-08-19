@@ -237,6 +237,8 @@ function importJSON(file) {
           return;
         }
         showToast(`成功导入 ${candidates.length} 条记录`, 'success');
+        // P0-6: 导入后刷新仪表盘
+        if (typeof renderDashboard === 'function') renderDashboard();
       }
     } catch(err) { 
       showToast('解析失败: '+err.message,'error'); 

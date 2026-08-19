@@ -227,6 +227,8 @@ function confirmClose(idx) {
   openClosePanelIdx = -1;
   // 平仓后刷新表格与统计数据
   if (typeof renderLogs === 'function') renderLogs();
+  // P0-5/6: 平仓后刷新仪表盘，确保 Heat / PnL / 强平预警实时更新
+  if (typeof renderDashboard === 'function') renderDashboard();
   return true;
 }
 
@@ -341,7 +343,7 @@ function downloadBackup() {
 function updateBackupTime() {
   let latest = null, latestTime = '';
   for (let i = 0; i < 10; i++) {  // M1: 支持 10 份轮转备份
-    const raw = localStorage.getItem('trade_auto_backup_' + i);
+    const raw = localStorage.getItem('trade_backup_auto_' + i);
     if (raw) {
       try {
         const t = JSON.parse(raw).time;
@@ -351,7 +353,7 @@ function updateBackupTime() {
   }
   // 兼容旧版单槽备份
   if (!latestTime) {
-    const old = localStorage.getItem('trade_auto_backup');
+    const old = localStorage.getItem('trade_backup_auto');
     if (old) { try { latestTime = JSON.parse(old).time; } catch(e) { console.error('[logs-backup]', e); } }
   }
   const el = document.getElementById('lastBackupTime');
@@ -359,7 +361,7 @@ function updateBackupTime() {
 }
 
 function clearLogs() {
-  if (confirm('确认清空所有日志？')) { logs = []; openClosePanelIdx = -1; saveLogs(); }
+  if (confirm('确认清空所有日志？')) { logs = []; openClosePanelIdx = -1; saveLogs(); if (typeof renderDashboard === 'function') renderDashboard(); }
 }
 
 // ==================== 日志列表过滤 ====================

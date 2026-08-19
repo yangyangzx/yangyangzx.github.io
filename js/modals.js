@@ -700,6 +700,8 @@ function saveEditLog(idx) {
     showToast('日志编辑未保存，已恢复到保存前状态。', 'error');
     return false;
   }
+  // P0-5/6: 持仓变化后刷新仪表盘，确保 Heat / PnL / 强平预警实时正确
+  if (typeof renderDashboard === 'function') renderDashboard();
   // 刷新表格与统计数据（表格更新后再关闭弹窗，避免闪烁）
   if (typeof renderLogs === 'function') renderLogs();
   closeEditModal();
@@ -858,6 +860,8 @@ function doSaveSplit(calc, count) {
   openClosePanelIdx = -1;
   actionPanelIdx = -1;
   setCalcDirty(false);
+  // P0-1/5/6: 分批保存后刷新仪表盘
+  if (typeof renderDashboard === 'function') renderDashboard();
   showToast('拆分保存成功，共 ' + count + ' 笔', 'success');
   return true;
 }

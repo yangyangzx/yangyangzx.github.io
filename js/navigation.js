@@ -67,6 +67,7 @@ function switchView(viewName) {
   if (viewName !== 'planner') {
     _splitMode = false;
     _splitBatches = [];
+    persistSplitState();
   }
 
   // 切出仪表盘时销毁 equity 图表实例，防止重复创建累积内存

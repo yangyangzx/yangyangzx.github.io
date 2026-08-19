@@ -259,6 +259,21 @@ function calculate() {
     }
   }
 
+  // P0-4 FIX: 硬上限保护——表单值不允许绕过系统设置的风险比例上限
+  try {
+    var _sysSettings = loadSettings();
+    var _sysMaxRiskPct = (_sysSettings && _sysSettings.riskPercent) ? (_sysSettings.riskPercent / 100) : 0.10;
+    if (riskPercent > _sysMaxRiskPct) {
+      _calcCleanup();
+      return renderHardBlock(
+        'single-risk-exceeds-limit',
+        '单笔风险超出系统上限',
+        '当前风险 ' + (riskPercent * 100).toFixed(1) + '% 超过系统设置上限 ' + _sysSettings.riskPercent + '%，不允许开仓。请降低风险比例或调整系统设置。',
+        { riskPercent: riskPercent, maxRiskPercent: _sysMaxRiskPct }
+      );
+    }
+  } catch(e) { /* 读取设置失败则跳过硬上限检查 */ }
+
   // ===== Skills 融合：凯利公式计算（额外显示） =====
   let kellyHTML = '';
   let kellyData = null;  // 持久化数据（存入日志和详情）
@@ -459,7 +474,13 @@ function calculate() {
     var _settings = loadSettings();
     if (_settings && _settings.mmr != null) mmr = _settings.mmr / 100;
 
-    liquidationPrice = window.utils.calcLiquidationPrice(effectiveEntryPrice, direction, leverage, mmr);
+    // P0-3 FIX: 分批建仓模式下，使用加权入场价计算强平价
+    var _liqEntryPrice = effectiveEntryPrice;
+    if (_splitMode && _splitBatches.length >= 2) {
+      var _w = computeWeightedEntry();
+      if (_w != null && _w > 0) _liqEntryPrice = _w;
+    }
+    liquidationPrice = window.utils.calcLiquidationPrice(_liqEntryPrice, direction, leverage, mmr);
     // BUG#1 修复：止损价严格越过强平价时才阻断；等于时允许（用户仍可在强平前手动止损）
     const isInvalid = (direction === 'long' && stopLoss < liquidationPrice) ||
                       (direction === 'short' && stopLoss > liquidationPrice);
@@ -861,6 +882,8 @@ function saveTradeAction(idx) {
   item.actions.push(action);
   actionPanelIdx = -1;
   saveLogs();
+  // P0-6: 记录动作后刷新仪表盘
+  if (typeof renderDashboard === 'function') renderDashboard();
 }
 window.saveTradeAction = saveTradeAction;
 
@@ -930,6 +953,8 @@ function saveLog() {
     kellyData: calc.kellyData != null ? JSON.parse(JSON.stringify(calc.kellyData)) : null,
     groupId: null,
     groupLabel: null,
+    splitMode: _splitMode,
+    splitEntries: getSplitEntries(),
     reason: calc.reason || getReason(),
     mindsetScore: calc.mindsetScore != null ? calc.mindsetScore : (parseInt(document.getElementById('mindsetScore').value, 10) || 3),
     strategyFramework: document.getElementById('strategyFramework').value,
@@ -963,6 +988,8 @@ function saveLog() {
   openClosePanelIdx = -1;
   actionPanelIdx = -1;
   setCalcDirty(false);
+  // P0-1/5/6: 保存后刷新仪表盘，确保持仓变更实时反映在 Heat / PnL / 强平预警
+  if (typeof renderDashboard === 'function') renderDashboard();
   showToast('日志已保存', 'success');
   return true;
 }
@@ -979,6 +1006,7 @@ function toggleSplitMode() {
     if (!_splitBatches.length) { initSplitBatches(2); }
     renderSplitBatches();
     updateSplitButtons(); // 新增：确保按钮状态正确
+    persistSplitState();
     if (!document.getElementById('entryPrice').value) {
       document.getElementById('entryPrice').placeholder = '加权均价（自动计算）';
     }
@@ -992,6 +1020,7 @@ function toggleSplitMode() {
     document.getElementById('entryPrice').readOnly = false;
     // 分批模式关闭后计算上下文改变，标记脏状态以强制用户重新计算
     setCalcDirty(true);
+    persistSplitState();
     if (window.CalculationUI) {
       CalculationUI.renderDirty(CalculationUI.getResultUI());
     }
@@ -1019,6 +1048,7 @@ function initSplitBatches(count) {
   for (let i = 0; i < count; i++) {
     _splitBatches.push({ price: '', alloc: '', stopLoss: '' });
   }
+  persistSplitState();
 }
 function renderSplitBatches() {
   const inner = document.getElementById('splitAreaInner');
@@ -1130,9 +1160,7 @@ function addSplitBatch() {
   _splitBatches.push({ price: '', alloc: '', stopLoss: '' });
   renderSplitBatches();
   updateSplitButtons(); // 新增：更新按钮状态
-  
-  // 调试信息
-  console.log(`已添加第${_splitBatches.length}批，当前共${_splitBatches.length}批，范围：${MIN_SPLITS}-${MAX_SPLITS}`);
+  persistSplitState();
   return true; // 返回true表示添加成功
 }
 function removeSplitBatch(idx) {
@@ -1150,9 +1178,7 @@ function removeSplitBatch(idx) {
   renderSplitBatches();
   updateSplitButtons(); // 更新按钮状态
   onSplitChange();
-  
-  // 调试信息
-  console.log(`已删除第${idx + 1}批，剩余${_splitBatches.length}批，范围：${MIN_SPLITS}-${MAX_SPLITS}`);
+  persistSplitState();
   return true; // 返回true表示删除成功
 }
 

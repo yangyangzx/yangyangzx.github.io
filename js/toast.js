@@ -23,6 +23,8 @@
       if (window._pendingDeleteIndices) window._pendingDeleteIndices.clear();
       window._pendingDelete = null;
       if (window.saveLogs) saveLogs(true);
+      // P0-6: 批量删除后刷新仪表盘
+      if (typeof renderDashboard === 'function') renderDashboard();
       if (window._undoToastEl) { window._undoToastEl.remove(); window._undoToastEl = null; }
       return;
     }
@@ -35,6 +37,8 @@
     if (window._pendingDeleteIndices) window._pendingDeleteIndices.clear();
     window._pendingDelete = null;
     if (window.saveLogs) window.saveLogs(true);
+    // P0-6: 单条删除后刷新仪表盘
+    if (typeof renderDashboard === 'function') renderDashboard();
     if (window._undoToastEl) { window._undoToastEl.remove(); window._undoToastEl = null; }
   };
 

@@ -319,8 +319,9 @@ function saveLogs(skipBackup) {
     var backupCount = autoSettings ? (autoSettings.backupCount || 10) : 10;
     if (autoBackupEnabled) {
       _autoBackupIndex = (_autoBackupIndex + 1) % backupCount;
-      localStorage.setItem('trade_auto_backup_index', String(_autoBackupIndex));
-      localStorage.setItem('trade_auto_backup_' + _autoBackupIndex, JSON.stringify({ time: new Date().toISOString(), data: logs }));
+      // ADR-3 FIX: 使用明确前缀 trade_backup_auto，避免与 emergency_backup_ 混淆
+      localStorage.setItem('trade_backup_auto_index', String(_autoBackupIndex));
+      localStorage.setItem('trade_backup_auto_' + _autoBackupIndex, JSON.stringify({ time: new Date().toISOString(), data: logs }));
       if (typeof updateBackupTime === 'function') updateBackupTime();
     }
   } catch (backupError) {
@@ -437,24 +438,36 @@ function formatHoldDuration(closeTime, openTime) {
  */
 function preCheckStorageCapacity(requiredBytes) {
   try {
-    // 尝试写入一个小的测试键来检查可用空间
+    // 实际写入时 localStorage.setItem 会替换旧值，因此剩余容量 = quota - 当前所有键值总大小
+    var totalUsed = 0;
+    for (var i = 0; i < localStorage.length; i++) {
+      var k = localStorage.key(i);
+      var v = localStorage.getItem(k);
+      if (k) totalUsed += k.length + (v ? v.length : 0);
+    }
+    // 尝试写入一个小测试键来验证写权限
     const testKey = '__storage_test_capacity__';
-    const testData = 'x'.repeat(Math.min(requiredBytes, 1024)); // 最多测试1KB
-    
+    const testData = 'x'.repeat(Math.min(requiredBytes, 1024));
     localStorage.setItem(testKey, testData);
     localStorage.removeItem(testKey);
-    
-    // 粗略估算剩余空间（不同浏览器差异很大）
-    const estimatedRemaining = estimateLocalStorageCapacity();
-    if (estimatedRemaining > 0 && requiredBytes > estimatedRemaining * 0.8) {
-      console.warn(`存储容量不足：需要${requiredBytes}字节，估计剩余${estimatedRemaining}字节`);
+    // 估算剩余空间（使用 navigator.storage API 或安全默认值）
+    var estRemaining = -1;
+    if (navigator.storage && navigator.storage.estimate) {
+      try {
+        var est = navigator.storage.estimate();
+        if (est && Number.isFinite(est.quota) && est.quota > 0) {
+          estRemaining = Math.max(0, est.quota - totalUsed);
+        }
+      } catch(e) {}
+    }
+    if (estRemaining > 0 && requiredBytes > estRemaining * 0.5) {
+      console.warn(`存储容量不足：需要${requiredBytes}字节，估计剩余${estRemaining}字节`);
       return false;
     }
-    
     return true;
   } catch (e) {
     console.error('存储容量预检查失败:', e);
-    return false; // 预检查失败，假设空间不足
+    return false;
   }
 }
 

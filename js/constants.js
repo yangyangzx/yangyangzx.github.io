@@ -18,9 +18,17 @@ function createClosePanelKeyDownHandler() {
     else if (e.key === 'Escape') { e.preventDefault(); openClosePanelIdx = -1; renderLogs(); }
   };
 }
-var _autoBackupIndex = (function() { try { const v = localStorage.getItem('trade_auto_backup_index'); return v !== null ? parseInt(v, 10) : 0; } catch(e) { return 0; } })();
+var _autoBackupIndex = (function() { try { const v = localStorage.getItem('trade_backup_auto_index'); return v !== null ? parseInt(v, 10) : 0; } catch(e) { return 0; } })();
 var _activeFilters = { direction: '', symbol: '', strategy: '', status: '', pnl: '', time: '' };
 // NOTE: SCHEMA_VERSION also referenced in storage.js - keep consistent
+// P0-1 FIX: persist split state to localStorage so it survives page reload
+try { var _splitPersisted = JSON.parse(localStorage.getItem('trade_split_persist') || '{}'); _splitMode = !!_splitPersisted.mode; _splitBatches = _splitPersisted.batches || []; } catch(e) { _splitMode = false; _splitBatches = []; }
+/**
+ * P0-1 FIX: 持久化分批建仓状态到 localStorage
+ */
+function persistSplitState() {
+  try { localStorage.setItem('trade_split_persist', JSON.stringify({ mode: !!_splitMode, batches: _splitBatches.slice() })); } catch(e) { /* ignore */ }
+}
 
 const MINDSET_LABELS = { 1:'极度焦虑', 2:'有些紧张', 3:'中性/平静', 4:'比较冷静', 5:'极度冷静专注' };
 

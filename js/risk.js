@@ -2,14 +2,22 @@
 
 /**
  * 获取账户总余额：从日志中取最新的 capital，兜底第一个有 capital 的日志
+ * 若均无，返回 settings.accountBalance（初始本金快照）；仍未设置则返回 null
  */
 function getAccountCapital() {
-  // 从最新的日志开始倒序查找第一个有 capital 的记录
+  // 优先从最近的日志中取最新的 capital 快照（自动反映已平仓后的权益变化）
   for (var i = logs.length - 1; i >= 0; i--) {
     if (logs[i].capital != null && !isNaN(parseFloat(logs[i].capital))) {
       return parseFloat(logs[i].capital);
     }
   }
+  // 兜底：从系统设置读取初始本金快照
+  try {
+    var _fallbackSettings = loadSettings();
+    if (_fallbackSettings && _fallbackSettings.accountBalance > 0) {
+      return _fallbackSettings.accountBalance;
+    }
+  } catch(e) { /* ignore */ }
   return null;
 }
 
@@ -111,8 +119,8 @@ function renderAccountOverview() {
   var container = document.getElementById('riskAccountRows');
   if (!container) return;
 
-  var settings = loadSettings();
-  var capital = settings.accountBalance > 0 ? settings.accountBalance : getAccountCapital();
+  var capital = getAccountCapital();
+  // getAccountCapital 已内置 settings.accountBalance 兜底，此处无需额外读取
   if (capital == null) {
     container.innerHTML = '<div class="risk-empty">暂无日志数据，无法计算账户概览</div>';
     return;
@@ -174,7 +182,7 @@ function renderDailyLoss(closedOverride) {
 
   var dailyLossSettings = loadSettings();
   var dailyLossPct = dailyLossSettings.dailyLossLimit;
-  var capital = getAccountCapital() || dailyLossSettings.accountBalance;
+  var capital = getAccountCapital();
   var capitalKnown = (capital != null && capital > 0);
   var dailyLossLimit = capitalKnown ? capital * (dailyLossPct / 100) : 0;
 
@@ -217,12 +225,13 @@ function renderDrawdown(closedOverride) {
     return;
   }
 
-  // 计算累计权益曲线：从首笔已平仓日志的 capital 取，无则从 settings.accountBalance 兜底
+  // 计算累计权益曲线：从首笔已平仓日志的 capital 取，无则从 getAccountCapital() 兜底
   var capital = 0;
   if (closed.length > 0 && closed[0].capital != null && !isNaN(closed[0].capital) && closed[0].capital > 0) {
     capital = closed[0].capital;
   } else {
-    try { var _ddSettings = loadSettings(); if (_ddSettings.accountBalance > 0) capital = _ddSettings.accountBalance; } catch(e) { console.error('[risk]', e); }
+    var _ddCapital = getAccountCapital();
+    if (_ddCapital != null && _ddCapital > 0) capital = _ddCapital;
   }
   var equity = capital;
   var peak = capital;
@@ -384,7 +393,7 @@ function renderConcentration(closedOverride) {
 
   var openPositions = getOpenPositions();
   var closed = closedOverride || getClosedSorted();
-  var capital = getAccountCapital() || loadSettings().accountBalance;
+  var capital = getAccountCapital();
   if (capital == null || capital <= 0) {
     container.innerHTML = '<div class="risk-empty">请先在「系统设置」中填写账户余额</div>';
     return;

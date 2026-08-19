@@ -123,13 +123,14 @@ function renderEquityChart(closed) {
     return;
   }
 
-  // 取初始权益：从首笔已平仓日志的 capital 取，无则从 settings.accountBalance 兜底
+  // 取初始权益：从首笔已平仓日志的 capital 取，无则从 getAccountCapital() 兜底
   var sortedClosed = [...closed].sort(function(a, b) { return new Date(a.closeTime || a.time) - new Date(b.closeTime || b.time); });
   var capital = 0;
   if (sortedClosed.length > 0 && sortedClosed[0].capital != null && !isNaN(sortedClosed[0].capital) && sortedClosed[0].capital > 0) {
     capital = sortedClosed[0].capital;
   } else {
-    try { var _abs = loadSettings(); if (_abs.accountBalance > 0) capital = _abs.accountBalance; } catch(e) { console.error('[analytics]', e); }
+    var _eqCapital = getAccountCapital();
+    if (_eqCapital != null && _eqCapital > 0) capital = _eqCapital;
   }
 
   // 检查设置中的 accountBalance 是否与推算值差异较大
