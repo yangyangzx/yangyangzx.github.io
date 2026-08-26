@@ -92,7 +92,8 @@ class ImportValidator {
     if (typeof item.time !== 'string' || isNaN(new Date(item.time).getTime())) errors.push(`第${index}条记录时间无效：${item.time}`);
     if (item.positionSize != null) {
       var positionSize = Number(item.positionSize);
-      if (!Number.isFinite(positionSize) || positionSize <= 0) errors.push(`第${index}条记录仓位必须为大于 0 的有限数字`);
+      // 允许 positionSize 为 0（数据损坏场景下由计算模块拦截），仅校验有限数值
+      if (!Number.isFinite(positionSize)) errors.push(`第${index}条记录仓位必须为有限数字：${item.positionSize}`);
     }
     if (item.stopLoss != null) {
       var stopLoss = Number(item.stopLoss);

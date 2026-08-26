@@ -70,6 +70,15 @@ function switchView(viewName) {
     persistSplitState();
   }
 
+  // 切回开仓计划时恢复分批建仓状态（从 localStorage 读取）
+  if (viewName === 'planner') {
+    try {
+      var _resumedSplit = JSON.parse(localStorage.getItem('trade_split_persist') || '{}');
+      _splitMode = !!_resumedSplit.mode;
+      _splitBatches = _resumedSplit.batches || [];
+    } catch(e) { _splitMode = false; _splitBatches = []; }
+  }
+
   // 切出仪表盘时销毁 equity 图表实例，防止重复创建累积内存
   if (viewName !== 'dashboard') {
     if (window._dashEquityChart && typeof window._dashEquityChart.destroy === 'function') {

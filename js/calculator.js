@@ -215,18 +215,34 @@ function calculate() {
     return null;
   }
 
-  // ===== P0-01：当日连亏熔断 =====
-  const streakResult = _getTodayLossStreak();
-  const currentStreak = streakResult.streak;
-  if (currentStreak >= 3) {
-    _calcCleanup();
-    return renderHardBlock(
-      'loss-streak-limit',
-      '连续亏损熔断',
-      '当日已连续亏损 ' + currentStreak + ' 笔；冷却期结束前不可建立新计划。',
-      streakResult
-    );
-  }
+  // ===== P0-01：当日连亏熔断（口径与 checkDailyLossLimit 统一：仅统计已平仓且有有效 pnlAmount 的记录） =====
+  (function() {
+    var todayStr = window.utils.toLocalDateStr(new Date().toISOString());
+    var todayClosed = [];
+    for (var _i = 0; _i < logs.length; _i++) {
+      var _l = logs[_i];
+      if (!window.utils.isClosedTrade(_l)) continue;
+      var _ct = _l.closeTime;
+      if (!_ct) continue;
+      if (window.utils.toLocalDateStr(_ct) === todayStr) todayClosed.push(_l);
+    }
+    todayClosed.sort(function(a, b) { return (a.closeTime || '').localeCompare(b.closeTime || ''); });
+    var _streak = 0;
+    for (var _j = todayClosed.length - 1; _j >= 0; _j--) {
+      var _v = parseFloat(todayClosed[_j].pnlAmount);
+      if (!isNaN(_v) && _v < 0) { _streak++; } else { break; }
+    }
+    const currentStreak = _streak;
+    if (currentStreak >= 3) {
+      _calcCleanup();
+      return renderHardBlock(
+        'loss-streak-limit',
+        '连续亏损熔断',
+        '当日已连续亏损 ' + currentStreak + ' 笔；冷却期结束前不可建立新计划。',
+        { streak: currentStreak }
+      );
+    }
+  })();
 
   if (entryPrice <= 0) { showCalcError('无效入场价', '入场价必须大于 0'); _calcCleanup(); return; }
   if (isNaN(capital) || capital <= 0) { showCalcError('无效本金', '请输入本金'); _calcCleanup(); return; }

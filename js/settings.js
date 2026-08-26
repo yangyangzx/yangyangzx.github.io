@@ -282,7 +282,7 @@ function importLogs() {
           var data = JSON.parse(ev.target.result);
           if (Array.isArray(data) && (data.length === 0 || (data[0] && typeof data[0] === 'object' && (data[0].symbol != null || data[0].direction != null || data[0].entryPrice != null)))) {
             // 导入前归一化所有数值字段（JSON 中可能为字符串或 NaN/Infinity）
-            var numFields = ['entryPrice','stopLoss','targetPrice','positionSize','leverage','riskAmount','capital','fee','slippageCost','closePrice','pnlAmount','mae','mfe','lowPrice','highPrice','rMultiple','pnlPercent','holdDuration'];
+            var numFields = ['entryPrice','stopLoss','targetPrice','positionSize','leverage','riskAmount','capital','fee','slippageCost','closePrice','pnlAmount','mae','mfe','lowPrice','highPrice','rMultiple','pnlPercent','holdDuration','effectiveEntryPrice','stopType','atrStopMode','calculationVersion','grossPnlAmount','actualCloseFee','actualExitLegacySlippageCost'];
             for (var k = 0; k < data.length; k++) {
               for (var nf = 0; nf < numFields.length; nf++) {
                 var f = numFields[nf];

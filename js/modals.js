@@ -581,10 +581,14 @@ function saveEditLog(idx) {
   // 编辑平仓数据时，若尚未有 closeTime 则自动写入
   if (item.closeType) {
     if (!item.closeTime) item.closeTime = new Date().toISOString();
-    // holdDuration 始终基于 time + closeTime 重算，确保修改时间后口径正确
-    if (item.time && !isNaN(new Date(item.time).getTime()) && !isNaN(new Date(item.closeTime).getTime())) {
-      var durMin = Math.round((new Date(item.closeTime) - new Date(item.time)) / 60000);
-      item.holdDuration = durMin >= 0 ? durMin : null;
+    // holdDuration 始终基于 time + closeTime 重算（包含修改已有平仓记录的场景）
+    if (item.time && item.closeTime) {
+      var tTime = new Date(item.time).getTime();
+      var tClose = new Date(item.closeTime).getTime();
+      if (!isNaN(tTime) && !isNaN(tClose)) {
+        var durMin = Math.round((tClose - tTime) / 60000);
+        item.holdDuration = durMin >= 0 ? durMin : null;
+      }
     }
   }
   v = gv('emRMultiple'); if (v !== undefined && v !== '') { var rm = parseFloat(v); item.rMultiple = isNaN(rm) ? null : rm; } else if (document.getElementById('emRMultiple')?.value === '') item.rMultiple = null;

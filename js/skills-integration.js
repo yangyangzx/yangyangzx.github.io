@@ -223,7 +223,13 @@ function checkSymbolConcentration(symbol, positionSize, leverage, capital, openP
 function checkDailyLossLimit() {
   var todayStr = window.utils.toLocalDateStr(new Date().toISOString());
   var todayPnl = 0;
-  var closed = getClosedSorted();
+  // 统一使用 isClosedTrade 判定已平仓，与 renderLogs/stats.js 口径一致
+  var closed = [];
+  for (var i = 0; i < logs.length; i++) {
+    if (window.utils.isClosedTrade(logs[i])) {
+      closed.push(logs[i]);
+    }
+  }
   for (var i = 0; i < closed.length; i++) {
     var ct = closed[i].closeTime;
     if (!ct) continue;

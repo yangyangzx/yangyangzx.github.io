@@ -1,16 +1,11 @@
 // ==================== 仪表盘渲染 ====================
 
 /**
- * 筛选已平仓日志（统一使用 utils.isClosedTrade 判定）
+ * 统一调用 utils.getClosedSorted()，避免与 storage/risk 实现分叉。
+ * 已平仓判定统一使用 window.utils.isClosedTrade（要求 closeType 非空且 pnlAmount 可解析）。
  */
-function _getClosedLogs() {
-  var result = [];
-  for (var i = 0; i < logs.length; i++) {
-    if (window.utils.isClosedTrade(logs[i])) {
-      result.push(logs[i]);
-    }
-  }
-  return result;
+function getClosedLogs() {
+  return window.utils.getClosedSorted();
 }
 
 /**
@@ -95,7 +90,7 @@ window._animateDashValue = function(el, targetText, duration) {
 // ==================== 卡片 1：今日 PnL ====================
 function _renderTodayPnl() {
   var todayStr = window.utils.toLocalDateStr(new Date().toISOString());
-  var closed = _getClosedLogs();
+  var closed = getClosedLogs();
   var totalPnl = 0;
   var count = 0;
 
@@ -143,7 +138,7 @@ function _renderWinRate() {
   var diff = day === 0 ? 6 : day - 1;
   var monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - diff);
   var mondayStr = window.utils.toLocalDateStr(monday.toISOString());
-  var closed = _getClosedLogs();
+  var closed = getClosedLogs();
   var wins = [];
   var losses = [];
   var totalPnl = 0;
@@ -250,7 +245,7 @@ function _renderRiskExposure() {
 
 // ==================== 卡片 4：连亏计数 ====================
 function _renderLossStreak() {
-  var closed = _getClosedLogs();
+  var closed = getClosedLogs();
   var valueEl = document.getElementById('dashStreakValue');
   var subEl = document.getElementById('dashStreakSub');
 
@@ -418,7 +413,7 @@ function _renderLiqWarn() {
 // ==================== 卡片 6：资金曲线缩略图 ====================
 
 function _renderEquityChart() {
-  const closed = _getClosedLogs();
+  const closed = getClosedLogs();
   const canvas = document.getElementById('dashEquityChart');
   
   if (!canvas) {

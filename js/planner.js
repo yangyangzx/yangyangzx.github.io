@@ -582,7 +582,8 @@ function refreshChecklistLabels() {
   }
   // 同步 ATR 开关状态到检查清单底部说明
   var atrNote = document.getElementById('checklistAtrNote');
-  if (atrNote) {
+  if (!atrNote) return; // checklistCard 已被移除时跳过，避免静默失败
+  try {
     var formAtrEnabled = document.getElementById('formAtrStopEnabled');
     var atrOn = (formAtrEnabled && formAtrEnabled.checked) || settings.atrStopEnabled === true;
     var atrMult = parseFloat(document.getElementById('atrMultiplier').value) || settings.atrDefaultMultiplier || 2;
@@ -592,7 +593,7 @@ function refreshChecklistLabels() {
       '心态评分 ≥ ' + (settings.mindsetMinScore || 3) +
       ' · 组合热量 ≤ ' + (settings.riskHeatMax || 6) + '%';
     atrNote.style.display = 'block';
-  }
+  } catch(e) { console.error('[planner] refreshChecklistLabels atrNote error:', e); }
 }
 
 function updateCheckItem(itemId, checkFn) {
