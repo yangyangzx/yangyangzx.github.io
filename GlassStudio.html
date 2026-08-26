@@ -238,7 +238,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 }
 #dz-inner:hover::before,#dz-inner.drag-on::before{opacity:1}
 #dz-inner:hover,#dz-inner.drag-on{border-color:var(--accent);background:rgba(9,119,87,.07);box-shadow:0 0 0 5px rgba(9,119,87,0.10)}
-#dz-inner.drag-on{animation:dzPulse 1.2s ease-in-out infinite}
+#dz-inner.drag-on{animation:dzPulse 1.2s ease-in-out infinite;transition:none}
 @keyframes dzPulse{
   0%,100%{box-shadow:0 0 0 0 rgba(9,119,87,.20),inset 0 0 0 1px rgba(9,119,87,.10)}
   50%{box-shadow:0 0 0 10px rgba(9,119,87,0),inset 0 0 20px 2px rgba(9,119,87,.06)}
@@ -393,6 +393,8 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 .gel.sel{outline:2px solid var(--accent);outline-offset:2px;box-shadow:0 0 0 5px rgba(9,119,87,0.15),0 4px 20px rgba(0,0,0,.3);transition:outline 150ms var(--ease-out),box-shadow 150ms var(--ease-out)}
 .gel-inner{width:100%;height:100%;display:flex;align-items:center;justify-content:center;padding:12px;overflow:hidden}
 .el-text{word-break:break-word;white-space:pre-wrap;pointer-events:none;width:100%;text-align:center;line-height:1}
+/* 编辑中的 textarea 用 box-shadow ring 替代 outline（outline 会触发 layout），失焦时透明 */
+.text-editor-area:focus-visible{box-shadow:0 0 0 2px var(--accent)}
 /* ── Resize handles ── */
 .rh{
   position:absolute;width:8px;height:8px;border-radius:2px;
@@ -1151,9 +1153,12 @@ const S = {
 };
 const SNAP = 6;
 
-// Apple-style rubber-band: progressive resistance past a boundary
+// Apple-style rubber-band: progressive resistance past a boundary.
+// overshoot is the distance travelled beyond the boundary (positive value).
+// Formula: force = overshoot * dim * c / (dim + c * overshoot)
+// When overshoot → 0 force → 0; when overshoot → ∞ force → dim/c (hard limit).
 function rubberband(overshoot, dim, c = 0.55) {
-  return (overshoot * dim * c) / (dim + c * Math.abs(overshoot));
+  return (overshoot * dim * c) / (dim + c * overshoot);
 }
 
 // ── Alignment guide line pool ──
@@ -1317,7 +1322,7 @@ el.scroll.addEventListener('drop', e => {
 function loadFile(file) {
   if (!file || !file.type.startsWith('image/')) { toast('仅支持图片文件', 3000); return; }
   if (file.size > 40 * 1024 * 1024) { toast('图片超过 40MB，请先压缩后再导入', 4000); return; }
-  if (S._editingId) commitTextEdit();
+  if (S._editingId) _abandonEdit();
   // Reset gesture state so a pending long-press or pinch from the previous image
   // doesn't carry over and interfere with the new image session.
   _lpFired = false;
@@ -1382,6 +1387,10 @@ function _enterWorkspace() {
   el.cv.classList.add('loaded');
   el.cvToolbar.style.display = '';
   el.sbDim.textContent   = `${S.imgNatW} × ${S.imgNatH}`;
+  // Abort any in-progress text edit so the new workspace starts clean.
+  // Without this, a lingering _editingId blocks pointer interaction (onDS
+  // returns early), making elements unclickable after image replacement.
+  if (S._editingId) _abandonEdit();
   // fitCanvas() internally calls setZoom() → applyZoom() — no need to call applyZoom separately
   fitCanvas();
   S.history = [];
@@ -1427,7 +1436,7 @@ function fitCanvas() {
 }
 
 function applyZoom(pct, updateSlider) {
-  if (!S.imgSrc) return;
+  if (!S.imgSrc || !S.imgW) return; // imgW=0 means image not loaded yet
   const scale = pct / 100;
   el.cv.style.transform = `scale(${scale})`;
   // Reserve space so scrolling works correctly — transform doesn't affect layout flow
@@ -1458,7 +1467,7 @@ function render() {
     el.cv.addEventListener('click', e => {
       // Commit text edit when clicking outside the editing element
       if (e.target === el.cv || e.target === imgEl) {
-        if (S._editingId) commitTextEdit();
+        if (S._editingId) _abandonEdit();
         S.sel = null;
         S.selSet.clear();
         S._selectedParaId = null;
@@ -1474,11 +1483,14 @@ function render() {
       const rect = el.cv.getBoundingClientRect();
       const cx = (e.clientX - rect.left) / scale;
       const cy = (e.clientY - rect.top)  / scale;
-      // Create a text element centered at the cursor position
+      // Create a text element centered at the cursor position. Clamp its origin
+      // so a click near the edge (or on a very small image) never creates an
+      // element that is completely unreachable outside the canvas.
       const w = 220, h = 70;
       const newEl = {
         id: S.nid++, type: 'text',
-        x: cx - w / 2, y: cy - h / 2,
+        x: clampElementPos(cx - w / 2, w, S.imgW),
+        y: clampElementPos(cy - h / 2, h, S.imgH),
         w, h, r: 12,
         bg: '#ffffff', tc: '#F9F6ED',
         fs: 22, fw: '700',
@@ -1560,6 +1572,10 @@ function render() {
     _renderPropsImpl();
   } else if (!document.activeElement || !el.pscroll.contains(document.activeElement)) {
     renderProps();
+  } else {
+    // A panel input is active — defer rebuild so the user isn't interrupted.
+    clearTimeout(_propsTimer);
+    _propsTimer = setTimeout(renderProps, 80);
   }
   el.sbCnt.textContent = S.els.length;
   updateUndoInfo();
@@ -1801,7 +1817,7 @@ function startTextEdit(id) {
   textarea.className = 'text-editor-area';
   textarea.value = typeof item.text === 'string' ? item.text : '';
   textarea.placeholder = '输入文字...';
-  textarea.style.cssText = 'width:100%;height:100%;background:transparent;border:none;outline:none;resize:none;overflow:hidden;word-break:break-word;white-space:pre-wrap;';
+  textarea.style.cssText = 'width:100%;height:100%;background:transparent;border:none;outline:none;resize:none;overflow:hidden;word-break:break-word;white-space:pre-wrap;box-shadow:0 0 0 2px transparent';
   _applyTextNodeStyle(textarea, item);
   textarea.style.pointerEvents = 'auto';
   textarea.addEventListener('input', () => {
@@ -1813,7 +1829,14 @@ function startTextEdit(id) {
       while (item.paragraphs.length < count) item.paragraphs.push({});
     }
   });
-  textarea.addEventListener('blur', () => commitTextEdit());
+  textarea.addEventListener('blur', () => {
+    // Clear the focus ring immediately — commitTextEdit() will re-render the element
+    // and the editing-path guard in applyStyle skips DOM updates, so we must
+    // nullify the shadow here to avoid a stale ring after focus loss.
+    const editor = inner.querySelector('.text-editor-area');
+    if (editor) editor.style.boxShadow = '';
+    commitTextEdit();
+  });
   textarea.addEventListener('keydown', event => {
     if (event.key === 'Escape') { event.preventDefault(); commitTextEdit(); }
     if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); commitTextEdit(); }
@@ -1836,6 +1859,14 @@ function commitTextEdit() {
   }
   saveHist();
   render();
+}
+
+// Abandon (discard) any in-progress text edit without saving to history.
+// Used by undo/redo and project-switching operations to avoid polluting history
+// with unsaved draft input.
+function _abandonEdit() {
+  if (!S._editingId) return;
+  S._editingId = null;
 }
 
 function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;').replace(/'/g,'&#39;'); }
@@ -1922,7 +1953,8 @@ function gdToggle(id) {
   const preview = document.getElementById(`gd-preview-${id}`);
   if (preview) {
     const gd = gdGet(el2);
-    preview.style.background = gdCSS(gd, 200, 20) || 'transparent';
+    // Preview reflects actual element opacity for consistency with export
+    preview.style.background = gdCSS(gd, 200, 20, el2.op ?? 0.25) || 'transparent';
   }
   clearTimeout(_spTimer);
   _spTimer = setTimeout(scheduleHistSave, 600);
@@ -1983,7 +2015,7 @@ function getEl2(id) { return elMap.get(id); }
 
 function _textTaCss(el2) {
   const fam = el2.fontFamily || "'DM Sans',sans-serif";
-  return `width:100%;height:100%;background:transparent;border:none;outline:none;resize:none;font-family:${escHtml(fam)};font-size:${el2.fs||16}px;font-weight:${el2.fw||'500'};font-style:${el2.italic?'italic':'normal'};color:${escHtml(el2.tc||'#fff')};text-align:${el2.align||'center'};letter-spacing:${el2.ls||0}px;line-height:${el2.lh||1.45};text-shadow:${escHtml((el2.tsh||'0 1px 6px rgba(0,0,0,.4)').replace(/"/g,"'"))};word-break:break-word;white-space:pre-wrap;overflow:hidden;caret-color:${escHtml(el2.tc||'#fff')}`;
+  return `width:100%;height:100%;background:transparent;border:none;outline:none;resize:none;font-family:${escHtml(fam)};font-size:${el2.fs||16}px;font-weight:${el2.fw||'500'};font-style:${el2.italic?'italic':'normal'};color:${escHtml(el2.tc||'#fff')};text-align:${el2.align||'center'};letter-spacing:${el2.ls||0}px;line-height:${el2.lh||1.45};text-shadow:${escHtml((el2.tsh||'0 1px 6px rgba(0,0,0,.4)').replace(/"/g,"'"))};word-break:break-word;white-space:pre-wrap;overflow:hidden;caret-color:${escHtml(el2.tc||'#fff')};box-shadow:0 0 0 2px transparent`;
 }
 
 // Keep the floating toolbar in sync while the overlay textarea is being edited.
@@ -1992,6 +2024,12 @@ function _textTaCss(el2) {
 // DRAG & RESIZE
 // ═══════════════════════════════════════════════════════════════
 function onDS(e) {
+  // Cancel any pending long-press timer — a pointer-down drag should take precedence
+  // over the touch-based context menu gesture to prevent race conditions.
+  clearTimeout(_lpTimer);
+  _lpTimer = null;
+  _lpFired = false;
+  _lpActive = false;
   if (S._editingId) return;
   if (e.target.classList.contains('rh')) return;
   const id = +e.currentTarget.dataset.id;
@@ -2148,12 +2186,14 @@ function onMouseMove(e) {
     let nx = (e.clientX - rect.left) / scale - S._dragOX;
     let ny = (e.clientY - rect.top)  / scale - S._dragOY;
 
-    // Soft clamp with rubber-band resistance at canvas edges
+    // Soft clamp with rubber-band resistance at canvas edges.
+    // The overshoot passed to rubberband() must be positive (distance past boundary);
+    // nx - minNx is negative when pulled left, so we negate it.
     const minNx = -el2.w + 20, maxNx = S.imgW - 20;
     const minNy = -el2.h + 20, maxNy = S.imgH - 20;
-    if (nx < minNx) nx = minNx + rubberband(nx - minNx, el2.w);
+    if (nx < minNx) nx = minNx + rubberband(minNx - nx, el2.w);
     if (nx > maxNx) nx = maxNx + rubberband(nx - maxNx, el2.w);
-    if (ny < minNy) ny = minNy + rubberband(ny - minNy, el2.h);
+    if (ny < minNy) ny = minNy + rubberband(minNy - ny, el2.h);
     if (ny > maxNy) ny = maxNy + rubberband(ny - maxNy, el2.h);
 
     // ── Smart alignment guides (canvas edges + other elements) ──
@@ -2481,6 +2521,14 @@ function toggleLock() {
 // ═══════════════════════════════════════════════════════════════
 // ELEMENTS CRUD
 // ═══════════════════════════════════════════════════════════════
+function clampElementPos(pos, size, canvasSize) {
+  // Keep at least 20px of an oversized element visible while ensuring normal
+  // sized elements remain fully inside the canvas.
+  const maxPos = canvasSize - 20;
+  const minPos = -size + 20;
+  return Math.max(minPos, Math.min(maxPos, Number(pos) || 0));
+}
+
 function addEl(type) {
   if (!S.imgSrc) { toast('请先上传图片', 5000); return; }
   const cx = S.imgW / 2, cy = S.imgH / 2;
@@ -2488,8 +2536,8 @@ function addEl(type) {
   const h = type === 'text' ? 70 : 130;
   const el2 = {
     id: S.nid++, type,
-    x: cx - w/2,
-    y: cy - h/2,
+    x: clampElementPos(cx - w/2, w, S.imgW),
+    y: clampElementPos(cy - h/2, h, S.imgH),
     w, h, r: type === 'text' ? 12 : 14,
     bg: type === 'card' ? '#111111' : '#ffffff',
     tc: '#F9F6ED',
@@ -2524,6 +2572,9 @@ function addEl(type) {
 // Track element IDs with pending delete animations — distinguishes "animation in progress"
 // from "undo cancelled the delete". render() won't clear materialize-out for these.
 const _pendingDelete = new Set();
+// Prevent rapid double-click Delete from queuing a second deletion while an animation
+// is mid-flight (would remove elements before their finish callback runs).
+let _isDeleting = false;
 
 // Shared entrance animation for newly added elements (addEl / applyPreset).
 // Stores the handler on the DOM so _cleanupAnimListeners can detach it.
@@ -2557,12 +2608,13 @@ function _cleanupAnimListeners() {
 }
 
 function delSel() {
-  if (!S.sel) return;
+  if (!S.sel || _isDeleting) return;
   // If deleting the element currently being edited, commit (or abandon) the edit first
   const idsToRemove = [...S.selSet];
   if (!idsToRemove.length && S.sel) idsToRemove.push(S.sel);
   // Play materialize-out animation on all targeted DOM elements
   let pending = 0;
+  _isDeleting = true;
   idsToRemove.forEach(id => {
     const dom = el.cv.querySelector(`[data-id="${id}"]`);
     if (dom) {
@@ -2577,6 +2629,7 @@ function delSel() {
   const finish = () => {
     if (finished) return;
     finished = true;
+    _isDeleting = false;
     // Only remove elements still marked for deletion (undo clears _pendingDelete to cancel)
     let removed = false;
     idsToRemove.forEach(id => {
@@ -2609,13 +2662,16 @@ function delSel() {
 }
 
 function delById(id) {
+  if (_isDeleting) return;
   // If deleting the element currently being edited, commit the edit first
   const dom = el.cv.querySelector(`[data-id="${id}"]`);
   if (dom) {
     // Animate out and remove after animation completes
+    _isDeleting = true;
     dom.classList.add('materialize-out');
     _pendingDelete.add(id);
     const finish = () => {
+      _isDeleting = false;
       if (_pendingDelete.has(id)) {
         _pendingDelete.delete(id);
         S.els = S.els.filter(e => e.id !== id);
@@ -2647,7 +2703,8 @@ function clearAll() {
   const doClear = () => {
     // Clean up shadow store for all elements
     S.els.forEach(e => _shdCleanup(e.id));
-    S._editingId = null; // commit or abandon any active text edit — prevents stale textarea from blocking new edits
+    if (S._editingId) _abandonEdit();
+    S._editingId = null;
     S.els = []; S.sel = null; S.selSet.clear();
     _pendingDelete.clear();
     // Reset long-press and pinch state to prevent stale gestures affecting new session
@@ -2732,32 +2789,25 @@ function sendBwd() {
 
 function toFront() {
   if (!S.sel) { toast('请先选中一个元素'); return; }
-  // Bring to front: move selected elements to end of S.els (top of z-order).
-  // Sort by descending current index so we process topmost first, preserving
-  // relative z-order among selected elements when they all reach the top.
-  const selIds = S.selSet.size ? [...S.selSet] : (S.sel ? [S.sel] : []);
-  if (!selIds.length) return;
-  const indices = selIds.map(id => S.els.findIndex(e => e.id === id)).sort((a, b) => b - a);
-  indices.forEach(i => {
-    const e = S.els[i];
-    if (e) { S.els.splice(i, 1); S.els.push(e); }
-  });
+  // Stable partition: move selected elements to the top while preserving their
+  // original relative z-order. Repeated splice/unshift operations used here
+  // previously reversed multi-selection order because indices became stale.
+  const selected = new Set(S.selSet.size ? [...S.selSet] : [S.sel]);
+  const moved = S.els.filter(e => selected.has(e.id));
+  if (!moved.length) return;
+  S.els = S.els.filter(e => !selected.has(e.id)).concat(moved);
   _rebuildElMap();
   saveHist(); render();
 }
 
 function toBack() {
   if (!S.sel) { toast('请先选中一个元素'); return; }
-  // Send to back: move selected elements to start of S.els (bottom of z-order).
-  // Sort by ascending current index so we process bottommost first, preserving
-  // relative z-order among selected elements when they all reach the bottom.
-  const selIds = S.selSet.size ? [...S.selSet] : (S.sel ? [S.sel] : []);
-  if (!selIds.length) return;
-  const indices = selIds.map(id => S.els.findIndex(e => e.id === id)).sort((a, b) => a - b);
-  indices.forEach(i => {
-    const e = S.els[i];
-    if (e) { S.els.splice(i, 1); S.els.unshift(e); }
-  });
+  // Stable partition at the bottom; selected elements retain their relative
+  // order from the current layer stack.
+  const selected = new Set(S.selSet.size ? [...S.selSet] : [S.sel]);
+  const moved = S.els.filter(e => selected.has(e.id));
+  if (!moved.length) return;
+  S.els = moved.concat(S.els.filter(e => !selected.has(e.id)));
   _rebuildElMap();
   saveHist(); render();
 }
@@ -2860,8 +2910,8 @@ function applyPreset(key) {
   const w = p.w || 240, h = p.h || 120;
   const el2 = {
     id: S.nid++, type: p.type || 'glass',
-    x: cx - w/2,
-    y: cy - h/2,
+    x: clampElementPos(cx - w/2, w, S.imgW),
+    y: clampElementPos(cy - h/2, h, S.imgH),
     w, h, r: p.r ?? 14,
     bg: p.bg || '#ffffff', tc: p.tc || '#ffffff',
     fs: p.fs || 16, fw: p.fw || '500',
@@ -3002,7 +3052,7 @@ el.ll.addEventListener('dragend', e => {
 function selectLayerById(id) {
   id = Number(id);
   if (!getEl2(id)) return;
-  if (S._editingId && S._editingId !== id) commitTextEdit();
+  if (S._editingId && S._editingId !== id) _abandonEdit();
   S.sel = id;
   S.selSet.clear();
   S.selSet.add(id);
@@ -3029,6 +3079,9 @@ el.ll.addEventListener('keydown', e => {
   selectLayerById(id);
 });
 function renderLayers() {
+  // Save scroll position before rebuilding — the list has max-height:170px and
+  // users frequently scroll to reach lower layers; resetting to top is jarring.
+  const prevScroll = el.ll.scrollTop;
   if (!S.els.length) {
     el.ll.innerHTML = `<div class="empty-st"><svg width="26" height="26" viewBox="0 0 26 26" fill="none"><rect x="2" y="4" width="22" height="18" rx="3" stroke="currentColor" stroke-width="1.2"/></svg><p>还没有元素</p></div>`;
     return;
@@ -3062,6 +3115,8 @@ function renderLayers() {
     });
     el.ll.appendChild(div);
   });
+  // Restore scroll so the user's viewport into the layer list is preserved across rebuilds
+  el.ll.scrollTop = prevScroll;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -3250,7 +3305,9 @@ function _renderPropsImpl() {
         </select>
       </div>`;
     if (hasGrad) {
-      const previewGrad = gdCSS(gd, 200, 20);
+      // Preview reflects the element's actual opacity so the bar matches
+      // what the export will render — no mismatch between UI and output.
+      const previewGrad = gdCSS(gd, 200, 20, el2.op ?? 0.25);
       sa += `<div class="gd-preview-bar" id="gd-preview-${el2.id}" style="height:20px;border-radius:4px;background:${previewGrad};margin-bottom:6px;border:1px solid var(--border2)"></div>`;
       sa += `<div style="font-size:10px;color:var(--text-hint);margin-bottom:4px">色标（颜色 → 不透明度）</div>`;
       gd.stops.forEach((stop, i) => {
@@ -3540,12 +3597,11 @@ function slp(id, key, raw, lblId, unit, dec) {
   if (dom) applyStyle(dom, el2);
   const lbl = document.getElementById(lblId);
   if (lbl) lbl.textContent = (dec > 0 ? raw.toFixed(dec) : Math.round(raw)) + unit;
-  // Only refresh panel when not dragging — while dragging the user should be able
-  // to interact with panel controls without constant rebuilds.
-  if (!S._drag && !S._resize) {
-    clearTimeout(_propsTimer);
-    _propsTimer = setTimeout(renderProps, 50);
-  }
+  // Always refresh panel on slider change so visual feedback stays in sync,
+  // even while dragging (the panel is deferred-rebuilt via renderProps which
+  // has its own debounce guard to avoid rebuilds during active drags).
+  clearTimeout(_propsTimer);
+  _propsTimer = setTimeout(renderProps, 50);
   requestLayersRender();
   clearTimeout(_spTimer);
   _spTimer = setTimeout(scheduleHistSave, 600);
@@ -3751,12 +3807,13 @@ document.addEventListener('visibilitychange', () => {
 })();
 
 function undo() {
-  if (S._editingId) S._editingId = null;
+  // Abandon any active text edit before undoing — unsaved draft input should not
+  // be committed to history; the user can always re-open the editor if they want it back.
+  if (S._editingId) _abandonEdit();
   if (S.hIdx <= 0) { toast('已到最早记录'); return; }
   if (S._drag || S._resize) { S._drag = null; S._resize = null; S._didDrag = false; }
   // Cancel any pending delete animations — undo restores the elements
   _pendingDelete.clear();
-  // Discard any in-progress text edit — the saved state may not match current DOM
   S.hIdx--;
   const s = JSON.parse(S.history[S.hIdx]);
   S.els = s.els; S.sel = s.sel;
@@ -3769,7 +3826,7 @@ function undo() {
 }
 
 function redo() {
-  if (S._editingId) S._editingId = null;
+  if (S._editingId) _abandonEdit();
   if (S.hIdx >= S.history.length - 1) { toast('没有可重做的操作'); return; }
   if (S._drag || S._resize) { S._drag = null; S._resize = null; S._didDrag = false; }
   _pendingDelete.clear();
@@ -3907,7 +3964,7 @@ function loadProjectFile(input) {
   const file = input.files[0];
   if (!file) return;
   if (file.size > 15 * 1024 * 1024) { toast('❌ 项目文件超过 15MB，无法安全加载'); input.value = ''; return; }
-  if (S._editingId) commitTextEdit();
+  if (S._editingId) _abandonEdit();
   const reader = new FileReader();
   reader.onload = ev => {
     try {
@@ -3983,12 +4040,21 @@ function canvasFontStr(italic, fw, fsize, fam) {
 }
 
 // Reusable offscreen canvases for export (blur backdrop + chromatic aberration).
-// Reusing avoids allocating/freeing large canvases for every element on every export.
+// Max pool size limits GPU-memory growth across repeated exports. When a canvas
+// exceeds MAX_DIM/2 on any side it is discarded and recreated at the current size.
 const _expPool = {};
+const _EXP_MAX_DIM = 8000;
 function _expCanvas(name, w, h) {
   let c = _expPool[name];
   if (!c) { c = document.createElement('canvas'); _expPool[name] = c; }
-  if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+  if (c.width !== w || c.height !== h) {
+    // Discard oversized cached canvases to free GPU memory on repeated high-res exports
+    if (c.width > _EXP_MAX_DIM || c.height > _EXP_MAX_DIM) {
+      delete _expPool[name];
+      c = document.createElement('canvas'); _expPool[name] = c;
+    }
+    c.width = w; c.height = h;
+  }
   return c;
 }
 
@@ -4158,6 +4224,12 @@ async function exportImg() {
     // Yield less frequently when there are many elements — every 5 items is
     // enough to keep the progress bar responsive without excessive rIC/tick overhead.
     if (i > 0 && i % 5 === 4) await yield();
+    // Ensure progress reaches 87% for the last element so the bar never
+    // stalls at 15% when only one element is present.
+    if (i === S.els.length - 1) {
+      bar.style.width = '87%';
+      msg.textContent = `渲染完成，共 ${S.els.length} 个元素`;
+    }
     if (window._exportCancelled) { ov.classList.remove('show'); toast('已取消导出'); return; }
 
     const ex = el2.x * sx, ey = el2.y * sy, ew = el2.w * sx, eh = el2.h * sy;
@@ -4217,7 +4289,18 @@ async function exportImg() {
       if (brVal  !== 100) parts.push(`brightness(${brVal}%)`);
       const useCtxFilter = parts.length > 0 && _supportsCtxFilter();
       if (useCtxFilter) tc.filter = parts.join(' ');
-      tc.drawImage(ec, bRx, bRy, bRw, bRh, 0, 0, bRw, bRh);
+      // When element is rotated, sample the rotated AABB (extW×extH) centred on
+      // the rotated centre, not the axis-aligned bbox — otherwise corners are cut.
+      if (hasRot) {
+        tc.save();
+        tc.translate(bCx, bCy);
+        tc.rotate(rotRad);
+        tc.translate(-bCx, -bCy);
+        tc.drawImage(ec, bRx, bRy, bRw, bRh, 0, 0, bRw, bRh);
+        tc.restore();
+      } else {
+        tc.drawImage(ec, bRx, bRy, bRw, bRh, 0, 0, bRw, bRh);
+      }
       tc.filter = 'none';
       if (parts.length > 0 && !useCtxFilter) _applyBackdropFallback(tc, bRadius, satVal, brVal);
     }
@@ -4658,11 +4741,11 @@ function yield() {
 }
 
 // Mouse-wheel zoom on canvas scroll area (centered on cursor)
-// Supports Ctrl/Cmd+wheel (standard) and Alt+wheel (mac-friendly, avoids
-// conflict with macOS "Zoom screen" accessibility gesture on Ctrl+wheel)
+// Supports Ctrl/Cmd+wheel (standard). Alt+wheel is intentionally NOT supported
+// to avoid conflict with macOS "Zoom screen" accessibility gesture.
 el.scroll.addEventListener('wheel', e => {
   if (!S.imgSrc) return;
-  if (e.ctrlKey || e.metaKey || e.altKey) {
+  if (e.ctrlKey || e.metaKey) {
     e.preventDefault();
     const scrollEl = el.scroll;
     // Record content point under cursor before zoom
@@ -4680,7 +4763,8 @@ el.scroll.addEventListener('wheel', e => {
 }, { passive: false });
 
 // ── Two-finger pinch zoom for mobile (when no element is selected) ──
-// Tracks the distance between two touch points and adjusts zoom accordingly.
+// Only allow pinch zoom when no element is selected — prevents accidental zooming
+// while trying to drag or resize elements on mobile.
 let _pinchStartDist = null;
 let _pinchStartZoom = null;
 document.addEventListener('touchstart', e => {
@@ -4832,11 +4916,18 @@ document.addEventListener('touchmove', e => {
 document.addEventListener('touchend', e => {
   clearTimeout(_lpTimer);
   _lpTimer = null;
-  // Reset both flags immediately — the touchend handler that hides ctx menus
-  // (line 2678) checks _lpActive/_lpFired synchronously, so any rAF delay
-  // would cause menus to stick open on the same touch sequence.
-  _lpFired = false;
-  _lpActive = false;
+  // Only clear the flags if the long-press did NOT fire.
+  // When _lpFired is true, showCtx() was already called; clearing _lpActive here
+  // would cause the subsequent click event (which fires after touchend due to
+  // touch-action:manipulation) to incorrectly close the context menu.
+  if (!_lpFired) {
+    _lpFired = false;
+    _lpActive = false;
+  } else {
+    // Long-press just fired — keep _lpActive true so the click handler below
+    // skips hiding the menu. _lpActive will be reset on the next touchstart.
+    _lpFired = false;
+  }
 });
 // ═══════════════════════════════════════════════════════════════
 let toastTimer;
