@@ -12,3 +12,7 @@ trading.html.backup_*
 .hallmark
 *.md
 .gitignore
+GlassStudio-*
+BUG*
+bug*
+.eslin*
