@@ -130,9 +130,10 @@ function calculate() {
   let atrStopMode = false;
   const atrValue = parseFloat(document.getElementById('atrValue').value);
   var settings = loadSettings();
-  // 优先使用表单开关，其次设置值；倍数同理
+  // P0-7 FIX: 表单开关应完全覆盖全局设置，而非 OR 短路
+  // 若用户在表单中显式关闭 ATR（checked=false），即使 settings.atrStopEnabled=true 也应生效
   const formAtrEnabled = document.getElementById('formAtrStopEnabled');
-  const atrEnabled = (formAtrEnabled && formAtrEnabled.checked) || settings.atrStopEnabled === true;
+  const atrEnabled = formAtrEnabled ? formAtrEnabled.checked : (settings.atrStopEnabled === true);
   const atrMultiplier = parseFloat(document.getElementById('atrMultiplier').value) || settings.atrDefaultMultiplier || 2;
   if (atrEnabled && !isNaN(atrValue) && atrValue > 0) {
     var atrStopResult = calcATRStop(effectiveEntryPrice, atrValue, atrMultiplier, direction);
@@ -586,6 +587,16 @@ function calculate() {
   if (stopPct > 5) { stopTagClass = 'red'; stopTagLabel = '偏大'; rw = '<span class="warning-tag alert"><i class="fas fa-exclamation-triangle"></i> 止损距离 '+stopPct.toFixed(2)+'% 较大，请确认策略</span>'; }
   else if (stopPct > maxStopPct) { stopTagClass = 'yellow'; stopTagLabel = '偏大'; rw = '<span class="warning-tag"><i class="fas fa-bolt"></i> 止损距离 '+stopPct.toFixed(2)+'% 偏大</span>'; }
   else if (stopPct < minStopPct) { stopTagClass = 'yellow'; stopTagLabel = '偏窄'; rw = '<span class="warning-tag"><i class="fas fa-bolt"></i> 止损距离 '+stopPct.toFixed(2)+'% 较窄，注意滑点</span>'; }
+  // P0-7 FIX: 超过品种自定义止损上限时硬阻断（与 riskPercent 硬上限行为一致）
+  if (stopPct > maxStopPct) {
+    _calcCleanup();
+    return renderHardBlock(
+      'custom-stop-limit-exceeded',
+      '止损距离超出品种上限',
+      '品种 ' + symbol + ' 止损距离 ' + stopPct.toFixed(2) + '% 超过自定义上限 ' + maxStopPct + '%。请收紧止损距离或修改系统设置中的品种止损上限。',
+      { stopPct: stopPct, maxStopPct: maxStopPct, symbol: symbol }
+    );
+  }
 
   // ===== P0-05：手续费与双侧 tick 滑点（供 targetRR 使用） =====
   let feeRate = parseFloat(document.getElementById('feeRate').value) || 0;

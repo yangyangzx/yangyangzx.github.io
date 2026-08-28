@@ -234,6 +234,10 @@ function buildRowsHTML(dl) {
               '<option value="reducePosition">减仓</option>' +
             '</select>' +
           '</div>' +
+          '<div class="fp" id="cpPartialRatioRow_' + realIdx + '" style="display:' + ((item.closeType === 'partialTP' || item.closeType === 'reducePosition') ? 'block' : 'none') + ';">' +
+            '<label>平仓比例 (%)<span style="font-size:11px;color:var(--color-text-muted);margin-left:4px;">剩余仓位 = 原仓位 × (1 − 比例)</span></label>' +
+            '<input type="number" id="cpPartialRatio_' + realIdx + '" step="5" min="1" max="100" value="' + (item.partialRatio != null ? item.partialRatio : '') + '" placeholder="如 50 表示平仓 50%" />' +
+          '</div>' +
           '<div class="fp">' +
             '<label>平仓价格 <span style="color:var(--color-danger);margin-left:2px">*</span></label>' +
             '<input type="number" id="cpClosePrice_' + realIdx + '" step="0.00001" placeholder="价格" />' +
@@ -437,6 +441,12 @@ function bindTbodyEvents() {
           cpPriceEl.select();
         }
       }
+      // P0-3 FIX: 切换平仓类型时动态显示/隐藏部分平仓比例输入框
+      var ratioRowEl = document.getElementById('cpPartialRatioRow_' + idx);
+      if (ratioRowEl) {
+        var isPartial = e.target.value === 'partialTP' || e.target.value === 'reducePosition';
+        ratioRowEl.style.display = isPartial ? 'block' : 'none';
+      }
       calcClosePnL(idx);
       return;
     }
@@ -527,7 +537,9 @@ function renderLogs() {
 
   // 仅清除已关闭面板（非当前打开的）的标记，避免同会话内意外重置手动填价状态
   Object.keys(_closePriceEdited).forEach(function(k) {
-    if (parseInt(k, 10) !== openClosePanelIdx) delete _closePriceEdited[k];
+    var kNum = parseInt(k, 10);
+    // 安全处理：k 不是数字时直接删除（防止脏数据残留）
+    if (isNaN(kNum) || kNum !== openClosePanelIdx) delete _closePriceEdited[k];
   });
 
   // 延迟绑定事件委托（首次调用时绑定一次）

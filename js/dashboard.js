@@ -14,7 +14,8 @@ function getClosedLogs() {
 function _getOpenLogs() {
   var result = [];
   for (var i = 0; i < logs.length; i++) {
-    if (!logs[i].closeType) {
+    // partialTP / reducePosition 视为部分平仓，不重复计入"持仓中"统计
+    if (!logs[i].closeType || logs[i].closeType === 'partialTP' || logs[i].closeType === 'reducePosition') {
       result.push(logs[i]);
     }
   }

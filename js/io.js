@@ -4,6 +4,10 @@ var fmtTime = window.utils.fmtTime;
 
 function exportCSV() {
   if (!logs.length) { showToast('暂无日志','info'); return; }
+  // 防重入：防止快速双击触发多次下载
+  if (window.__exportingCSV) { showToast('正在导出中，请稍候', 'info'); return; }
+  window.__exportingCSV = true;
+  try {
   const headers = ['时间','品种','方向','订单类型','入场价','有效入场价','止损价','目标价','仓位(USDT)','杠杆','风险额','本金','心态评分','形态/策略','信号K','交易时段','市场环境','平仓类型','平仓价','平仓时间','持仓时长(分钟)','R倍数','盈亏金额','盈亏百分比','MAE%','MFE%','执行评分','出场理由','亏损原因','交易情绪','平仓备注','入场原因','手续费','滑点成本','计算版本','滑点Schema','入场Ticks','退出Ticks','TickSize','计划有效退出价','GroupId'];
   let csv = headers.join(',') + '\n';
   for (const row of logs) {
@@ -23,6 +27,8 @@ function exportCSV() {
   }
   const b = new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'});
   const a = document.createElement('a'); a.href=URL.createObjectURL(b); a.download='trade_logs_'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
+  } catch(e) { showToast('导出失败: ' + e.message, 'error'); }
+  finally { window.__exportingCSV = false; }
 }
 
 function exportJSON(indices) {

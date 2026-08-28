@@ -99,6 +99,10 @@ function openEditModal(idx) {
       '</div>' +
       '<div class="modal-tab-panel" id="emTab1">' +
         '<div class="fp"><label>平仓类型</label><select id="emCloseType"><option value="">—</option><option value="initialSL"' + (item.closeType === 'initialSL' ? ' selected' : '') + '>初始止损</option><option value="trailingSL"' + (item.closeType === 'trailingSL' ? ' selected' : '') + '>追踪止损</option><option value="initialTP"' + (item.closeType === 'initialTP' ? ' selected' : '') + '>初始止盈</option><option value="manualWin"' + (item.closeType === 'manualWin' ? ' selected' : '') + '>手平赢</option><option value="manualLoss"' + (item.closeType === 'manualLoss' ? ' selected' : '') + '>手平损</option><option value="liquidation"' + (item.closeType === 'liquidation' ? ' selected' : '') + '>强平/爆仓</option><option value="partialTP"' + (item.closeType === 'partialTP' ? ' selected' : '') + '>部分止盈</option><option value="timeStop"' + (item.closeType === 'timeStop' ? ' selected' : '') + '>时间止损</option><option value="reducePosition"' + (item.closeType === 'reducePosition' ? ' selected' : '') + '>减仓</option></select></div>' +
+        '<div class="fp" id="emPartialRatioRow" style="display:' + ((item.closeType === 'partialTP' || item.closeType === 'reducePosition') ? 'block' : 'none') + ';">' +
+          '<label>平仓比例 (%)<span style="font-size:11px;color:var(--color-text-muted);margin-left:4px;">剩余仓位 = 原仓位 × (1 − 比例)</span></label>' +
+          '<input type="number" id="emPartialRatio" step="5" min="1" max="100" value="' + (item.partialRatio != null ? item.partialRatio : '') + '" placeholder="如 50 表示平仓 50%" />' +
+        '</div>' +
         '<div class="fp"><label>平仓价</label><input type="number" id="emClosePrice" step="0.00001" value="' + (item.closePrice ?? '') + '" /></div>' +
         '<div class="fp"><label>R倍数</label><input type="text" id="emRMultiple" value="' + (item.rMultiple ?? '') + '" /></div>' +
         '<div class="fp"><label>盈亏金额</label><input type="text" id="emPnlAmount" value="' + (item.pnlAmount ?? '') + '" /><span id="emPnlManualTag" style="display:none;font-size:10px;color:var(--color-warning);margin-left:4px;">手动</span></div>' +
@@ -577,6 +581,28 @@ function saveEditLog(idx) {
   item.signals = signals;
 
   v = gv('emCloseType'); if (v !== undefined) item.closeType = v;
+  // P0-3 FIX: partialTP/reducePosition 时记录平仓比例并更新剩余仓位
+  if (item.closeType === 'partialTP' || item.closeType === 'reducePosition') {
+    var ratioEl = document.getElementById('emPartialRatio');
+    var partialRatio = ratioEl ? parseFloat(ratioEl.value) : NaN;
+    if (!isNaN(partialRatio) && partialRatio > 0 && partialRatio < 100) {
+      item.partialRatio = partialRatio;
+      var origPos = parseFloat(item.positionSize) || 0;
+      var remainingPos = origPos * (1 - partialRatio / 100);
+      item.positionSize = parseFloat(remainingPos.toFixed(2));
+      // 按比例缩减风险额与保证金
+      if (!isNaN(item.riskAmount) && item.riskAmount != null) {
+        item.riskAmount = parseFloat((item.riskAmount * (1 - partialRatio / 100)).toFixed(2));
+      }
+      if (!isNaN(item.actualMargin) && item.actualMargin != null) {
+        item.actualMargin = parseFloat((item.actualMargin * (1 - partialRatio / 100)).toFixed(2));
+      }
+    } else {
+      delete item.partialRatio;
+    }
+  } else {
+    delete item.partialRatio;
+  }
   v = gn('emClosePrice'); if (v !== undefined && v !== null) item.closePrice = v;
   // 编辑平仓数据时，若尚未有 closeTime 则自动写入
   if (item.closeType) {

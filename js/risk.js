@@ -1,23 +1,21 @@
 // ==================== 风控中心 ====================
 
 /**
- * 获取账户总余额：从日志中取最新的 capital，兜底第一个有 capital 的日志
- * 若均无，返回 settings.accountBalance（初始本金快照）；仍未设置则返回 null
+ * 获取账户总余额：优先使用 settings.accountBalance（反映实际账户状态），
+ * 兜底到日志中最新的 capital 快照（用于向后兼容无设置的历史数据），
+ * 仍未设置则返回 null
  */
 function getAccountCapital() {
-  // 优先从最近的日志中取最新的 capital 快照（自动反映已平仓后的权益变化）
+  try {
+    var _s = loadSettings();
+    if (_s && _s.accountBalance > 0) return _s.accountBalance;
+  } catch(e) { /* ignore */ }
+  // 兜底：从最近的日志中取最新的 capital 快照
   for (var i = logs.length - 1; i >= 0; i--) {
     if (logs[i].capital != null && !isNaN(parseFloat(logs[i].capital))) {
       return parseFloat(logs[i].capital);
     }
   }
-  // 兜底：从系统设置读取初始本金快照
-  try {
-    var _fallbackSettings = loadSettings();
-    if (_fallbackSettings && _fallbackSettings.accountBalance > 0) {
-      return _fallbackSettings.accountBalance;
-    }
-  } catch(e) { /* ignore */ }
   return null;
 }
 
@@ -27,7 +25,8 @@ function getAccountCapital() {
 function getOpenPositions() {
   var open = [];
   for (var i = 0; i < logs.length; i++) {
-    if (!logs[i].closeType) {
+    // partialTP / reducePosition 为部分平仓操作，不应继续计入"未平仓"持仓
+    if (!logs[i].closeType || logs[i].closeType === 'partialTP' || logs[i].closeType === 'reducePosition') {
       open.push(logs[i]);
     }
   }
@@ -225,11 +224,13 @@ function renderDrawdown(closedOverride) {
     return;
   }
 
-  // 计算累计权益曲线：从首笔已平仓日志的 capital 取，无则从 getAccountCapital() 兜底
+  // 计算累计权益曲线：优先从 settings.accountBalance 取（与 calcEquityCurve 口径一致），
+  // 兜底到首笔已平仓日志的 capital，最后用 getAccountCapital() 兜底
   var capital = 0;
-  if (closed.length > 0 && closed[0].capital != null && !isNaN(closed[0].capital) && closed[0].capital > 0) {
+  try { var _ddSettings = loadSettings(); if (_ddSettings && _ddSettings.accountBalance > 0) capital = _ddSettings.accountBalance; } catch(e) {}
+  if (capital <= 0 && closed.length > 0 && closed[0].capital != null && !isNaN(closed[0].capital) && closed[0].capital > 0) {
     capital = closed[0].capital;
-  } else {
+  } else if (capital <= 0) {
     var _ddCapital = getAccountCapital();
     if (_ddCapital != null && _ddCapital > 0) capital = _ddCapital;
   }

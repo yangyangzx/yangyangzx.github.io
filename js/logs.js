@@ -193,6 +193,26 @@ function confirmClose(idx) {
   logs[idx].rMultiple = settlement.rMultiple == null ? null : parseFloat(settlement.rMultiple.toFixed(2));
   logs[idx].actualCloseFee = parseFloat(settlement.fee.toFixed(8));
   logs[idx].actualExitLegacySlippageCost = parseFloat(settlement.legacySlippageCost.toFixed(8));
+  // P0-3 FIX: partialTP/reducePosition 时处理平仓比例并更新剩余仓位
+  if (closeType.value === 'partialTP' || closeType.value === 'reducePosition') {
+    var ratioEl2 = document.getElementById('cpPartialRatio_' + idx);
+    var partialRatio2 = ratioEl2 ? parseFloat(ratioEl2.value) : NaN;
+    if (!isNaN(partialRatio2) && partialRatio2 > 0 && partialRatio2 < 100) {
+      logs[idx].partialRatio = partialRatio2;
+      var origPos2 = parseFloat(logs[idx].positionSize) || 0;
+      logs[idx].positionSize = parseFloat((origPos2 * (1 - partialRatio2 / 100)).toFixed(2));
+      if (!isNaN(logs[idx].riskAmount) && logs[idx].riskAmount != null) {
+        logs[idx].riskAmount = parseFloat((logs[idx].riskAmount * (1 - partialRatio2 / 100)).toFixed(2));
+      }
+      if (!isNaN(logs[idx].actualMargin) && logs[idx].actualMargin != null) {
+        logs[idx].actualMargin = parseFloat((logs[idx].actualMargin * (1 - partialRatio2 / 100)).toFixed(2));
+      }
+    } else {
+      delete logs[idx].partialRatio;
+    }
+  } else {
+    delete logs[idx].partialRatio;
+  }
   logs[idx].closeNote = closeNoteEl ? closeNoteEl.value.trim() : '';
   // Execution score
   const execChecks = document.getElementById('cpExecChecks_' + idx);
