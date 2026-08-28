@@ -1411,6 +1411,12 @@ function _enterWorkspace() {
   // Without this, a lingering _editingId blocks pointer interaction (onDS
   // returns early), making elements unclickable after image replacement.
   if (S._editingId) _abandonEdit();
+  // Clear ALL gesture state from the previous session to prevent stale
+  // long-press timers or pinch state from interfering with the new image.
+  _lpFired = false; _lpActive = false; clearTimeout(_lpTimer); _lpTimer = null;
+  _pinchStartDist = null; _pinchStartZoom = null;
+  if (_autoScrollRAF) { cancelAnimationFrame(_autoScrollRAF); _autoScrollRAF = 0; }
+  if (_rafId) { cancelAnimationFrame(_rafId); _rafId = null; _pendingHistSave = false; }
   // fitCanvas() internally calls setZoom() → applyZoom() — no need to call applyZoom separately
   fitCanvas();
   S.history = [];
@@ -1986,6 +1992,7 @@ function gdToggle(id) {
     // Preview reflects the gradient stops as they render — no elemOp multiplication.
     preview.style.background = gdCSS(gd, 200, 20) || 'transparent';
   }
+  renderProps(); // immediately refresh panel so gradient controls appear/disappear
   clearTimeout(_spTimer);
   _spTimer = setTimeout(scheduleHistSave, 600);
 }
@@ -3376,8 +3383,8 @@ function _renderPropsImpl() {
   sp_html += `<div class="prop-grid">
     <div class="pg"><div class="pl">宽</div><input class="pi" type="number" value="${Math.round(el2.w)}" min="20" title="宽度（像素）" onchange="sp(${el2.id},'w',+this.value);renderProps()"></div>
     <div class="pg"><div class="pl">高</div><input class="pi" type="number" value="${Math.round(el2.h)}" min="20" title="高度（像素）" onchange="sp(${el2.id},'h',+this.value);renderProps()"></div>
-    <div class="pg"><div class="pl">X</div><input class="pi" type="number" value="${Math.round(el2.x)}" title="水平坐标（像素）" onchange="sp(${el2.id},'x',+this.value)"></div>
-    <div class="pg"><div class="pl">Y</div><input class="pi" type="number" value="${Math.round(el2.y)}" title="垂直坐标（像素）" onchange="sp(${el2.id},'y',+this.value)"></div>
+    <div class="pg"><div class="pl">X</div><input class="pi" type="number" value="${Math.round(el2.x)}" title="水平坐标（像素）" onchange="sp(${el2.id},'x',+this.value);renderProps()"></div>
+    <div class="pg"><div class="pl">Y</div><input class="pi" type="number" value="${Math.round(el2.y)}" title="垂直坐标（像素）" onchange="sp(${el2.id},'y',+this.value);renderProps()"></div>
   </div>`;
   sp_html += `<div class="pg"><div class="pl">对齐到画布</div>
     <div class="align-btns">
@@ -3653,6 +3660,7 @@ function tp(id, key) {
   el2[key] = !el2[key];
   const dom = el.cv.querySelector(`[data-id="${id}"]`);
   if (dom) applyStyle(dom, el2);
+  requestLayersRender(); // refresh layer thumbnail highlight
   saveHist();
   renderProps();
 }
@@ -4258,6 +4266,9 @@ function _applyBackdropFallback(ctx, bRadius, satVal, brVal) {
 }
 
 async function exportImg() {
+  // Prevent re-entrant export calls — if an export is already in progress,
+  // starting another would race the overlay and corrupt the progress bar.
+  if (el.expOvl.classList.contains('show')) return;
   window._exportCancelled = false;
   const ov = el.expOvl, bar = el.expBar, msg = el.expMsg;
   ov.classList.add('show');
@@ -5101,6 +5112,8 @@ function _applyResponsive() {
   const w = window.innerWidth;
   const h = window.innerHeight;
   const isPhone = _isPhone();
+  // Track previous panel display state to detect show/hide transitions
+  const prevPanelHidden = document.getElementById('rp')?.style.display === 'none';
   // Panel toggle visibility
   const panelBtn = document.getElementById('panel-toggle');
   if (panelBtn) panelBtn.style.display = isPhone ? 'flex' : '';
@@ -5124,7 +5137,7 @@ function _applyResponsive() {
     // Dynamically sync the CSS variable used by canvas-scroll padding-top so it
     // always matches the actual rendered toolbar height (handles overflow, etc.)
     if (isPhone) {
-      const toolbarH = cvTb.offsetHeight;
+      const toolbarH = cvTb.offsetHeight || 48; // fallback prevents 0px from hidden toolbar
       document.documentElement.style.setProperty('--m-toolbar-h', toolbarH + 'px');
     }
   }
@@ -5133,12 +5146,13 @@ function _applyResponsive() {
   if (rp) {
     rp.style.display = (isPhone && h < w) ? 'none' : '';
   }
-  // Close panel sheet when resizing away from phone or entering landscape
-  if (!isPhone || h < w) {
+  // Close panel sheet when resizing away from phone or entering landscape.
+  // Also re-fit when panel is revealed (portrait phone) so canvas uses correct space.
+  const shouldFit = !isPhone || h < w || (isPhone && h >= w && prevPanelHidden);
+  if (shouldFit) {
     if (rp) rp.classList.remove('open');
     const overlay = document.getElementById('panel-overlay');
     if (overlay) overlay.classList.remove('show');
-    // Re-fit canvas after panel state changes so the available space is correct
     if (S.imgW) fitCanvas();
   }
 }
