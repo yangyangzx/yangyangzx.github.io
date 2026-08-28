@@ -2044,6 +2044,8 @@ function getEl2(id) { return elMap.get(id); }
 
 
 function _textTaCss(el2) {
+  // Intentionally kept as a reference; actual styles are applied inline in startTextEdit().
+  // Kept here to avoid regression if the inline approach ever needs to be centralized.
   const fam = el2.fontFamily || "'DM Sans',sans-serif";
   return `width:100%;height:100%;background:transparent;border:none;outline:none;resize:none;font-family:${escHtml(fam)};font-size:${el2.fs||16}px;font-weight:${el2.fw||'500'};font-style:${el2.italic?'italic':'normal'};color:${escHtml(el2.tc||'#fff')};text-align:${el2.align||'center'};letter-spacing:${el2.ls||0}px;line-height:${el2.lh||1.45};text-shadow:${escHtml((el2.tsh||'0 1px 6px rgba(0,0,0,.4)').replace(/"/g,"'"))};word-break:break-word;white-space:pre-wrap;overflow:hidden;caret-color:${escHtml(el2.tc||'#fff')};box-shadow:0 0 0 2px transparent`;
 }
@@ -2435,6 +2437,7 @@ document.addEventListener('paste', e => {
     if (it.type && it.type.startsWith('image/')) {
       const file = it.getAsFile && it.getAsFile();
       if (file) { e.preventDefault(); loadFile(file); }
+      else { toast('⚠️ 无法访问剪贴板图片，请改用文件上传', 3000); }
       break;
     }
   }
@@ -2749,6 +2752,7 @@ function clearAll() {
     clearTimeout(_autosaveTimer);
     if (_autoScrollRAF) { cancelAnimationFrame(_autoScrollRAF); _autoScrollRAF = 0; }
     if (_rafId) { cancelAnimationFrame(_rafId); _rafId = null; _pendingHistSave = false; }
+    clearTimeout(_responsiveTimer);
     _cleanupAnimListeners();
     _rebuildElMap(); // S.els is now empty — map must reflect this before render()
     _dirty = false; // clearAll is a destructive action, not a modification requiring save warning
@@ -2877,9 +2881,20 @@ function alignSel(type) {
 
 function setTool(t) {
   S.tool = t;
+  // Desktop: toggle active class on #t-{tool} buttons
   document.querySelectorAll('.tb[id^="t-"]').forEach(b => b.classList.remove('active'));
   const btn = document.getElementById('t-' + t);
   if (btn) btn.classList.add('active');
+  // Mobile: sync the bottom toolbar active state by matching onclick attribute
+  document.querySelectorAll(`.tb[onclick*="setTool('${t}')"]`).forEach(b => b.classList.add('active'));
+  // Also handle multi-word onclicks like "setTool('select')" in the btm bar
+  document.querySelectorAll('.tb').forEach(b => {
+    const onclick = b.getAttribute('onclick') || '';
+    const match = onclick.match(/setTool\('([^']+)'\)/);
+    if (match) {
+      b.classList.toggle('active', match[1] === t);
+    }
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2979,7 +2994,9 @@ function showCtx(e, id) {
   // Measure real menu size — hardcoding under-estimates overflow off the bottom
   // of the viewport, leaving the last item(s) unreachable.
   const mw = el.ctxMenu.offsetWidth  || 180;
-  const mh = el.ctxMenu.offsetHeight || 320;
+  // Use scrollHeight as fallback — offsetHeight can be smaller than actual content
+  // when the menu overflows its container or when CSS transforms affect layout.
+  const mh = Math.max(el.ctxMenu.offsetHeight, el.ctxMenu.scrollHeight) || 320;
   // Use the same isPhone definition as the responsive handler
   const isPhone = _isPhone();
   // Account for fixed top toolbar (~48px) on mobile and bottom toolbar (~52px + safe-area)
@@ -2992,7 +3009,13 @@ function showCtx(e, id) {
   el.ctxMenu.style.top  = y + 'px';
 }
 
-function hideCtx() { el.ctxMenu.classList.remove('show'); }
+function hideCtx() {
+  el.ctxMenu.classList.remove('show');
+  // Reset _lpActive so subsequent touchclicks can properly close the menu.
+  // Without this, a long-press-fired menu stays immune to click dismissal until
+  // the next touchstart resets the flag.
+  _lpActive = false;
+}
 
 document.addEventListener('click', e => {
   // If a long-press just fired the context menu, skip hiding it here —
@@ -3046,7 +3069,7 @@ function _llDrop(e) {
   el.ll.querySelectorAll('.li').forEach(d => d.style.borderTop = '');
   if (!S._dragLayerId) return;
   const target = e.target.closest('.li');
-  if (!target) return;
+  if (!target) { S._dragLayerId = null; return; }
   const fromIdx = +target.dataset.layerIdx;
   const toIdx = S._dragLayerId !== null ? S.els.findIndex(el2 => el2.id === S._dragLayerId) : -1;
   if (toIdx < 0 || fromIdx === toIdx) return;
@@ -3206,7 +3229,9 @@ function _renderPropsImpl() {
     for (let i = 0; i < _paraCount; i++) {
       const ps = _paraStyles[i] || {};
       const previewText = (el2.text || '').split('\n')[i] || '';
-      const pPreview = previewText.length > 20 ? previewText.slice(0,20) + '…' : previewText;
+      const pPreview = Array.from(previewText).length > 20
+        ? Array.from(previewText).slice(0, 20).join('') + '…'
+        : previewText;
       const pFs   = ps.fs  ?? _fs;
       const pTc   = ps.tc  ?? _tc;
       const pFw   = ps.fw  || _fw;
@@ -3746,6 +3771,8 @@ function _doAutosave() {
     imgSrc: S.imgSrc,
     selSet: [...S.selSet].sort((a, b) => a - b),
     zoom: S.zoom,
+    scrollL: el.scroll.scrollLeft,
+    scrollT: el.scroll.scrollTop,
     ts: Date.now()
   };
   _idb.set('gs_autosave', data).then(() => { _dirty = false; }).catch(() => {
@@ -3767,9 +3794,13 @@ function saveHist() {
   _scheduleAutosave();
 }
 
-// Warn before closing tab with unsaved work; also flush autosave
+// Warn before closing tab with unsaved work; also flush autosave and clean up
+// transient state (shadow store, animation listeners) to free memory.
 window.addEventListener('beforeunload', e => {
   _doAutosave(); // best-effort save
+  // Clear shadow slider store — entries persist across renders and only get
+  // cleaned up per-element on delete; clearing here prevents long-session growth.
+  Object.keys(_shdStore).forEach(k => delete _shdStore[k]);
   if (_dirty && S.els.length > 0) {
     e.preventDefault();
     e.returnValue = '';
@@ -3807,6 +3838,11 @@ document.addEventListener('visibilitychange', () => {
         S.sel = null;
         const restoredIds = new Set(S.els.map(item => item.id));
         S.selSet = new Set((Array.isArray(data.selSet) ? data.selSet : []).map(Number).filter(id => restoredIds.has(id)));
+        // Restore scroll position so the user's viewport into the canvas is preserved
+        if (el.scroll) {
+          el.scroll.scrollLeft = Number.isFinite(Number(data.scrollL)) ? data.scrollL : 0;
+          el.scroll.scrollTop  = Number.isFinite(Number(data.scrollT)) ? data.scrollT  : 0;
+        }
         _pendingDelete.clear();
         _rebuildElMap();
         // Verify image is valid, then set up UI
@@ -3922,7 +3958,10 @@ function saveProject() {
     imgW: S.imgW, imgH: S.imgH,
     imgNatW: S.imgNatW, imgNatH: S.imgNatH,
     imgSrc: S.imgSrc,
-    selSet: [...S.selSet],
+    zoom: S.zoom,
+    exportScale: S.exportScale,
+    exportFmt: S.exportFmt,
+    selSet: [...S.selSet].sort((a, b) => a - b),
   };
   const blob = new Blob([JSON.stringify(proj)], { type: 'application/json' });
   const a = document.createElement('a');
@@ -4061,6 +4100,9 @@ function loadProjectFile(input) {
       S.imgNatH = projectDim(proj.imgNatH);
       S.imgSrc = projectImgSrc;
       S.sel    = null;
+      S.zoom   = Number.isFinite(+proj.zoom) ? +proj.zoom : 100;
+      S.exportScale = proj.exportScale || 3;
+      S.exportFmt   = proj.exportFmt || 'png';
       const validIds = new Set(S.els.map(e => e.id));
       S.selSet = new Set((Array.isArray(proj.selSet) ? proj.selSet : []).filter(id => validIds.has(Number(id))));
       _pendingDelete.clear();
@@ -4114,11 +4156,21 @@ function canvasFontStr(italic, fw, fsize, fam) {
 // Reusable offscreen canvases for export (blur backdrop + chromatic aberration).
 // Max pool size limits GPU-memory growth across repeated exports. When a canvas
 // exceeds MAX_DIM/2 on any side it is discarded and recreated at the current size.
+// _EXP_MAX_ENTRIES prevents unbounded growth when the same export runs many times
+// with varying canvas sizes (each creates several named canvases that would otherwise
+// accumulate in memory indefinitely).
 const _expPool = {};
 const _EXP_MAX_DIM = 8000;
+const _EXP_MAX_ENTRIES = 12;
 function _expCanvas(name, w, h) {
   let c = _expPool[name];
-  if (!c) { c = document.createElement('canvas'); _expPool[name] = c; }
+  if (!c) {
+    if (Object.keys(_expPool).length >= _EXP_MAX_ENTRIES) {
+      const oldest = Object.keys(_expPool)[0];
+      delete _expPool[oldest];
+    }
+    c = document.createElement('canvas'); _expPool[name] = c;
+  }
   if (c.width !== w || c.height !== h) {
     // Discard oversized cached canvases to free GPU memory on repeated high-res exports
     if (c.width > _EXP_MAX_DIM || c.height > _EXP_MAX_DIM) {
