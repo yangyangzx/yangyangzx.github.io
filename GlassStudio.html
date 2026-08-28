@@ -2881,20 +2881,12 @@ function alignSel(type) {
 
 function setTool(t) {
   S.tool = t;
-  // Desktop: toggle active class on #t-{tool} buttons
-  document.querySelectorAll('.tb[id^="t-"]').forEach(b => b.classList.remove('active'));
-  const btn = document.getElementById('t-' + t);
-  if (btn) btn.classList.add('active');
-  // Mobile: sync the bottom toolbar active state by matching onclick attribute
+  // Reset active state on all known tool buttons (desktop ID-based + mobile onclick-based)
+  document.querySelectorAll('.tb[id^="t-"], .tb[onclick*="setTool("]').forEach(b => b.classList.remove('active'));
+  // Activate the matching button — desktop uses #t-{tool} ID, mobile uses onclick attribute
+  const desktopBtn = document.getElementById('t-' + t);
+  if (desktopBtn) desktopBtn.classList.add('active');
   document.querySelectorAll(`.tb[onclick*="setTool('${t}')"]`).forEach(b => b.classList.add('active'));
-  // Also handle multi-word onclicks like "setTool('select')" in the btm bar
-  document.querySelectorAll('.tb').forEach(b => {
-    const onclick = b.getAttribute('onclick') || '';
-    const match = onclick.match(/setTool\('([^']+)'\)/);
-    if (match) {
-      b.classList.toggle('active', match[1] === t);
-    }
-  });
 }
 
 // ═══════════════════════════════════════════════════════════════
