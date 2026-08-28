@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
 <title>GlassStudio — 毛玻璃图片编辑器</title>
+<!-- Inline SVG favicon — frosted-glass stacked squares motif -->
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='9' width='20' height='20' rx='5' fill='%23097757' opacity='.5'/%3E%3Crect x='9' y='3' width='20' height='20' rx='5' fill='%232dd4a4' opacity='.7'/%3E%3Crect x='6' y='6' width='16' height='16' rx='4' fill='none' stroke='%23F9F6ED' stroke-width='1.5' opacity='.9'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;1,400&family=Syne:wght@400;600;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
 <script>
@@ -80,7 +82,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 #header::-webkit-scrollbar{height:3px}
 #header::-webkit-scrollbar-track{background:transparent}
 #header::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
-.logo{font-family:var(--font-display);font-size:16px;font-weight:600;letter-spacing:-.022em;white-space:nowrap}
+.logo{display:flex;align-items:center;gap:7px;font-family:var(--font-display);font-size:16px;font-weight:600;letter-spacing:-.022em;white-space:nowrap;cursor:default;user-select:none}
+.logo-mark{width:20px;height:20px;flex-shrink:0}
 .logo span{color:var(--accent-light)}
 .h-sep{width:1px;height:20px;background:var(--border2);margin:0 4px;flex-shrink:0}
 .hg{display:flex;align-items:center;gap:2px}
@@ -557,6 +560,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
   #rp{width:190px}
   #pscroll{padding:var(--space-sm) 10px}
   .logo{font-size:15px}
+  .logo-mark{width:18px;height:18px}
 }
 
 /* ── Phone (≤768px) ── */
@@ -583,6 +587,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
   .hb{padding:4px 8px;font-size:11px}
   .hb svg{width:11px;height:11px}
   .logo{font-size:14px}
+  .logo-mark{width:16px;height:16px}
   /* Collapse left toolbar to floating bottom bar */
   #lp{
     display:none; /* hidden — moved to bottom bar */
@@ -704,7 +709,25 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 
 <!-- Header -->
 <div id="header">
-  <div class="logo">Glass<span>Studio</span></div>
+  <div class="logo">
+    <svg class="logo-mark" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <!-- Bottom-left pane: frosted glass, dark accent -->
+      <rect x="1" y="8" width="15" height="15" rx="4"
+            fill="rgba(9,119,87,0.55)"
+            stroke="rgba(249,246,237,0.35)" stroke-width="1"/>
+      <!-- Top-right pane: light accent, layered on top -->
+      <rect x="8" y="1" width="15" height="15" rx="4"
+            fill="rgba(45,212,164,0.45)"
+            stroke="rgba(249,246,237,0.50)" stroke-width="1"/>
+      <!-- Inner highlight: glass edge refraction -->
+      <rect x="5" y="5" width="10" height="10" rx="3"
+            fill="none"
+            stroke="rgba(249,246,237,0.70)" stroke-width="1.2"/>
+      <!-- Small corner dot — the "studio" spark -->
+      <circle cx="17.5" cy="6.5" r="1.5" fill="rgba(249,246,237,0.90)"/>
+    </svg>
+    Glass<span>Studio</span>
+  </div>
   <div class="h-sep"></div>
   <input type="file" id="fi" accept="image/*" style="display:none">
   <div class="hg">
