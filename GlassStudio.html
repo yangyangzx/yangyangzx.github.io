@@ -2017,7 +2017,7 @@ function gdToggle(id) {
   }
   renderProps(); // immediately refresh panel so gradient controls appear/disappear
   clearTimeout(_spTimer);
-  _spTimer = setTimeout(scheduleHistSave, 600);
+  _spTimer = setTimeout(scheduleHistSave, 400);
 }
 
 function gdSetAngle(id, angle) {
@@ -2029,7 +2029,7 @@ function gdSetAngle(id, angle) {
   requestLayersRender();
   renderProps(); // refresh panel to show updated gradient preview
   clearTimeout(_spTimer);
-  _spTimer = setTimeout(scheduleHistSave, 600);
+  _spTimer = setTimeout(scheduleHistSave, 400);
 }
 
 function gdSetStopColor(id, idx, color) {
@@ -2043,7 +2043,7 @@ function gdSetStopColor(id, idx, color) {
   requestLayersRender();
   renderProps(); // refresh panel to show updated gradient preview
   clearTimeout(_spTimer);
-  _spTimer = setTimeout(scheduleHistSave, 600);
+  _spTimer = setTimeout(scheduleHistSave, 400);
 }
 
 function gdSetStopOpacity(id, idx, pct) {
@@ -2055,7 +2055,7 @@ function gdSetStopOpacity(id, idx, pct) {
   requestLayersRender();
   renderProps(); // refresh panel to show updated gradient preview
   clearTimeout(_spTimer);
-  _spTimer = setTimeout(scheduleHistSave, 600);
+  _spTimer = setTimeout(scheduleHistSave, 400);
 }
 // turning getEl2 from O(n) linear scan into O(1) map lookup. All S.els mutations
 // are followed by a render() call, so the map never goes stale outside renders.
@@ -3653,7 +3653,7 @@ function sp(id, key, val, noHist) {
   requestLayersRender();
   if (!noHist) {
     clearTimeout(_spTimer);
-    _spTimer = setTimeout(scheduleHistSave, 600);
+    _spTimer = setTimeout(scheduleHistSave, 400);
   }
 }
 
@@ -3674,7 +3674,7 @@ function slp(id, key, raw, lblId, unit, dec) {
   _propsTimer = setTimeout(renderProps, 50);
   requestLayersRender();
   clearTimeout(_spTimer);
-  _spTimer = setTimeout(scheduleHistSave, 600);
+  _spTimer = setTimeout(scheduleHistSave, 400);
 }
 
 function tp(id, key) {
@@ -3705,7 +3705,7 @@ function setParaStyle(id, paraIdx, key, val) {
   if (dom) applyStyle(dom, el2);
   requestLayersRender();
   clearTimeout(_spTimer);
-  _spTimer = setTimeout(scheduleHistSave, 600);
+  _spTimer = setTimeout(scheduleHistSave, 400);
 }
 
 // Toggle bold on/off for a single paragraph (UI button handler).
@@ -4742,6 +4742,8 @@ async function exportImg() {
   const fmt  = S.exportFmt === 'jpeg' ? 'jpeg' : 'png';
   const mime = fmt === 'jpeg' ? 'image/jpeg' : 'image/png';
   const ext  = fmt === 'jpeg' ? 'jpg' : 'png';
+  // JPEG has no alpha channel — warn user that transparent areas will become white.
+  if (fmt === 'jpeg') toast('⚠️ JPEG 不支持透明，透明区域将显示为白色背景', 3500);
   a.download = `glass-studio-${exportScale}x-${Date.now()}.${ext}`;
   // JPEG has no alpha channel — composite the canvas over a white backdrop first.
   let blobSrc = ec;
