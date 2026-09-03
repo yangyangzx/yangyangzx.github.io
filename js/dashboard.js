@@ -332,10 +332,11 @@ function _renderLiqWarn() {
     var dir = log.direction;
 
     // 强平价：统一使用 utils.calcLiquidationPrice
+    // 使用 loadSettings() 而非直接读 localStorage，与 calculator.js 口径一致
     var mmr = DEFAULT_MMR;
     try {
-      var raw = localStorage.getItem('trade_settings_v1');
-      if (raw) { var s = JSON.parse(raw); if (s.mmr != null) mmr = s.mmr / 100; }
+      var _ds = loadSettings();
+      if (_ds && _ds.mmr != null) mmr = _ds.mmr / 100;
     } catch(e) { console.error('[dashboard]', e); }
     var liqPrice = window.utils.calcLiquidationPrice(entry, dir, lev, mmr);
     if (isNaN(liqPrice) || liqPrice <= 0) continue; // 强平价无效跳过

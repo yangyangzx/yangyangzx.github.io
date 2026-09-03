@@ -297,10 +297,11 @@ function renderLiqTable() {
   }
 
   // 从设置读取 MMR，默认 0.5%（0.005）
+  // 使用 loadSettings() 统一通道，与 calculator.js 口径一致
   var mmr = 0.005;
   try {
-    var raw = localStorage.getItem('trade_settings_v1');
-    if (raw) { var s = JSON.parse(raw); if (s.mmr != null) mmr = s.mmr / 100; }
+    var _rs = loadSettings();
+    if (_rs && _rs.mmr != null) mmr = _rs.mmr / 100;
   } catch(e) { console.error('[risk]', e); }
 
   // 计算每笔强平价和安全距离（按聚合持仓）
