@@ -20,9 +20,10 @@ var SETTINGS_DEFAULTS = {
   atrDefaultMultiplier: 2,   // ATR 默认倍数
   portfolioHeatMax: 8,       // 组合热量最大百分比 (默认 8%)
   minRRRatio: 2,             // 最低盈亏比 (默认 2:1)
-  singleSymbolMaxPct: 10,    // 单品种最大占比 (%)
+  singleSymbolMaxPct: 30,    // 单品种最大占比 (%) —— 用户自定 30%
   dailyTradeMax: 8,          // 每日建议最大交易笔数
   riskHeatMax: 6,              // 组合热量安全上限 (%)
+  tpRRs: [1.5, 2.0, 3.0],      // P2-7 FIX：多止盈位默认盈亏比（planner 真正读取，可被用户设置覆盖）
   customSymbols: [             // 新增：自定义品种列表 [{symbol, desc}]
     { symbol: 'BTC', desc: '比特币' },
     { symbol: 'ETH', desc: '以太坊' },
@@ -115,7 +116,7 @@ function renderSettings() {
 
   // ✅ Skills 融合：单品种集中度限制
   el = document.getElementById('setSingleSymbolMaxPct');
-  if (el) el.value = settings.singleSymbolMaxPct != null ? settings.singleSymbolMaxPct : 10;
+  if (el) el.value = settings.singleSymbolMaxPct != null ? settings.singleSymbolMaxPct : 30;
 
   // ✅ Skills 融合：日最大交易笔数
   el = document.getElementById('setDailyTradeMax');

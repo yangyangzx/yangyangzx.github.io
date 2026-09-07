@@ -7,13 +7,51 @@
 
   // ======== 来自 risk.js ========
   /**
-   * 获取按平仓时间排序的已平仓日志（有 pnlAmount 的）
+   * P0-1 判定：一条日志是否为"最终平仓"（整笔交易已全部退出）。
+   * partialTP / reducePosition 是部分平仓中间态，剩余仓位仍属持仓，
+   * 只有全部平仓后才进入"已平仓"统计（胜率/资金曲线/日盈亏/凯利样本）。
+   * @param {Object} item 日志对象
+   * @returns {boolean}
+   */
+  util.isClosedTrade = function(item) {
+    if (!item || !item.closeType || item.closeType === '') return false;
+    if (item.pnlAmount == null || isNaN(parseFloat(item.pnlAmount))) return false;
+    if (item.closeType === 'partialTP' || item.closeType === 'reducePosition') {
+      // 新格式：以累计平仓比例判定；旧格式一律视为中间态（剩余仓位回归持仓监控）
+      if (Array.isArray(item.closes)) {
+        var cr = parseFloat(item.closedRatio);
+        return !isNaN(cr) && cr >= 99.999;
+      }
+      return false;
+    }
+    return true;
+  };
+
+  /**
+   * P0-1 判定：是否为"部分平仓"中间态（有剩余仓位在持仓监控中）
+   * @param {Object} item 日志对象
+   * @returns {boolean}
+   */
+  util.isPartialClosed = function(item) {
+    if (!item || !item.closeType) return false;
+    if (item.closeType === 'partialTP' || item.closeType === 'reducePosition') {
+      if (Array.isArray(item.closes)) {
+        var cr = parseFloat(item.closedRatio);
+        return !isNaN(cr) && cr > 0 && cr < 99.999;
+      }
+      return true;
+    }
+    return false;
+  };
+
+  /**
+   * 获取按平仓时间排序的"最终平仓"日志（整笔交易已全部退出，pnlAmount 为整笔累计已实现盈亏）
    * @returns {Array} 已平仓日志数组（按 closeTime 升序）
    */
   util.getClosedSorted = function() {
     var closed = [];
     for (var i = 0; i < logs.length; i++) {
-      if (logs[i].closeType && logs[i].pnlAmount != null && !isNaN(parseFloat(logs[i].pnlAmount))) {
+      if (util.isClosedTrade(logs[i])) {
         var item = Object.assign({}, logs[i]);
         item.pnlAmount = parseFloat(item.pnlAmount);
         closed.push(item);
@@ -193,13 +231,21 @@
 
   // ======== 已平仓交易判断（统一过滤条件） ========
   /**
-   * 判断一条日志是否为已平仓交易
+   * P0-1 FIX：判断一条日志是否为"最终平仓"交易（与文件头部定义一致，此处为历史重复定义，统一语义）
    * @param {Object} item - 日志条目
    * @returns {boolean}
    */
   util.isClosedTrade = function(item) {
-    return item && item.closeType && item.closeType !== '' &&
-      item.pnlAmount != null && !isNaN(parseFloat(item.pnlAmount));
+    if (!item || !item.closeType || item.closeType === '') return false;
+    if (item.pnlAmount == null || isNaN(parseFloat(item.pnlAmount))) return false;
+    if (item.closeType === 'partialTP' || item.closeType === 'reducePosition') {
+      if (Array.isArray(item.closes)) {
+        var cr = parseFloat(item.closedRatio);
+        return !isNaN(cr) && cr >= 99.999;
+      }
+      return false;
+    }
+    return true;
   };
 
   /**
@@ -307,144 +353,11 @@
     };
   };
 
-// ======== 滑点成本计算 - 市场微观结构模型 ========
-  /**
-   * 计算订单规模对市场冲击的影响因子 (非线性模型)
-   * 基于 Kyle(1985) 和 Almgren-Chriss(2000) 市场冲击理论
-   * @param {number} positionSize - 仓位大小 (USDT)
-   * @param {string} symbol - 交易品种
-   * @returns {number} 订单规模影响因子 (>= 1.0)
-   */
-  util.calculateOrderSizeImpact = function(positionSize, symbol) {
-    // 基础假设：不同品种的日均交易量 (简化模型)
-    const dailyVolumeMap = {
-      'BTC': 50000000000,  // 500亿 USDT
-      'ETH': 20000000000,  // 200亿 USDT
-      'BNB': 2000000000,   // 20亿 USDT
-      'ADA': 500000000,    // 5亿 USDT
-      'SOL': 800000000,    // 8亿 USDT
-      'DOT': 300000000,    // 3亿 USDT
-      'LINK': 400000000,   // 4亿 USDT
-      'default': 1000000000 // 默认10亿 USDT
-    };
-    
-    // 获取品种对应的日交易量
-    const dailyVolume = dailyVolumeMap[symbol] || dailyVolumeMap['default'];
-    
-    // 标准化仓位大小 (相对于日交易量的比例)
-    const sizeRatio = positionSize / dailyVolume;
-    
-    // 非线性冲击模型：小订单线性，大订单指数增长
-    let impactFactor;
-    if (sizeRatio <= 0.001) {
-      // 小额订单 (< 0.1% 日交易量): 近似线性
-      impactFactor = 1.0 + sizeRatio * 100;
-    } else if (sizeRatio <= 0.01) {
-      // 中等订单 (0.1%-1% 日交易量): 平方根增长
-      impactFactor = 1.0 + Math.sqrt(sizeRatio) * 10;
-    } else {
-      // 大额订单 (> 1% 日交易量): 指数增长 (市场冲击严重)
-      impactFactor = 1.0 + Math.pow(sizeRatio, 0.7) * 20;
-    }
-    
-    // 确保最小影响为1.0，最大不超过100倍 (极端情况保护)
-    return Math.min(Math.max(impactFactor, 1.0), 100.0);
-  };
-
-  /**
-   * 计算波动率对滑点的影响因子
-   * 高波动时期市场深度下降，滑点放大
-   * @param {string} symbol - 交易品种
-   * @returns {number} 波动率影响因子 (>= 0.5, <= 3.0)
-   */
-  util.calculateVolatilityImpact = function(symbol) {
-    // 获取当前时间 (简化：使用系统时间)
-    const now = new Date();
-    const hour = now.getUTCHours();
-    
-    // 时间段波动率模型 (UTC时间)
-    let baseVolatility;
-    if (hour >= 0 && hour < 8) {
-      // 亚洲早盘：相对较低波动
-      baseVolatility = 1.0;
-    } else if (hour >= 8 && hour < 16) {
-      // 欧洲时段：中等波动
-      baseVolatility = 1.2;
-    } else if (hour >= 16 && hour < 24) {
-      // 美洲时段：高波动
-      baseVolatility = 1.5;
-    } else {
-      baseVolatility = 1.0;
-    }
-    
-    // 品种特性调整 (基于历史波动率特征)
-    const symbolVolatilityMap = {
-      'BTC': 1.0,   // 基准
-      'ETH': 1.1,   // 略高于BTC
-      'SOL': 1.4,   // 高波动山寨币
-      'ADA': 1.3,   // 中等波动
-      'DOT': 1.2,   // 中等波动
-      'LINK': 1.25, // 中等波动
-      'default': 1.15
-    };
-    
-    const symbolFactor = symbolVolatilityMap[symbol] || symbolVolatilityMap['default'];
-    
-    // 综合波动率影响 (考虑周末效应)
-    const dayOfWeek = now.getUTCDay();
-    const weekendFactor = (dayOfWeek === 0 || dayOfWeek === 6) ? 0.7 : 1.0; // 周末波动较低
-    
-    const volatilityImpact = baseVolatility * symbolFactor * weekendFactor;
-    
-    // 限制范围在 0.5-3.0 之间
-    return Math.min(Math.max(volatilityImpact, 0.5), 3.0);
-  };
-
-  /**
-   * 计算流动性对滑点的影响因子
-   * 基于订单簿深度的流动性分析
-   * @param {string} symbol - 交易品种
-   * @param {number} positionSize - 仓位大小
-   * @returns {number} 流动性影响因子 (>= 0.3, <= 5.0)
-   */
-  util.calculateLiquidityImpact = function(symbol, positionSize) {
-    // 模拟订单簿深度 (实际应用中应从交易所API获取)
-    const orderBookDepthMap = {
-      'BTC': { depth: 5000000, spread: 0.02 },    // 500万USDT深度，0.02%价差
-      'ETH': { depth: 2000000, spread: 0.05 },    // 200万USDT深度，0.05%价差
-      'BNB': { depth: 500000, spread: 0.1 },      // 50万USDT深度，0.1%价差
-      'SOL': { depth: 200000, spread: 0.15 },     // 20万USDT深度，0.15%价差
-      'ADA': { depth: 100000, spread: 0.2 },      // 10万USDT深度，0.2%价差
-      'DOT': { depth: 80000, spread: 0.25 },      // 8万USDT深度，0.25%价差
-      'LINK': { depth: 150000, spread: 0.18 },    // 15万USDT深度，0.18%价差
-      'default': { depth: 100000, spread: 0.2 }
-    };
-    
-    const bookInfo = orderBookDepthMap[symbol] || orderBookDepthMap['default'];
-    const marketDepth = bookInfo.depth;
-    const baseSpread = bookInfo.spread;
-    
-    // 流动性冲击模型：仓位占市场深度的比例决定滑点放大倍数
-    const depthRatio = positionSize / marketDepth;
-    
-    let liquidityFactor;
-    if (depthRatio <= 0.01) {
-      // 浅度冲击：滑点略大于基础价差
-      liquidityFactor = 1.0 + depthRatio * 2;
-    } else if (depthRatio <= 0.1) {
-      // 中度冲击：滑点明显放大
-      liquidityFactor = 1.0 + Math.pow(depthRatio, 0.8) * 5;
-    } else {
-      // 深度冲击：滑点急剧放大 (流动性枯竭)
-      liquidityFactor = 1.0 + Math.pow(depthRatio, 0.6) * 10;
-    }
-    
-    // 基础价差调整：流动性差的品种基础滑点就高
-    const adjustedFactor = liquidityFactor * (baseSpread / 0.02); // 以BTC的0.02%为基准
-    
-    // 限制范围在 0.3-5.0 之间
-    return Math.min(Math.max(adjustedFactor, 0.3), 5.0);
-  };
+// ======== 滑点成本计算 ========
+// P2-6 FIX：删除未接入的"市场微观结构"静态模拟模型（calculateOrderSizeImpact /
+// calculateVolatilityImpact / calculateLiquidityImpact）。这三个函数此前无任何调用点，
+// 且其硬编码的日交易量/订单簿深度/波动率并非真实市场数据，保留会误导维护者。
+// 实际滑点统一由 slippage.js 的 ticks-v1 模型（用户显式输入 ticks + 交易所 tickSize）承担。
 
 // ======== Chart.js 生命周期管理系统 ========
 /**
@@ -741,6 +654,11 @@ if (typeof window !== 'undefined') {
 // 挂载到全局
 window.utils = util;
 window.ChartManager = ChartManager; // 暴露给全局使用
+// BUG FIX：skills-integration.js 的 calcKellyStatsFromLogs 以裸标识符调用 getClosedSorted，
+// 此前仅挂在 window.utils 上导致调用即 ReferenceError（凯利统计从未真正生效）。补全局别名。
+window.getClosedSorted = util.getClosedSorted;
+window.isClosedTrade = util.isClosedTrade;
+window.isPartialClosed = util.isPartialClosed;
 })();
 
 // ======== Chart.js 页面级清理方法 ========

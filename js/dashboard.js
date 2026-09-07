@@ -9,14 +9,17 @@ function getClosedLogs() {
 }
 
 /**
- * 筛选未平仓日志
+ * P0-1 FIX：筛选"持仓中"日志。
+ * 语义：未平仓 + 部分平仓中间态（partialTP / reducePosition 剩余仓位仍属持仓，
+ * 必须继续计入在仓风险 / 保证金占用 / 强平预警）。
  */
 function _getOpenLogs() {
   var result = [];
   for (var i = 0; i < logs.length; i++) {
-    // partialTP / reducePosition 视为部分平仓，不重复计入"持仓中"统计
-    if (!logs[i].closeType || logs[i].closeType === 'partialTP' || logs[i].closeType === 'reducePosition') {
-      result.push(logs[i]);
+    if (typeof window.utils !== 'undefined' && typeof window.utils.isClosedTrade === 'function') {
+      if (!window.utils.isClosedTrade(logs[i])) result.push(logs[i]);
+    } else {
+      if (!logs[i].closeType || logs[i].closeType === '') result.push(logs[i]);
     }
   }
   return result;
@@ -172,8 +175,9 @@ function _renderWinRate() {
     return;
   }
 
+  // P1-2 FIX：胜率口径与统计页统一——分母为本周全部已平仓（保本计入分母，与期望值自洽）
   var decided = wins.length + losses.length;
-  var winRate = decided > 0 ? ((wins.length / decided) * 100) : 0;
+  var winRate = count > 0 ? ((wins.length / count) * 100) : 0;
 
   valueEl.textContent = _fmtPct(winRate);
   valueEl.className = 'dash-card-value ' + (winRate >= 50 ? 'pnl-positive' : 'pnl-negative');
@@ -216,10 +220,17 @@ function _renderRiskExposure() {
     }
   }
 
-  // 若 riskAmount 为 0（无止损或未设置），显示 — 而非 0%
-  var riskPctDisplay = totalRisk > 0 ? ((totalRisk / totalPosition) * 100).toFixed(1) : '—';
-  var riskNum = totalRisk > 0 ? parseFloat(riskPctDisplay) : 0;
-  var riskCls = riskNum > 5 ? 'danger' : (riskNum > 2 ? 'warn' : '');
+  // P2-2 FIX：风险占比分母统一为账户本金（与组合热量/风控中心口径一致），
+  // 阈值对齐 riskHeatMax（默认 6%）：≥80% 预警、≥100% 危险
+  var capital = (typeof getAccountCapital === 'function') ? getAccountCapital() : null;
+  var riskPctDisplay = (totalRisk > 0 && capital > 0) ? ((totalRisk / capital) * 100).toFixed(1) : '—';
+  var riskNum = (totalRisk > 0 && capital > 0) ? parseFloat(riskPctDisplay) : 0;
+  var heatMax = 6;
+  try {
+    var _riskS = loadSettings();
+    if (_riskS && _riskS.riskHeatMax) heatMax = _riskS.riskHeatMax;
+  } catch(e) {}
+  var riskCls = riskNum >= heatMax ? 'danger' : (riskNum >= heatMax * 0.8 ? 'warn' : '');
 
   rowsEl.innerHTML =
     '<div class="dash-risk-row">' +
@@ -227,8 +238,8 @@ function _renderRiskExposure() {
       '<span class="dash-risk-value">' + _fmtUSDT(totalPosition) + '</span>' +
     '</div>' +
     '<div class="dash-risk-row">' +
-      '<span class="dash-risk-label">总风险</span>' +
-      '<span class="dash-risk-value ' + riskCls + '">' + _fmtUSDT(totalRisk) + ' (' + (riskPctDisplay === '—' ? '—' : riskPctDisplay + '%') + ')</span>' +
+      '<span class="dash-risk-label">总风险（占本金）</span>' +
+      '<span class="dash-risk-value ' + riskCls + '">' + _fmtUSDT(totalRisk) + (riskPctDisplay === '—' ? '' : ' (' + riskPctDisplay + '%)') + '</span>' +
     '</div>' +
     '<div class="dash-risk-row">' +
       '<span class="dash-risk-label">占用保证金</span>' +
@@ -241,45 +252,33 @@ function _renderRiskExposure() {
 
   var card = document.getElementById('dashRiskExposure');
   card.className = card.className.replace(/\bstatus-\w+/g, '');
-  card.classList.add(riskNum > 5 ? 'status-negative' : (riskNum > 2 ? 'status-warning' : 'status-positive'));
+  card.classList.add(riskNum >= heatMax ? 'status-negative' : (riskNum >= heatMax * 0.8 ? 'status-warning' : 'status-positive'));
 }
 
 // ==================== 卡片 4：连亏计数 ====================
+// P0-2 FIX：统一复用 stats.js 的当日连亏实现（_getTodayLossStreak）。
+// 原实现存在双重计数（totalLossCount 累加两次）且 streak 未限定当日，与
+// 风控/熔断的"当日连亏≥3"口径不一致；现与统计页完全一致。
 function _renderLossStreak() {
-  var closed = getClosedLogs();
   var valueEl = document.getElementById('dashStreakValue');
   var subEl = document.getElementById('dashStreakSub');
 
-  if (closed.length === 0) {
-    valueEl.textContent = '—';
-    valueEl.className = 'dash-card-value pnl-neutral';
-    subEl.textContent = '暂无数据';
-    return;
-  }
+  var streakResult = (typeof _getTodayLossStreak === 'function')
+    ? _getTodayLossStreak()
+    : { streak: 0, totalLossCount: 0 };
+  var streak = streakResult.streak || 0;
+  var totalLossCount = streakResult.totalLossCount || 0;
 
-  // 按平仓时间倒序
-  var sorted = closed.slice().sort(function(a, b) {
-    var ta = a.closeTime ? new Date(a.closeTime).getTime() : 0;
-    var tb = b.closeTime ? new Date(b.closeTime).getTime() : 0;
-    return tb - ta;
-  });
-
-  // 连续亏损（从末尾倒序）+ 当日总亏损笔数
-  var streak = 0;
-  var totalLossCount = 0;
-  for (var i = 0; i < sorted.length; i++) {
-    var pnl = sorted[i].pnlAmount || 0;
-    if (pnl < 0) {
-      streak++;
-      totalLossCount++;
-    } else {
-      break;
+  if (streak === 0 && totalLossCount === 0) {
+    valueEl.textContent = '0';
+    valueEl.className = 'dash-card-value pnl-positive';
+    subEl.innerHTML = '<span class="streak-safe">安全</span>  连续亏损 0 笔（今日无亏损）';
+    var card0 = document.getElementById('dashLossStreak');
+    if (card0) {
+      card0.className = card0.className.replace(/\bstatus-\w+/g, '');
+      card0.classList.add('status-positive');
     }
-  }
-  // 统计全天总亏损笔数（不限连续）
-  for (var j = 0; j < sorted.length; j++) {
-    var pnl2 = sorted[j].pnlAmount || 0;
-    if (pnl2 < 0) totalLossCount++;
+    return;
   }
 
   valueEl.textContent = streak;
@@ -301,12 +300,14 @@ function _renderLossStreak() {
     tip = '<div class="streak-tip"><i class="fas fa-exclamation-triangle"></i> 建议降仓至 60%</div>';
   }
 
-  // BUG-6 修复：明确显示"连续亏损"而非"连亏"，并补充总亏损笔数
+  // BUG-6 修复：明确显示"连续亏损"而非"连亏"，并补充总亏损笔数（当日口径，无重复计数）
   subEl.innerHTML = tag + '  连续亏损 ' + streak + ' 笔（当日共 ' + totalLossCount + ' 笔亏损）' + tip;
 
   var card = document.getElementById('dashLossStreak');
-  card.className = card.className.replace(/\bstatus-\w+/g, '');
-  card.classList.add(streak <= 1 ? 'status-positive' : (streak === 2 ? 'status-warning' : 'status-negative'));
+  if (card) {
+    card.className = card.className.replace(/\bstatus-\w+/g, '');
+    card.classList.add(streak <= 1 ? 'status-positive' : (streak === 2 ? 'status-warning' : 'status-negative'));
+  }
 }
 
 // ==================== 卡片 5：强平预警 ====================

@@ -108,6 +108,11 @@ function renderAnalytics() {
       console.error('[analytics] ' + fns[i][0] + ' failed:', e);
     }
   }
+  // 设计优化：统计指标区随 analytics 视图切换同步刷新
+  // （原实现仅 renderLogs 调 updateStats，直接切到统计页会显示过期数据）
+  try { updateStats(); } catch(e) {
+    console.error('[analytics] updateStats failed:', e);
+  }
 }
 
 // ==================== 图表 1：资金曲线 ====================
@@ -657,7 +662,8 @@ function renderMAEMFEScatter(closed) {
       y: { title: { display: true, text: 'MFE %', color: cc.tickColor } }
     }
   });
-  scatterOpts.plugins = [{
+  // FIX: 自定义插件挂载到 plugins 对象而非整体替换，保留上方 legend/tooltip 配置
+  scatterOpts.plugins.idealZone = {
     id: 'idealZone',
     afterDraw: function(chart) {
       var ctx2 = chart.ctx;
@@ -683,7 +689,7 @@ function renderMAEMFEScatter(closed) {
         ctx2.restore();
       }
     }
-  }];
+  };
   _analyticsCharts['chartMAEMFE'] = new Chart(ctx, {
     type: 'scatter',
     data: {
@@ -855,7 +861,8 @@ function renderCloseTypeChart(closed) {
     plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(ctx) { return ctx.parsed.y + ' 笔 (' + pcts[ctx.dataIndex] + '%)'; } } } },
     scales: { x: { grid: { display: false }, ticks: { maxRotation: 45 } }, y: { ticks: { stepSize: 1, callback: function(v) { return Number.isInteger(v) ? v : ''; } } } }
   });
-  barLabelOpts.plugins = [{
+  // FIX: 自定义插件挂载到 plugins 对象而非整体替换，保留上方 tooltip（笔数+百分比）配置
+  barLabelOpts.plugins.barLabels = {
     id: 'barLabels',
     afterDatasetsDraw: function(chart) {
       var ctx2 = chart.ctx;
@@ -871,7 +878,7 @@ function renderCloseTypeChart(closed) {
       }
       ctx2.restore();
     }
-  }];
+  };
   _analyticsCharts['closeTypeChart'] = new Chart(ctx, {
     type: 'bar',
     data: {
@@ -1209,7 +1216,6 @@ function renderMindsetAnalysis(closed) {
   var keys = Object.keys(mindsetStats).map(Number).sort(function(a, b) { return a - b; });
   var totalClosed = closed.length;
   var withMindset = closed.filter(function(l) { return l.mindsetScore != null; }).length;
-  console.log("[MindsetAnalysis] closed.length:", totalClosed, "mindsetStats keys:", keys, "totalClosed with mindset:", withMindset);
   if (keys.length === 0) {
     var msg = '暂无心态评分数据';
     if (totalClosed > 0) {
@@ -1283,7 +1289,8 @@ function renderMindsetAnalysis(closed) {
     var s = mindsetStats[score];
     labels.push(score + '分');
     var avgPnl = s.count > 0 ? (s.totalPnl / s.count) : 0;
-    var wr = (s.wins + s.losses) > 0 ? (s.wins / (s.wins + s.losses) * 100) : 0;
+    // P1-2 FIX：胜率分母为该评分全部已平仓（含保本）
+    var wr = s.count > 0 ? (s.wins / s.count * 100) : 0;
     avgPnlData.push(parseFloat(avgPnl.toFixed(2)));
     winRateData.push(parseFloat(wr.toFixed(1)));
     countData.push(s.count);
@@ -1335,7 +1342,8 @@ function renderMindsetAnalysis(closed) {
     var score = keys[k];
     var s = mindsetStats[score];
     var avgPnl = s.count > 0 ? (s.totalPnl / s.count) : 0;
-    var wr = (s.wins + s.losses) > 0 ? (s.wins / (s.wins + s.losses) * 100) : 0;
+    // P1-2 FIX：胜率分母为该评分全部已平仓（含保本）
+    var wr = s.count > 0 ? (s.wins / s.count * 100) : 0;
     var wrDev = wr - overallWinRate;
 
     var wrClass = wrDev > 0 ? 'col-pnl-pos' : (wrDev < 0 ? 'col-pnl-neg' : '');
@@ -1393,7 +1401,7 @@ function renderMarketConditionAnalysis(closed) {
     var withMarket = closed.filter(function(l) { return l.marketCondition && getMarketConditionLabel(l.marketCondition) !== '—'; }).length;
     var msg = '暂无市场环境数据';
     if (totalClosed > 0) {
-      msg += '（共 ' + totalClosed + ' 笔已平仓，其中 ' + withMarket + ' 笔有市场环境记录）';
+      msg += '（共 ' + totalClosed + ' 笔已平仓，其中 ' + withMarket + ' 笔有市场环境记录，但均缺少盈亏数据）';
     } else {
       msg += '，请先完成至少一笔交易并记录市场环境';
     }
@@ -1406,7 +1414,8 @@ function renderMarketConditionAnalysis(closed) {
   var rows = [];
   for (var k = 0; k < keys.length; k++) {
     var s = marketStats[keys[k]];
-    var wr = (s.wins + s.losses) > 0 ? (s.wins / (s.wins + s.losses) * 100) : 0;
+    // P1-2 FIX：胜率分母为该组合全部已平仓（含保本）
+    var wr = s.count > 0 ? (s.wins / s.count * 100) : 0;
     var avgPnl = s.count > 0 ? (s.totalPnl / s.count) : 0;
     rows.push({
       key: keys[k],

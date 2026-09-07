@@ -372,9 +372,12 @@ function emRecalc(item) {
     const rEl = document.getElementById('emRMultiple');
     if (pnlAmtEl) pnlAmtEl.value = netPnl.toFixed(2);
     if (pnlPctEl) pnlPctEl.value = netPnlPercent.toFixed(2) + '%';
-    const riskAmount = parseFloat((document.getElementById('emRiskAmount') || {}).value);
-    if (rEl && !isNaN(riskAmount) && riskAmount !== 0) {
-      rEl.value = (netPnl / riskAmount).toFixed(2);
+    // 设计优化：R 倍数基准统一用"初始风险"（部分平仓后 riskAmount 被缩减，直接用它会导致 R 漂移）
+    var riskBase = (item.initialRiskAmount != null && !isNaN(parseFloat(item.initialRiskAmount)) && parseFloat(item.initialRiskAmount) > 0)
+      ? parseFloat(item.initialRiskAmount)
+      : parseFloat((document.getElementById('emRiskAmount') || {}).value);
+    if (rEl && !isNaN(riskBase) && riskBase !== 0) {
+      rEl.value = (netPnl / riskBase).toFixed(2);
     }
   }
 }
@@ -597,6 +600,10 @@ function saveEditLog(idx) {
       if (!isNaN(item.actualMargin) && item.actualMargin != null) {
         item.actualMargin = parseFloat((item.actualMargin * (1 - partialRatio / 100)).toFixed(2));
       }
+      // P1-3 FIX：编辑部分平仓时同步缩减剩余 round-trip 费用，避免最终平仓重复扣费
+      if (!isNaN(item.fee) && item.fee != null) {
+        item.fee = parseFloat((item.fee * (1 - partialRatio / 100)).toFixed(8));
+      }
     } else {
       delete item.partialRatio;
     }
@@ -724,11 +731,43 @@ function saveEditLog(idx) {
       return;
     }
   }
+  // 设计优化：执行评分"止损未被移动/破坏"与极值数据矛盾校验（不阻断，仅警示）
+  try {
+    var _execScore = (document.getElementById('emExecPlanEntry')?.checked ? 1 : 0) +
+      (document.getElementById('emExecStopLoss')?.checked ? 1 : 0) +
+      (document.getElementById('emExecPlanExit')?.checked ? 1 : 0);
+    var _slRaw = gn('emStopLoss');
+    var _loRaw = gn('emLowPrice');
+    var _hiRaw = gn('emHighPrice');
+    if (_execScore >= 2 && _slRaw != null && _slRaw > 0) {
+      var _dir2 = document.getElementById('emDirection')?.value || item.direction;
+      if ((_dir2 === 'long' && _loRaw != null && _loRaw < _slRaw) ||
+          (_dir2 === 'short' && _hiRaw != null && _hiRaw > _slRaw)) {
+        showToast('⚠ 极值价格已穿透原始止损位，但执行评分勾选了"止损未被移动"，请核对止损价或评分', 'warn');
+      }
+    }
+  } catch(e) { /* 校验异常不阻断保存 */ }
+
   if (!saveLogs()) {
     Object.assign(item, beforeEdit);
     if (typeof renderLogs === 'function') renderLogs();
     showToast('日志编辑未保存，已恢复到保存前状态。', 'error');
     return false;
+  }
+  // 设计优化：编辑保存后提供 5 秒撤销（恢复保存前深拷贝，与删除撤销同一 toast 基建）
+  window._lastEditBackup = { idx: idx, item: beforeEdit };
+  if (typeof showUndoToast === 'function') {
+    showUndoToast('已保存，可撤销', function() {
+      var bk = window._lastEditBackup;
+      if (bk && bk.idx === idx && logs[idx] !== bk.item) {
+        logs[idx] = bk.item;
+        if (typeof saveLogs === 'function') saveLogs(true);
+        if (typeof renderDashboard === 'function') renderDashboard();
+        if (typeof renderLogs === 'function') renderLogs();
+        showToast('已撤销编辑', 'info');
+      }
+      window._lastEditBackup = null;
+    }, function() { window._lastEditBackup = null; }, 5000);
   }
   // P0-5/6: 持仓变化后刷新仪表盘，确保 Heat / PnL / 强平预警实时正确
   if (typeof renderDashboard === 'function') renderDashboard();
@@ -834,6 +873,33 @@ function doSaveSplit(calc, count) {
     positionSize: parseFloat(pos.toFixed(2)),
     leverage: calc.leverage,
     riskAmount: parseFloat(risk.toFixed(2)),
+    // 拆分保存字段完整性 FIX：与 saveLog 保持同一字段集，避免分析模块缺失
+    plannedRiskAmount: calc.plannedRiskAmount != null ? parseFloat(calc.plannedRiskAmount.toFixed(2)) : null,
+    plannedRiskPercent: calc.plannedRiskPercent != null ? parseFloat((calc.plannedRiskPercent * 100).toFixed(2)) : null,
+    actualMargin: calc.actualMargin != null ? parseFloat((calc.actualMargin * (pos / (calc.positionSize || 1))).toFixed(2)) : null,
+    capital: calc.capital != null && !isNaN(calc.capital) ? calc.capital : null,
+    stopPct: calc.stopPct != null ? calc.stopPct : null,
+    kellyData: calc.kellyData != null ? JSON.parse(JSON.stringify(calc.kellyData)) : null,
+    splitMode: true,
+    atrStopMode: calc.atrStopMode || false,
+    atrValue: calc.atrStopMode ? calc.atrValue || null : null,
+    atrMultiplier: calc.atrStopMode ? calc.atrMultiplier || null : null,
+    session: document.getElementById('tradeSession') ? document.getElementById('tradeSession').value : '',
+    marketCondition: document.getElementById('marketCondition') ? document.getElementById('marketCondition').value : '',
+    tpPlan: (function() {
+      if (typeof computeWeightedTPRR !== 'function') return null;
+      var w = computeWeightedTPRR();
+      if (!w) return null;
+      var p = [], r = [];
+      ['tp1', 'tp2', 'tp3'].forEach(function(id) {
+        var pEl = document.getElementById(id + 'Price');
+        var rEl = document.getElementById(id + 'Ratio');
+        var pv = pEl ? parseFloat(pEl.value) : NaN;
+        p.push((!isNaN(pv) && pv > 0) ? pv : null);
+        r.push(rEl ? (parseFloat(rEl.value) || 0) : 0);
+      });
+      return { prices: p, ratios: r, weightedRR: (w && w.rr != null && !w.overLimit) ? w.rr : null, remain: w.remain };
+    })(),
     reason: calc.reason || getReason(),
     mindsetScore: calc.mindsetScore != null ? calc.mindsetScore : (parseInt(document.getElementById('mindsetScore').value) || 3),
     strategyFramework: document.getElementById('strategyFramework').value,
@@ -861,9 +927,14 @@ function doSaveSplit(calc, count) {
       batchStopLoss = parseFloat(splitBatches[i].stopLoss);
     }
     const costs = createBatchCosts(pos, batchStopLoss);
-    const perRisk = calc.riskAmount / count;
-    const remainderRisk = calc.riskAmount - perRisk * (count - 1);
-    const risk = isLast ? remainderRisk : perRisk;
+    // 等风险公式 FIX：每笔风险按该笔实际止损距离重算（含批次独立止损），
+    // 与主计算器 positionSize × |entry − stopLoss| / entry 口径一致；
+    // 无独立止损时自动退化为 calc.riskAmount / count 均分。
+    const effEntry = calc.effectiveEntryPrice || calc.entryPrice;
+    const batchRisk = (costs.stopLoss != null && effEntry > 0)
+      ? pos * Math.abs(effEntry - costs.stopLoss) / effEntry
+      : NaN;
+    const risk = !isNaN(batchRisk) && batchRisk >= 0 ? batchRisk : (calc.riskAmount / count);
     const label = i === 0 ? '主' : ('第' + (i + 1) + '笔');
     const entry = makeEntry(pos, costs, risk, label, i);
     splitEntries.push({

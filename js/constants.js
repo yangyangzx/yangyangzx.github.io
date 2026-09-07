@@ -148,7 +148,8 @@ const ENTRY_REASON_OPTIONS = ['趋势突破','回调入场','震荡区间边界'
 
 // TICK_SIZE_MAP: 各品种的最小价格变动单位（tick size）
 const TICK_SIZE_MAP = {
-  'BTC': 0.1, 'ETH': 0.01, 'SOL': 0.001, 'GOLD': 0.01
+  'BTC': 0.1, 'ETH': 0.01, 'SOL': 0.001, 'GOLD': 0.01,
+  'XRP': 0.0001, 'DOGE': 0.00001, 'BNB': 0.01, 'ADA': 0.0001, 'AVAX': 0.01
 };
 
 function getTickSize(symbol) {

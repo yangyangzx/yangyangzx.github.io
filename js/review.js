@@ -133,7 +133,7 @@ function renderLossReasonPie(closed) {
     options: createStandardOptions(cc, {
       plugins: {
         legend: { position: 'right', labels: { font: { size: 12 }, padding: 12, usePointStyle: true, pointStyleWidth: 10 } },
-        tooltip: { callbacks: { label: function(ctx) { var total = ctx.dataset.data.reduce(function(a, b) { return a + b; }, 0); var pct = ((ctx.parsed / total) * 100).toFixed(1); var pnl = reasonPnl[ctx.label] || 0; return ctx.label + ': ' + ctx.parsed + ' 次 (' + pct + '%)  累计 ' + pnl.toFixed(0) + ' USDT'; } } }
+        tooltip: { callbacks: { label: function(ctx) { var total = ctx.dataset.data.reduce(function(a, b) { return a + b; }, 0); var pct = ((ctx.parsed / total) * 100).toFixed(1); var pnl = reasonPnl[ctx.label] || 0; return ctx.label + ': ' + ctx.parsed + ' 次 (' + pct + '%)  多因累计 ' + pnl.toFixed(0) + ' U'; } } }
       },
       cutout: '55%'
     })
@@ -173,12 +173,13 @@ function renderStrategyRank(closed) {
       else if (pnl < 0) { losses++; lossSum += Math.abs(pnl); }
     }
     var decidedCnt = wins + losses;
+    // P1-2 FIX：胜率分母为组内全部已平仓（保本计入分母，与统计页/期望值自洽）
     rows.push({
       name: keys[j],
       count: trades.length,
       wins: wins,
       losses: losses,
-      winRate: decidedCnt > 0 ? (wins / decidedCnt * 100) : 0,
+      winRate: trades.length > 0 ? (wins / trades.length * 100) : 0,
       totalPnl: totalPnl,
       avgWin: wins > 0 ? winSum / wins : 0,
       avgLoss: losses > 0 ? lossSum / losses : 0
@@ -267,7 +268,8 @@ function renderOrderTypeChart(closed) {
   var labels = [], wrData = [], pnlData = [];
   for (var j = 0; j < keys.length; j++) {
     var g = groups[keys[j]];
-    var decided = g.wins + g.losses; // 排除 break-even，与全局口径一致
+    // P1-2 FIX：胜率分母为组内全部已平仓（含保本，与统计页一致）
+    var decided = g.total;
     labels.push(keys[j] + ' (' + g.total + ')');
     wrData.push(decided > 0 ? parseFloat((g.wins / decided * 100).toFixed(1)) : 0);
     pnlData.push(parseFloat(g.pnlTotal.toFixed(2)));
@@ -389,7 +391,8 @@ function renderEmotionAnalysis(closed) {
   for (var e = 0; e < keys.length; e++) {
     var em = keys[e];
     var stats = emotionStats[em];
-    var decided = stats.wins + stats.losses;
+    // P1-2 FIX：胜率分母为该情绪出现次数（保本计入分母，与整体基准一致）
+    var decided = stats.count;
     var winRate = decided > 0 ? (stats.wins / decided * 100) : 0;
     var avgPnl = stats.count > 0 ? (stats.totalPnl / stats.count) : 0;
     var deviation = winRate - overallWinRate;
@@ -416,7 +419,7 @@ function renderEmotionAnalysis(closed) {
     tHtml += '</tr>';
   }
   tHtml += '</tbody></table></div>';
-  tHtml += '<p style="font-size:11px;color:var(--color-text-muted);margin-top:8px;">注：负向关联表示该情绪出现时胜率低于整体水平，值得关注。</p>';
+  tHtml += '<p style="font-size:11px;color:var(--color-text-muted);margin-top:8px;">注：一笔交易可标记多个亏损原因，次数与累计金额按原因展开统计（单笔可能重复计入）。</p>';
   tableEl.innerHTML = tHtml;
 }
 
@@ -426,14 +429,6 @@ function renderExecutionQuality(closed) {
   var canvas = document.getElementById('chartExecutionQuality');
   var tableEl = document.getElementById('executionTableWrap');
   if (!canvas || !tableEl) { console.warn('[review] executionQuality: canvas or table missing'); return; }
-
-  // Diagnostic: trace why chart may be empty
-  var withExec = closed.filter(function(l) { return l.executionScore != null; });
-  var hasScore13 = closed.filter(function(l) { return l.executionScore >= 1 && l.executionScore <= 3; });
-  console.log('[review] executionQuality: closed=' + closed.length +
-    ' withScore=' + withExec.length +
-    ' scores13=' + hasScore13.length +
-    ' rawScores=' + JSON.stringify(closed.map(function(l){ return l.executionScore; })));
 
   // 按执行分分组（0=未评分，1-3=已评分）
   var execStats = {};
@@ -461,9 +456,9 @@ function renderExecutionQuality(closed) {
     var msg = '暂无执行评分数据';
     if (totalClosed > 0) {
       msg += '（共 ' + totalClosed + ' 笔已平仓，其中 ' + withExec.length + ' 笔有执行评分[1-3]）';
-      // Show migration hint if needed
+      // 历史 0 分已自动迁移为未评分；提示用户如何查看
       if (withExec.length === 0) {
-        msg += ' · 提示：如历史评分显示为0分，请在系统设置中点击「立即备份」后手动清除浏览器数据并重新加载';
+        msg += ' · 提示：平仓时填写执行分后此图表自动生效';
       }
     } else {
       msg += '，请先完成至少一笔交易并在平仓时记录执行分';
@@ -473,8 +468,8 @@ function renderExecutionQuality(closed) {
     return;
   }
 
-  // 整体基准
-  var overallWins = 0, overallLosses = 0, overallPnl = 0, overallRr = 0, overallRrCount = 0;
+  // 整体基准（P1-2/P2-5 FIX：分母为全部已评分交易，保本计入——与统计页/期望值自洽）
+  var overallWins = 0, overallLosses = 0, overallPnl = 0, overallRr = 0, overallRrCount = 0, overallCount = 0;
   for (var ki = 0; ki < keys.length; ki++) {
     var s = execStats[keys[ki]];
     overallWins += s.wins;
@@ -482,6 +477,7 @@ function renderExecutionQuality(closed) {
     overallPnl += s.totalPnl;
     overallRr += s.rrSum;
     overallRrCount += s.rrCount;
+    overallCount += s.count;
   }
   // Safety: verify all execStats entries exist before proceeding
   for (var gi = 0; gi < keys.length; gi++) {
@@ -491,9 +487,8 @@ function renderExecutionQuality(closed) {
       return;
     }
   }
-  var overallDecided = overallWins + overallLosses;
-  var overallWinRate = overallDecided > 0 ? (overallWins / overallDecided * 100) : 0;
-  var overallAvgPnl = overallDecided > 0 ? (overallPnl / overallDecided) : 0;
+  var overallWinRate = overallCount > 0 ? (overallWins / overallCount * 100) : 0;
+  var overallAvgPnl = overallCount > 0 ? (overallPnl / overallCount) : 0;
   var overallAvgRr = overallRrCount > 0 ? (overallRr / overallRrCount) : 0;
 
   // 绘制图表
@@ -504,7 +499,8 @@ function renderExecutionQuality(closed) {
   for (var ki = 0; ki < keys.length; ki++) {
     var s = execStats[keys[ki]];
     labels.push('执行' + keys[ki] + '分');
-    var wr = (s.wins + s.losses) > 0 ? (s.wins / (s.wins + s.losses) * 100) : 0;
+    // P1-2 FIX：胜率分母为组内全部已评分交易（含保本）
+    var wr = s.count > 0 ? (s.wins / s.count * 100) : 0;
     var avgPnl = s.count > 0 ? (s.totalPnl / s.count) : 0;
     var avgRr = s.rrCount > 0 ? (s.rrSum / s.rrCount) : 0;
     winRateData.push(parseFloat(wr.toFixed(1)));
@@ -547,7 +543,8 @@ function renderExecutionQuality(closed) {
   for (var ki = 0; ki < keys.length; ki++) {
     var s = execStats[keys[ki]];
     var avgPnl = s.count > 0 ? (s.totalPnl / s.count) : 0;
-    var wr = (s.wins + s.losses) > 0 ? (s.wins / (s.wins + s.losses) * 100) : 0;
+    // P1-2 FIX：胜率分母为组内全部已评分交易（含保本）
+    var wr = s.count > 0 ? (s.wins / s.count * 100) : 0;
     var avgRr = s.rrCount > 0 ? (s.rrSum / s.rrCount) : 0;
     var wrDev = wr - overallWinRate;
 
@@ -631,11 +628,11 @@ function renderEntryReasonAnalysis(closed) {
     return;
   }
 
-  // 计算整体胜率作为基准
+  // 计算整体胜率作为基准（P1-2 FIX：分母为全部标签总笔数，保本计入）
   var overallWins = 0, overallDecided = 0, overallPnl = 0;
   for (var k = 0; k < keys.length; k++) {
     overallWins += groups[keys[k]].wins;
-    overallDecided += groups[keys[k]].wins + groups[keys[k]].losses;
+    overallDecided += groups[keys[k]].total;
     overallPnl += groups[keys[k]].pnlTotal;
   }
   var overallWinRate = overallDecided > 0 ? (overallWins / overallDecided * 100) : 0;
@@ -652,7 +649,8 @@ function renderEntryReasonAnalysis(closed) {
   var labels = [], wrData = [], pnlData = [];
   for (var j = 0; j < validKeys.length; j++) {
     var g = groups[validKeys[j]];
-    var decided = g.wins + g.losses;
+    // P1-2 FIX：胜率分母为该标签总笔数（保本计入分母）
+    var decided = g.total;
     labels.push(validKeys[j] + ' (' + g.total + ')');
     wrData.push(decided > 0 ? parseFloat((g.wins / decided * 100).toFixed(1)) : 0);
     pnlData.push(parseFloat(g.pnlTotal.toFixed(2)));
@@ -691,7 +689,8 @@ function renderEntryReasonAnalysis(closed) {
   for (var t = 0; t < validKeys.length; t++) {
     var key = validKeys[t];
     var g = groups[key];
-    var decided = g.wins + g.losses;
+    // P1-2 FIX：胜率分母为该标签总笔数（保本计入分母）
+    var decided = g.total;
     var winRate = decided > 0 ? (g.wins / decided * 100) : 0;
     var avgPnl = g.total > 0 ? (g.pnlTotal / g.total) : 0;
     var dev = winRate - overallWinRate;
@@ -718,7 +717,7 @@ function renderEntryReasonAnalysis(closed) {
     tHtml += '</tr>';
   }
   tHtml += '</tbody></table>';
-  tHtml += '<p style="font-size:11px;color:var(--color-text-muted);margin-top:8px;">注：vs整体胜率表示该入场原因胜率与全部入场原因整体胜率的偏差。样本≥3笔才显示。</p>';
+  tHtml += '<p style="font-size:11px;color:var(--color-text-muted);margin-top:8px;">注：vs整体胜率表示该入场原因胜率与全部入场原因整体胜率的偏差。样本≥3笔才显示。一笔交易可有多个入场原因，笔数含重复计数（P2-10）。</p>';
   tableEl.innerHTML = tHtml;
 }
 
@@ -760,11 +759,11 @@ function renderStrategyTips(closed) {
     return;
   }
 
-  // 计算整体基准
+  // 计算整体基准（P1-2 FIX：分母为全部标签总笔数，保本计入）
   var totalWins = 0, totalDecided = 0, totalPnl = 0;
   for (var k = 0; k < keys.length; k++) {
     totalWins += reasonStats[keys[k]].wins;
-    totalDecided += reasonStats[keys[k]].wins + reasonStats[keys[k]].losses;
+    totalDecided += reasonStats[keys[k]].count;
     totalPnl += reasonStats[keys[k]].pnlTotal;
   }
   var overallWinRate = totalDecided > 0 ? (totalWins / totalDecided * 100) : 0;
@@ -773,7 +772,8 @@ function renderStrategyTips(closed) {
   var tips = [];
   for (var t = 0; t < keys.length; t++) {
     var s = reasonStats[keys[t]];
-    var decided = s.wins + s.losses;
+    // P1-2 FIX：胜率分母为该标签总笔数（保本计入）
+    var decided = s.count;
     if (decided < 3) continue; // 样本不足跳过
     var winRate = (s.wins / decided * 100);
     var pnlRate = (s.pnlTotal / s.count).toFixed(2);

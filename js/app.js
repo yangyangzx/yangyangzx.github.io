@@ -114,7 +114,7 @@ document.addEventListener('DOMContentLoaded', function() {
     var amount = NaN;
     if (raw.endsWith('%')) { amount = parseFloat(raw) / 100 * capital; }
     var hint = document.getElementById('riskHint');
-    if (hint) { hint.textContent = !isNaN(amount) && amount > 0 ? '≈ ' + amount.toFixed(2) + ' USDT' : ''; }
+    if (hint) { hint.textContent = !isNaN(amount) && amount > 0 ? '≈ ' + (amount >= 0.01 ? amount.toFixed(2) : amount.toFixed(4)) + ' USDT' : ''; }
   });
   var saveBtn = document.getElementById('saveBtn'); if (saveBtn) saveBtn.addEventListener('click', saveLog);
   var splitSaveBtn = document.getElementById('splitSaveBtn'); if (splitSaveBtn) splitSaveBtn.addEventListener('click', saveSplit);
@@ -142,7 +142,10 @@ document.addEventListener('DOMContentLoaded', function() {
   // ATR 止损辅助
   var applyAtrBtn = document.getElementById('applyAtrBtn'); if (applyAtrBtn) applyAtrBtn.addEventListener('click', function() {
     const atr = parseFloat(document.getElementById('atrValue').value);
-    const mult = parseFloat(document.getElementById('atrMultiplier').value) || 1.5;
+    // P2-13 FIX：默认倍数与 calculate() 主逻辑统一（settings.atrDefaultMultiplier → 2），
+    // 避免同一表单清空时"应用 ATR"按钮用 1.5、点计算却用 2 导致止损/仓位不一致
+    var _atrSettings = loadSettings();
+    const mult = parseFloat(document.getElementById('atrMultiplier').value) || _atrSettings.atrDefaultMultiplier || 2;
     // FIX #9: Use actual entry price (considering split mode weighted average)
     let entry;
     if (typeof getActiveEntryPrice === 'function') {

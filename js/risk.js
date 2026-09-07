@@ -20,14 +20,17 @@ function getAccountCapital() {
 }
 
 /**
- * 获取所有未平仓日志
+ * 获取所有未平仓日志（P0-1 FIX）
+ * 语义：未平仓 + 部分平仓中间态（partialTP / reducePosition 剩余仓位仍属持仓，
+ * 必须继续参与组合热量 / 集中度 / 强平预警 / 保证金占用监控）
  */
 function getOpenPositions() {
   var open = [];
   for (var i = 0; i < logs.length; i++) {
-    // partialTP / reducePosition 为部分平仓操作，不应继续计入"未平仓"持仓
-    if (!logs[i].closeType || logs[i].closeType === 'partialTP' || logs[i].closeType === 'reducePosition') {
-      open.push(logs[i]);
+    if (typeof util !== 'undefined' && typeof util.isClosedTrade === 'function') {
+      if (!util.isClosedTrade(logs[i])) open.push(logs[i]);
+    } else {
+      if (!logs[i].closeType || logs[i].closeType === '') open.push(logs[i]);
     }
   }
   return open;
@@ -35,16 +38,23 @@ function getOpenPositions() {
 
 /**
  * 获取按平仓时间排序的已平仓日志（有 pnlAmount 的）
- * 委托给 utils.js
+ * P0-1 FIX：统一委托 utils.js 的权威实现（部分平仓中间态不算已平仓），
+ * 避免本文件旧实现覆盖 utils 全局别名导致判定分裂。
  */
 function getClosedSorted() {
+  if (window.utils && typeof window.utils.getClosedSorted === 'function') {
+    return window.utils.getClosedSorted();
+  }
+  // 兜底（正常不会走到）：与 utils 实现一致的判定
   var closed = [];
   for (var i = 0; i < logs.length; i++) {
-    if (logs[i].closeType && logs[i].pnlAmount != null && !isNaN(parseFloat(logs[i].pnlAmount))) {
-      var item = Object.assign({}, logs[i]);
-      item.pnlAmount = parseFloat(item.pnlAmount);
-      closed.push(item);
-    }
+    var isClosedNow = (window.utils && typeof window.utils.isClosedTrade === 'function')
+      ? window.utils.isClosedTrade(logs[i])
+      : !!(logs[i].closeType && logs[i].closeType !== '');
+    if (!isClosedNow || logs[i].pnlAmount == null || isNaN(parseFloat(logs[i].pnlAmount))) continue;
+    var item = Object.assign({}, logs[i]);
+    item.pnlAmount = parseFloat(item.pnlAmount);
+    closed.push(item);
   }
   closed.sort(function(a, b) {
     var ta = a.closeTime ? new Date(a.closeTime).getTime() : 0;
@@ -200,7 +210,8 @@ function renderDailyLoss(closedOverride) {
   }
 
   var progressPct = (todayLoss / dailyLossLimit) * 100;
-  var isOverLimit = todayLoss >= dailyLossLimit;
+  // P1-4 FIX：与熔断门 checkDailyLossLimit 边界一致（严格大于才算超限；等于上限时恰好位于临界，尚未超限）
+  var isOverLimit = todayLoss > dailyLossLimit;
 
   var fillClass = isOverLimit ? 'danger' : (progressPct > 70 ? 'warn' : 'safe');
   var statusText = isOverLimit ? ('日亏损已达上限！建议停止交易（已超 ' + progressPct.toFixed(0) + '%）') : ('亏损 ' + todayLoss.toFixed(2) + ' USDT / 上限 ' + dailyLossLimit.toFixed(2) + ' USDT（' + Math.min(progressPct, 100).toFixed(0) + '%）');
@@ -224,33 +235,39 @@ function renderDrawdown(closedOverride) {
     return;
   }
 
-  // 计算累计权益曲线：优先从 settings.accountBalance 取（与 calcEquityCurve 口径一致），
-  // 兜底到首笔已平仓日志的 capital，最后用 getAccountCapital() 兜底
-  var capital = 0;
-  try { var _ddSettings = loadSettings(); if (_ddSettings && _ddSettings.accountBalance > 0) capital = _ddSettings.accountBalance; } catch(e) {}
-  if (capital <= 0 && closed.length > 0 && closed[0].capital != null && !isNaN(closed[0].capital) && closed[0].capital > 0) {
-    capital = closed[0].capital;
-  } else if (capital <= 0) {
-    var _ddCapital = getAccountCapital();
-    if (_ddCapital != null && _ddCapital > 0) capital = _ddCapital;
-  }
-  var equity = capital;
-  var peak = capital;
-  for (var i = 0; i < closed.length; i++) {
-    // M5: 仅当 capital 变化时才视为存款/取款事件，否则累加 PnL
-    var capVal = parseFloat(closed[i].capital);
-    if (!isNaN(capVal) && capVal > 0 && capVal !== equity) {
-      equity = capVal;
-    } else {
-      equity += parseFloat(closed[i].pnlAmount) || 0;
+  // P1-1 FIX：统一回撤口径 — 复用 utils.calcEquityCurve（与统计/分析/仪表盘完全一致）。
+  // 取消原"capital 快照变化即重置权益"逻辑（capital 是开仓时账户快照，不是存取款事件，
+  // 用它会抹平真实回撤）；存取款请通过日志的 balanceAdjustment 字段显式记录。
+  var ddSettings = loadSettings();
+  var curve = null;
+  try {
+    curve = window.utils.calcEquityCurve(closed, ddSettings, {});
+  } catch(e) { curve = null; }
+
+  var capital = 0, equity = 0, peak = 0;
+  if (curve && curve.data && curve.data.length > 0) {
+    capital = curve.initCap;
+    equity = curve.finalEq;
+    peak = curve.peakVal;
+  } else {
+    // 无数据兜底（与 calcEquityCurve 相同的取数顺序）
+    try { var _ddSettings = loadSettings(); if (_ddSettings && _ddSettings.accountBalance > 0) capital = _ddSettings.accountBalance; } catch(e) {}
+    if (capital <= 0 && closed.length > 0 && closed[0].capital != null && !isNaN(closed[0].capital) && closed[0].capital > 0) {
+      capital = closed[0].capital;
+    } else if (capital <= 0) {
+      var _ddCapital = getAccountCapital();
+      if (_ddCapital != null && _ddCapital > 0) capital = _ddCapital;
     }
-    if (equity > peak) peak = equity;
+    equity = capital;
+    peak = capital;
+    for (var i = 0; i < closed.length; i++) {
+      equity += parseFloat(closed[i].pnlAmount) || 0;
+      if (equity > peak) peak = equity;
+    }
   }
 
   var drawdownAmount = peak - equity;
   var drawdownPct = peak > 0 ? (drawdownAmount / peak) * 100 : 0;
-
-  var ddSettings = loadSettings();
   var maxDrawdownAlert = ddSettings.maxDrawdownAlert;
   var capitalKnown = (capital > 0);
   var warnThreshold = capitalKnown ? capital * (maxDrawdownAlert / 100) : Infinity;
@@ -417,32 +434,24 @@ function renderConcentration(closedOverride) {
     symbolMargin[sym] = (symbolMargin[sym] || 0) + margin;
     symbolCount[sym] = (symbolCount[sym] || 0) + 1;
   }
-  // 也统计已平仓的品种分布
-  for (var j = 0; j < closed.length; j++) {
-    var csym = closed[j].symbol || '未知';
-    symbolCount[csym] = (symbolCount[csym] || 0) + 1;
-  }
-
+  // P2-4 FIX：表格只反映"当前持仓"分布，不再混入已平仓历史品种/笔数
   var symbolRows = [];
-  // 合并所有出现过的品种（包括仅有已平仓记录的品种）
-  var allSymbols = {};
-  for (var sym in symbolMargin) { allSymbols[sym] = true; }
-  for (var sym in symbolCount) { allSymbols[sym] = true; }
-  for (var sym2 in allSymbols) {
-    var margin = symbolMargin[sym2] || 0;
+  for (var sym in symbolMargin) {
+    var margin = symbolMargin[sym] || 0;
     var pct = capital > 0 ? (margin / capital * 100) : 0;
-    symbolRows.push({ symbol: sym2, margin: margin, pct: pct, count: symbolCount[sym2] || 0 });
+    symbolRows.push({ symbol: sym, margin: margin, pct: pct, count: symbolCount[sym] || 0 });
   }
   symbolRows.sort(function(a, b) { return b.pct - a.pct || b.count - a.count; });
 
-  // 杠杆集中度
-  var leverageBuckets = { '1x(现货)': 0, '5-20x': 0, '50x': 0, '100x': 0 };
+  // 杠杆集中度（P2-15 FIX：原分桶 21-49x / 51-99x 不落入任何桶导致持仓丢失，改为全覆盖分桶）
+  var leverageBuckets = { '1x(现货)': 0, '2-20x': 0, '21-50x': 0, '51-100x': 0, '100x以上': 0 };
   for (var k = 0; k < openPositions.length; k++) {
     var lv = openPositions[k].leverage || 0;
     if (lv === 0) leverageBuckets['1x(现货)']++;
-    else if (lv <= 20) leverageBuckets['5-20x']++;
-    else if (lv === 50) leverageBuckets['50x']++;
-    else if (lv >= 100) leverageBuckets['100x']++;
+    else if (lv <= 20) leverageBuckets['2-20x']++;
+    else if (lv <= 50) leverageBuckets['21-50x']++;
+    else if (lv <= 100) leverageBuckets['51-100x']++;
+    else leverageBuckets['100x以上']++;
   }
 
   var html = '';
@@ -518,9 +527,9 @@ function renderFrequency(closedOverride) {
     if (curLossStreak > maxLossStreak) maxLossStreak = curLossStreak;
   }
 
-  // 平均每日交易次数
-  var daysRange = dates.length > 0 ? Math.max(1, Math.ceil((new Date(dates[dates.length - 1]) - new Date(dates[0])) / 86400000)) : 1;
-  var avgDaily = (closed.length / daysRange).toFixed(1);
+  // P2-3 FIX：日均交易改为"活跃交易日"口径（实际有平仓记录的天数），
+  // 避免日历天跨度（含无交易日）系统性低估频率
+  var avgDaily = dates.length > 0 ? (closed.length / dates.length).toFixed(1) : '0.0';
 
   // 今日交易次数
   var todayStr = window.utils.toLocalDateStr(new Date().toISOString());

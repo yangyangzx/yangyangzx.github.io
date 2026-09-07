@@ -115,6 +115,74 @@ function updateStats() {
     ddEl.style.color = '';
   }
 
+  // ====== 设计优化：风险调整后收益指标 ======
+  // 年化收益：总盈亏按首末平仓时间跨度年化（跨度 <1 天按 1 天）
+  try {
+    var annEl = document.getElementById('statAnnReturn');
+    if (annEl) {
+      var _t0 = null, _t1 = null;
+      for (var _i = 0; _i < closed.length; _i++) {
+        var _ct = closed[_i].closeTime ? new Date(closed[_i].closeTime).getTime() : NaN;
+        if (isNaN(_ct)) continue;
+        if (_t0 === null || _ct < _t0) _t0 = _ct;
+        if (_t1 === null || _ct > _t1) _t1 = _ct;
+      }
+      if (_t0 !== null && _t1 > _t0 && totalPnl !== 0) {
+        var _spanDays = Math.max((_t1 - _t0) / 86400000, 1);
+        var _ann = totalPnl * (365 / _spanDays);
+        annEl.textContent = (_ann >= 0 ? '+' : '') + _ann.toFixed(0) + ' U/年';
+        annEl.style.color = _ann >= 0 ? 'var(--color-success)' : 'var(--color-danger)';
+        annEl.title = '跨度 ' + _spanDays.toFixed(1) + ' 天';
+      } else {
+        annEl.textContent = '—';
+        annEl.style.color = '';
+      }
+    }
+    // 夏普（日频）：按平仓日聚合日盈亏
+    var shEl = document.getElementById('statSharpe');
+    if (shEl) {
+      var dayMap = {};
+      for (var _j = 0; _j < closed.length; _j++) {
+        var _ct2 = closed[_j].closeTime ? new Date(closed[_j].closeTime) : null;
+        if (!_ct2 || isNaN(_ct2.getTime())) continue;
+        var _dk = _ct2.getFullYear() + '-' + (_ct2.getMonth() + 1) + '-' + _ct2.getDate();
+        var _pnl = parseFloat(closed[_j].pnlAmount);
+        if (isNaN(_pnl)) continue;
+        dayMap[_dk] = (dayMap[_dk] || 0) + _pnl;
+      }
+      var _dayVals = Object.keys(dayMap).map(function(k) { return dayMap[k]; });
+      if (_dayVals.length >= 2) {
+        var _m = 0; for (var _a = 0; _a < _dayVals.length; _a++) _m += _dayVals[_a];
+        _m /= _dayVals.length;
+        var _sd = 0; for (var _b = 0; _b < _dayVals.length; _b++) _sd += Math.pow(_dayVals[_b] - _m, 2);
+        _sd = Math.sqrt(_sd / _dayVals.length);
+        if (_sd > 0) {
+          var _sharpe = _m / _sd * Math.sqrt(252);
+          shEl.textContent = _sharpe.toFixed(2);
+          shEl.style.color = _sharpe >= 1 ? 'var(--color-success)' : (_sharpe >= 0 ? 'var(--color-warning)' : 'var(--color-danger)');
+          shEl.title = '基于 ' + _dayVals.length + ' 个交易日';
+        } else { shEl.textContent = '—'; shEl.style.color = ''; }
+      } else { shEl.textContent = '—'; shEl.style.color = ''; }
+    }
+    // 成本侵蚀：Σ手续费 ÷ Σ(盈利+亏损绝对值)
+    var cdEl = document.getElementById('statCostDrag');
+    if (cdEl) {
+      var _feeSum = 0, _grossSum = 0;
+      for (var _k = 0; _k < closed.length; _k++) {
+        var _f = parseFloat(closed[_k].fee);
+        if (!isNaN(_f)) _feeSum += _f;
+        var _gp = Math.abs(parseFloat(closed[_k].pnlAmount));
+        if (!isNaN(_gp)) _grossSum += _gp;
+      }
+      if (_grossSum > 0 && _feeSum > 0) {
+        var _drag = _feeSum / _grossSum * 100;
+        cdEl.textContent = _drag.toFixed(1) + '%';
+        cdEl.style.color = _drag > 15 ? 'var(--color-danger)' : (_drag > 8 ? 'var(--color-warning)' : 'var(--color-success)');
+        cdEl.title = '总手续费 ' + _feeSum.toFixed(2) + ' U / 毛盈亏 ' + _grossSum.toFixed(2) + ' U';
+      } else { cdEl.textContent = '—'; cdEl.style.color = ''; }
+    }
+  } catch(e) { console.error('[stats] risk-adjusted metrics error:', e); }
+
   // ====== 新增统计：目标达成率 ======
   let targetTotal = 0, targetHit = 0;
   for (const l of closed) {
@@ -600,8 +668,12 @@ function _getTodayLossStreak() {
     String(now.getMonth() + 1).padStart(2, '0') + '-' +
     String(now.getDate()).padStart(2, '0');
   // 先筛选当日已平仓，再按 closeTime 升序排序确保时间顺序正确
+  // P0-1 FIX：统一使用 utils.isClosedTrade（部分平仓中间态不计入"已平仓"当日统计）
   var todayClosed = logs.filter(function(l) {
-    return l.closeType && l.closeType !== '' && _getTradeDate(l) === todayStr;
+    var isClosed = (typeof window.utils !== 'undefined' && typeof window.utils.isClosedTrade === 'function')
+      ? window.utils.isClosedTrade(l)
+      : (l.closeType && l.closeType !== '');
+    return isClosed && _getTradeDate(l) === todayStr;
   });
   todayClosed.sort(function(a, b) {
     return (a.closeTime || '').localeCompare(b.closeTime || '');

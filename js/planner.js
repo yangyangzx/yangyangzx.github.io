@@ -163,9 +163,11 @@ function autoCalcMultiTP() {
     return;
   }
 
-  // 使用设置中的默认盈亏比
+  // P2-7 FIX：真正读取设置中的多止盈盈亏比（settings.tpRRs），不再硬编码
   var settings = typeof loadSettings === 'function' ? loadSettings() : {};
-  var tpRRs = [1.5, 2.0, 3.0];
+  var tpRRs = (settings && Array.isArray(settings.tpRRs) && settings.tpRRs.length >= 3)
+    ? settings.tpRRs.map(function(v) { return parseFloat(v) > 0 ? parseFloat(v) : 1.5; })
+    : [1.5, 2.0, 3.0];
   var tpIds = ['tp1Price', 'tp2Price', 'tp3Price'];
 
   for (var i = 0; i < 3; i++) {
@@ -189,6 +191,59 @@ function autoCalcMultiTP() {
   }
 
   updateMultiTP();
+}
+
+/**
+ * 计算多止盈组合的加权期望盈亏比（含费，每 1U 仓位口径）
+ * - 每档：单位净盈 = (TP距/入场) − 单位往返费；逆势档为负毛利，自然拉低期望
+ * - 剩余仓位（100−Σ比例）按止损路径计（保守口径，鼓励规划满 100%）
+ * - 返回 { rr, remain, sumRatio, unitLoss, overLimit }；未规划返回 null
+ */
+function computeWeightedTPRR() {
+  var calc = getCalc();
+  if (!calc || !calc.entryPrice) return null;
+  var entryPrice = calc.effectiveEntryPrice || calc.entryPrice;
+  var stopLoss = calc.stopLoss;
+  var direction = calc.direction;
+  var stopDistance = calc.stopDistance != null ? calc.stopDistance
+    : (!isNaN(entryPrice) && !isNaN(stopLoss) ? Math.abs(entryPrice - stopLoss) : 0);
+  if (!(entryPrice > 0) || !(stopDistance > 0)) return null;
+  var ep = entryPrice;
+
+  // 单位往返费用（每 1U 仓位），与主计算同费率口径
+  var posSize = calc.positionSize || 0;
+  var fee = calc.fee || 0;
+  var feePerUnit = posSize > 0 ? fee / posSize : 0;
+  var unitLoss = stopDistance / ep + feePerUnit;
+  if (!(unitLoss > 0)) return null;
+
+  var ids = ['tp1', 'tp2', 'tp3'];
+  var prices = [], ratios = [];
+  var anyFilled = false;
+  for (var i = 0; i < 3; i++) {
+    var pEl = document.getElementById(ids[i] + 'Price');
+    var rEl = document.getElementById(ids[i] + 'Ratio');
+    var p = pEl ? parseFloat(pEl.value) : NaN;
+    var r = rEl ? (parseFloat(rEl.value) || 0) : 0;
+    prices.push((!isNaN(p) && p > 0) ? p : null);
+    ratios.push(r);
+    if (prices[i] !== null) anyFilled = true;
+  }
+  if (!anyFilled) return null; // 三档均未规划
+
+  var sumRatio = ratios[0] + ratios[1] + ratios[2];
+  var remain = Math.max(0, 100 - sumRatio);
+  var eNet = 0;
+  for (var j = 0; j < 3; j++) {
+    if (prices[j] === null) continue;
+    var dist = direction === 'long' ? (prices[j] - ep) : (ep - prices[j]);
+    var unitGross = dist / ep;
+    eNet += (ratios[j] / 100) * (unitGross - feePerUnit);
+  }
+  // 剩余仓位按止损路径计
+  eNet -= (remain / 100) * unitLoss;
+
+  return { rr: eNet / unitLoss, remain: remain, sumRatio: sumRatio, unitLoss: unitLoss, overLimit: sumRatio > 100 };
 }
 
 /**
@@ -281,14 +336,32 @@ function updateMultiTP() {
       var origPosSize = stopDistance > 0 && ep > 0 ? (riskAmt * ep / stopDistance) : (calc.positionSize || 0);
       var grossProfit = profitDistance * origPosSize / ep;
       var grossLoss = stopDistance * origPosSize / ep;
-      // calc.fee 为 round-trip 总手续费（开仓+平仓双向），止盈路径和止损路径各承担全部费用
-      // netProfit: 盈利扣除一次手续费；netLoss: 亏损叠加手续费（损失扩大）
-      var fee = calc.fee || 0;
-      var netProfit = grossProfit - fee;
-      var netLoss = grossLoss + fee;
+      // 费用口径 FIX：按单位费率还原到原始仓位（截断前后口径一致）
+      // 原先直接使用 calc.fee（基于截断后仓位），与反推原始仓位的毛利不在同一口径
+      var posSize = calc.positionSize || 0;
+      var feePerUnit = posSize > 0 ? (calc.fee || 0) / posSize : 0;
+      var feeThis = feePerUnit * origPosSize;
+      var netProfit = grossProfit - feeThis;
+      var netLoss = grossLoss + feeThis;
       var rr = netLoss > 0 ? netProfit / netLoss : grossProfit / grossLoss;
       rrEl.textContent = rr.toFixed(2) + 'R';
       rrEl.className = 'tp-rr' + (rr < 1.5 ? ' negative' : '');
+    }
+  }
+
+  // 多止盈组合加权期望 R（含费；剩余仓位按止损计）
+  var w = computeWeightedTPRR();
+  var wEl = document.getElementById('tpWeightedRR');
+  if (wEl) {
+    if (!w) {
+      wEl.textContent = '—';
+      wEl.className = 'tp-rr';
+    } else if (w.overLimit) {
+      wEl.textContent = '比例超限 ' + w.sumRatio + '%';
+      wEl.className = 'tp-rr negative';
+    } else {
+      wEl.textContent = '加权期望 ' + w.rr.toFixed(2) + 'R';
+      wEl.className = 'tp-rr' + (w.rr < 1.5 ? ' negative' : '');
     }
   }
 }
@@ -336,8 +409,10 @@ function getTodayLossStatus() {
   try {
     var todayStr = window.utils.toLocalDateStr(new Date().toISOString());
     var totalTodayLoss = 0;
-    // 统计今日所有已平仓的亏损
+    // 统计今日所有已平仓的亏损（P0-1 一致性：部分平仓中间态记录跳过，
+    // 其已实现盈亏已计入最终平仓记录的整笔累计 pnlAmount，避免重复计数）
     for (var i = 0; i < logs.length; i++) {
+      if (!window.utils.isClosedTrade(logs[i])) continue;
       if (logs[i].closeType && logs[i].pnlAmount != null) {
         var closeDate = window.utils.toLocalDateStr(logs[i].closeTime || logs[i].time);
         if (closeDate === todayStr && logs[i].pnlAmount < 0) {
@@ -509,6 +584,18 @@ function updateChecklist() {
     return { result: passed, message: concCheck.warning || (passed ? '品种集中度正常' : '集中度超限') };
   });
 
+  // 【增强12】多止盈组合加权期望盈亏比达标（组合止盈计划 ≥ minRRRatio）
+  updateCheckItemWithResult('checkTPWeighted', function() {
+    if (!calc) return null;
+    if (typeof computeWeightedTPRR !== 'function') return null;
+    var w = computeWeightedTPRR();
+    if (!w || w.rr == null) return null; // 未规划多止盈 → 跳过
+    if (w.overLimit) return { result: false, message: 'TP 减仓比例合计 ' + w.sumRatio + '% 超过 100%，请调整' };
+    var minRR = (settings.minRRRatio != null && settings.minRRRatio > 0) ? settings.minRRRatio : 2;
+    var passed = w.rr >= minRR;
+    return { result: passed, message: '多止盈加权期望 ' + w.rr.toFixed(2) + 'R（剩余仓位 ' + w.remain + '% 按止损计）' + (passed ? ' ≥ ' + minRR + ' 达标' : ' < ' + minRR + ' 偏低') };
+  });
+
   // ========== P1 修复：当 _lastCalc 为 null 时所有检查项均为 null，显示提示 ==========
   var hintEl = document.getElementById('checklistHint');
   if (!calc) {
@@ -534,7 +621,7 @@ function updateChecklist() {
   if (calc) {
     // 收集所有检查的结果（用于写入日志）
     var checklistResults = {};
-    var checkItems = ['checkRiskPct','checkStopDist','checkLiqSafe','checkLossStreak','checkRR','checkMargin','checkReason','checkDailyLoss','checkMindset','checkPortfolioHeat','checkSymbolConc'];
+    var checkItems = ['checkRiskPct','checkStopDist','checkLiqSafe','checkLossStreak','checkRR','checkMargin','checkReason','checkDailyLoss','checkMindset','checkPortfolioHeat','checkSymbolConc','checkTPWeighted'];
     for (var i = 0; i < checkItems.length; i++) {
       var id = checkItems[i];
       var el = document.getElementById(id);

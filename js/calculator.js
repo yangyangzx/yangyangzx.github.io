@@ -4,6 +4,9 @@ var _calculating = false;
 // 计算结束清理：确保 _calculating 始终被复位
 function _calcCleanup() {
   _calculating = false;
+  // 计算失败时移除组合风险行，避免残留上次结果误导
+  var _prl = document.getElementById('portfolioRiskLine');
+  if (_prl) _prl.remove();
 }  // 防止 calculate() 重入及计算期间的脏事件污染
 
 // ==================== _lastCalc 私有化访问器 ====================
@@ -102,8 +105,18 @@ function calculate() {
     return null;
   }
   const capitalEl = document.getElementById('capital');
-  const capital = capitalEl ? parseFloat(capitalEl.value) : 0;
-  if (!capital || capital <= 0) { showCalcError('无效本金', '请输入有效的本金金额'); _calcCleanup(); return; }
+  let capital = capitalEl ? parseFloat(capitalEl.value) : 0;
+  // P1-5 FIX：本金权威源统一——表单为空/无效时回退到系统设置的账户余额（getAccountCapital 优先 settings.accountBalance）
+  if (!capital || capital <= 0) {
+    try {
+      var _capSettings = loadSettings();
+      if (_capSettings && _capSettings.accountBalance > 0) {
+        capital = _capSettings.accountBalance;
+        if (capitalEl) capitalEl.value = String(capital);
+      }
+    } catch(e) { /* 忽略 */ }
+  }
+  if (!capital || capital <= 0) { showCalcError('无效本金', '请输入本金，或在系统设置中填写账户余额'); _calcCleanup(); return; }
   const leverageEl = document.getElementById('leverage');
   const leverage = leverageEl ? Math.max(0, parseFloat(leverageEl.value) || 0) : 0;
   const directionEl = document.getElementById('direction');
@@ -250,6 +263,16 @@ function calculate() {
   if (isNaN(stopLoss) || stopLoss <= 0) { showCalcError('无效止损价', '请输入有效止损价格'); _calcCleanup(); return; }
 
   let riskAmount=0, riskPercent=0;
+  // 凯利驱动取消还原：必须在读取 riskInput 之前执行，否则取消后 riskPercent 仍沿用驱动值
+  const kellyEnableElPre = document.getElementById('kellyEnableCalc');
+  const kellyDrivenPre = !!(kellyEnableElPre && kellyEnableElPre.checked);
+  if (!kellyDrivenPre) {
+    const _restoreRiskElPre = document.getElementById('riskInput');
+    if (_restoreRiskElPre && _restoreRiskElPre.dataset.preKelly) {
+      _restoreRiskElPre.value = _restoreRiskElPre.dataset.preKelly;
+      delete _restoreRiskElPre.dataset.preKelly;
+    }
+  }
   const rawRisk = document.getElementById('riskInput').value.trim();
 
   // FIX #6: Support both percentage format (e.g., "2%") and fixed amount (e.g., "200")
@@ -275,6 +298,11 @@ function calculate() {
       return;
     }
   }
+
+  // 记录用户设定的"计划风险"（2% 上限约束）。此后集中度/保证金/心态等截断只缩减仓位，
+  // riskAmount/riskPercent 仍保留用户设定值；实际风险由 effectiveRiskAmount 另行派生。
+  const plannedRiskPercent = riskPercent;
+  const plannedRiskAmount = riskAmount;
 
   // P0-4 FIX: 硬上限保护——表单值不允许绕过系统设置的风险比例上限
   try {
@@ -303,6 +331,8 @@ function calculate() {
       var kellyResult = calcKelly(kellyWinRate, kellyAvgWin, kellyAvgLoss, capital, true, kellyLev);
       if (kellyResult && kellyResult.halfKellyPct > 0) {
         var kellyRisk = capital * kellyResult.halfKellyPct;
+        // 样本量元信息：autoFillKellyFromLogs 填充时写入 dataset.kellySamples
+        var kellySampleCount = parseInt((document.getElementById('kellyWinRate') || {}).dataset?.kellySamples, 10) || 0;
         kellyData = {
           halfKellyPct: kellyResult.halfKellyPct,
           halfKellyRisk: kellyRisk,
@@ -310,7 +340,9 @@ function calculate() {
           kellyPct: kellyResult.kellyPct,
           kellyCapped: kellyResult.kellyCapped,
           halfKellyCapped: kellyResult.halfKellyCapped,
-          recommendation: kellyResult.recommendation
+          recommendation: kellyResult.recommendation,
+          sampleCount: kellySampleCount,
+          sampleWarning: kellySampleCount > 0 && kellySampleCount < 30
         };
         var kellyCappedMsg = '';
         if (kellyResult.kellyCapped || kellyResult.halfKellyCapped) {
@@ -331,6 +363,56 @@ function calculate() {
       }
     }
   } catch(e) { console.error('[kelly]', e); }
+
+  // ===== 凯利真实参与计算：勾选"凯利驱动仓位"后，单笔风险由半凯利决定（而非仅参考展示） =====
+  // （取消还原逻辑已前置到 riskInput 解析之前，见 kellyDrivenPre）
+  var kellyEnableEl = document.getElementById('kellyEnableCalc');
+  var kellyDriven = !!(kellyEnableEl && kellyEnableEl.checked);
+  if (kellyDriven) {
+    if (kellyData && kellyData.halfKellyPct > 0) {
+      riskPercent = kellyData.halfKellyPct;
+      riskAmount = capital * riskPercent;
+      // 同步风险输入框显示（select 需匹配 0.5% 步进选项）
+      var kellyRiskEl = document.getElementById('riskInput');
+      if (kellyRiskEl) {
+        // 记住用户进入驱动前的选择，供取消勾选时还原
+        if (!kellyRiskEl.dataset.preKelly) kellyRiskEl.dataset.preKelly = kellyRiskEl.value;
+        var roundedKelly = Math.max(0.5, Math.min(10, Math.round(riskPercent * 200) / 2));
+        kellyRiskEl.value = roundedKelly + '%';
+      }
+      var riskHintEl = document.getElementById('riskHint');
+      if (riskHintEl) riskHintEl.textContent = '= ' + riskAmount.toFixed(2) + ' USDT（半凯利驱动 ' + (riskPercent * 100).toFixed(2) + '%）';
+    } else if (kellyData && kellyData.isNegative) {
+      // 策略期望为负 → 硬阻断开仓
+      _calcCleanup();
+      return renderHardBlock(
+        'kelly-negative-expectancy',
+        '策略期望值为负',
+        '凯利公式显示当前策略期望收益为负，已阻止开仓。请改善策略或关闭凯利驱动。',
+        { expectancy: kellyData.expectancy }
+      );
+    } else {
+      showCalcError('凯利数据无效', '启用凯利驱动前，请先填写胜率/平均盈利/平均亏损并点击计算');
+      return;
+    }
+    // 凯利驱动的风险同样受系统单笔风险上限约束（与手动输入同权，P0-4 语义）
+    try {
+      var _sysS2 = loadSettings();
+      var _sysMax2 = (_sysS2 && _sysS2.riskPercent) ? (_sysS2.riskPercent / 100) : 0.10;
+      if (riskPercent > _sysMax2) {
+        _calcCleanup();
+        return renderHardBlock(
+          'kelly-exceeds-limit',
+          '凯利风险超出系统上限',
+          '半凯利风险 ' + (riskPercent * 100).toFixed(1) + '% 超过系统设置上限 ' + _sysS2.riskPercent + '%，不允许开仓。请在系统设置中提高上限或关闭凯利驱动。',
+          { riskPercent: riskPercent, maxRiskPercent: _sysMax2 }
+        );
+      }
+    } catch(e) { /* 忽略 */ }
+    // 持久化"凯利驱动"标记（存入日志 kellyData）
+    kellyData = kellyData || {};
+    kellyData.kellyDriven = true;
+  }
 
   // BUG#2: 分批独立止损时，用各批止损距离的加权平均替代主止损计算 stopDistance
   let stopDistance=0, positionSize=0, valid=true, err='', rw='';
@@ -540,7 +622,18 @@ function calculate() {
       riskAmount = riskAmount * concentrationRatio;
       riskPercent = riskAmount / capital;
       cappedByMargin = true;
-      capMsg = (capMsg ? capMsg + ' ' : '') + '<span class="warning-tag alert"><i class="fas fa-exclamation-triangle"></i> ' + concentrationCheck.warning + '</span>';
+      // 口径 FIX：截断后重新生成提示，避免"结果卡显示截断后保证金 100、提示却写截断前 20%"的自相矛盾。
+      // 截断目标 = 单品种上限允许的保证金（allowedMargin − 同品种已用保证金），换算回仓位。
+      var cappedNewMargin = finalPosBeforeMindset / effLev;
+      var cappedPct = capital > 0 ? (cappedNewMargin / capital * 100) : 0;
+      var cappedRisk = finalPosBeforeMindset * stopDistance / effectiveEntryPrice;
+      var cappedRiskPct = capital > 0 ? (cappedRisk / capital * 100) : 0;
+      capMsg = (capMsg ? capMsg + ' ' : '') + '<span class="warning-tag alert"><i class="fas fa-exclamation-triangle"></i> ' + esc(symbol) +
+        ' 新仓保证金 ' + concentrationCheck.newMargin.toFixed(2) + ' USDT 将超过单品种上限 ' + concentrationCheck.allowedMargin.toFixed(2) +
+        ' USDT（' + concentrationCheck.maxPct + '%），已自动截断至 ' + finalPosBeforeMindset.toFixed(2) +
+        ' U（保证金 ' + cappedNewMargin.toFixed(2) + ' USDT，占比 ' + cappedPct.toFixed(1) + '%）。' +
+        '你设定的 ' + (plannedRiskPercent * 100).toFixed(1) + '% 风险上限未变；因仓位截断，实际最大亏损为 ' + cappedRisk.toFixed(2) +
+        ' USDT（' + cappedRiskPct.toFixed(2) + '%）</span>';
     }
   }
 
@@ -805,6 +898,8 @@ function calculate() {
     capital: capital,
     riskAmount: riskAmount,
     riskPercent: riskPercent,
+    plannedRiskAmount: plannedRiskAmount,      // 用户设定的计划风险（截断前），供复盘对照实际风险
+    plannedRiskPercent: plannedRiskPercent,    // 用户设定的计划风险比例（如 2%）
     leverage: leverage,
     direction: direction,
     orderType: orderType,
@@ -837,12 +932,17 @@ function calculate() {
     splitMode: _splitMode,
     weightedStopDistance: useWeightedStop ? stopDistance : null,
     atrStopMode: atrStopMode,
+    atrValue: atrStopMode ? atrValue : null,                 // ATR 增强：供 saveLog 持久化
+    atrMultiplier: atrStopMode ? atrMultiplier : null,       // ATR 增强：供 saveLog 持久化
     mindsetScore: parseInt(document.getElementById('mindsetScore').value, 10) || 3,
     kellyData: kellyData,
     // 暴露分批明细供 saveSplit 使用（独立止损需逐笔保存）
     _splitBatches: _splitMode ? _splitBatches.slice() : null
   });
   CalculationUI.renderCalculated(ui);
+  // 组合级风险视图：现有持仓风险/保证金 + 本仓后总风险（设计优化，纯展示不阻断）
+  // 注意：calculate() 内无 calc 局部变量（setCalc 直接传对象字面量），须经 getCalc() 读取
+  try { renderPortfolioRisk(getCalc()); } catch(e) { console.error('[calculate] renderPortfolioRisk error:', e); }
   // P0-5: 计算结果卡片入场动效
   var _ra = document.getElementById('resultArea');
   if (_ra) {
@@ -855,10 +955,83 @@ function calculate() {
   if (resultBox) resultBox.scrollIntoView({behavior:'smooth'});
   // 更新凯利侧边栏卡片
   try { updateKellySidebar(); } catch(e) { console.error('[calculate] updateKellySidebar error:', e); }
-  try { if (typeof updateChecklist === 'function') updateChecklist(); } catch(e) { console.error('[calculate] updateChecklist error:', e); }
+  // 顺序 FIX：先自动填充多止盈价格，再刷新检查清单（否则 checkTPWeighted 首次计算读到空 TP 误判 skipped）
   try { if (typeof autoCalcMultiTP === 'function') autoCalcMultiTP(); } catch(e) { console.error('[calculate] autoCalcMultiTP error:', e); }
+  try { if (typeof updateChecklist === 'function') updateChecklist(); } catch(e) { console.error('[calculate] updateChecklist error:', e); }
   _calculating = false;
 }
+
+/**
+ * 组合级风险预算视图（设计优化）：单笔计算时展示账户维度总览
+ * 现有持仓风险/保证金 + 本仓后总风险 + ATR 参考止损对比。纯展示，不阻断保存。
+ */
+function renderPortfolioRisk(calc) {
+  var box = document.getElementById('resultBox');
+  if (!box || !calc) return;
+  var old = document.getElementById('portfolioRiskLine');
+  if (old) old.remove();
+
+  var openLogs = (typeof getOpenPositions === 'function') ? getOpenPositions() : [];
+  var portRisk = 0, portMargin = 0;
+  for (var i = 0; i < openLogs.length; i++) {
+    var p = openLogs[i];
+    var pos = parseFloat(p.positionSize) || 0;
+    var entry = parseFloat(p.entryPrice);
+    var sl = parseFloat(p.stopLoss);
+    if (pos > 0 && entry > 0 && sl > 0) portRisk += pos * Math.abs(entry - sl) / entry;
+    var lev = parseFloat(p.leverage) || 0;
+    portMargin += lev > 0 ? pos / lev : pos;
+  }
+  var thisRisk = (calc.riskAmount != null && !isNaN(calc.riskAmount)) ? calc.riskAmount : 0;
+  var thisMargin = (calc.actualMargin != null && !isNaN(calc.actualMargin)) ? calc.actualMargin : 0;
+  var capital = (calc.capital != null && !isNaN(calc.capital) && calc.capital > 0) ? calc.capital
+    : (typeof getAccountCapital === 'function' ? getAccountCapital() : null);
+  if (!capital || capital <= 0) return;
+
+  var totalRisk = portRisk + thisRisk;
+  var totalMargin = portMargin + thisMargin;
+  var riskPct = totalRisk / capital * 100;
+  var marginPct = totalMargin / capital * 100;
+
+  // ATR 参考校验：手动止损模式下，若 ATR 值可用则对比止损距（偏差 >2 倍或 <0.5 倍时警示）
+  var atrNote = '';
+  try {
+    var atrOn = (document.getElementById('formAtrStopEnabled') || {}).checked === true;
+    if (!atrOn && !calc.atrStopMode) {
+      var atrValue = parseFloat((document.getElementById('atrValue') || {}).value);
+      var atrMult = parseFloat((document.getElementById('atrMultiplier') || {}).value) || 2;
+      if (!isNaN(atrValue) && atrValue > 0 && typeof calcATRStop === 'function' && calc.entryPrice > 0 && calc.stopLoss > 0) {
+        var atrRes = calcATRStop(calc.entryPrice, atrValue, atrMult, calc.direction);
+        if (atrRes && atrRes.stopPrice > 0) {
+          var manualDist = Math.abs(calc.entryPrice - calc.stopLoss) / calc.entryPrice * 100;
+          var atrDist = Math.abs(calc.entryPrice - atrRes.stopPrice) / calc.entryPrice * 100;
+          if (atrDist > 0) {
+            var ratio = manualDist / atrDist;
+            if (ratio > 2) atrNote = '⚠ 手动止损距 ' + manualDist.toFixed(1) + '% 是 ATR 参考(' + atrDist.toFixed(1) + '%) 的 ' + ratio.toFixed(1) + ' 倍，止损可能过宽';
+            else if (ratio < 0.5) atrNote = '⚠ 手动止损距 ' + manualDist.toFixed(1) + '% 不足 ATR 参考(' + atrDist.toFixed(1) + '%) 的一半，止损可能过紧易被扫';
+          }
+        }
+      }
+    }
+  } catch(e) { /* ATR 参考校验失败不影响主流程 */ }
+
+  var riskCls = riskPct > 50 ? 'color:var(--color-danger);' : (riskPct > 30 ? 'color:var(--color-warning);' : '');
+  var marginCls = marginPct > 80 ? 'color:var(--color-danger);' : (marginPct > 50 ? 'color:var(--color-warning);' : '');
+
+  var line = document.createElement('div');
+  line.id = 'portfolioRiskLine';
+  line.style.cssText = 'margin-top:8px;padding:8px 12px;border-radius:8px;background:rgba(0,0,0,0.03);font-size:12px;line-height:1.7;color:var(--color-text-secondary);';
+  line.innerHTML =
+    '<div style="display:flex;gap:16px;flex-wrap:wrap;">' +
+      '<span>现有持仓 <strong>' + openLogs.length + '</strong> 笔</span>' +
+      '<span>组合风险 <strong style="' + riskCls + '">' + portRisk.toFixed(2) + ' U（' + (portRisk / capital * 100).toFixed(1) + '%）</strong></span>' +
+      '<span>本仓后总风险 <strong style="' + riskCls + '">' + totalRisk.toFixed(2) + ' U（' + riskPct.toFixed(1) + '%）</strong></span>' +
+      '<span>保证金占用 <strong style="' + marginCls + '">' + marginPct.toFixed(1) + '%</strong></span>' +
+    '</div>' +
+    (atrNote ? '<div style="margin-top:4px;color:var(--color-warning);">' + atrNote + '</div>' : '');
+  box.appendChild(line);
+}
+window.renderPortfolioRisk = renderPortfolioRisk;
 
 // ==================== 保存日志 ====================
 // ==================== 盘中动作记录 ====================
@@ -922,6 +1095,27 @@ function assertSavableCalculation() {
   if (getCalcDirty()) {
     return { ok: false, message: '计划参数已变更，请重新计算后再保存。' };
   }
+  // 表单 vs 计算快照一致性比对（双保险）：dirty 漏网字段（如多止盈/ATR 开关联动）
+  // 导致表单值与快照脱节时，阻止旧快照+新参数混存入库。
+  // 数值字段用相对容差比较：独立止损/加权价回填表单时会格式化截断（如 59499.09900 vs 59499.09899...），
+  // 严格相等会误伤拆分保存等合法场景（2026-09-07 实测发现并修复）。
+  try {
+    function fv(id) { var el = document.getElementById(id); return el ? String(el.value).trim() : null; }
+    function numDiff(a, b) {
+      var pa = parseFloat(a), pb = parseFloat(b);
+      if (isNaN(pa) || isNaN(pb)) return true;
+      return Math.abs(pa - pb) > Math.max(Math.abs(pb) * 1e-6, 1e-6);
+    }
+    var _mismatch = [];
+    if (fv('symbol') !== null && fv('symbol') !== String(calc.symbol)) _mismatch.push('品种');
+    if (!_splitMode && fv('entryPrice') !== null && fv('entryPrice') !== '' && numDiff(fv('entryPrice'), calc.entryPrice)) _mismatch.push('入场价');
+    if (fv('stopLoss') !== null && fv('stopLoss') !== '' && numDiff(fv('stopLoss'), calc.stopLoss)) _mismatch.push('止损价');
+    if (fv('leverage') !== null && fv('leverage') !== '' && numDiff(fv('leverage'), calc.leverage)) _mismatch.push('杠杆');
+    if (fv('direction') !== null && fv('direction') !== String(calc.direction)) _mismatch.push('方向');
+    if (_mismatch.length > 0) {
+      return { ok: false, message: '参数已变更（' + _mismatch.join('/') + '），与计算结果不一致，请重新计算后再保存。' };
+    }
+  } catch(e) { /* 比对异常不阻断，交给原 Gate 判定 */ }
   if (calc.stopLossAutoGenerated) {
     return { ok: false, message: '当前止损为系统临时测算值，请确认或修改止损后重新计算再保存。' };
   }
@@ -932,6 +1126,10 @@ function assertSavableCalculation() {
   var failCount = 0, totalExecutables = 0;
   if (calc.checklistResults) {
     for (var k in calc.checklistResults) {
+      // checkTPWeighted 为提示性指标（多止盈组合加权期望），
+      // 默认 50/30/20+1.5/2/3R 配置下加权期望天然低于单档 2R 门槛，
+      // 不参与保存门槛，避免正常计划无法保存（仅警示，不阻断）
+      if (k === 'checkTPWeighted') continue;
       if (calc.checklistResults[k] === 'skipped') continue;
       totalExecutables++;
       if (calc.checklistResults[k] === 'fail') failCount++;
@@ -968,6 +1166,8 @@ function saveLog() {
     positionSize: parseFloat(calc.positionSize.toFixed(2)),
     leverage: calc.leverage,
     riskAmount: parseFloat(calc.riskAmount.toFixed(2)),
+    plannedRiskAmount: calc.plannedRiskAmount != null ? parseFloat(calc.plannedRiskAmount.toFixed(2)) : null,   // 计划风险（用户设定）
+    plannedRiskPercent: calc.plannedRiskPercent != null ? parseFloat((calc.plannedRiskPercent * 100).toFixed(2)) : null, // 计划风险 %（如 2）
     actualMargin: calc.actualMargin != null ? parseFloat(calc.actualMargin.toFixed(2)) : null,
     capital: isNaN(calc.capital) ? null : calc.capital,              // H1: 入场时本金快照，用于事后验证仓位合理性
     fee: calc.fee != null ? calc.fee : 0,
@@ -977,6 +1177,21 @@ function saveLog() {
     calculationVersion: calc.calculationVersion || 2,
     targetRR: calc.targetRR != null ? calc.targetRR : null,
     stopPct: calc.stopPct,                                          // ✅ 新增：持久化止损距离百分比
+    // 多止盈组合计划（价格/减仓比例/加权期望R），用于复盘"计划分批 vs 实际分批"
+    tpPlan: (function() {
+      if (typeof computeWeightedTPRR !== 'function') return null;
+      var w = computeWeightedTPRR();
+      if (!w) return null;
+      var p = [], r = [];
+      ['tp1', 'tp2', 'tp3'].forEach(function(id) {
+        var pEl = document.getElementById(id + 'Price');
+        var rEl = document.getElementById(id + 'Ratio');
+        var pv = pEl ? parseFloat(pEl.value) : NaN;
+        p.push((!isNaN(pv) && pv > 0) ? pv : null);
+        r.push(rEl ? (parseFloat(rEl.value) || 0) : 0);
+      });
+      return { prices: p, ratios: r, weightedRR: (w && w.rr != null && !w.overLimit) ? w.rr : null, remain: w.remain };
+    })(),
     kellyData: calc.kellyData != null ? JSON.parse(JSON.stringify(calc.kellyData)) : null,
     groupId: null,
     groupLabel: null,
@@ -1004,6 +1219,8 @@ function saveLog() {
     actions: [],
     splitEntries: getSplitEntries(),
     atrStopMode: calc.atrStopMode || false,                        // A 修复：持久化 ATR 止损使用状态
+    atrValue: calc.atrStopMode ? (isNaN(calc.atrValue) ? null : calc.atrValue) : null,          // ATR 增强：持久化 ATR 值
+    atrMultiplier: calc.atrStopMode ? (calc.atrMultiplier != null ? calc.atrMultiplier : null) : null, // ATR 增强：持久化 ATR 倍数
     checklistResults: checklistResults  // ✅ 新增：持久化检查结果至日志
   };
   logs.push(entry);
@@ -1392,13 +1609,19 @@ function toggleFormSection(sectionId) {
     'orderType', 'stopType', 'feeRate', 'slippageMode', 'entrySlippageTicks',
     'exitSlippageTicks', 'lossStreak', 'riskInput', 'targetPrice',
     'kellyWinRate', 'kellyAvgWin', 'kellyAvgLoss', 'atrValue', 'atrMultiplier',
-    'mindsetScore'
+    'mindsetScore',
+    // 设计优化：ATR 开关与多止盈价格/比例也标记脏状态，防止清单/落库与表单脱节
+    'formAtrStopEnabled', 'tp1Price', 'tp2Price', 'tp3Price', 'tp1Ratio', 'tp2Ratio', 'tp3Ratio'
   ];
   dirtyFields.forEach(function(id) {
     var el = document.getElementById(id);
     if (el) {
       var markFieldDirty = function() {
         if (id === 'stopLoss') delete el.dataset.provisionalStop;
+        // 设计优化：用户手动修改凯利字段时清除样本背书
+        // （dataset.kellySamples 只在 autoFillKellyFromLogs 自动填充时写入；
+        //  若残留，用户手填的凯利会被历史样本门槛误拦）
+        if (id === 'kellyWinRate' || id === 'kellyAvgWin' || id === 'kellyAvgLoss') delete el.dataset.kellySamples;
         markCalculationDirty();
       };
       el.addEventListener('input', markFieldDirty);
@@ -1467,31 +1690,23 @@ function applyKellyRisk() {
     showToast('请先填写凯利数据并点击计算', 'warn');
     return;
   }
-  var kellyPct = getCalc().kellyData.halfKellyPct;
-  if (!kellyPct || kellyPct <= 0) {
-    showToast('凯利计算结果为 0，无法应用', 'warn');
+  // 设计优化：小样本凯利是噪音放大器，<10 笔时不驱动仓位（仍保留展示与建议）
+  var kd = getCalc().kellyData;
+  if (kd.sampleCount > 0 && kd.sampleCount < 10) {
+    showToast('凯利样本仅 ' + kd.sampleCount + ' 笔，统计不可靠，未应用（可手动填写风险比例）', 'warn');
     return;
   }
-  var wasCapped = kellyPct > 0.10; // 实际上限为 10%，kellyPct > 0.10 表示被 Math.min(10, ...) 截断
-  
-  // 杠杆感知：调整凯利风险比例
-  var leverage = parseInt(document.getElementById('leverage').value, 10) || 1;
-  var effectiveRisk = kellyPct * leverage;
-  if (effectiveRisk > 0.10) {
-    // 有效风险超过 10%，降低凯利建议
-    var adjustedKelly = kellyPct / leverage * 0.10;
-    kellyPct = adjustedKelly;
-    wasCapped = true;
+  var kellyPct = kd.halfKellyPct;
+  if (!kellyPct || kellyPct <= 0) {
+    showToast('凯利计算结果为 0 或期望为负，无法应用', 'warn');
+    return;
   }
-  
-  var riskEl = document.getElementById('riskInput');
-  if (!riskEl) return;
-  // riskInput 是 <select>，只有 0.5% 步长的固定选项。
-  // 将半凯利值四舍五入到最近的可用选项，确保 .value 能匹配到一个真实存在的 option。
-  var pctVal = parseFloat((kellyPct * 100).toFixed(2));
-  pctVal = Math.max(0.5, Math.min(10, pctVal)); // 限制在 0.5%~10%
-  var roundedPct = Math.round(pctVal * 2) / 2; // 四舍五入到 0.5% 步进
-  riskEl.value = roundedPct + '%';
+
+  // 修复（P2-12）：统一走"凯利驱动仓位"路径（kellyEnableCalc），
+  // 计算直接使用真实半凯利值，不再经过 riskInput select 的 0.5% 步进中转
+  // （旧实现会把 0.2% 之类极小幅值放大到 0.5% 执行，且丢失精度）。
+  var kellyEnableEl = document.getElementById('kellyEnableCalc');
+  if (kellyEnableEl) kellyEnableEl.checked = true;
 
   // ===== 自动计算并填入止损价 =====
   var entryPrice = parseFloat(document.getElementById('entryPrice').value);
@@ -1501,11 +1716,13 @@ function applyKellyRisk() {
     var calc = getCalc();
     var stopLoss = null;
 
-    // 优先使用 ATR 止损（仅当 ATR 自动模式已启用）
+    // 优先使用 ATR 止损（仅当 ATR 自动模式已启用——尊重表单开关，与 calculate() 主逻辑口径一致）
     var atrValue = parseFloat(document.getElementById('atrValue').value);
     var settings = loadSettings();
     const atrMultiplier = parseFloat(document.getElementById('atrMultiplier').value) || settings.atrDefaultMultiplier || 2;
-    if (settings.atrStopEnabled && !isNaN(atrValue) && atrValue > 0 && typeof calcATRStop === 'function') {
+    var formAtrOn = document.getElementById('formAtrStopEnabled');
+    var atrOn = (formAtrOn && formAtrOn.checked) || (settings.atrStopEnabled === true);
+    if (atrOn && !isNaN(atrValue) && atrValue > 0 && typeof calcATRStop === 'function') {
       var atrResult = calcATRStop(entryPrice, atrValue, atrMultiplier, direction);
       if (atrResult && atrResult.stopPrice > 0) {
         stopLoss = atrResult.stopPrice;
@@ -1549,26 +1766,11 @@ function applyKellyRisk() {
   setCalcBlocker(null);
   setCalcDirty(true);
   _calculating = false;
-  // 自动重新计算
+  // 自动重新计算（凯利驱动路径在 calculate() 内使用真实 halfKellyPct 计算风险）
   if (typeof calculate === 'function') {
     calculate();
   }
-  var msg = '已应用半凯利风险 ' + roundedPct.toFixed(1) + '%';
-  if (wasCapped) {
-    msg += '（半凯利超出上限，已截断至 10%）';
-  } else if (roundedPct !== pctVal) {
-    msg += '（取整至最近 0.5% 步长）';
-  }
-  // K2 修复：验证 select 选项是否匹配，防止静默失败
-  var _matched = false;
-  for (var _oi = 0; _oi < riskEl.options.length; _oi++) {
-    if (riskEl.options[_oi].value === roundedPct + '%') { _matched = true; break; }
-  }
-  if (!_matched) {
-    showToast('凯利建议值 ' + roundedPct.toFixed(1) + '% 在可选范围外，请手动调整风险比例', 'warn');
-    return;
-  }
-  showToast(msg, 'info');
+  showToast('已应用半凯利风险 ' + (kellyPct * 100).toFixed(2) + '%（凯利驱动已开启）', 'info');
 }
 window.applyKellyRisk = applyKellyRisk;
 
@@ -1629,9 +1831,26 @@ function updateKellySidebar() {
     if (data.kellyCapped || data.halfKellyCapped) {
       warnEl.style.display = '';
       warnEl.innerHTML = '<span class="kelly-card-warning-text"><i class="fas fa-exclamation-triangle"></i> 原始凯利超出 5% 上限，已截断</span>';
+      // 截断与样本不足是两类独立信息，可同时显示
+      if (data.sampleWarning) {
+        warnEl.innerHTML += '<span class="kelly-card-warning-text" style="margin-top:4px;"><i class="fas fa-info-circle"></i> 样本仅 ' + data.sampleCount + ' 笔，凯利参考性有限</span>';
+      }
+    } else if (data.sampleWarning) {
+      warnEl.style.display = '';
+      warnEl.innerHTML = '<span class="kelly-card-warning-text"><i class="fas fa-exclamation-triangle"></i> 样本仅 ' + data.sampleCount + ' 笔，凯利参考性有限</span>';
     } else {
       warnEl.style.display = 'none';
     }
+  }
+  // 样本数徽标（有样本元信息时显示；无样本时清除，避免手动覆盖后残留旧徽标）
+  var sampleEl = document.getElementById('kellySampleCount');
+  if (data.sampleCount > 0) {
+    if (sampleEl) {
+      sampleEl.style.display = '';
+      sampleEl.textContent = '基于 ' + data.sampleCount + ' 笔样本';
+    }
+  } else if (sampleEl) {
+    sampleEl.style.display = 'none';
   }
   if (btnEl) btnEl.style.display = '';
 }

@@ -66,10 +66,10 @@ function calcPortfolioHeat() {
  * @returns {KellyResult|null} 凯利计算结果，策略期望为负时返回 null
  * 
  * @typedef {Object} KellyResult
- * @property {number} kellyPct - 完整凯利比例（已截断到 5%）
- * @property {number} halfKellyPct - 半凯利比例（已截断到 5%）
- * @property {number} kellyShares - 凯利建议仓位大小（股数/合约数）
- * @property {number} halfKellyShares - 半凯利建议仓位大小
+ * @property {number} kellyPct - 完整凯利比例（已截断到 5%/杠杆上限）
+ * @property {number} halfKellyPct - 半凯利比例（已截断到 5%/杠杆上限）
+ * @property {number} kellyRiskAmount - 完整凯利建议风险金额 = accountSize × kellyPct（USDT）
+ * @property {number} halfKellyRiskAmount - 半凯利建议风险金额 = accountSize × halfKellyPct（USDT）
  * @property {number} expectancy - 每笔交易的期望收益（USDT）
  * @property {string} recommendation - 建议文本
  * @property {boolean} kellyCapped - 完整凯利是否被截断
@@ -103,8 +103,10 @@ function calcKelly(winRate, avgWin, avgLoss, accountSize, halfKelly, leverage) {
   kellyPct = Math.min(kellyPct, leverageAdjustedLimit);
   halfKellyPct = Math.min(halfKellyPct, leverageAdjustedLimit);
 
-  var kellyShares = accountSize * kellyPct / avgLoss;
-  var halfKellyShares = accountSize * halfKellyPct / avgLoss;
+  // P2-9 FIX：删除无金融含义的 kellyShares（账户×比例÷平均亏损没有推导依据），
+  // 改为有明确语义的"凯利建议风险金额"（账户×比例），与 UI 使用的 halfKellyPct×capital 同源
+  var kellyRiskAmount = accountSize * kellyPct;
+  var halfKellyRiskAmount = accountSize * halfKellyPct;
 
   var recommendation = '';
   if (kellyPct <= 0) {
@@ -119,8 +121,8 @@ function calcKelly(winRate, avgWin, avgLoss, accountSize, halfKelly, leverage) {
   return {
     kellyPct: kellyPct,
     halfKellyPct: halfKellyPct,
-    kellyShares: kellyShares,
-    halfKellyShares: halfKellyShares,
+    kellyRiskAmount: kellyRiskAmount,
+    halfKellyRiskAmount: halfKellyRiskAmount,
     expectancy: winRate * avgWin - lossRate * avgLoss,
     recommendation: recommendation,
     kellyCapped: kellyCapped,
@@ -172,12 +174,12 @@ function checkRRRequirement(targetRR, minRR) {
  */
 function checkSymbolConcentration(symbol, positionSize, leverage, capital, openPositions) {
   if (!capital || capital <= 0) {
-    return { pass: true, currentPct: 0, maxPct: 10, usedMargin: 0, allowedMargin: 0, allowedNewMargin: 0, warning: null };
+    return { pass: true, currentPct: 0, maxPct: 30, usedMargin: 0, allowedMargin: 0, allowedNewMargin: 0, warning: null };
   }
-  var maxPct = 10;
+  var maxPct = 30;
   try {
     var settings = loadSettings();
-    maxPct = settings.singleSymbolMaxPct || 10;
+    maxPct = settings.singleSymbolMaxPct || 30;
   } catch(e) { console.error('[concentration]', e); }
 
   // 集中度衡量的是“当前未平仓风险敞口”；已平仓交易不应持续占用保证金额度。
@@ -353,14 +355,15 @@ function calcKellyStatsFromLogs(minSamples, strategyFramework, lookbackDays) {
     else { breakEvens++; }
   }
 
-  var totalTrades = wins + losses;
+  // P1-2 FIX：胜率分母统一为全部已平仓（含保本），与统计页口径一致（凯利输入更保守）
+  var totalTrades = wins + losses + breakEvens;
   if (totalTrades < minSamples) return null;
 
   var winRate = wins / totalTrades;
   var avgWin = totalWin / (wins || 1);
   var avgLoss = totalLoss / (losses || 1);
 
-  return { winRate: winRate, avgWin: avgWin, avgLoss: avgLoss, samples: totalTrades, breakEvenRate: breakEvens / (totalTrades + breakEvens) };
+  return { winRate: winRate, avgWin: avgWin, avgLoss: avgLoss, samples: totalTrades, breakEvenRate: totalTrades > 0 ? (breakEvens / totalTrades) : 0 };
 }
 
 /**
@@ -384,10 +387,17 @@ function autoFillKellyFromLogs() {
     if (!avgWinEl.value || avgWinEl.value === '') avgWinEl.value = stats.avgWin.toFixed(2);
     if (!avgLossEl.value || avgLossEl.value === '') avgLossEl.value = stats.avgLoss.toFixed(2);
 
+    // 设计优化：样本量元信息挂到 winRate 元素，供 calculate() 组装 kellyData 时读取
+    // （小样本凯利是噪音放大器，applyKellyRisk 依据它决定是否驱动仓位）
+    winRateEl.dataset.kellySamples = stats.samples;
+
     // K3 修复：增加平盘率和样本质量提示
     var tipText = '已从 ' + stats.samples + ' 笔' + (curFramework ? '「' + curFramework + '」策略' : '历史') + '交易自动计算';
     if (stats.breakEvenRate > 0) {
       tipText += '（平盘 ' + (stats.breakEvenRate * 100).toFixed(0) + '%）';
+    }
+    if (stats.samples < 30) {
+      tipText += '；⚠ 样本不足 30 笔，统计参考性有限';
     }
     tipText += '；修改后手动覆盖';
     if (tipEl) tipEl.textContent = tipText;

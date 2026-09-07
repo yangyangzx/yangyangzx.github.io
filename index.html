@@ -304,6 +304,13 @@
                   </div>
                 </div>
                 <span class="field-tip kelly-tip">基于历史数据计算凯利最优仓位，半凯利建议更保守安全</span>
+                <div class="kelly-drive-row" style="margin-top:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                  <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;">
+                    <input type="checkbox" id="kellyEnableCalc" onchange="calculate()" />
+                    <b>凯利驱动仓位</b>
+                  </label>
+                  <span class="field-tip" style="font-size:12px;color:var(--color-text-muted);">勾选后单笔风险直接采用半凯利比例（期望为负将阻断开仓），仍受系统单笔风险上限约束</span>
+                </div>
               </div>
             </div>
           </div>
@@ -515,6 +522,9 @@
               <span class="kelly-card-label">建议风险额</span>
               <span class="kelly-card-value kelly-highlight" id="kellyRiskAmount">—</span>
             </div>
+            <div class="kelly-card-row">
+              <span class="kelly-card-label" id="kellySampleCount" style="display:none;font-size:11px;color:var(--color-text-muted);"></span>
+            </div>
             <div id="kellyWarning" style="display:none;" class="kelly-card-warning"></div>
             <button type="button" class="kelly-card-btn" id="kellyApplyBtn" onclick="applyKellyRisk()">
               <i class="fas fa-bolt"></i> 应用半凯利风险
@@ -567,6 +577,10 @@
             </div>
             <div style="margin-top:8px;font-size:12px;color:var(--color-text-muted);">
               剩余仓位 <span id="tpRemain">100</span>%（TP1+TP2+TP3 合计不能超过 100%）
+            </div>
+            <div style="margin-top:6px;font-size:12px;color:var(--color-text-muted);">
+              多止盈组合 <span id="tpWeightedRR" class="tp-rr">—</span>
+              <span style="font-size:11px;">（按减仓比例加权，剩余仓位按止损计，含费）</span>
             </div>
           </div>
         </div>
@@ -623,6 +637,11 @@
               <span class="check-icon skipped">—</span>
               <span>品种集中度未超限</span>
             </div>
+            <!-- 【增强12】多止盈加权期望盈亏比 -->
+            <div class="check-item" id="checkTPWeighted">
+              <span class="check-icon skipped">—</span>
+              <span>多止盈加权期望盈亏比达标</span>
+            </div>
 
           </div>
           <div id="checklistAtrNote" style="font-size:11px;color:var(--color-text-muted);padding:4px 8px;line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></div>
@@ -659,6 +678,9 @@
       <div class="stat-item" title="计算公式：胜率×平均盈利−败率×平均亏损。参考价值：每笔交易的数学期望。正值才值得持续执行，负值需立即调整策略。"><span class="stat-label">期望值</span><span class="stat-value" id="statExpectancy">—</span></div>
       <div class="stat-item" title="计算公式：总盈利÷总亏损的绝对值。参考价值：每亏1元能赚多少。>1.5合格，>2优秀，<1策略无效。"><span class="stat-label">利润因子</span><span class="stat-value" id="statProfitFactor">—</span></div>
       <div class="stat-item" title="计算公式：权益从峰值到谷底的最大跌幅百分比。参考价值：决定仓位大小和心态承受力。>30%需要降低仓位或暂停交易。"><span class="stat-label">最大回撤</span><span class="stat-value" id="statMaxDD">—</span></div>
+      <div class="stat-item" title="计算公式：总盈亏按首末平仓时间跨度年化（不足 1 天按 1 天计）。参考价值：评估策略年化回报能力，样本跨度过短时参考性有限。"><span class="stat-label">年化收益</span><span class="stat-value" id="statAnnReturn">—</span></div>
+      <div class="stat-item" title="计算公式：按平仓日聚合日盈亏，夏普=日均盈亏÷日盈亏标准差×√252（无风险利率取 0）。参考价值：衡量每承担一单位波动获得的超额回报，>1 合格。"><span class="stat-label">夏普比率(日)</span><span class="stat-value" id="statSharpe">—</span></div>
+      <div class="stat-item" title="计算公式：Σ手续费÷Σ(盈利+亏损绝对值)×100%。参考价值：成本侵蚀越高，策略对滑点/手续费越敏感，应降低频率或提高单笔目标。"><span class="stat-label">成本侵蚀</span><span class="stat-value" id="statCostDrag">—</span></div>
       <div class="stat-group-divider"></div>
       <!-- 质量指标 -->
       <div class="stat-item" title="计算公式：达成目标收益的笔数÷已平仓数×100%。参考价值：反映纪律执行而非盈利能力。偏低说明止盈目标设置不切实际。"><span class="stat-label">目标达成率</span><span class="stat-value" id="statTargetRate">—</span></div>
@@ -1166,30 +1188,30 @@
 
 </main>
 
-  <script src="js/constants.js?v=3.0"></script>
-  <script src="js/utils.js?v=3.0"></script>
-  <script src="js/toast.js?v=3.0"></script>
-  <script src="js/slippage.js?v=3.0"></script>
-  <script src="js/storage.js?v=3.0"></script>
-  <script src="js/skills-integration.js?v=3.0"></script>
-  <script src="js/calculation-ui.js?v=3.0"></script>
-  <script src="js/calculator.js?v=3.0"></script>
-  <script src="js/logs.js?v=3.0"></script>
-  <script src="js/rendering.js?v=3.0"></script>
-  <script src="js/stats.js?v=3.0"></script>
-  <script src="js/modals.js?v=3.0"></script>
-  <script src="js/navigation.js?v=3.0"></script>
-  <script src="js/dashboard.js?v=3.0"></script>
-  <script src="js/planner.js?v=3.0"></script>
-  <script src="js/settings.js?v=3.0"></script>
-  <script src="js/risk.js?v=3.0"></script>
-  <script src="js/chart-factory.js?v=3.0"></script>
-  <script src="js/analytics.js?v=3.0"></script>
-  <script src="js/review.js?v=4.0"></script>
-  <script src="js/io.js?v=3.0"></script>
-  <script src="js/dom-cache.js?v=3.0"></script>
-  <script src="js/app.js?v=3.0"></script>
-<script src="js/version.js?v=3.0"></script>
+  <script src="js/constants.js?v=3.9"></script>
+  <script src="js/utils.js?v=3.9"></script>
+  <script src="js/toast.js?v=3.9"></script>
+  <script src="js/slippage.js?v=3.9"></script>
+  <script src="js/storage.js?v=3.9"></script>
+  <script src="js/skills-integration.js?v=3.9"></script>
+  <script src="js/calculation-ui.js?v=3.9"></script>
+  <script src="js/calculator.js?v=3.9"></script>
+  <script src="js/logs.js?v=3.9"></script>
+  <script src="js/rendering.js?v=3.9"></script>
+  <script src="js/stats.js?v=3.9"></script>
+  <script src="js/modals.js?v=3.9"></script>
+  <script src="js/navigation.js?v=3.9"></script>
+  <script src="js/dashboard.js?v=3.9"></script>
+  <script src="js/planner.js?v=3.9"></script>
+  <script src="js/settings.js?v=3.9"></script>
+  <script src="js/risk.js?v=3.9"></script>
+  <script src="js/chart-factory.js?v=3.9"></script>
+  <script src="js/analytics.js?v=3.9"></script>
+  <script src="js/review.js?v=4.1"></script>
+  <script src="js/io.js?v=3.9"></script>
+  <script src="js/dom-cache.js?v=3.9"></script>
+  <script src="js/app.js?v=3.9"></script>
+<script src="js/version.js?v=3.9"></script>
 
   <div id="toastContainer" style="position:fixed;top:24px;right:24px;z-index:400;display:flex;flex-direction:column;gap:8px;pointer-events:none;"></div>
 

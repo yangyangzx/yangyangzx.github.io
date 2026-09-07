@@ -4,6 +4,22 @@
 // 2. 职责拆分：buildRowsHTML（纯函数）→ restoreAfterRender（状态恢复）→ renderLogs（编排）
 // 3. 可测试性：构建逻辑与 DOM 操作解耦
 
+// ==================== 止盈计划渲染（tpPlan 持久化字段回溯） ====================
+function renderTpPlanHtml(tpPlan) {
+  if (!tpPlan || !Array.isArray(tpPlan.prices)) return '—';
+  var names = ['TP1', 'TP2', 'TP3'];
+  var parts = [];
+  for (var i = 0; i < 3; i++) {
+    var p = tpPlan.prices[i];
+    var r = tpPlan.ratios && tpPlan.ratios[i] != null ? tpPlan.ratios[i] : 0;
+    if (p == null) continue;
+    parts.push(names[i] + ' @' + Number(p).toFixed(5) + (r > 0 ? '（' + r + '%）' : ''));
+  }
+  if (!parts.length) return '—';
+  var w = tpPlan.weightedRR != null ? Number(tpPlan.weightedRR).toFixed(2) + 'R' : null;
+  return esc(parts.join(' · ')) + (w ? ' · 加权期望 <b style="color:var(--color-primary);">' + w + '</b>' : '');
+}
+
 let _expandedRows = new Set();   // 已展开的日志行索引集合
 let _tbodyEventsBound = false;   // 事件委托是否已初始化
 
@@ -15,7 +31,10 @@ function buildRowsHTML(dl) {
     var entry = dl[ri];
     var item = entry.item;
     var realIdx = entry.origIdx;
-    var isClosed = !!(item.closeType && item.closeType !== '');
+    // P0-1 FIX：状态显示与全局 isClosedTrade 语义一致（部分平仓中间态显示为"持仓"）
+    var isClosed = (typeof window.utils !== 'undefined' && typeof window.utils.isClosedTrade === 'function')
+      ? window.utils.isClosedTrade(item)
+      : !!(item.closeType && item.closeType !== '');
     var isExpanded = _expandedRows.has(realIdx);
 
     const dir    = item.direction === 'long' ? '多' : '空';
@@ -161,11 +180,20 @@ function buildRowsHTML(dl) {
         '<div class="ditem"><span class="dlabel">止损价</span><span class="dval">' + (item.stopLoss != null ? item.stopLoss : '—') + '</span></div>' +
         (item.atrStopMode ? '<div class="ditem"><span class="dlabel">止损方式</span><span class="dval" style="color:var(--color-primary);"><i class="fas fa-wave-square"></i> ATR 动态止损</span></div>' : '') +
         '<div class="ditem"><span class="dlabel">目标价</span><span class="dval">' + targetPriceDisplay + '</span></div>' +
+        (item.tpPlan && Array.isArray(item.tpPlan.prices) ? '<div class="ditem" style="grid-column:span 4;"><span class="dlabel">止盈计划</span><span class="dval">' + renderTpPlanHtml(item.tpPlan) + '</span></div>' : '') +
         '<div class="ditem"><span class="dlabel">仓位(USDT)</span><span class="dval">' + (item.positionSize != null ? Number(item.positionSize).toFixed(2) : '—') + '</span></div>' +
         '<div class="ditem"><span class="dlabel">杠杆</span><span class="dval">' + (item.leverage ?? 0) + '</span></div>' +
         '<div class="ditem"><span class="dlabel">保证金</span><span class="dval">' + (item.actualMargin != null ? Number(item.actualMargin).toFixed(2) : '—') + '</span></div>' +
         '<div class="ditem"><span class="dlabel">风险额</span><span class="dval">' + (item.riskAmount != null ? item.riskAmount : '—') + '</span></div>' +
-        (item.kellyData ? '<div class="ditem"><span class="dlabel">凯利参考</span><span class="dval" style="color:var(--color-primary);">半凯利 ' + (item.kellyData.halfKellyPct * 100).toFixed(2) + '% = ' + item.kellyData.halfKellyRisk.toFixed(2) + 'U</span></div>' : '') +
+        (item.plannedRiskAmount != null && item.plannedRiskAmount > 0
+          ? '<div class="ditem"><span class="dlabel">计划风险</span><span class="dval">' + Number(item.plannedRiskAmount).toFixed(2) +
+            (item.riskAmount != null && item.riskAmount < item.plannedRiskAmount * 0.95
+              ? ' <span class="exec-badge" style="background:rgba(250,173,20,.15);color:#B9770E;">截断 ' + ((1 - item.riskAmount / item.plannedRiskAmount) * 100).toFixed(0) + '%</span>'
+              : (item.riskAmount != null && item.riskAmount > item.plannedRiskAmount * 1.05
+                ? ' <span class="exec-badge" style="background:rgba(234,102,104,.15);color:#C0392B;">超限 ' + ((item.riskAmount / item.plannedRiskAmount - 1) * 100).toFixed(0) + '%</span>'
+                : '')) + '</span></div>'
+          : '') +
+        (item.kellyData && item.kellyData.halfKellyPct != null ? '<div class="ditem"><span class="dlabel">凯利参考</span><span class="dval" style="color:var(--color-primary);">半凯利 ' + (item.kellyData.halfKellyPct * 100).toFixed(2) + '% = ' + (item.kellyData.halfKellyRisk != null ? item.kellyData.halfKellyRisk.toFixed(2) : '—') + 'U</span></div>' : '') +
         '<div class="ditem"><span class="dlabel">心态分</span><span class="dval">' + mindset + '</span></div>' +
         '<div class="ditem"><span class="dlabel">形态/策略</span><span class="dval">' + strategyShort + '</span></div>' +
         '<div class="ditem"><span class="dlabel">信号K</span><span class="dval">' + signalShort + '</span></div>' +
@@ -255,7 +283,7 @@ function buildRowsHTML(dl) {
             '<input type="text" id="cpRMultiple_' + realIdx + '" readonly placeholder="自动计算" />' +
           '</div>' +
           '<div class="fp">' +
-            '<label>手续费 (USDT)</label>' +
+            '<label>手续费 (USDT)<span style="font-size:11px;color:var(--color-text-muted);font-weight:400;margin-left:4px;">开仓计划时的 round-trip 预估；部分平仓按比例分摊</span></label>' +
             '<input type="text" id="cpFee_' + realIdx + '" readonly placeholder="从日志读取" value="' + (item.fee != null ? item.fee : '') + '" />' +
           '</div>' +
           '<div class="fp">' +

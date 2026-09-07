@@ -113,10 +113,19 @@ function calcClosePnL(idx) {
     if (rMultipleEl) rMultipleEl.value = '';
     return;
   }
-  if (pnlAmtEl) pnlAmtEl.value = settlement.netPnl.toFixed(2);
+  // P1-3/P0-1 FIX：部分平仓预览按本次比例折算已实现净盈亏（与 confirmClose 落库口径一致：
+  // 未平仓部分的浮动盈亏不计入，费用按比例分摊）
+  var isPartialPreview = closeType && (closeType.value === 'partialTP' || closeType.value === 'reducePosition');
+  var ratioPreviewEl = document.getElementById('cpPartialRatio_' + idx);
+  var ratioPreview = ratioPreviewEl ? parseFloat(ratioPreviewEl.value) : NaN;
+  var netPnlPreview = settlement.netPnl;
+  if (isPartialPreview && !isNaN(ratioPreview) && ratioPreview > 0 && ratioPreview < 100) {
+    netPnlPreview = (settlement.grossPnl - settlement.legacySlippageCost) * (ratioPreview / 100) - settlement.fee * (ratioPreview / 100);
+  }
+  if (pnlAmtEl) pnlAmtEl.value = netPnlPreview.toFixed(2);
   if (pnlPctEl) pnlPctEl.value = settlement.pnlPercent.toFixed(2) + '%';
   const lrRow = document.getElementById('cpLossReasonRow_' + idx);
-  if (lrRow) lrRow.style.display = (settlement.netPnl < 0 || (closeType && (closeType.value === 'manualLoss' || closeType.value === 'liquidation'))) ? 'block' : 'none';
+  if (lrRow) lrRow.style.display = (netPnlPreview < 0 || (closeType && (closeType.value === 'manualLoss' || closeType.value === 'liquidation'))) ? 'block' : 'none';
   if (rMultipleEl) rMultipleEl.value = settlement.rMultiple == null ? '' : settlement.rMultiple.toFixed(2);
 }
 
@@ -158,8 +167,25 @@ function confirmClose(idx) {
   const settlement = calculateCloseSettlement(logs[idx], closePrice, feeEl ? feeEl.value : undefined, slipEl ? slipEl.value : undefined);
   if (!settlement) { showToast('盈亏计算失败，请检查入场价、仓位、费用和滑点输入是否有效','error'); return; }
   const netPnlVal = settlement.netPnl;
-  // 亏损单必须选择亏损原因
-  const isLoss = netPnlVal < 0 || (closeType && (closeType.value === 'manualLoss' || closeType.value === 'liquidation'));
+  // P0-1 FIX：部分平仓判定（提前到盈亏判定之前）
+  const isPartialAction = (closeType.value === 'partialTP' || closeType.value === 'reducePosition');
+  const hadPartialBefore = (Array.isArray(logs[idx].closes) && parseFloat(logs[idx].closedRatio) > 0) ||
+    (logs[idx].closeType === 'partialTP' || logs[idx].closeType === 'reducePosition');
+  // 本次实际净盈亏：部分平仓时按本次平仓比例分摊 round-trip 费用（P1-3 FIX）
+  var partialRatio2 = NaN;
+  if (isPartialAction) {
+    var ratioEl2 = document.getElementById('cpPartialRatio_' + idx);
+    partialRatio2 = ratioEl2 ? parseFloat(ratioEl2.value) : NaN;
+  }
+  var partialValid = (isPartialAction && !isNaN(partialRatio2) && partialRatio2 > 0 && partialRatio2 < 100);
+  // P0-1 FIX：部分平仓的"本次已实现净盈亏" = (剩余仓位毛利 − 剩余滑点) × 比例 − 剩余费用 × 比例。
+  // settlement 以当前剩余仓位全量计价，未平仓部分（1−比例）的浮动盈亏不得计入已实现。
+  var netPnlThis = partialValid
+    ? (settlement.grossPnl - settlement.legacySlippageCost) * (partialRatio2 / 100) - settlement.fee * (partialRatio2 / 100)
+    : netPnlVal;
+
+  // 亏损单必须选择亏损原因（按"本次实际净盈亏"判定，部分平仓不再被全额费用误判为亏损）
+  const isLoss = netPnlThis < 0 || (closeType && (closeType.value === 'manualLoss' || closeType.value === 'liquidation'));
   if (isLoss) {
     var lrContainer = document.getElementById('cpLossReason_' + idx);
     var checked = lrContainer ? lrContainer.querySelectorAll('input[type="checkbox"]:checked') : [];
@@ -169,6 +195,15 @@ function confirmClose(idx) {
       return;
     }
   }
+  // 设计优化：极值价格（MAE/MFE 原料）填写提醒——不阻断平仓，仅提示
+  try {
+    var _loEl = document.getElementById('cpLowPrice_' + idx);
+    var _hiEl = document.getElementById('cpHighPrice_' + idx);
+    if ((!logs[idx].lowPrice && (!_loEl || _loEl.value === '')) &&
+        (!logs[idx].highPrice && (!_hiEl || _hiEl.value === ''))) {
+      showToast('提示：未填写持仓最低/最高价，MAE/MFE 无法分析（可后续编辑补充）', 'info');
+    }
+  } catch(e) { /* 提醒失败不阻断 */ }
   // 主存储写入失败时必须回滚本次内存变更，避免界面状态和持久化状态分叉。
   const beforeClose = JSON.parse(JSON.stringify(logs[idx]));
   // 写入时间信息（仅新平仓时设置 closeTime，修改已平仓保留原始时间）
@@ -176,6 +211,9 @@ function confirmClose(idx) {
   logs[idx].closeType = closeType.value;
   logs[idx].closePrice = closePrice;
   if (isNewClose) {
+    logs[idx].closeTime = new Date().toISOString();
+  } else if (hadPartialBefore && !isPartialAction) {
+    // P0-1 FIX：部分平仓中间态最终平仓时，closeTime 更新为最终平仓时间（持仓时长/按日归属正确）
     logs[idx].closeTime = new Date().toISOString();
   }
   // holdDuration 始终基于 time + closeTime 重算（含修改已有平仓记录的场景）
@@ -187,31 +225,93 @@ function confirmClose(idx) {
       logs[idx].holdDuration = durMin2 >= 0 ? durMin2 : null;
     }
   }
-  logs[idx].grossPnlAmount = parseFloat(settlement.grossPnl.toFixed(2));
-  logs[idx].pnlAmount = parseFloat(settlement.netPnl.toFixed(2));
-  logs[idx].pnlPercent = parseFloat(settlement.pnlPercent.toFixed(2));
-  logs[idx].rMultiple = settlement.rMultiple == null ? null : parseFloat(settlement.rMultiple.toFixed(2));
-  logs[idx].actualCloseFee = parseFloat(settlement.fee.toFixed(8));
-  logs[idx].actualExitLegacySlippageCost = parseFloat(settlement.legacySlippageCost.toFixed(8));
-  // P0-3 FIX: partialTP/reducePosition 时处理平仓比例并更新剩余仓位
-  if (closeType.value === 'partialTP' || closeType.value === 'reducePosition') {
-    var ratioEl2 = document.getElementById('cpPartialRatio_' + idx);
-    var partialRatio2 = ratioEl2 ? parseFloat(ratioEl2.value) : NaN;
-    if (!isNaN(partialRatio2) && partialRatio2 > 0 && partialRatio2 < 100) {
-      logs[idx].partialRatio = partialRatio2;
-      var origPos2 = parseFloat(logs[idx].positionSize) || 0;
-      logs[idx].positionSize = parseFloat((origPos2 * (1 - partialRatio2 / 100)).toFixed(2));
-      if (!isNaN(logs[idx].riskAmount) && logs[idx].riskAmount != null) {
-        logs[idx].riskAmount = parseFloat((logs[idx].riskAmount * (1 - partialRatio2 / 100)).toFixed(2));
-      }
-      if (!isNaN(logs[idx].actualMargin) && logs[idx].actualMargin != null) {
-        logs[idx].actualMargin = parseFloat((logs[idx].actualMargin * (1 - partialRatio2 / 100)).toFixed(2));
-      }
+
+  // ===== P0-1 FIX：整笔交易生命周期字段（closes 事件数组 + 累计已实现盈亏） =====
+  if (!Array.isArray(logs[idx].closes)) logs[idx].closes = [];
+  if (logs[idx].initialPositionSize == null || isNaN(parseFloat(logs[idx].initialPositionSize)) || parseFloat(logs[idx].initialPositionSize) <= 0) {
+    logs[idx].initialPositionSize = parseFloat(logs[idx].positionSize) || 0;
+  }
+  if (logs[idx].initialRiskAmount == null || isNaN(parseFloat(logs[idx].initialRiskAmount))) {
+    logs[idx].initialRiskAmount = (logs[idx].riskAmount != null) ? parseFloat(logs[idx].riskAmount) : null;
+  }
+  if (logs[idx].initialMargin == null || isNaN(parseFloat(logs[idx].initialMargin))) {
+    logs[idx].initialMargin = (logs[idx].actualMargin != null) ? parseFloat(logs[idx].actualMargin) : null;
+  }
+  if (logs[idx].realizedPnl == null || isNaN(parseFloat(logs[idx].realizedPnl))) logs[idx].realizedPnl = 0;
+  if (logs[idx].realizedFee == null || isNaN(parseFloat(logs[idx].realizedFee))) logs[idx].realizedFee = 0;
+  if (logs[idx].closedRatio == null || isNaN(parseFloat(logs[idx].closedRatio))) logs[idx].closedRatio = 0;
+  var _nowISO = new Date().toISOString();
+
+  if (partialValid) {
+    // —— 部分平仓 / 减仓：按比例缩减剩余仓位、剩余风险、剩余保证金、剩余费用 ——
+    var feeThis = settlement.fee * (partialRatio2 / 100);
+    var posBefore = parseFloat(logs[idx].positionSize) || 0;
+    logs[idx].partialRatio = partialRatio2;
+    logs[idx].positionSize = parseFloat((posBefore * (1 - partialRatio2 / 100)).toFixed(2));
+    if (logs[idx].riskAmount != null && !isNaN(parseFloat(logs[idx].riskAmount))) {
+      logs[idx].riskAmount = parseFloat((parseFloat(logs[idx].riskAmount) * (1 - partialRatio2 / 100)).toFixed(2));
+    }
+    if (logs[idx].actualMargin != null && !isNaN(parseFloat(logs[idx].actualMargin))) {
+      logs[idx].actualMargin = parseFloat((parseFloat(logs[idx].actualMargin) * (1 - partialRatio2 / 100)).toFixed(2));
+    }
+    if (logs[idx].fee != null && !isNaN(parseFloat(logs[idx].fee))) {
+      // P1-3 FIX：剩余仓位费用按比例缩减，最终平仓时不再重复扣全额 round-trip 费
+      logs[idx].fee = parseFloat((parseFloat(logs[idx].fee) * (1 - partialRatio2 / 100)).toFixed(8));
+    }
+    logs[idx].realizedPnl = parseFloat((parseFloat(logs[idx].realizedPnl) + netPnlThis).toFixed(2));
+    logs[idx].realizedFee = parseFloat((parseFloat(logs[idx].realizedFee) + feeThis).toFixed(8));
+    logs[idx].closedRatio = parseFloat((parseFloat(logs[idx].closedRatio) + partialRatio2).toFixed(4));
+    logs[idx].closes.push({ type: closeType.value, price: closePrice, ratio: partialRatio2, fee: parseFloat(feeThis.toFixed(8)), pnl: parseFloat(netPnlThis.toFixed(2)), time: _nowISO });
+    logs[idx].grossPnlAmount = parseFloat(settlement.grossPnl.toFixed(2));
+    logs[idx].pnlAmount = parseFloat(netPnlThis.toFixed(2));
+    // P0-1 FIX：中间态记录的收益率/R 用"本次已实现"口径（本次平仓保证金、初始风险为基准）
+    var _levNow = Number(logs[idx].leverage) > 0 ? Number(logs[idx].leverage) : 1;
+    var marginThis = posBefore > 0 ? (posBefore / _levNow) * (partialRatio2 / 100) : 0;
+    logs[idx].pnlPercent = marginThis > 0
+      ? parseFloat((netPnlThis / marginThis * 100).toFixed(2))
+      : parseFloat(settlement.pnlPercent.toFixed(2));
+    logs[idx].rMultiple = (logs[idx].initialRiskAmount != null && parseFloat(logs[idx].initialRiskAmount) > 0)
+      ? parseFloat((netPnlThis / parseFloat(logs[idx].initialRiskAmount)).toFixed(2))
+      : (settlement.rMultiple == null ? null : parseFloat(settlement.rMultiple.toFixed(2)));
+    logs[idx].actualCloseFee = parseFloat(feeThis.toFixed(8));
+    logs[idx].actualExitLegacySlippageCost = parseFloat(settlement.legacySlippageCost.toFixed(8));
+  } else if (hadPartialBefore) {
+    // —— 部分平仓后的最终平仓：pnlAmount 为整笔累计已实现盈亏 ——
+    var feeFinal = settlement.fee;
+    var ratioFinal = 100 - (parseFloat(logs[idx].closedRatio) || 0);
+    logs[idx].realizedPnl = parseFloat((parseFloat(logs[idx].realizedPnl) + netPnlVal).toFixed(2));
+    logs[idx].realizedFee = parseFloat((parseFloat(logs[idx].realizedFee) + feeFinal).toFixed(8));
+    logs[idx].closedRatio = 100;
+    logs[idx].closes.push({ type: closeType.value, price: closePrice, ratio: parseFloat(Math.max(0, ratioFinal).toFixed(4)), fee: parseFloat(feeFinal.toFixed(8)), pnl: parseFloat(netPnlVal.toFixed(2)), time: _nowISO });
+    logs[idx].positionSize = 0; // 全部退出
+    delete logs[idx].partialRatio;
+    logs[idx].grossPnlAmount = parseFloat(settlement.grossPnl.toFixed(2));
+    logs[idx].pnlAmount = parseFloat(logs[idx].realizedPnl.toFixed(2)); // 整笔累计
+    logs[idx].actualCloseFee = parseFloat(logs[idx].realizedFee.toFixed(8));
+    logs[idx].actualExitLegacySlippageCost = parseFloat(settlement.legacySlippageCost.toFixed(8));
+    // 整笔 R 与收益率以初始风险/初始保证金为基准（部分止盈的已实现盈亏计入分子）
+    if (logs[idx].initialRiskAmount != null && parseFloat(logs[idx].initialRiskAmount) > 0) {
+      logs[idx].rMultiple = parseFloat((parseFloat(logs[idx].realizedPnl) / parseFloat(logs[idx].initialRiskAmount)).toFixed(2));
     } else {
-      delete logs[idx].partialRatio;
+      logs[idx].rMultiple = settlement.rMultiple == null ? null : parseFloat(settlement.rMultiple.toFixed(2));
+    }
+    if (logs[idx].initialMargin != null && parseFloat(logs[idx].initialMargin) > 0) {
+      logs[idx].pnlPercent = parseFloat((parseFloat(logs[idx].realizedPnl) / parseFloat(logs[idx].initialMargin) * 100).toFixed(2));
+    } else {
+      logs[idx].pnlPercent = parseFloat(settlement.pnlPercent.toFixed(2));
     }
   } else {
-    delete logs[idx].partialRatio;
+    // —— 全新平仓：原有逻辑 + 初始化整笔累计字段 ——
+    logs[idx].grossPnlAmount = parseFloat(settlement.grossPnl.toFixed(2));
+    logs[idx].pnlAmount = parseFloat(settlement.netPnl.toFixed(2));
+    logs[idx].pnlPercent = parseFloat(settlement.pnlPercent.toFixed(2));
+    logs[idx].rMultiple = settlement.rMultiple == null ? null : parseFloat(settlement.rMultiple.toFixed(2));
+    logs[idx].actualCloseFee = parseFloat(settlement.fee.toFixed(8));
+    logs[idx].actualExitLegacySlippageCost = parseFloat(settlement.legacySlippageCost.toFixed(8));
+    logs[idx].realizedPnl = parseFloat(settlement.netPnl.toFixed(2));
+    logs[idx].realizedFee = parseFloat(settlement.fee.toFixed(8));
+    logs[idx].closedRatio = 100;
+    logs[idx].closes.push({ type: closeType.value, price: closePrice, ratio: 100, fee: parseFloat(settlement.fee.toFixed(8)), pnl: parseFloat(settlement.netPnl.toFixed(2)), time: _nowISO });
   }
   logs[idx].closeNote = closeNoteEl ? closeNoteEl.value.trim() : '';
   // Execution score
@@ -392,8 +492,16 @@ function _filterMatch(l) {
   if (f.direction && l.direction !== f.direction) return false;
   if (f.symbol && l.symbol !== f.symbol) return false;
   if (f.strategy && (l.strategyFramework || '') !== f.strategy) return false;
-  if (f.status === 'open') { if (l.closeType && l.closeType !== '') return false; }
-  else if (f.status === 'closed') { if (!l.closeType || l.closeType === '') return false; }
+  // P0-1 FIX：状态筛选与全局 isClosedTrade 语义一致（部分平仓中间态归入"持仓中"）
+  if (f.status === 'open') {
+    if (typeof window.utils !== 'undefined' && typeof window.utils.isClosedTrade === 'function') {
+      if (window.utils.isClosedTrade(l)) return false;
+    } else if (l.closeType && l.closeType !== '') { return false; }
+  } else if (f.status === 'closed') {
+    if (typeof window.utils !== 'undefined' && typeof window.utils.isClosedTrade === 'function') {
+      if (!window.utils.isClosedTrade(l)) return false;
+    } else if (!l.closeType || l.closeType === '') { return false; }
+  }
   if (f.pnl === 'profit') { var v = parseFloat(l.pnlAmount); if (isNaN(v) || v <= 0) return false; }
   else if (f.pnl === 'loss') { var v = parseFloat(l.pnlAmount); if (isNaN(v) || v >= 0) return false; }
   if (f.time) {
@@ -402,7 +510,14 @@ function _filterMatch(l) {
     else if (f.time === 'thisWeek') { var d = new Date(now); var dayOffset = d.getDay() === 0 ? 6 : d.getDay() - 1; d.setDate(d.getDate() - dayOffset); d.setHours(0, 0, 0, 0); since = d; }
     else if (f.time === 'thisMonth') { since = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0); }
     else if (f.time === 'last30') { since = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000); }
-    if (since) { var t = new Date(l.time); if (t < since) return false; }
+    if (since) {
+      // P2-1 FIX：时间筛选与统计口径统一——已平仓记录按平仓时间，未平仓记录按开仓时间
+      var isClosedT = (typeof window.utils !== 'undefined' && typeof window.utils.isClosedTrade === 'function')
+        ? window.utils.isClosedTrade(l) : false;
+      var useTime = isClosedT ? (l.closeTime || l.time) : l.time;
+      var t = new Date(useTime);
+      if (t < since) return false;
+    }
   }
   return true;
 }

@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>核心计算链回归测试</title>
+<style>
+  body { font-family: 'PingFang SC', 'Roboto', sans-serif; background: #F4F3EE; margin: 0; padding: 20px; color: #1A1B1C; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { font-size: 12px; color: #6B7280; margin-bottom: 16px; }
+  .bar { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; }
+  button { padding: 8px 16px; border: none; border-radius: 8px; background: #2C7DA0; color: #fff; font-size: 13px; cursor: pointer; }
+  button:hover { opacity: .88; }
+  #summary { font-size: 13px; font-weight: 600; }
+  .pass { color: #1E7E34; }
+  .fail { color: #C0392B; }
+  #out { background: #fff; border: 1px solid rgba(0,0,0,0.08); border-radius: 12px; padding: 12px 16px; font-size: 12.5px; line-height: 1.7; }
+  .t-pass { color: #1E7E34; }
+  .t-fail { color: #C0392B; font-weight: 600; }
+  .t-info { color: #6B7280; }
+</style>
+</head>
+<body>
+<h1>核心计算链回归测试</h1>
+<div class="sub">浏览器端一键回归 · 覆盖 isClosedTrade / 凯利 / 滑点 / 权益曲线 / 存储安全 · 页面加载即自动运行</div>
+<div class="bar">
+  <button onclick="runAll()">重新运行</button>
+  <span id="summary">—</span>
+</div>
+<div id="out">加载中…</div>
+
+<script src="../js/constants.js"></script>
+<script src="../js/utils.js"></script>
+<script src="../js/storage.js"></script>
+<script src="../js/slippage.js"></script>
+<script src="../js/skills-integration.js"></script>
+<script src="../js/calculator.js"></script>
+<script>
+(function() {
+  // ---- 环境 mock（与生产隔离） ----
+  window.showToast = function() {};
+  window.renderLogs = function() {};
+  window.renderDashboard = function() {};
+  window._activeFilters = null;
+  var store = {};
+  localStorage.getItem = function(k) { return (k in store) ? store[k] : null; };
+  localStorage.setItem = function(k, v) { store[k] = String(v); };
+  localStorage.removeItem = function(k) { delete store[k]; };
+  window.logs = [];
+
+  var pass = 0, fail = 0;
+  function T(name, cond) {
+    if (cond) { pass++; return '<div class="t-pass">PASS ' + name + '</div>'; }
+    fail++; return '<div class="t-fail">FAIL ' + name + '</div>';
+  }
+  function group(title) { return '<div style="margin-top:8px;font-weight:600;font-size:13px;">' + title + '</div>'; }
+  function loadErr(name) {
+    fail++;
+    return '<div class="t-fail">加载失败 ' + name + '（依赖文件缺失或语法错误）</div>';
+  }
+
+  window.runAll = function() {
+    pass = 0; fail = 0;
+    var h = '';
+    var util = window.utils;
+    if (!util || typeof util.isClosedTrade !== 'function') h += loadErr('utils.js');
+    if (typeof calcKelly !== 'function') h += loadErr('skills-integration.js');
+    if (typeof Slippage === 'undefined') h += loadErr('slippage.js');
+    if (typeof StorageSecurity === 'undefined') h += loadErr('storage.js');
+
+    // ---- 1. 平仓判定 ----
+    h += group('1. isClosedTrade / isPartialClosed 判定');
+    h += T('持仓记录非已平仓', util.isClosedTrade({ closeType: '', pnlAmount: 1 }) === false);
+    h += T('正常平仓=已平仓', util.isClosedTrade({ closeType: 'tp', pnlAmount: 12.5 }) === true);
+    h += T('partialTP 50% 新格式=中间态', util.isClosedTrade({ closeType: 'partialTP', closes: [{}], closedRatio: 50, pnlAmount: 5 }) === false);
+    h += T('reducePosition 100%=已平仓', util.isClosedTrade({ closeType: 'reducePosition', closes: [{}], closedRatio: 100, pnlAmount: 8 }) === true);
+    h += T('isPartialClosed 100% 为假', util.isPartialClosed({ closeType: 'reducePosition', closes: [{}], closedRatio: 100 }) === false);
+
+    // ---- 2. getClosedSorted 过滤 ----
+    h += group('2. getClosedSorted 只含最终平仓');
+    window.logs = [
+      { id: 1, closeType: '', pnlAmount: null, time: '2026-09-01T08:00:00Z' },
+      { id: 2, closeType: 'partialTP', closes: [{}], closedRatio: 50, pnlAmount: 3, time: '2026-09-02T08:00:00Z', closeTime: '2026-09-02T08:00:00Z' },
+      { id: 3, closeType: 'tp', pnlAmount: 10, time: '2026-09-03T08:00:00Z', closeTime: '2026-09-03T08:00:00Z' }
+    ];
+    var sorted = util.getClosedSorted();
+    h += T('数量=1（排除中间态）', sorted.length === 1 && sorted[0].id === 3);
+
+    // ---- 3. 凯利公式 ----
+    h += group('3. calcKelly 半凯利与截断');
+    var k0 = calcKelly(0.51, 10, 9.8, 10000, true, 1); // kelly=(5.1-4.802)/10=0.0298 < 5% 不截断
+    h += T('kellyPct=(WR*W-LR*L)/W=0.0298', k0 && Math.abs(k0.kellyPct - 0.0298) < 1e-9);
+    h += T('halfKellyPct=0.0149', k0 && Math.abs(k0.halfKellyPct - 0.0149) < 1e-9);
+    h += T('期望=WR*W-LR*L=0.298', k0 && Math.abs(k0.expectancy - 0.298) < 1e-9);
+    var k1 = calcKelly(0.6, 20, 10, 10000, true, 10); // 原始 0.4 → 杠杆上限 5%/10
+    h += T('杠杆截断：kellyPct=0.005（=5%/10）', k1 && Math.abs(k1.kellyPct - 0.005) < 1e-9);
+    h += T('杠杆截断：halfKellyPct=0.005', k1 && Math.abs(k1.halfKellyPct - 0.005) < 1e-9);
+    h += T('截断标记 kellyCapped=true', k1 && k1.kellyCapped === true);
+    var k2 = calcKelly(0.3, 10, 20, 10000, true, 10); // 期望为负
+    h += T('期望为负时 kellyPct<=0', k2 && k2.kellyPct <= 0);
+
+    // ---- 4. calcKellyStatsFromLogs 保本分母 ----
+    h += group('4. 凯利统计：胜率分母含保本');
+    window.logs = [
+      { closeType: 'tp', pnlAmount: 10, closeTime: '2026-09-01T08:00:00Z' },
+      { closeType: 'sl', pnlAmount: -6, closeTime: '2026-09-02T08:00:00Z' },
+      { closeType: 'tp', pnlAmount: 0, closeTime: '2026-09-03T08:00:00Z' }
+    ];
+    var ks = calcKellyStatsFromLogs(3);
+    h += T('winRate=1/3（保本计入分母）', ks && Math.abs(ks.winRate - 1/3) < 1e-9);
+    h += T('avgWin=10 / avgLoss=6', ks && Math.abs(ks.avgWin - 10) < 1e-9 && Math.abs(ks.avgLoss - 6) < 1e-9);
+    h += T('samples=3', ks && ks.samples === 3);
+    var ks30 = calcKellyStatsFromLogs(3, undefined, 30);
+    h += T('lookbackDays 过滤后仍有效', ks30 != null);
+
+    // ---- 5. 滑点模型 ----
+    h += group('5. Slippage 反向滑点方向');
+    var longModel = Slippage.calculate({ direction: 'long', expectedEntryPrice: 60000, expectedExitPrice: 61000, quantity: 0.1, tickSize: 0.1, entryTicks: 1, exitTicks: 1 });
+    h += T('做多：有效入场价上移（不利）', longModel.effectiveEntryPrice > 60000);
+    h += T('做多：有效出场价下移（不利）', longModel.effectiveExitPrice < 61000);
+    var shortModel = Slippage.calculate({ direction: 'short', expectedEntryPrice: 3000, expectedExitPrice: 2900, quantity: 1, tickSize: 0.01, entryTicks: 2, exitTicks: 2 });
+    h += T('做空：有效入场价下移（不利）', shortModel.effectiveEntryPrice < 3000);
+    h += T('做空：有效出场价上移（不利）', shortModel.effectiveExitPrice > 2900);
+
+    // ---- 6. 权益曲线 ----
+    h += group('6. calcEquityCurve 峰值/回撤');
+    var curve = util.calcEquityCurve([
+      { pnlAmount: 100, closeTime: '2026-09-01T08:00:00Z', capital: 10000 },
+      { pnlAmount: -50, closeTime: '2026-09-02T08:00:00Z', capital: 10000 }
+    ]);
+    h += T('权益曲线存在', curve && Array.isArray(curve.data) && curve.data.length >= 2);
+    h += T('maxDDPercent >= 0', curve && curve.maxDDPercent >= 0);
+
+    // ---- 7. 存储安全 ----
+    h += group('7. StorageSecurity 容量判定');
+    var cOk = StorageSecurity.checkCapacity(1000);
+    h += T('小数据可写', cOk.canWrite === true);
+    var cHuge = StorageSecurity.checkCapacity(1e9);
+    h += T('超限数据被拒绝', cHuge.canWrite === false);
+
+    // ---- 8. TICK_SIZE_MAP 品种覆盖 ----
+    h += group('8. tick size 映射');
+    h += T('BTC=0.1', getTickSize('BTC') === 0.1);
+    h += T('XRP=0.0001（新增）', getTickSize('XRP') === 0.0001);
+    h += T('未知品种兜底 0.1', getTickSize('ZZZ') === 0.1);
+
+    // ---- 9. 保存门与组合视图存在性 ----
+    h += group('9. assertSavableCalculation / renderPortfolioRisk');
+    h += T('calculator.js 可独立加载（无 CalculationUI 不崩）', typeof assertSavableCalculation === 'function');
+    h += T('空态保存门安全返回', typeof assertSavableCalculation === 'function' && assertSavableCalculation().ok === false);
+    h += T('renderPortfolioRisk 已定义', typeof renderPortfolioRisk === 'function');
+
+    document.getElementById('out').innerHTML = h;
+    var sum = document.getElementById('summary');
+    sum.innerHTML = '<span class="' + (fail === 0 ? 'pass' : 'fail') + '">PASS=' + pass + ' FAIL=' + fail + '</span>';
+  };
+  runAll();
+})();
+</script>
+</body>
+</html>
