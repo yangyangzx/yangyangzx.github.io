@@ -433,14 +433,23 @@ function drawEquityCurve(closed) {
       '盈亏: ' + (d.pnl >= 0 ? '+' : '') + d.pnl.toFixed(2) + ' USDT<br>' +
       '累计权益: ' + d.eq.toFixed(2) + ' USDT';
     tooltip.style.display = 'block';
-    const tx = xScale(closest) + 12;
+    // UI 修复（2026-09-07）：tooltip 边界 clamp，防止靠近右/下边缘时溢出卡片
+    const tx = Math.min(xScale(closest) + 12, W - 140);
     const ty = yScale(d.eq) - 10;
-    const tr = canvas.parentElement.getBoundingClientRect();
+    const tyClamped = Math.max(0, Math.min(ty, H - 70));
     tooltip.style.left = tx + 'px';
-    tooltip.style.top = Math.max(0, ty) + 'px';
+    tooltip.style.top = tyClamped + 'px';
   };
   canvas.onmouseleave = function() { tooltip.style.display = 'none'; };
+
+  // UI 修复（2026-09-07）：窗口 resize 时重绘，避免 canvas 拉伸失真
+  window.removeEventListener('resize', _equityResizeHandler);
+  _equityResizeHandler = function() { drawEquityCurve(closed); };
+  window.addEventListener('resize', _equityResizeHandler);
 }
+
+// 权益曲线 resize 重绘句柄（drawEquityCurve 内绑定/解绑）
+var _equityResizeHandler = null;
 
 // ==================== 策略绩效拆解 ====================
 function renderStrategyBreakdown(closed) {

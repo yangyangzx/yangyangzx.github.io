@@ -1236,7 +1236,10 @@ function renderMindsetAnalysis(closed) {
     overallLosses += s.losses;
     overallPnl += s.totalPnl;
   }
-  var overallDecided = overallWins + overallLosses;
+  // 口径修复（2026-09-07）：整体基准的胜率/均盈亏分母改为含保本总笔数，
+  // 与各分组（wins/count）一致——原实现用 wins+losses 分母导致
+  // "vs整体"偏差的基准与组内胜率口径错位（复盘中心执行质量分析已修，此为同类遗漏）。
+  var overallDecided = keys.reduce(function(s, k) { return s + mindsetStats[k].count; }, 0);
   var overallWinRate = overallDecided > 0 ? (overallWins / overallDecided * 100) : 0;
   var overallAvgPnl = overallDecided > 0 ? (overallPnl / overallDecided) : 0;
 
