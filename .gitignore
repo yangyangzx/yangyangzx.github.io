@@ -14,6 +14,10 @@ node_modules/
 *.log
 *.tmp
 
+# 交易日志备份导出（用户数据，不入库）
+trading_backup_*.json
+trade_logs_backup_*.json
+
 # 备份文件
 *.backup
 *.bak
