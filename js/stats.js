@@ -165,12 +165,16 @@ function updateStats() {
       } else { shEl.textContent = '—'; shEl.style.color = ''; }
     }
     // 成本侵蚀：Σ手续费 ÷ Σ(盈利+亏损绝对值)
+    // P0 修复：部分平仓链的 item.fee 只是"剩余仓位"round-trip 费（中间态按比例缩减过），
+    // 整笔累计费用在 realizedFee（部分平仓链已实现费用累加），直接用 fee 会低估成本侵蚀。
     var cdEl = document.getElementById('statCostDrag');
     if (cdEl) {
       var _feeSum = 0, _grossSum = 0;
       for (var _k = 0; _k < closed.length; _k++) {
-        var _f = parseFloat(closed[_k].fee);
-        if (!isNaN(_f)) _feeSum += _f;
+        var _fRaw = closed[_k].realizedFee != null && !isNaN(parseFloat(closed[_k].realizedFee))
+          ? parseFloat(closed[_k].realizedFee)
+          : parseFloat(closed[_k].fee);
+        if (!isNaN(_fRaw)) _feeSum += _fRaw;
         var _gp = Math.abs(parseFloat(closed[_k].pnlAmount));
         if (!isNaN(_gp)) _grossSum += _gp;
       }

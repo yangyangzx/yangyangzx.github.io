@@ -356,7 +356,8 @@ function emRecalc(item) {
     // 市价单使用 effectiveEntryPrice（含滑点修正），其他使用 entryPrice
     const entryForPnl = (item.effectiveEntryPrice != null && !isNaN(item.effectiveEntryPrice))
       ? item.effectiveEntryPrice : entry;
-    if (isNaN(entryForPnl) || isNaN(closePrice) || isNaN(pos) || entryForPnl === 0 || closePrice <= 0) return;
+    // P0 修复：已全部平仓（positionSize<=0）时无剩余仓位可重算，保留整笔累计显示，避免预览出"-费用"
+    if (isNaN(entryForPnl) || isNaN(closePrice) || isNaN(pos) || pos <= 0 || entryForPnl === 0 || closePrice <= 0) return;
     let grossPnl;
     if (direction === 'short') {
       grossPnl = (entryForPnl - closePrice) / entryForPnl * pos;
@@ -670,7 +671,14 @@ function saveEditLog(idx) {
 
   // ticks-v1 记录的执行字段改变后必须同步重建有效入场价、各路径滑点和计划费用。
   rebuildTickSlippageSnapshot(item);
-  if (item.closeType && item.closePrice != null && typeof calculateCloseSettlement === 'function') {
+  // P0 修复（2026-09-07 实测）：部分平仓链（中间态/最终平仓）的结算字段保存整笔累计口径
+  // （realizedPnl/pnlAmount），编辑时不得用"剩余仓位全量"重算覆盖——否则 pnlAmount/rMultiple/
+  // grossPnlAmount 被污染且与 realizedPnl 脱节，后续统计失真；最终平仓（positionSize=0）还会
+  // 被结算无效拦截导致完全无法编辑。全新平仓记录（从未部分平仓）保留自动重算（改价同步 PnL）。
+  var _partialChain = (Array.isArray(item.closes) && item.closes.length > 1) ||
+    (item.closeType === 'partialTP' || item.closeType === 'reducePosition') ||
+    (parseFloat(item.positionSize) <= 0);
+  if (item.closeType && item.closePrice != null && !_partialChain && typeof calculateCloseSettlement === 'function') {
     // BUG#6 修复：rebuildTickSlippageSnapshot 已更新 item.slippage，直接使用 item.fee 而非实际快照字段
     // 避免保存后实际CloseFee已过时导致结算结果与当前数据不一致
     var editedSettlement = calculateCloseSettlement(item, item.closePrice);

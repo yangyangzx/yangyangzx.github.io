@@ -1243,7 +1243,9 @@ function renderMindsetAnalysis(closed) {
   // 计算相关性
   var totalTrades = keys.reduce(function(s, k) { return s + mindsetStats[k].count; }, 0);
   var meanX = keys.reduce(function(sum, k) { return sum + k * mindsetStats[k].count; }, 0) / totalTrades;
-  var meanY = overallAvgPnl;
+  // 修复口径：相关性基准的 meanY 与 meanX 同用含保本总笔数分母
+  // （原实现用 overallAvgPnl（wins+losses 分母）导致两组分的平均盈亏基准不一致）
+  var meanY = totalTrades > 0 ? (overallPnl / totalTrades) : 0;
   var num = 0, denX = 0, denY = 0;
   for (var k = 0; k < keys.length; k++) {
     var score = keys[k];  // 修复：使用 keys[k] 作为键值

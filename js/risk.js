@@ -94,18 +94,27 @@ function getAggregatedOpenPositions() {
     var pos = openLogs[i];
     var gid = pos.groupId || ('single_' + i);
     if (!groups[gid]) {
-      groups[gid] = { symbol: pos.symbol, direction: pos.direction, leverage: pos.leverage, stopLoss: pos.stopLoss, positionSize: 0, weightedEntrySum: 0, entries: [] };
+      groups[gid] = { symbol: pos.symbol, direction: pos.direction, leverage: pos.leverage, stopLoss: pos.stopLoss, positionSize: 0, weightedEntrySum: 0, weightedStopSum: 0, stopCount: 0, entries: [] };
     }
     groups[gid].positionSize += parseFloat(pos.positionSize) || 0;
     groups[gid].entries.push(pos);
     if (pos.entryPrice != null && !isNaN(parseFloat(pos.entryPrice)) && parseFloat(pos.entryPrice) > 0) {
       groups[gid].weightedEntrySum += parseFloat(pos.entryPrice) * (parseFloat(pos.positionSize) || 0);
     }
+    // 聚合止损：按仓位加权（分批独立止损时强平安全距离用正确止损；同止损时结果一致）
+    if (pos.stopLoss != null && !isNaN(parseFloat(pos.stopLoss))) {
+      groups[gid].weightedStopSum += parseFloat(pos.stopLoss) * (parseFloat(pos.positionSize) || 0);
+      groups[gid].stopCount++;
+    }
   }
   var result = [];
   for (var gid in groups) {
     var g = groups[gid];
     g.weightedEntry = g.positionSize > 0 ? g.weightedEntrySum / g.positionSize : 0;
+    // 分批独立止损：用仓位加权止损替代"仅取第一笔"（2026-09-07 审计修复）
+    if (g.stopCount > 0 && g.positionSize > 0) {
+      g.stopLoss = g.weightedStopSum / g.positionSize;
+    }
     result.push(g);
   }
   return result;
@@ -457,13 +466,20 @@ function renderConcentration(closedOverride) {
   var html = '';
 
   // 品种集中度表格
+  // 阈值读设置 singleSymbolMaxPct（用户可自定，如 30%）；警示档 = 上限，危险档 = 上限×1.67（保持原 50/30 比例感）
+  var maxPctSetting = 30;
+  try {
+    var _concSettings = loadSettings();
+    if (_concSettings && _concSettings.singleSymbolMaxPct != null) maxPctSetting = _concSettings.singleSymbolMaxPct;
+  } catch(e) { /* 默认 30 */ }
+  var dangerPct = maxPctSetting * 1.67;
   html += '<div class="risk-concentration-wrap"><table class="risk-liq-table risk-conc-table" style="margin-bottom:16px;"><thead><tr><th>品种</th><th>保证金(USDT)</th><th>占本金%</th><th>持仓笔数</th></tr></thead><tbody>';
   if (symbolRows.length === 0) {
     html += '<tr><td colspan="4" style="text-align:center;color:var(--color-text-placeholder);padding:8px;">无持仓</td></tr>';
   } else {
     for (var sr = 0; sr < symbolRows.length; sr++) {
       var r = symbolRows[sr];
-      var cls = r.pct > 50 ? 'liq-dist-danger' : (r.pct > 30 ? 'liq-dist-warn' : '');
+      var cls = r.pct > dangerPct ? 'liq-dist-danger' : (r.pct > maxPctSetting ? 'liq-dist-warn' : '');
       var marginDisplay = r.margin > 0 ? r.margin.toFixed(2) + ' USDT' : '<span style="color:var(--color-text-muted);">—</span>';
       html += '<tr><td>' + esc(r.symbol) + '</td><td>' + marginDisplay + '</td><td class="' + cls + '">' + r.pct.toFixed(1) + '%</td><td>' + r.count + '</td></tr>';
     }
@@ -479,9 +495,9 @@ function renderConcentration(closedOverride) {
   }
   html += '</div>';
 
-  // 集中度警告
-  if (symbolRows.length > 0 && symbolRows[0].pct > 50) {
-    html += '<div style="font-size:12px;color:var(--color-warning);"><i class="fas fa-exclamation-triangle"></i> ⚠️ ' + esc(symbolRows[0].symbol) + ' 占用 ' + symbolRows[0].pct.toFixed(1) + '% 本金，风险高度集中</div>';
+  // 集中度警告（阈值与表格一致，读设置 singleSymbolMaxPct）
+  if (symbolRows.length > 0 && symbolRows[0].pct > maxPctSetting) {
+    html += '<div style="font-size:12px;color:var(--color-warning);"><i class="fas fa-exclamation-triangle"></i> ⚠️ ' + esc(symbolRows[0].symbol) + ' 占用 ' + symbolRows[0].pct.toFixed(1) + '% 本金，超过单品种上限 ' + maxPctSetting + '%，风险高度集中</div>';
   }
 
   container.innerHTML = html;

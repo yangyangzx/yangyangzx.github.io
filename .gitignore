@@ -1,0 +1,23 @@
+# 系统文件
+.DS_Store
+
+# 依赖
+node_modules/
+
+# 本地 AI 助手 / 编辑器配置
+.claude/
+.hallmark
+.idea/
+.vscode/
+
+# 日志与临时文件
+*.log
+*.tmp
+
+# 备份文件
+*.backup
+*.bak
+
+# 构建产物（当前纯静态，无构建步骤，预留）
+dist/
+build/

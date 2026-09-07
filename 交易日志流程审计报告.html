@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>交易日志全流程深度审计报告</title>
+<style>
+:root{--bg:#F4F3EE;--card:#FFFFFF;--text:#1A1B1C;--muted:#6B7280;--border:#E4E3DD;--red:#EA6668;--green:#52C41A;--amber:#FAAD14;--blue:#8BC8EA;--purple:#C9A7E8;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:'Roboto','PingFang SC','Segoe UI',Arial,sans-serif;line-height:1.6;padding:32px 16px;}
+.wrap{max-width:960px;margin:0 auto;}
+h1{font-size:24px;margin-bottom:6px;}
+.sub{color:var(--muted);font-size:13px;margin-bottom:24px;}
+h2{font-size:18px;margin:32px 0 14px;padding-bottom:8px;border-bottom:2px solid var(--border);}
+h3{font-size:15px;margin:18px 0 8px;}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px 20px;margin-bottom:16px;}
+.tag{display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:600;margin-right:8px;vertical-align:2px;}
+.tag-p0{background:#fdeaea;color:var(--red);}
+.tag-p1{background:#fff7e6;color:#d48806;}
+.tag-ok{background:#e6f7e6;color:var(--green);}
+.tag-adv{background:#eef4fd;color:#4a6fa5;}
+.tag-design{background:#f4ecfb;color:var(--purple);}
+table{width:100%;border-collapse:collapse;font-size:13px;margin:10px 0;}
+th,td{border:1px solid var(--border);padding:8px 10px;text-align:left;vertical-align:top;}
+th{background:#f8f7f4;font-weight:600;white-space:nowrap;}
+code{background:#f0efea;border-radius:4px;padding:1px 5px;font-size:12px;font-family:Menlo,Consolas,monospace;}
+.mono{font-family:Menlo,Consolas,monospace;font-size:12px;background:#f0efea;border-radius:4px;padding:2px 6px;}
+.flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:14px 0;}
+.flow .node{background:var(--card);border:1.5px solid var(--blue);border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;}
+.flow .arrow{color:var(--muted);font-size:16px;}
+.flow .node.warn{border-color:var(--amber);}
+.flow .node.fix{border-color:var(--red);background:#fff5f5;}
+.formula{background:#f8f7f4;border-left:3px solid var(--blue);border-radius:0 6px 6px 0;padding:10px 14px;font-family:Menlo,Consolas,monospace;font-size:12.5px;margin:10px 0;overflow-x:auto;}
+.good{color:var(--green);font-weight:600;}
+.bad{color:var(--red);font-weight:600;}
+ul{padding-left:20px;font-size:13.5px;}
+li{margin-bottom:6px;}
+.footer{margin-top:36px;padding-top:16px;border-top:1px solid var(--border);color:var(--muted);font-size:12px;}
+.metric{display:flex;flex-wrap:wrap;gap:12px;margin:14px 0;}
+.metric .m{flex:1 1 140px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;}
+.metric .m .v{font-size:22px;font-weight:700;}
+.metric .m .l{font-size:12px;color:var(--muted);}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>交易日志全流程深度审计报告</h1>
+<div class="sub">审计日期：2026-09-07 ｜ 范围：日志生命周期（开仓保存 → 持仓 → 平仓三态 → 编辑 → 统计消费） ｜ 对象：notes/（纯前端 SPA）</div>
+
+<div class="metric">
+  <div class="m"><div class="v bad">2</div><div class="l">已修复数据问题（P0×1 / P1×1）</div></div>
+  <div class="m"><div class="v good">12</div><div class="l">流程节点核对通过</div></div>
+  <div class="m"><div class="v" style="color:#d48806;">5</div><div class="l">低优先级设计建议</div></div>
+  <div class="m"><div class="v">47+47</div><div class="l">回归断言全绿</div></div>
+</div>
+
+<h2>一、审计结论（先说结果）</h2>
+<div class="card">
+<p style="font-size:14px;margin-bottom:10px;">交易日志的核心数据链设计**整体成立**：结算口径统一、部分平仓生命周期完整、消费端判定语义一致。但深度核对发现 <b class="bad">2 处真实数据问题</b>，均与<b>部分平仓链</b>相关——这是全系统最复杂的路径，普通单笔平仓不触发。</p>
+<table>
+<tr><th>级别</th><th>问题</th><th>影响</th><th>状态</th></tr>
+<tr><td><span class="tag tag-p0">P0</span></td><td>编辑已平仓记录时无条件重算结算字段</td><td>部分平仓中间态 pnlAmount/rMultiple 被"剩余仓位"口径覆盖且与 realizedPnl 脱节；最终平仓（positionSize=0）完全无法编辑保存</td><td class="good">已修复+实测</td></tr>
+<tr><td><span class="tag tag-p1">P1</span></td><td>成本侵蚀指标用 item.fee 而非 realizedFee</td><td>部分平仓链的总手续费只算到"剩余仓位"部分，成本侵蚀被低估约一半</td><td class="good">已修复+实测</td></tr>
+</table>
+</div>
+
+<h2>二、交易日志完整流程链（核对通过）</h2>
+<div class="card">
+<div class="flow">
+  <span class="node">开仓保存<br><span style="font-weight:400;font-size:11px;">saveLog 落库</span></span><span class="arrow">→</span>
+  <span class="node">持仓监控<br><span style="font-weight:400;font-size:11px;">dashboard/risk 聚合</span></span><span class="arrow">→</span>
+  <span class="node warn">平仓三态<br><span style="font-weight:400;font-size:11px;">全新 / 部分 / 最终</span></span><span class="arrow">→</span>
+  <span class="node fix">编辑回改<br><span style="font-weight:400;font-size:11px;">本次修复点①</span></span><span class="arrow">→</span>
+  <span class="node">统计消费<br><span style="font-weight:400;font-size:11px;">stats/analytics/risk</span></span>
+</div>
+<div class="formula">结算唯一口径：netPnl = (平仓价 − 有效入场价) × 仓位 ÷ 有效入场价 − 手续费 − 旧式滑点；ticks-v1 滑点已计入有效入场价，禁止二次扣减</div>
+<table>
+<tr><th>#</th><th>流程节点</th><th>关键设计</th><th>核对结果</th></tr>
+<tr><td>1</td><td>结算计算<br><code>calculateCloseSettlement</code></td><td>预览与确认共用同一函数（界面显示=落库值，无双轨分叉）；入参均做有效性校验</td><td class="good">✓ 通过</td></tr>
+<tr><td>2</td><td>滑点模型</td><td>ticks-v1 通过 effectiveEntryPrice 计入 PnL；与旧 slippageCost 共存时检测并忽略旧值（防双重计费）</td><td class="good">✓ 通过</td></tr>
+<tr><td>3</td><td>全新平仓</td><td>pnlAmount=netPnl，初始化 realizedPnl/realizedFee/closedRatio/closes[]</td><td class="good">✓ 通过</td></tr>
+<tr><td>4</td><td>部分平仓</td><td>按比例缩减剩余仓位/风险/保证金/费用；realizedPnl 累计本次已实现；R 以<b>初始风险</b>为基准不漂移</td><td class="good">✓ 通过</td></tr>
+<tr><td>5</td><td>最终平仓</td><td>realizedPnl 累加剩余部分；pnlAmount=整笔累计；R/收益率以初始风险/初始保证金为基准；closeTime 刷新</td><td class="good">✓ 通过</td></tr>
+<tr><td>6</td><td>保存失败回滚</td><td>localStorage 写入失败时深拷贝回滚 + toast，界面与持久化不分叉</td><td class="good">✓ 通过</td></tr>
+<tr><td>7</td><td>编辑弹窗</td><td>多标签竞态检测、dirty 校验、撤销（5 秒）、保存失败回滚</td><td class="good">✓ 通过</td></tr>
+<tr><td>8</td><td>编辑已平仓记录</td><td><b>本次修复</b>：部分平仓链记录跳过自动重算，保留整笔累计口径</td><td class="good">✓ 修复</td></tr>
+<tr><td>9</td><td>极值价格采集</td><td>面板预填已有值（重开不丢数据）；MAE/MFE 以 effectiveEntryPrice 为基准与 PnL 一致</td><td class="good">✓ 通过</td></tr>
+<tr><td>10</td><td>已平仓判定</td><td>isClosedTrade / isPartialClosed / getClosedSorted 全站统一（部分平仓中间态归"持仓中"）</td><td class="good">✓ 通过</td></tr>
+<tr><td>11</td><td>统计消费</td><td>stats/analytics/dashboard/risk 全部消费 isClosedTrade 语义；时间筛选按 closeTime；权益曲线索引对位</td><td class="good">✓ 通过</td></tr>
+<tr><td>12</td><td>成本侵蚀</td><td><b>本次修复</b>：费用取 realizedFee（整笔累计）而非 item.fee（剩余仓位费）</td><td class="good">✓ 修复</td></tr>
+</table>
+</div>
+
+<h2>三、P0 修复详述：编辑污染部分平仓链结算字段</h2>
+<div class="card">
+<h3>问题复现</h3>
+<p style="font-size:13.5px;">编辑弹窗保存（<code>saveEditLog</code>）对任何已平仓记录都会执行 <code>calculateCloseSettlement(item, closePrice)</code> 并<b>无条件覆盖</b> pnlAmount / rMultiple / pnlPercent / grossPnlAmount。该函数用 <code>item.positionSize</code> 计价——部分平仓链上：</p>
+<ul>
+<li><b class="bad">中间态</b>（已平 50%，positionSize=剩余 500）：结算按<b>剩余仓位全量</b>计价 → 实测 <code>pnlAmount 8.33 → 6.33</code>、<code>rMultiple 0.42 → 0.63</code>，且 <code>realizedPnl 仍为 8.33</code>（不同步）→ 后续最终平仓的累计、胜率、R 统计全部基于污染数据。</li>
+<li><b class="bad">最终平仓</b>（positionSize=0）：结算函数因仓位 ≤0 返回 null → 保存被拦"编辑后的平仓结算无效"→ 用户<b>完全无法编辑</b>该记录（改备注/补亏损原因/修正平仓价都不行）。</li>
+</ul>
+<h3>修复方案</h3>
+<div class="formula">_partialChain = closes 数组长度 &gt; 1 || closeType ∈ {partialTP, reducePosition} || positionSize ≤ 0<br>→ 命中则跳过自动重算（保留整笔累计口径与表单值）<br>→ 全新平仓记录（从未部分平仓）保留自动重算（改价同步 PnL 的原始功能）</div>
+<p style="font-size:13.5px;">同时修复 <code>emRecalc</code>：已全部平仓（positionSize ≤ 0）时不再重算预览，避免显示"-费用"误导。</p>
+<h3>实测证据（浏览器）</h3>
+<table>
+<tr><th>场景</th><th>修复前</th><th>修复后</th></tr>
+<tr><td>中间态编辑保存</td><td>pnlAmount 8.33→6.33（污染）</td><td class="good">保持 8.33，realizedPnl=8.33 一致</td></tr>
+<tr><td>最终平仓编辑保存</td><td>被拦"结算无效"</td><td class="good">正常保存，pnlAmount=18.33 保持</td></tr>
+<tr><td>全新平仓编辑（改价）</td><td>自动重算</td><td class="good">自动重算仍生效（原始功能未破坏）</td></tr>
+</table>
+</div>
+
+<h2>四、P1 修复详述：成本侵蚀指标低估费用</h2>
+<div class="card">
+<p style="font-size:13.5px;">成本侵蚀 = Σ手续费 ÷ Σ毛盈亏绝对值。原实现读取 <code>item.fee</code>——部分平仓时该字段被按比例缩减为<b>剩余仓位</b>的 round-trip 费，而整笔累计费用记录在 <code>realizedFee</code>。部分平仓链只统计最终平仓记录 → 费用被低估约一半。</p>
+<div class="formula">修复：优先取 realizedFee（部分平仓链已实现费用累加），无则回退 item.fee（兼容旧数据）</div>
+<h3>实测证据（浏览器）</h3>
+<p style="font-size:13.5px;">部分平仓链最终平仓记录（item.fee=1.0、realizedFee=2.0、pnlAmount=18.33）：<br>
+修复前：费用按 1.0 → 5.5% ｜ <b>修复后：总手续费 2.00 U / 毛盈亏 18.33 U = 10.9%</b> ✓</p>
+</div>
+
+<h2>五、设计合理项（亮点确认）</h2>
+<div class="card">
+<table>
+<tr><th>设计</th><th>合理性说明</th></tr>
+<tr><td>结算单一入口</td><td>预览与确认共用 calculateCloseSettlement，杜绝"显示一个值、存另一个值"</td></tr>
+<tr><td>部分平仓费用守恒</td><td>部分平仓按比例分摊费用并缩减剩余费用，最终平仓不重复扣费（Σ已分摊=整笔）</td></tr>
+<tr><td>R 倍数初始风险基准</td><td>中间态/最终平仓统一除以 initialRiskAmount，部分止盈后 R 不漂移</td></tr>
+<tr><td>整笔累计口径</td><td>realizedPnl 贯穿平仓链，最终 pnlAmount=累计值，统计侧单条记录即整笔结果（正确进入胜率/资金曲线/凯利样本）</td></tr>
+<tr><td>判定语义统一</td><td>isClosedTrade 要求 closeType 非空且 pnlAmount 可解析 + closedRatio≥100，避免"半平仓记录混入已平仓统计"</td></tr>
+<tr><td>权益曲线连续累加</td><td>不吃 capital 开仓快照重置；支持 balanceAdjustment 存取款流水；索引对位无错位</td></tr>
+<tr><td>编辑防呆</td><td>多标签竞态检测、保存失败回滚、删除/批量/编辑撤销、亏损单亏损原因必填</td></tr>
+<tr><td>当日连亏</td><td>按 closeTime 升序后倒序统计，符合"当前连续亏损"直觉</td></tr>
+</table>
+</div>
+
+<h2>六、低优先级设计建议（未改动，供后续考虑）</h2>
+<div class="card">
+<table>
+<tr><th>#</th><th>问题</th><th>风险</th><th>建议</th></tr>
+<tr><td>1</td><td><code>isClosedTrade</code> 在 utils.js 内重复定义两处（L16/L238，内容一致）</td><td>维护风险：未来改一处忘另一处会导致判定分裂</td><td>删除后定义，保留头部唯一实现</td></tr>
+<tr><td>2</td><td><code>storeMAEMFE</code> 对 lowPrice=''（空字符串）不防御 → mae=NaN</td><td>历史/导入数据可能产生 ''，NaN 会污染 MAE 统计</td><td>判空条件改为 <code>lowVal !== '' && lowVal != null</code></td></tr>
+<tr><td>3</td><td><code>emRecalc</code> 中 effectiveEntryPrice 未 parseFloat（字符串参与运算）</td><td>行为正确但类型不干净，依赖 JS 隐式转换</td><td>统一 parseFloat 后再运算</td></tr>
+<tr><td>4</td><td>年化收益对跨度&lt;1 天按 1 天年化</td><td>单日/短跨度年化值巨大，易误解</td><td>跨度&lt;7 天显示"—"或标注"样本过短"</td></tr>
+<tr><td>5</td><td>平仓面板"亏损原因必填"按<b>本次</b>净盈亏判定</td><td>部分平仓本次小赚但整笔最终亏损时，本次不需填原因</td><td>设计可接受（按动作判定），文档注明即可</td></tr>
+</table>
+</div>
+
+<h2>七、验证方式与覆盖范围</h2>
+<div class="card">
+<ul>
+<li><b>静态</b>：node --check 全部改动文件通过</li>
+<li><b>回归</b>：verify_fix.js 47/47 PASS（含 confirmClose 部分平仓→最终平仓全链）、smoke.js ALL PASS、测试页 31/31 PASS</li>
+<li><b>浏览器实测</b>：P0 修复（中间态/最终平仓/全新平仓三种编辑路径）、P1 修复（成本侵蚀 2.00/18.33=10.9%）</li>
+<li><b>覆盖范围</b>：logs.js 平仓生命周期全函数、modals.js 编辑/拆分/撤销、utils.js 判定与权益曲线、stats.js 全部统计口径、analytics.js/dashboard.js/risk.js 消费端、rendering.js 平仓面板模板</li>
+<li><b>仍存在的缺口</b>：低优先级建议 1-5 未实施（见第六节）；io.js 导入校验与历史数据兼容未在本轮逐行复核（此前轮次已确认 ImportValidator 正则兼容历史值）</li>
+</ul>
+</div>
+
+<div class="footer">本报告基于代码逐行核对 + 浏览器构造数据实测（2026-09-07）。已修复项均已通过回归与实测验证；未修复项为设计建议，不构成当前功能缺陷。</div>
+</div>
+</body>
+</html>

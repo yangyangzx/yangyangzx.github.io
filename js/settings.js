@@ -283,7 +283,7 @@ function importLogs() {
           var data = JSON.parse(ev.target.result);
           if (Array.isArray(data) && (data.length === 0 || (data[0] && typeof data[0] === 'object' && (data[0].symbol != null || data[0].direction != null || data[0].entryPrice != null)))) {
             // 导入前归一化所有数值字段（JSON 中可能为字符串或 NaN/Infinity）
-            var numFields = ['entryPrice','stopLoss','targetPrice','positionSize','leverage','riskAmount','capital','fee','slippageCost','closePrice','pnlAmount','mae','mfe','lowPrice','highPrice','rMultiple','pnlPercent','holdDuration','effectiveEntryPrice','stopType','atrStopMode','calculationVersion','grossPnlAmount','actualCloseFee','actualExitLegacySlippageCost'];
+            var numFields = ['entryPrice','stopLoss','targetPrice','positionSize','leverage','riskAmount','capital','fee','slippageCost','closePrice','pnlAmount','mae','mfe','lowPrice','highPrice','rMultiple','pnlPercent','holdDuration','effectiveEntryPrice','stopType','atrStopMode','calculationVersion','grossPnlAmount','actualCloseFee','actualExitLegacySlippageCost','realizedPnl','realizedFee','closedRatio','initialRiskAmount','initialPositionSize'];
             for (var k = 0; k < data.length; k++) {
               for (var nf = 0; nf < numFields.length; nf++) {
                 var f = numFields[nf];
@@ -328,6 +328,26 @@ function parseCSVImport(csvText) {
   var lines = csvText.split(/\r?\n/).filter(function(l) { return l.trim().length > 0; });
   if (lines.length < 2) { showToast('CSV 文件为空', 'error'); return; }
 
+  // CSV 列映射：导出中文 header → 内部字段名
+  // 修复（2026-09-07）：原先按英文 key 匹配，导出 header 是中文导致全部落入 else 分支，
+  // 导入后字段存为中文 key，页面/统计全部读不到（CSV 导入实际长期失效）。
+  var CSV_FIELD_MAP = {
+    '时间':'time','品种':'symbol','方向':'direction','订单类型':'orderType','入场价':'entryPrice','有效入场价':'effectiveEntryPrice',
+    '止损价':'stopLoss','目标价':'targetPrice','仓位(USDT)':'positionSize','杠杆':'leverage','风险额':'riskAmount','本金':'capital',
+    '心态评分':'mindsetScore','形态/策略':'strategyFramework','信号K':'signals','交易时段':'session','市场环境':'marketCondition',
+    '平仓类型':'closeType','平仓价':'closePrice','平仓时间':'closeTime','持仓时长(分钟)':'holdDuration','R倍数':'rMultiple',
+    '盈亏金额':'pnlAmount','盈亏百分比':'pnlPercent','MAE%':'mae','MFE%':'mfe','执行评分':'executionScore','出场理由':'exitReason',
+    '亏损原因':'lossReason','交易情绪':'emotions','平仓备注':'closeNote','入场原因':'reason','手续费':'fee','滑点成本':'slippageCost',
+    '计算版本':'calculationVersion','滑点Schema':'slipSchema','入场Ticks':'slipEntryTicks','退出Ticks':'slipExitTicks',
+    'TickSize':'slipTickSize','计划有效退出价':'slipEffectiveExit','GroupId':'groupId',
+    '已实现盈亏':'realizedPnl','累计手续费':'realizedFee','已平仓比例%':'closedRatio','初始风险':'initialRiskAmount',
+    '初始仓位':'initialPositionSize','平仓明细':'closes','部分平仓':'isPartial'
+  };
+  var CSV_ARRAY_FIELDS = ['signals','lossReason','emotions','reason'];
+  var CSV_JSON_FIELDS = ['actions','splitEntries','closes'];
+  var CSV_NUM_FIELDS = ['entryPrice','stopLoss','targetPrice','positionSize','leverage','riskAmount','capital','fee','slippageCost','closePrice','pnlAmount','mae','mfe','lowPrice','highPrice','rMultiple','pnlPercent','holdDuration','realizedPnl','realizedFee','closedRatio','initialRiskAmount','initialPositionSize'];
+  var CSV_INT_FIELDS = ['mindsetScore','executionScore'];
+
   var headers = parseCSVLine(lines[0]);
   var imported = [];
   for (var i = 1; i < lines.length; i++) {
@@ -336,24 +356,46 @@ function parseCSVImport(csvText) {
     for (var j = 0; j < headers.length; j++) {
       var h = headers[j];
       var v = values[j] || '';
-      if (h === 'emotions' || h === 'lossReason' || h === 'signals' || h === 'reason') {
-        obj[h] = v ? v.split(';').filter(Boolean) : [];
-      } else if (h === 'actions') {
-        try { obj[h] = v ? JSON.parse(v) : []; } catch(e) { obj[h] = []; }
-      } else if (h === 'splitEntries') {
-        try { obj[h] = v ? JSON.parse(v) : null; } catch(e) { obj[h] = null; }
-      } else if (['entryPrice','stopLoss','targetPrice','positionSize','leverage','riskAmount','capital','fee','slippageCost','closePrice','pnlAmount','mae','mfe','lowPrice','highPrice','rMultiple','pnlPercent','holdDuration'].indexOf(h) >= 0) {
+      var key = CSV_FIELD_MAP[h] || h; // 中文 header 映射；未知/英文 header 原样使用
+      if (CSV_ARRAY_FIELDS.indexOf(key) !== -1) {
+        obj[key] = v ? v.split(';').filter(Boolean) : [];
+      } else if (CSV_JSON_FIELDS.indexOf(key) !== -1) {
+        try { obj[key] = v ? JSON.parse(v) : (key === 'closes' ? [] : null); } catch(e) { obj[key] = key === 'closes' ? [] : null; }
+      } else if (key === 'isPartial') {
+        obj[key] = v === 'true' || v === '1';
+      } else if (CSV_NUM_FIELDS.indexOf(key) !== -1) {
         var parsed = parseFloat(v);
         // rMultiple 可能带 'R' 后缀（如 "2.5R"），需先去除
-        if (h === 'rMultiple' && typeof v === 'string') parsed = parseFloat(v.replace(/R$/g, ''));
-        obj[h] = isNaN(parsed) ? null : parsed;
-      } else if (h === 'mindsetScore' || h === 'executionScore') {
-        var parsedInt = parseInt(v);
-        obj[h] = isNaN(parsedInt) ? null : parsedInt;
+        if (key === 'rMultiple' && typeof v === 'string') parsed = parseFloat(v.replace(/R$/g, ''));
+        obj[key] = isNaN(parsed) ? null : parsed;
+      } else if (CSV_INT_FIELDS.indexOf(key) !== -1) {
+        var parsedInt;
+        if (key === 'mindsetScore' && typeof v === 'string' && v.indexOf('★') !== -1) {
+          parsedInt = v.split('★').length - 1; // 兼容旧版星号串（如 ★★★☆ → 3）
+        } else {
+          parsedInt = parseInt(v);
+        }
+        obj[key] = isNaN(parsedInt) ? null : parsedInt;
       } else {
-        obj[h] = v;
+        obj[key] = v;
       }
     }
+    // 滑点快照还原：导出时各滑点字段独立成列（slipSchema/slipEntryTicks/...），导入时重组进 slippage.planning
+    var hasSlip = (obj.slipSchema && obj.slipSchema !== '') ||
+      (obj.slipEntryTicks != null && obj.slipEntryTicks !== '') ||
+      (obj.slipExitTicks != null && obj.slipExitTicks !== '') ||
+      (obj.slipTickSize != null && obj.slipTickSize !== '') ||
+      (obj.slipEffectiveExit != null && obj.slipEffectiveExit !== '');
+    if (hasSlip) {
+      var slipPlan = {};
+      if (obj.slipSchema) slipPlan.schema = obj.slipSchema;
+      if (obj.slipEntryTicks != null && obj.slipEntryTicks !== '') slipPlan.entryTicks = parseFloat(obj.slipEntryTicks);
+      if (obj.slipExitTicks != null && obj.slipExitTicks !== '') slipPlan.exitTicks = parseFloat(obj.slipExitTicks);
+      if (obj.slipTickSize != null && obj.slipTickSize !== '') slipPlan.tickSize = parseFloat(obj.slipTickSize);
+      if (obj.slipEffectiveExit != null && obj.slipEffectiveExit !== '') slipPlan.effectiveExitPrice = parseFloat(obj.slipEffectiveExit);
+      obj.slippage = { schema: 'ticks-v1', planning: slipPlan, unit: 'ticks', source: 'csv-import' };
+    }
+    delete obj.slipSchema; delete obj.slipEntryTicks; delete obj.slipExitTicks; delete obj.slipTickSize; delete obj.slipEffectiveExit;
     imported.push(obj);
   }
 
@@ -436,12 +478,14 @@ function importSettings() {
           showToast('文件格式不正确', 'error');
           return;
         }
-        // 合并：已保存的设置优先，导入数据补全缺失字段
+        // 合并：导入文件覆盖当前值（导入=恢复备份语义），仅跳过显式 null
+        // 修复（2026-09-07）：原 `!(k in current)` 恒为 false（loadSettings 已合并全部默认键），
+        // 导致导入的设置字段永不生效（只有 customSymbols 追加逻辑在跑）。
         var current = loadSettings();
         var keys = Object.keys(SETTINGS_DEFAULTS);
         for (var i = 0; i < keys.length; i++) {
           var k = keys[i];
-          if (imported[k] != null && !(k in current)) {
+          if (imported[k] != null) {
             current[k] = imported[k];
           }
         }

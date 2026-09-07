@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>风控中心/统计分析/复盘中心/系统设置 深度审计报告</title>
+<style>
+  :root { --bg:#f4f3ee; --card:#fff; --border:#e4e3dd; --text:#1a1b1c; --muted:#6b7280; --red:#ea6668; --green:#52c41a; --warn:#faad14; --accent:#9eacea; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:'PingFang SC','Roboto',sans-serif; background:var(--bg); color:var(--text); padding:24px; line-height:1.6; }
+  .wrap { max-width:1000px; margin:0 auto; }
+  h1 { font-size:22px; margin-bottom:4px; }
+  .sub { color:var(--muted); font-size:13px; margin-bottom:20px; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:20px; margin-bottom:16px; }
+  h2 { font-size:16px; margin-bottom:12px; display:flex; align-items:center; gap:8px; }
+  .badge { display:inline-block; padding:2px 10px; border-radius:20px; font-size:12px; font-weight:600; }
+  .b-p0 { background:#fdeaea; color:#c0392b; }
+  .b-p1 { background:#fff3e0; color:#e65100; }
+  .b-p2 { background:#fffde7; color:#f9a825; }
+  .b-ok { background:#e8f5e9; color:#2e7d32; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
+  th { background:#faf9f6; font-weight:600; white-space:nowrap; }
+  .num { font-variant-numeric:tabular-nums; }
+  .ok { color:var(--green); font-weight:600; }
+  .fix { color:var(--red); font-weight:600; }
+  .ev { font-size:12px; color:var(--muted); font-family:Menlo,Consolas,monospace; }
+  .note { font-size:12px; color:var(--muted); margin-top:8px; }
+  ul { padding-left:18px; font-size:13px; }
+  li { margin-bottom:4px; }
+  code { background:#f0efea; padding:1px 5px; border-radius:4px; font-size:12px; font-family:Menlo,Consolas,monospace; }
+  .flow { display:flex; flex-wrap:wrap; gap:8px; align-items:center; font-size:12px; margin-top:8px; }
+  .flow .node { background:var(--accent); color:#1a1b1c; padding:4px 12px; border-radius:8px; font-weight:600; }
+  .flow .arrow { color:var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>风控中心 / 统计分析 / 复盘中心 / 系统设置 — 深度审计报告</h1>
+  <div class="sub">审计日期：2026-09-07 · 范围：risk.js（627行）· stats.js · analytics.js（1500行）· review.js（824行）· settings.js（547行）· 依赖链（skills-integration.js / utils.js / storage.js）· 修复 3 处真实缺陷 + 1 处口径 · 回归 47/47 通过</div>
+
+  <div class="card">
+    <h2>一、本轮修复（4 项，全部已修复并实测验证）</h2>
+    <table>
+      <thead><tr><th>级别</th><th>模块</th><th>问题</th><th>证据</th><th>修复</th><th>实测</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><span class="badge b-p1">P1</span></td>
+          <td>系统设置<br><code>settings.js</code></td>
+          <td><b>导入设置实际永远无效</b>：<code>importSettings</code> 合并条件 <code>!(k in current)</code> 恒为 false（<code>loadSettings</code> 已合并全部默认键，任何键都"已存在"），导入文件的字段永不生效，只有 customSymbols 追加逻辑在跑</td>
+          <td class="ev">L444: if (imported[k] != null &amp;&amp; !(k in current))</td>
+          <td>改为 <code>imported[k] != null</code> 直接覆盖（null 跳过）；导入 = 恢复备份语义，注释同步更新</td>
+          <td>页面内模拟导入：riskPercent 2→7 生效、accountBalance null 跳过、minRRRatio 2→3、customSymbols 追加 XRP ✅</td>
+        </tr>
+        <tr>
+          <td><span class="badge b-p2">P2</span></td>
+          <td>风控中心·强平距离<br><code>risk.js</code></td>
+          <td><b>分批建仓独立止损时，聚合止损取第一笔</b>：<code>getAggregatedOpenPositions</code> 组初始化 <code>stopLoss: pos.stopLoss</code> 后不再更新，强平安全距离 <code>|止损−强平|/入场×100</code> 用错止损</td>
+          <td class="ev">groups[gid].stopLoss 仅在 init 赋值</td>
+          <td>按仓位加权聚合：<code>Σ(stop×size)/Σsize</code>（同止损时结果不变，兼容旧数据）</td>
+          <td>注入 t1=58000×3000U + t2=60000×300U → 止损 58181.82 = (58000×3000+60000×300)/3300 ✅</td>
+        </tr>
+        <tr>
+          <td><span class="badge b-p2">P2</span></td>
+          <td>风控中心·集中度<br><code>risk.js</code></td>
+          <td><b>集中度警告阈值硬编码 50%/30%</b>，不读用户设置 <code>singleSymbolMaxPct</code>（用户已自定 30%），改了上限但卡片告警仍按 50% 才触发，口径脱节</td>
+          <td class="ev">L466: r.pct &gt; 50 / &gt; 30（写死）</td>
+          <td>阈值读设置：警示档 = 上限，危险档 = 上限×1.67（保持原 50/30 比例感）；表格与顶部告警同口径</td>
+          <td>33% 持仓：上限 30% 时告警「超过单品种上限 30%」；上限改 50% 后告警消失 ✅</td>
+        </tr>
+        <tr>
+          <td><span class="badge b-p3">P3</span></td>
+          <td>统计分析·心态相关性<br><code>analytics.js</code></td>
+          <td><b>相关性基准分母不一致</b>：meanX 按含保本总笔数加权，meanY 用 <code>overallAvgPnl</code>（wins+losses 分母，不含保本），相关系数轻微失真</td>
+          <td class="ev">L1246: meanY = overallAvgPnl（非含保本口径）</td>
+          <td>meanY 改为 <code>overallPnl / totalTrades</code>（与 meanX 同用含保本分母）</td>
+          <td>代码审查 + 口径推演：分母统一为总笔数 ✅</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>二、逐模块核对：确认无类似错误的项</h2>
+    <table>
+      <thead><tr><th>模块</th><th>核对项</th><th>结论</th></tr></thead>
+      <tbody>
+        <tr><td rowspan="7">风控中心<br><code>risk.js</code></td>
+          <td>账户概览保证金 <code>positionSize/leverage</code>（positionSize = 名义价值 USDT，与计算器口径一致）</td><td class="ok">✓ 正确</td></tr>
+        <tr><td>现货（leverage=0）保证金 = 仓位本身（BUG-7 修复沿用）</td><td class="ok">✓ 正确</td></tr>
+        <tr><td>强平价 <code>calcLiquidationPrice</code> 统一入口（entry/direction/leverage/mmr），风险中心与仪表盘同公式</td><td class="ok">✓ 正确</td></tr>
+        <tr><td>回撤监控用 <code>calcEquityCurve</code>（不吃 capital 快照，资金变化不回填历史）</td><td class="ok">✓ 正确</td></tr>
+        <tr><td>日亏损边界严格大于（今日盈亏 &gt; 上限才预警），与 checkDailyLossLimit 熔断同口径</td><td class="ok">✓ 正确</td></tr>
+        <tr><td>杠杆 5 桶全覆盖：1x 现货 / 2-20x / 21-50x / 51-100x / 100x+</td><td class="ok">✓ 正确</td></tr>
+        <tr><td>组合热量 <code>calcPortfolioHeat</code>（名义×止损距离/入场）与熔断「热量超限禁止开新仓」联动（实测 10%&gt;6% 触发）</td><td class="ok">✓ 正确</td></tr>
+        <tr><td rowspan="6">统计分析<br><code>stats.js</code> + <code>analytics.js</code></td>
+          <td>胜率分母全站统一：保本计入分母（P1-2 修复已覆盖各图表）</td><td class="ok">✓ 正确</td></tr>
+        <tr><td>日盈亏/月度聚合按 closeTime 本地日期，周几映射 Mon=0 正确</td><td class="ok">✓ 正确</td></tr>
+        <tr><td>持仓时长分箱边界（0-15m/15m-1h/…/&gt;1d）无重叠无遗漏</td><td class="ok">✓ 正确</td></tr>
+        <tr><td>成本侵蚀 Σ费用优先 realizedFee、回退 item.fee（上轮 P1 修复保持）</td><td class="ok">✓ 正确</td></tr>
+        <tr><td>心态/执行分/市场环境分组均含样本门槛与保本口径</td><td class="ok">✓ 正确</td></tr>
+        <tr><td>权益曲线连续累加索引对位、回撤 max/min 正确</td><td class="ok">✓ 正确</td></tr>
+        <tr><td rowspan="5">复盘中心<br><code>review.js</code></td>
+          <td>全部图表消费 <code>isClosedTrade</code>（排除中间态，与日志链一致）</td><td class="ok">✓ 正确</td></tr>
+        <tr><td>亏损原因/入场原因/情绪多标签按原因展开（单笔可重复计入已注明）</td><td class="ok">✓ 正确</td></tr>
+        <tr><td>执行评分：0=未评分跳过、1-3 分组、vs 整体偏差计算</td><td class="ok">✓ 正确</td></tr>
+        <tr><td>策略排名按总盈亏排序、样本不足（&lt;3）标注</td><td class="ok">✓ 正确</td></tr>
+        <tr><td>策略提示：偏差 ≥10% 且样本 ≥3 才出结论</td><td class="ok">✓ 正确</td></tr>
+        <tr><td rowspan="3">系统设置<br><code>settings.js</code></td>
+          <td>loadSettings 双级兜底 + 缓存；SETTINGS_VALIDATORS 覆盖全部数值字段</td><td class="ok">✓ 正确</td></tr>
+        <tr><td>品种管理保存/删除/去重、datalist 同步</td><td class="ok">✓ 正确</td></tr>
+        <tr><td>CSV/JSON 导入数值归一化、迁移入口（v2 现金滑点不伪造 ticks）</td><td class="ok">✓ 正确</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>三、低优先级建议（未修改，标注口径）</h2>
+    <ul>
+      <li><code>utils.js</code> <code>isClosedTrade</code> 存在两处内容一致的重复定义（L16/L238）——无害，可后续合并。</li>
+      <li><code>logs.js</code> <code>storeMAEMFE</code> 对 <code>''</code> 空串不防御，mae 可能被 NaN 污染——真实交易流程正常，防御性补丁可后续加。</li>
+      <li><code>modals.js</code> <code>emRecalc</code> 的 <code>effectiveEntryPrice</code> 未 parseFloat——字符串参与乘法会被强转，结果正确，仅类型不干净。</li>
+      <li><code>stats.js</code> 年化收益用短跨度（&lt;30 天）放大倍数过大——建议后续加最小跨度门槛。</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>四、数据流与修复点定位</h2>
+    <div class="flow">
+      <span class="node">风控中心</span><span class="arrow">→</span>
+      <span class="node">账户概览</span><span class="arrow">margin=名义/杠杆 ✓</span>
+      <span class="node">日亏损</span><span class="arrow">边界严格&gt; ✓</span>
+      <span class="node">回撤</span><span class="arrow">equityCurve ✓</span>
+      <span class="node">强平距离</span><span class="arrow" style="color:var(--red);">✱ 加权止损修复</span>
+      <span class="node">集中度</span><span class="arrow" style="color:var(--red);">✱ 阈值读设置修复</span>
+      <span class="node">频率</span><span class="arrow">活跃日口径 ✓</span>
+      <span class="node">组合热量</span><span class="arrow">熔断联动 ✓</span>
+    </div>
+    <div class="flow" style="margin-top:10px;">
+      <span class="node">系统设置</span><span class="arrow" style="color:var(--red);">✱ importSettings 覆盖修复</span>
+      <span class="node">→ loadSettings 缓存</span><span class="arrow">✓</span>
+      <span class="node">→ 计算器/风控/规划器</span>
+    </div>
+    <div class="note">✱ = 本轮修复点。全部修复不触碰：开仓计算管线、平仓生命周期、日志保存/编辑链、数据迁移。</div>
+  </div>
+
+  <div class="card">
+    <h2>五、验证方式与结果</h2>
+    <ul>
+      <li><b>静态</b>：node --check risk.js / settings.js / analytics.js ✅</li>
+      <li><b>回归</b>：verify_fix.js 47/47 PASS（平仓三态/凯利/胜率分母全链）+ smoke.js 24 文件加载 ALL PASS ✅</li>
+      <li><b>浏览器实测 4 项</b>：加权止损 58181.82；集中度 33% 在 30% 上限告警、50% 上限不告警；importSettings 合并 riskPercent 2→7；组合热量熔断 10%&gt;6% 触发 ✅</li>
+      <li>测试数据已清理（localStorage 置空），不影响用户实际数据。</li>
+    </ul>
+  </div>
+</div>
+</body>
+</html>
