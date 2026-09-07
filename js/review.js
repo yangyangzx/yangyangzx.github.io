@@ -452,7 +452,7 @@ function renderExecutionQuality(closed) {
   var keys = Object.keys(execStats).map(Number).sort(function(a, b) { return a - b; });
   if (keys.length === 0) {
     var totalClosed = closed.length;
-    var withExec = closed.filter(function(l) { return l.executionScore != null; }).length;
+    var withExec = closed.filter(function(l) { return l.executionScore != null && l.executionScore > 0; }).length;
     var msg = '暂无执行评分数据';
     if (totalClosed > 0) {
       msg += '（共 ' + totalClosed + ' 笔已平仓，其中 ' + withExec.length + ' 笔有执行评分[1-3]）';

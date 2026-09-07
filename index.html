@@ -18,19 +18,19 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <link rel="stylesheet" href="css/variables.css">
-  <link rel="stylesheet" href="css/base.css">
-  <link rel="stylesheet" href="css/calculator.css">
-  <link rel="stylesheet" href="css/table.css">
-  <link rel="stylesheet" href="css/modals.css">
-  <link rel="stylesheet" href="css/responsive.css">
-  <link rel="stylesheet" href="css/layout.css">
-  <link rel="stylesheet" href="css/dashboard.css">
-  <link rel="stylesheet" href="css/planner.css">
-  <link rel="stylesheet" href="css/risk.css">
-  <link rel="stylesheet" href="css/analytics.css">
-  <link rel="stylesheet" href="css/review.css">
-  <link rel="stylesheet" href="css/settings.css">
+  <link rel="stylesheet" href="css/variables.css?v=5.0">
+  <link rel="stylesheet" href="css/base.css?v=5.0">
+  <link rel="stylesheet" href="css/calculator.css?v=5.0">
+  <link rel="stylesheet" href="css/table.css?v=5.0">
+  <link rel="stylesheet" href="css/modals.css?v=5.0">
+  <link rel="stylesheet" href="css/responsive.css?v=5.0">
+  <link rel="stylesheet" href="css/layout.css?v=5.0">
+  <link rel="stylesheet" href="css/dashboard.css?v=5.0">
+  <link rel="stylesheet" href="css/planner.css?v=5.0">
+  <link rel="stylesheet" href="css/risk.css?v=5.0">
+  <link rel="stylesheet" href="css/analytics.css?v=5.0">
+  <link rel="stylesheet" href="css/review.css?v=5.0">
+  <link rel="stylesheet" href="css/settings.css?v=5.0">
 </head>
 <body>
 <nav id="mainNav" role="navigation" aria-label="主导航">
@@ -1214,14 +1214,5 @@
 <script src="js/version.js?v=5.0"></script>
 
   <div id="toastContainer" style="position:fixed;top:24px;right:24px;z-index:400;display:flex;flex-direction:column;gap:8px;pointer-events:none;"></div>
-
-  <script>
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./service-worker.js', { scope: './' })
-        .then(function(reg) { console.log('[SW] 已注册:', reg.scope); })
-        .catch(function(err) { console.warn('[SW] 注册失败:', err); });
-    }
-  </script>
-
 
 </html>

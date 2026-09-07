@@ -283,19 +283,5 @@ window.debugAnalysisData = function() {
 };
 
 // ==================== Service Worker 更新通知 ====================
-(function _initSWUpdate() {
-  if (!navigator.serviceWorker) return;
-  navigator.serviceWorker.ready.then(function(reg) {
-    if (!reg.waiting) return;
-    // 有新版本等待激活，提示用户刷新
-    if (confirm('发现新版本，是否立即刷新以获取最新内容？')) {
-      reg.waiting.postMessage({ type: 'SKIP_WAITING' });
-      window.location.reload();
-    }
-  }).catch(function(err) { console.warn('[SW] update check failed:', err); });
-
-  navigator.serviceWorker.addEventListener('controllerchange', function() {
-    // SW 控制器变更，页面已自动更新
-    showToast('系统已更新至最新版本', 'success');
-  });
-})();
+// 2026-09-07：service-worker.js 已移除（纯静态应用无需离线缓存），
+// 原注册/更新检测逻辑一并删除，避免 404 与死代码。
