@@ -2,19 +2,28 @@
 // 独立于 DOMContentLoaded，页面随时可调用
 var ThemeManager = (function() {
   var THEME_KEY = 'user_theme_v1';
+  var MANUAL_FLAG_KEY = 'user_theme_manual_v1';
 
-  // 从 localStorage 加载主题，或根据系统偏好自动选择
+  // 根据本地时间判断时段：6:00-18:00 浅色，其余深色
+  function getTimeBasedTheme() {
+    var hour = new Date().getHours();
+    return (hour >= 6 && hour < 18) ? 'light' : 'dark';
+  }
+
+  // 从 localStorage 加载主题：手动 > 系统偏好 > 时间自动 > 暗色兜底
   function loadPreferredTheme() {
-    // 优先读取用户手动设置
-    var saved = localStorage.getItem(THEME_KEY);
-    if (saved === 'light' || saved === 'dark') {
-      return saved;
+    var isManual = localStorage.getItem(MANUAL_FLAG_KEY) === 'true';
+    if (isManual) {
+      var saved = localStorage.getItem(THEME_KEY);
+      if (saved === 'light' || saved === 'dark') {
+        return saved;
+      }
     }
-    // 其次检查系统偏好（prefers-color-scheme）
+    // 无手动标记时：优先系统偏好，其次时间，最后暗色兜底
     if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
       return 'light';
     }
-    return 'dark'; // 默认深色
+    return getTimeBasedTheme();
   }
 
   function applyTheme(theme) {
@@ -30,6 +39,8 @@ var ThemeManager = (function() {
   function toggle() {
     var current = document.documentElement.getAttribute('data-theme');
     var newTheme = current === 'light' ? 'dark' : 'light';
+    // 手动切换时写入标记，阻止后续时间逻辑覆盖
+    localStorage.setItem(MANUAL_FLAG_KEY, 'true');
     applyTheme(newTheme);
     return newTheme;
   }
