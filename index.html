@@ -53,13 +53,13 @@
     <a class="nav-item" data-view="journal">
       <i class="fas fa-history"></i> <span>交易日志</span>
     </a>
-    <a class="nav-item" data-view="risk">
+    <a class="nav-item" data-view="risk" style="--nav-hue: 25">
       <i class="fas fa-shield-alt"></i> <span>风控中心</span>
     </a>
     <a class="nav-item" data-view="analytics">
       <i class="fas fa-chart-line"></i> <span>统计分析</span>
     </a>
-    <a class="nav-item" data-view="review">
+    <a class="nav-item" data-view="review" style="--nav-hue: 158">
       <i class="fas fa-clipboard-check"></i> <span>复盘中心</span>
     </a>
     <a class="nav-item" data-view="settings">
@@ -68,12 +68,35 @@
   </div>
   <div class="nav-footer">
     <div class="nav-version">v5.0-beta</div>
-    <!-- 主题切换滑动开关 -->
-    <label class="theme-toggle-switch" title="切换主题" aria-label="切换深色/浅色主题">
-      <i class="fas fa-sun"></i>
+    <!-- 主题切换开关（Uiverse swift_9148 spark-switch） -->
+    <label class="spark-switch" title="切换主题" aria-label="切换深色/浅色主题">
       <input type="checkbox" id="themeToggleCheckbox">
-      <span class="slider"></span>
-      <i class="fas fa-moon"></i>
+      <span class="track">
+        <span class="stars">
+          <span class="star"></span>
+          <span class="star"></span>
+          <span class="star"></span>
+          <span class="star"></span>
+        </span>
+        <span class="knob">
+          <svg class="knob-icon icon-sun" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="5"/>
+            <g stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <line x1="12" y1="1.5" x2="12" y2="4"/>
+              <line x1="12" y1="20" x2="12" y2="22.5"/>
+              <line x1="1.5" y1="12" x2="4" y2="12"/>
+              <line x1="20" y1="12" x2="22.5" y2="12"/>
+              <line x1="4.6" y1="4.6" x2="6.4" y2="6.4"/>
+              <line x1="17.6" y1="17.6" x2="19.4" y2="19.4"/>
+              <line x1="4.6" y1="19.4" x2="6.4" y2="17.6"/>
+              <line x1="17.6" y1="6.4" x2="19.4" y2="4.6"/>
+            </g>
+          </svg>
+          <svg class="knob-icon icon-moon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>
+          </svg>
+        </span>
+      </span>
     </label>
   </div>
 </nav>
@@ -136,7 +159,7 @@
           <span class="badge-soft"><i class="far fa-clock"></i> 实时 · 动态风控</span>
         </div>
 
-        <div class="mindset-reminder"><i class="fas fa-lightbulb reminder-icon"></i> 【有情绪是正常的，请不要被情绪所驱动，作出破坏规则的交易。】</div>
+        <div class="mindset-reminder"><i class="fas fa-lightbulb reminder-icon"></i> <span class="reminder-text">【有情绪是正常的，请不要被情绪所驱动，作出破坏规则的交易。】</span></div>
 
         <!-- 基础参数 -->
         <div class="form-section" id="sectionBasic">
