@@ -432,8 +432,13 @@ function calculate() {
         var bsl = b.stopLoss && !isNaN(parseFloat(b.stopLoss)) ? parseFloat(b.stopLoss) : stopLoss;
         if (direction === 'long' && bsl >= bp) { skippedCount++; continue; }
         if (direction === 'short' && bsl <= bp) { skippedCount++; continue; }
-        weightedStopPct += (Math.abs(bp - bsl) / bp) * ba;
-        totalAlloc += ba;
+        // P0-1 修复：各批止损距离(USDT)按仓位权重归一（仓位 ∝ alloc）。
+        // 原实现按"各批自身价百分比 × 全局价"中转，分母用各批 bp、还原乘全局 eff，
+        // 价格跨区间时基准混用致距离失真。归一后 stopDistance = Σ(dist_i·ba_i)/Σ(ba_i)。
+        // 注：此处 dist_i 仍按各批 bp 计算（未套主滑点 effectiveEntryPrice），因各批各自
+        // 成交价不同，逐批真实止损距离即 |bp-bsl|；这是分批独立止损的既有设计口径。
+        weightedStopPct += Math.abs(bp - bsl) * ba;   // Σ(dist_i · ba_i)，dist_i 为 USDT 距离
+        totalAlloc += ba;                              // Σ(ba_i)
       }
       if (skippedCount > 0 && totalAlloc === 0) {
         // 所有批次止损方向非法，回退使用主止损距离
@@ -442,9 +447,9 @@ function calculate() {
         // BUG-9 修复：跳过的批次不再占用比例，重新计算归一化权重
         rw = '<span class="warning-tag"><i class="fas fa-exclamation-circle"></i> 分批止损 ' + skippedCount + ' 批方向非法已跳过，使用剩余 ' + totalAlloc.toFixed(1) + '% 仓位加权计算。</span>';
       }
-      // BUG-9 修复：使用实际有效批次的总比例归一化，避免跳过批次稀释权重
+      // 各批止损距离(USDT)按仓位权重归一，得到整笔加权止损距离，直接用于仓位公式
       if (totalAlloc > 0 && weightedStopPct > 0) {
-        stopDistance = (weightedStopPct / totalAlloc) * effectiveEntryPrice;
+        stopDistance = weightedStopPct / totalAlloc;
         positionSize = riskAmount * effectiveEntryPrice / stopDistance;
         useWeightedStop = true;
       }
@@ -571,7 +576,8 @@ function calculate() {
     // MMR 从全局 settings 统一读取（百分比值需除以 100 转为小数）
     let mmr = 0.005; // 默认回退值
     var _settings = loadSettings();
-    if (_settings && _settings.mmr != null) mmr = _settings.mmr / 100;
+    // P2-14 修复：mmr 为 0/负值/缺失时回退默认 0.5%，避免 0 值导致强平价失去 MMR 缓冲（偏乐观）
+    if (_settings && Number.isFinite(_settings.mmr) && _settings.mmr > 0) mmr = _settings.mmr / 100;
 
     // P0-3 FIX: 分批建仓模式下，使用加权入场价计算强平价
     var _liqEntryPrice = effectiveEntryPrice;

@@ -270,6 +270,9 @@ function renderDrawdown(closedOverride) {
     equity = capital;
     peak = capital;
     for (var i = 0; i < closed.length; i++) {
+      // 与 calcEquityCurve 口径一致：balanceAdjustment（存取款）+ 已实现盈亏累加
+      var _adj = Number(closed[i].balanceAdjustment);
+      if (Number.isFinite(_adj) && _adj !== 0) equity += _adj;
       equity += parseFloat(closed[i].pnlAmount) || 0;
       if (equity > peak) peak = equity;
     }
@@ -363,7 +366,9 @@ function renderLiqTable() {
       continue;
     }
 
-    var safeDistance = Math.abs(stopLoss - liquidationPrice) / entryPrice * 100;
+    var safeDistance = Number.isFinite(liquidationPrice) && Number.isFinite(stopLoss) && entryPrice > 0
+      ? Math.abs(stopLoss - liquidationPrice) / entryPrice * 100
+      : NaN;
 
     rows.push({
       symbol: pos.symbol,
@@ -372,7 +377,9 @@ function renderLiqTable() {
       liquidationPrice: liquidationPrice,
       safeDistance: safeDistance,
       positionSize: pos.positionSize,
-      entryPrice: entryPrice
+      entryPrice: entryPrice,
+      // 强平价异常（NaN）时标记，渲染层显示 "—" 而非 "NaN%"
+      note: Number.isFinite(liquidationPrice) ? undefined : '强平价计算异常'
     });
   }
 
@@ -403,8 +410,8 @@ function renderLiqTable() {
     html += '<td>' + esc(r.symbol) + '</td>';
     html += '<td class="' + dirClass + '">' + dirLabel + '</td>';
     html += '<td>' + (r.stopLoss != null ? Number(r.stopLoss).toFixed(5) : '—') + '</td>';
-    html += '<td>' + r.liquidationPrice.toFixed(5) + '</td>';
-    html += '<td class="' + distClass + '">' + (r.note ? '方向错误' : r.safeDistance.toFixed(2) + '%') + '</td>';
+    html += '<td>' + (Number.isFinite(r.liquidationPrice) ? r.liquidationPrice.toFixed(5) : '—') + '</td>';
+    html += '<td class="' + distClass + '">' + (Number.isFinite(r.safeDistance) ? r.safeDistance.toFixed(2) + '%' : '—') + '</td>';
     html += '<td>' + (r.positionSize != null ? r.positionSize.toFixed(0) + ' U' : '—') + '</td>';
     html += '<td>' + (r.note ? '<span style="color:var(--color-danger);">' + esc(r.note) + '</span>' : '—') + '</td>';
     html += '</tr>';

@@ -436,6 +436,8 @@ function batchDelete() {
     _expandedRows.clear();
     openClosePanelIdx = -1;
     actionPanelIdx = -1;
+    // 日志顺序已重排，清除平仓面板"用户手动编辑价"标记（以旧索引为键，恢复后索引错位）
+    for (var k in _closePriceEdited) delete _closePriceEdited[k];
     renderLogs();
   }, function() {
     _commitPendingDelete();
@@ -483,7 +485,19 @@ function updateBackupTime() {
 }
 
 function clearLogs() {
-  if (confirm('确认清空所有日志？')) { logs = []; openClosePanelIdx = -1; saveLogs(); if (typeof renderDashboard === 'function') renderDashboard(); }
+  if (confirm('确认清空所有日志？')) {
+    logs = [];
+    openClosePanelIdx = -1;
+    actionPanelIdx = -1;
+    // P2 修复：清空后同步重置索引依赖型全局状态，避免后续操作引用过期索引
+    if (typeof _expandedRows !== 'undefined') _expandedRows.clear();
+    for (var _k in _closePriceEdited) delete _closePriceEdited[_k];
+    _batchMode = false;
+    if (window._selectedIndices) window._selectedIndices.clear();
+    if (typeof saveLogs === 'function') saveLogs();
+    if (typeof renderLogs === 'function') renderLogs();
+    if (typeof renderDashboard === 'function') renderDashboard();
+  }
 }
 
 // ==================== 日志列表过滤 ====================

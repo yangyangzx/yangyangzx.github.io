@@ -78,7 +78,8 @@ function calcPortfolioHeat() {
 function calcKelly(winRate, avgWin, avgLoss, accountSize, halfKelly, leverage) {
   if (halfKelly === undefined) halfKelly = true;
   if (leverage === undefined) leverage = 1;
-  if (winRate == null || winRate === undefined || !avgWin || !avgLoss || avgLoss <= 0) return null;
+  // P2 边界：avgWin/avgLoss 为 NaN 或 undefined 时无效；avgWin=0（全亏损样本）合法，公式仍成立（凯利→0）
+  if (winRate == null || winRate === undefined || isNaN(avgWin) || isNaN(avgLoss) || avgLoss <= 0) return null;
   if (winRate < 0 || winRate > 1) return null;
 
   // Kelly 公式：Kelly% = (WR × AvgWin - LR × AvgLoss) / AvgWin

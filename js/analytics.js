@@ -141,6 +141,12 @@ function renderEquityChart(closed) {
   // 检查设置中的 accountBalance 是否与推算值差异较大
   var _abSettings = null;
   try { _abSettings = loadSettings(); } catch(e) { console.error('[analytics]', e); }
+  // 曲线实际起点口径：calcEquityCurve 优先用 settings.accountBalance，其次首笔 capital。
+  // 提示文本必须与该优先级一致，否则用户看到"设置值 vs 日志推算值"却对不上曲线起点。
+  var _curveUsesSettings = !!( _abSettings && _abSettings.accountBalance > 0 );
+  var _noteSource = _curveUsesSettings
+    ? (_abSettings.accountBalance).toFixed(2)
+    : (capital > 0 ? capital.toFixed(2) : '0');
   var _noteEl = document.getElementById('equityBalanceNote');
   if (_abSettings && _abSettings.accountBalance > 0) {
     var _diff = Math.abs(_abSettings.accountBalance - capital);
@@ -152,7 +158,7 @@ function renderEquityChart(closed) {
         _noteEl.style.cssText = 'font-size:11px;color:var(--chart-canvas-text);margin-top:6px;text-align:right;';
         canvas.parentElement.appendChild(_noteEl);
       }
-      _noteEl.textContent = capital > 0 ? '设置中账户余额: ' + _abSettings.accountBalance.toFixed(2) + ' USDT（日志推算: ' + capital.toFixed(2) + ' USDT）' : '设置中账户余额: ' + _abSettings.accountBalance.toFixed(2) + ' USDT（日志中无 capital 数据，请在「系统设置」中保持一致）';
+      _noteEl.textContent = '设置中账户余额: ' + _abSettings.accountBalance.toFixed(2) + ' USDT（曲线以此为准 · 日志推算: ' + (capital > 0 ? capital.toFixed(2) : '无') + ' USDT）';
     } else if (_noteEl) {
       _noteEl.remove();
     }

@@ -41,7 +41,7 @@ function _fmtUSDT(val) {
  * 格式化百分比
  */
 function _fmtPct(val) {
-  if (val == null || isNaN(val)) return '—';
+  if (val == null || !isFinite(val)) return '—';
   return val.toFixed(1) + '%';
 }
 
@@ -223,8 +223,9 @@ function _renderRiskExposure() {
   // P2-2 FIX：风险占比分母统一为账户本金（与组合热量/风控中心口径一致），
   // 阈值对齐 riskHeatMax（默认 6%）：≥80% 预警、≥100% 危险
   var capital = (typeof getAccountCapital === 'function') ? getAccountCapital() : null;
-  var riskPctDisplay = (totalRisk > 0 && capital > 0) ? ((totalRisk / capital) * 100).toFixed(1) : '—';
-  var riskNum = (totalRisk > 0 && capital > 0) ? parseFloat(riskPctDisplay) : 0;
+  // P1 修复：display 字符串与判断用的数值分离，避免 .toFixed(1) 再 parseFloat 的精度往返丢失
+  var riskNum = (totalRisk > 0 && capital > 0) ? (totalRisk / capital) * 100 : 0;
+  var riskPctDisplay = (totalRisk > 0 && capital > 0) ? riskNum.toFixed(1) : '—';
   var heatMax = 6;
   try {
     var _riskS = loadSettings();
