@@ -406,11 +406,11 @@ tbody tr:hover > td {
   justify-content: center;
   vertical-align: middle;
   margin-right: 3px;
-  padding: 6px 10px;
-  font-size: 11px;
-  border-radius: var(--radius-full);
-  min-height: 44px;
-  transition: transform var(--dur-fast) var(--ease-out), opacity var(--dur-fast) var(--ease-out); 
+  padding: 5px 12px;
+  font-size: var(--font-sm);
+  border-radius: var(--radius-sm);
+  min-height: 30px;
+  transition: transform var(--dur-fast) var(--ease-out), opacity var(--dur-fast) var(--ease-out);
 }
 
 .action-col .btn:last-child { 
@@ -449,7 +449,10 @@ tbody tr:hover > td {
   color: var(--color-text-inverse);
   border: none;
   font-weight: var(--font-weight-semibold);
-  padding: 3px 10px;
+  font-size: var(--font-sm);
+  padding: 5px 12px;
+  border-radius: var(--radius-sm);
+  min-height: 30px;
   box-shadow: var(--btn-success-shadow);
   transition: background-color var(--transition-normal), border-color var(--transition-normal), color var(--transition-normal), transform var(--transition-fast), box-shadow var(--transition-normal);
 }
@@ -468,7 +471,10 @@ tbody tr:hover > td {
   color: var(--color-text-inverse);
   border: none;
   font-weight: var(--font-weight-semibold);
-  padding: 3px 10px;
+  font-size: var(--font-sm);
+  padding: 5px 12px;
+  border-radius: var(--radius-sm);
+  min-height: 30px;
   box-shadow: var(--btn-warning-shadow);
   transition: background-color var(--transition-normal), border-color var(--transition-normal), color var(--transition-normal), transform var(--transition-fast), box-shadow var(--transition-normal);
 }
@@ -836,14 +842,14 @@ tbody tr:hover > td {
   font-size: 14px;
 }
 
-.batch-bar .batch-btn { 
-  padding: 6px 14px; 
-  border-radius: var(--radius-xs); 
-  border: none; 
-  cursor: pointer; 
-  font-size: 13px; 
-  font-weight: var(--font-weight-medium); 
-  transition: color var(--transition-fast), background-color var(--transition-fast); 
+.batch-bar .batch-btn {
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
+  border: none;
+  cursor: pointer;
+  font-size: var(--font-sm);
+  font-weight: var(--font-weight-medium);
+  transition: color var(--transition-fast), background-color var(--transition-fast);
 }
 
 /* §1: Instant :active */
