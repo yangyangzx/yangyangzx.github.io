@@ -403,30 +403,6 @@ function initMultiTPListeners() {
 // ==================== 检查清单 ====================
 
 /**
- * 读取设置中的当日亏损状态（用于新增的检查项）
- */
-function getTodayLossStatus() {
-  try {
-    var todayStr = window.utils.toLocalDateStr(new Date().toISOString());
-    var totalTodayLoss = 0;
-    // 统计今日所有已平仓的亏损（P0-1 一致性：部分平仓中间态记录跳过，
-    // 其已实现盈亏已计入最终平仓记录的整笔累计 pnlAmount，避免重复计数）
-    for (var i = 0; i < logs.length; i++) {
-      if (!window.utils.isClosedTrade(logs[i])) continue;
-      if (logs[i].closeType && logs[i].pnlAmount != null) {
-        var closeDate = window.utils.toLocalDateStr(logs[i].closeTime || logs[i].time);
-        if (closeDate === todayStr && logs[i].pnlAmount < 0) {
-          totalTodayLoss += parseFloat(logs[i].pnlAmount) || 0;
-        }
-      }
-    }
-    return { todayLoss: totalTodayLoss };
-  } catch(e) {
-    return { todayLoss: 0 };
-  }
-}
-
-/**
  * 更新开仓前检查清单（读取 _lastCalc）
  * 增强版：新增日亏损上限检查、心态评分检查，支持可配止损阈值，检查结果持久化至日志
  */
@@ -681,27 +657,6 @@ function refreshChecklistLabels() {
       ' · 组合热量 ≤ ' + (settings.riskHeatMax || 6) + '%';
     atrNote.style.display = 'block';
   } catch(e) { console.error('[planner] refreshChecklistLabels atrNote error:', e); }
-}
-
-function updateCheckItem(itemId, checkFn) {
-  var item = document.getElementById(itemId);
-  if (!item) return;
-  var icon = item.querySelector('.check-icon');
-  var result = checkFn();
-
-  if (result === null) {
-    icon.textContent = '—';
-    icon.className = 'check-icon skipped';
-    item.classList.remove('fail-row');
-  } else if (result) {
-    icon.textContent = '✓';
-    icon.className = 'check-icon pass';
-    item.classList.remove('fail-row');
-  } else {
-    icon.textContent = '✗';
-    icon.className = 'check-icon fail';
-    item.classList.add('fail-row');
-  }
 }
 
 // 杠杆输入框默认值：从设置中读取 defaultLeverage

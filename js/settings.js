@@ -39,12 +39,12 @@ var SETTINGS_VALIDATORS = {
   maxDrawdownAlert:{ min: 5,     max: 50,        label: '最大回撤告警' },
   defaultLeverage: { min: 1,     max: 125,       label: '默认杠杆' },
   mmr:             { min: 0.1,   max: 5,         label: '维持保证金率' },
-  backupCount:     { min: 3,     max: 50,        label: '备份份数' },
+  backupCount:     { min: 3,     max: 50,        label: '备份份数', integer: true },
   atrDefaultMultiplier: { min: 0.5, max: 5,      label: 'ATR 默认倍数' },
   portfolioHeatMax:{ min: 5,     max: 20,        label: '组合热量上限' },
   minRRRatio:      { min: 1,     max: 5,         label: '最低盈亏比' },
   singleSymbolMaxPct: { min: 5, max: 50,        label: '单品种最大占比' },
-  dailyTradeMax:   { min: 5,     max: 30,        label: '日最大交易笔数' },
+  dailyTradeMax:   { min: 5,     max: 30,        label: '日最大交易笔数', integer: true },
   riskHeatMax:     { min: 3,     max: 15,        label: '组合热量安全上限' }
   // customStopLimit 和 mindsetMinScore 不需要简单的数值验证，特殊处理
 };
@@ -152,7 +152,11 @@ function saveSettings() {
   var settings = loadSettings();
 
   // ✅ 保存品种管理（从 settings UI 编辑）
-  if (typeof saveCustomSymbols === 'function') saveCustomSymbols();
+  // quiet=true：本调用被 saveSettings 串联，成功提示由下方「设置已保存」统一给出。
+  // 必须检查返回值——此处若因配额耗尽失败，后面的主设置写入必然同样失败，
+  // 不中止就会连弹两条「存储空间不足」，且旧实现下本函数成功/失败都返回 undefined，
+  // 无法区分。
+  if (typeof saveCustomSymbols === 'function' && !saveCustomSymbols(true)) return;
 
   // 读取 + 验证（原有字段）
   var fields = [
@@ -162,7 +166,7 @@ function saveSettings() {
     { key: 'maxDrawdownAlert',id: 'setMaxDrawdownAlert',parser: parseFloat },
     { key: 'defaultLeverage', id: 'setDefaultLeverage', parser: parseFloat },
     { key: 'mmr',             id: 'setMmr',             parser: parseFloat },
-    { key: 'backupCount',     id: 'setBackupCount',     parser: parseInt },
+    { key: 'backupCount',     id: 'setBackupCount',     parser: parseFloat },
     // ✅ Skills 融合字段：接入同一校验循环（原先仅判 NaN 后直接赋值，可写入越界值）
     { key: 'atrDefaultMultiplier', id: 'setAtrMultiplier',        parser: parseFloat },
     { key: 'portfolioHeatMax',     id: 'setPortfolioHeatMax',     parser: parseFloat },
@@ -182,6 +186,12 @@ function saveSettings() {
       return;
     }
     var rule = SETTINGS_VALIDATORS[f.key];
+    // 计数语义字段（备份份数 / 日最大笔数）必须为整数。旧实现用 parseInt 静默截断
+    // （10.5 → 10），用户看不到自己填的值被改了；现在显式拒绝并提示。
+    if (rule.integer && val % 1 !== 0) {
+      showToast(rule.label + ' 需为整数（当前输入 ' + el.value + '）', 'error');
+      return;
+    }
     if (val < rule.min || val > rule.max) {
       showToast(rule.label + ' 需在 ' + rule.min + ' ~ ' + rule.max + ' 之间', 'error');
       return;
@@ -193,8 +203,10 @@ function saveSettings() {
   // 与主字段校验一致：解析失败或越界均报错并拒绝保存，不做静默回退/钳位
   var mindsetEl = document.getElementById('setMindsetMinScore');
   if (mindsetEl) {
-    var msVal = parseInt(mindsetEl.value);
-    if (isNaN(msVal) || msVal < 1 || msVal > 5) {
+    // parseFloat + 显式整数校验：parseInt 会把 2.5 静默截成 2 并通过校验，
+    // 与下方提示语「需为 1–5 的整数」自相矛盾。
+    var msVal = parseFloat(mindsetEl.value);
+    if (isNaN(msVal) || msVal % 1 !== 0 || msVal < 1 || msVal > 5) {
       showToast('心态评分最低通过值需为 1–5 的整数', 'warn');
       return;
     }
@@ -567,19 +579,25 @@ function removeCustomSymbol(idx) {
   renderCustomSymbols();
 }
 
-function saveCustomSymbols() {
+// 返回值契约：true = 品种列表写入生效；false = 存储写入失败，调用方应中止后续保存。
+// 旧实现成功与失败都返回 undefined，saveSettings() 无从区分，配额耗尽时
+// 「品种列表」与「主设置」两处各弹一条错误，且用户会以为其余字段仍在保存中。
+// quiet=true 时抑制成功提示——被 saveSettings 串联调用时由下方「设置已保存」统一提示，
+// 避免两条成功 toast 叠加。
+function saveCustomSymbols(quiet) {
   var rows = document.querySelectorAll('#customSymbolsList .cs-symbol');
   var descs = document.querySelectorAll('#customSymbolsList .cs-desc');
   var symbols = [];
   rows.forEach(function(inp, i) {
     var sym = (inp.value || '').trim().toUpperCase();
-    var desc = (descs[i].value || '').trim();
+    var desc = (descs[i] && descs[i].value || '').trim();
     if (sym) symbols.push({ symbol: sym, desc: desc });
   });
   var settings = loadSettings();
   settings.customSymbols = symbols;
-  if (!_safeSetSettings(settings)) return;
+  if (!_safeSetSettings(settings)) return false;
   _clearSettingsCache();
   syncSymbolDatalist();
-  showToast('品种列表已保存', 'success');
+  if (!quiet) showToast('品种列表已保存', 'success');
+  return true;
 }

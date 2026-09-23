@@ -149,6 +149,13 @@
     h += T('低价品种 tick 小于价格', getTickSize('SHIB', 0.05) < 0.05);
     h += T('中价品种 tick 合理(0.3)', getTickSize('WIF', 0.3) < 0.001 && getTickSize('WIF', 0.3) > 1e-7);
     h += T('未传价格时不产生 0/负值', getTickSize('ZZZ') > 0);
+    // token 精确匹配（2026-09-23）：旧实现用 upper.includes(key) 子串匹配，
+    // SOLANA 命中 SOL、ETHEREUM 命中 ETH、DOGE1000 命中 DOGE，拿错 tick 直接放大滑点估算。
+    h += T('交易所后缀格式仍命中映射（BTCUSDT）', getTickSize('BTCUSDT') === 0.1);
+    h += T('合约写法仍命中映射（XRP-USDC-PERP）', getTickSize('XRP-USDC-PERP') === 0.0001);
+    h += T('斜杠写法仍命中映射（ETH/USDC）', getTickSize('ETH/USDC') === 0.01);
+    h += T('SOLANA 不再误判为 SOL', getTickSize('SOLANA', 150) === getTickSize('__UNMAPPED__', 150));
+    h += T('ETHEREUM 不再误判为 ETH', getTickSize('ETHEREUM', 3000) !== 0.01);
     h += T('SHIB 滑点不再产生负成交价',
       Slippage.applyAdversePrice(0.05, 'short', 2, getTickSize('SHIB', 0.05), 'entry').filledPrice > 0);
 

@@ -629,7 +629,7 @@ function renderPortfolioHeat(closedOverride) {
   var heatPct = Math.min(heat / (maxHeat * 1.5) * 100, 100);
 
   var html = '<div class="risk-alert-row"><span class="risk-stat-label">当前组合热量</span><span class="risk-stat-value ' + (isBlocked ? 'risk-danger' : (heat > maxHeat * 0.8 ? 'risk-warn' : 'risk-safe')) + '">' + heat.toFixed(1) + '%</span></div>';
-  html += '<div class="risk-alert-row"><span class="risk-sub">安全上限 ' + maxHeat + '%（总开口风险占本金）</span></div>';
+  html += '<div class="risk-alert-row"><span class="risk-sub">安全上限 ' + maxHeat + '%（已开持仓风险之和占本金，不含待开仓位）</span></div>';
   html += '<div class="risk-progress-wrap"><span style="font-size:12px;color:var(--color-text-muted);">' + (isBlocked ? '热量超限，禁止开新仓' : '热量 ' + heat.toFixed(1) + '% / 上限 ' + maxHeat + '%（' + heatPct.toFixed(0) + '%）') + '</span>';
   html += '<div class="risk-progress-bar"><div class="risk-progress-fill ' + fillClass + '" style="width:' + heatPct + '%;"></div></div></div>';
 

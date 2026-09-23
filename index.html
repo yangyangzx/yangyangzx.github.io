@@ -19,19 +19,19 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <link rel="stylesheet" href="css/variables.css?v=5.2">
-  <link rel="stylesheet" href="css/base.css?v=5.2">
-  <link rel="stylesheet" href="css/calculator.css?v=5.2">
-  <link rel="stylesheet" href="css/table.css?v=5.2">
-  <link rel="stylesheet" href="css/modals.css?v=5.2">
-  <link rel="stylesheet" href="css/responsive.css?v=5.2">
-  <link rel="stylesheet" href="css/layout.css?v=5.2">
-  <link rel="stylesheet" href="css/dashboard.css?v=5.2">
-  <link rel="stylesheet" href="css/planner.css?v=5.2">
-  <link rel="stylesheet" href="css/risk.css?v=5.2">
-  <link rel="stylesheet" href="css/analytics.css?v=5.2">
-  <link rel="stylesheet" href="css/review.css?v=5.2">
-  <link rel="stylesheet" href="css/settings.css?v=5.2">
+  <link rel="stylesheet" href="css/variables.css?v=5.3">
+  <link rel="stylesheet" href="css/base.css?v=5.3">
+  <link rel="stylesheet" href="css/calculator.css?v=5.3">
+  <link rel="stylesheet" href="css/table.css?v=5.3">
+  <link rel="stylesheet" href="css/modals.css?v=5.3">
+  <link rel="stylesheet" href="css/responsive.css?v=5.3">
+  <link rel="stylesheet" href="css/layout.css?v=5.3">
+  <link rel="stylesheet" href="css/dashboard.css?v=5.3">
+  <link rel="stylesheet" href="css/planner.css?v=5.3">
+  <link rel="stylesheet" href="css/risk.css?v=5.3">
+  <link rel="stylesheet" href="css/analytics.css?v=5.3">
+  <link rel="stylesheet" href="css/review.css?v=5.3">
+  <link rel="stylesheet" href="css/settings.css?v=5.3">
 </head>
 <body>
 <nav id="mainNav" role="navigation" aria-label="主导航">
@@ -68,7 +68,7 @@
     </a>
   </div>
   <div class="nav-footer">
-    <div class="nav-version">v5.2-beta</div>
+    <div class="nav-version">v5.3-beta</div>
     <!-- 主题切换开关（Uiverse swift_9148 spark-switch） -->
     <label class="spark-switch" title="切换主题">
       <!-- aria-label 加在 input 上才产生可访问名（加在 label 上不生效）；
@@ -1121,7 +1121,7 @@
           <div class="setting-row">
             <label>组合热量安全上限 (%)</label>
             <input type="number" id="setRiskHeatMax" min="3" max="15" step="1" value="6">
-            <span class="setting-hint">所有未平仓持仓风险之和占本金的最大百分比</span>
+            <span class="setting-hint">已开持仓风险之和占本金的上限；不含本次待开仓位（单笔风险见「单笔风险比例」）</span>
           </div>
           <div class="setting-row">
             <label>组合热量警告上限 (%)</label>
@@ -1215,30 +1215,30 @@
 
 </main>
 
-  <script src="js/constants.js?v=5.2"></script>
-  <script src="js/utils.js?v=5.2"></script>
-  <script src="js/toast.js?v=5.2"></script>
-  <script src="js/slippage.js?v=5.2"></script>
-  <script src="js/storage.js?v=5.2"></script>
-  <script src="js/skills-integration.js?v=5.2"></script>
-  <script src="js/calculation-ui.js?v=5.2"></script>
-  <script src="js/calculator.js?v=5.2"></script>
-  <script src="js/logs.js?v=5.2"></script>
-  <script src="js/rendering.js?v=5.2"></script>
-  <script src="js/stats.js?v=5.2"></script>
-  <script src="js/modals.js?v=5.2"></script>
-  <script src="js/navigation.js?v=5.2"></script>
-  <script src="js/dashboard.js?v=5.2"></script>
-  <script src="js/planner.js?v=5.2"></script>
-  <script src="js/settings.js?v=5.2"></script>
-  <script src="js/risk.js?v=5.2"></script>
-  <script src="js/chart-factory.js?v=5.2"></script>
-  <script src="js/analytics.js?v=5.2"></script>
-  <script src="js/review.js?v=5.2"></script>
-  <script src="js/io.js?v=5.2"></script>
-  <script src="js/dom-cache.js?v=5.2"></script>
-  <script src="js/app.js?v=5.2"></script>
-<script src="js/version.js?v=5.2"></script>
+  <script src="js/constants.js?v=5.3"></script>
+  <script src="js/utils.js?v=5.3"></script>
+  <script src="js/toast.js?v=5.3"></script>
+  <script src="js/slippage.js?v=5.3"></script>
+  <script src="js/storage.js?v=5.3"></script>
+  <script src="js/skills-integration.js?v=5.3"></script>
+  <script src="js/calculation-ui.js?v=5.3"></script>
+  <script src="js/calculator.js?v=5.3"></script>
+  <script src="js/logs.js?v=5.3"></script>
+  <script src="js/rendering.js?v=5.3"></script>
+  <script src="js/stats.js?v=5.3"></script>
+  <script src="js/modals.js?v=5.3"></script>
+  <script src="js/navigation.js?v=5.3"></script>
+  <script src="js/dashboard.js?v=5.3"></script>
+  <script src="js/planner.js?v=5.3"></script>
+  <script src="js/settings.js?v=5.3"></script>
+  <script src="js/risk.js?v=5.3"></script>
+  <script src="js/chart-factory.js?v=5.3"></script>
+  <script src="js/analytics.js?v=5.3"></script>
+  <script src="js/review.js?v=5.3"></script>
+  <script src="js/io.js?v=5.3"></script>
+  <script src="js/dom-cache.js?v=5.3"></script>
+  <script src="js/app.js?v=5.3"></script>
+<script src="js/version.js?v=5.3"></script>
 
   <div id="toastContainer" style="position:fixed;top:24px;right:24px;z-index:400;display:flex;flex-direction:column;gap:8px;pointer-events:none;"></div>
 

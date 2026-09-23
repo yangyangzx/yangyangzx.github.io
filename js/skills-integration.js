@@ -5,6 +5,16 @@
  * 计算组合热量（Portfolio Heat）
  * 返回当前未平仓持仓的总风险占比百分比
  * 使用实际止损距离重新计算每笔风险，而非依赖存储的 riskAmount（防止止损调整后低估风险）
+ *
+ * 口径说明（有意为之，勿当作 bug 修正）：
+ * 只统计**已持久化的在仓持仓**（getOpenPositions() → logs），**不含**调用方正在待开的
+ * 仓位——待开仓位存在 _lastCalcStore，与本函数无交集。所以这是一道
+ * 「已开持仓已过热就别再加仓」的门，不是「含本仓的总热量上限」。
+ * 本次待开仓位的单笔风险由 riskPercent（single-risk-exceeds-limit）与保证金 80%/90%
+ * 上限分别约束。UI 文案（index.html 设置页 riskHeatMax 提示、下方 renderPortfolioHeat
+ * 卡片副标题）已同步为「已开持仓」口径，避免与实现不符。
+ * 若要改成含本仓，需重排 calculator.js 门链：热量检查当前执行在仓位规模计算之前，
+ * 此时 riskAmount 尚未产出。见记忆 tradingdiscipline-v53-optimization.md。
  */
 function calcPortfolioHeat() {
   var openPositions = getOpenPositions();
@@ -309,23 +319,6 @@ function checkDailyTradeFrequency() {
     ? '今日已开仓 ' + todayCount + ' 笔，达到上限 ' + maxCount + ' 笔，建议停止交易'
     : '今日已开仓 ' + todayCount + ' 笔，建议最多 ' + maxCount + ' 笔';
   return { todayCount: todayCount, maxCount: maxCount, blocked: blocked, suggestion: suggestion };
-}
-
-/**
- * 生成综合风控检查报告
- */
-function generateRiskCheckReport() {
-  var settings = loadSettings();
-  var mindsetScore = parseInt(document.getElementById('mindsetScore').value) || 3;
-  var minScore = settings.mindsetMinScore != null ? settings.mindsetMinScore : 3;
-
-  return {
-    portfolioHeat: calcPortfolioHeat(),
-    dailyLoss: checkDailyLossLimit(),
-    mindset: getMindsetAdjustment(mindsetScore),
-    dailyFrequency: checkDailyTradeFrequency(),
-    settings: settings
-  };
 }
 
 /**

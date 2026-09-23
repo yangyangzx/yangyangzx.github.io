@@ -287,12 +287,19 @@ document.addEventListener('DOMContentLoaded', function() {
   var toggle = document.getElementById('navMobileToggle');
   var nav = document.getElementById('mainNav');
   var overlay = document.getElementById('navMobileOverlay');
+  // 真正的滚动容器是 #mainContent（layout.css 中 overflow-y:auto），不是 body：
+  // html,body 均为 height:100%，body 没有 overflow-y。旧实现只锁 body，抽屉打开时
+  // 背景内容仍可滚动，用户会划出抽屉范围、看到被 overlay 盖住的内容在动。
+  // closeMobileNav 在点击 toggle / 点击 overlay / 切换视图(≤768) / 窗口放大(>768)
+  // 四条路径都会被调用，故溢出恢复覆盖全部关闭路径。
+  var _drawerScroll = document.getElementById('mainContent');
   function openMobileNav() {
     if (!toggle || !nav) return;
     toggle.classList.add('open');
     nav.classList.add('open');
     if (overlay) overlay.classList.add('show');
-    document.body.style.overflow = 'hidden';
+    if (_drawerScroll) _drawerScroll.style.overflowY = 'hidden';
+    document.body.style.overflow = 'hidden';   // 兜底：极端情况下 body 可能参与滚动
     toggle.setAttribute('aria-expanded', 'true');
   }
   function closeMobileNav() {
@@ -300,6 +307,7 @@ document.addEventListener('DOMContentLoaded', function() {
     toggle.classList.remove('open');
     nav.classList.remove('open');
     if (overlay) overlay.classList.remove('show');
+    if (_drawerScroll) _drawerScroll.style.overflowY = '';
     document.body.style.overflow = '';
     toggle.setAttribute('aria-expanded', 'false');
   }
