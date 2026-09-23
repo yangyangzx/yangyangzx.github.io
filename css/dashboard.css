@@ -211,6 +211,8 @@
   flex-direction: column;
   gap: 6px;
   font-size: var(--font-sm);
+  max-height: 240px;
+  overflow-y: auto;
 }
 
 .liq-item {

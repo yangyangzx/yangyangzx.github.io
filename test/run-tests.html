@@ -35,6 +35,7 @@
 <script src="../js/slippage.js"></script>
 <script src="../js/skills-integration.js"></script>
 <script src="../js/calculator.js"></script>
+<script src="../js/risk.js"></script>
 <script>
 (function() {
   // ---- 环境 mock（与生产隔离） ----
@@ -138,17 +139,42 @@
     var cHuge = StorageSecurity.checkCapacity(1e9);
     h += T('超限数据被拒绝', cHuge.canWrite === false);
 
-    // ---- 8. TICK_SIZE_MAP 品种覆盖 ----
+    // ---- 8. TICK_SIZE_MAP 品种覆盖 + 未映射品种的价格自适应兜底 ----
     h += group('8. tick size 映射');
     h += T('BTC=0.1', getTickSize('BTC') === 0.1);
     h += T('XRP=0.0001（新增）', getTickSize('XRP') === 0.0001);
-    h += T('未知品种兜底 0.1', getTickSize('ZZZ') === 0.1);
+    // P0 回归：原实现未知品种兜底 0.1，SHIB(0.05) 会算出负成交价并 throw，永久卡死 _calculating。
+    // 现按价格量级估算，1 tick ≈ 价格的 1e-5。
+    h += T('未知品种不再固定 0.1', getTickSize('ZZZ') !== 0.1);
+    h += T('低价品种 tick 小于价格', getTickSize('SHIB', 0.05) < 0.05);
+    h += T('中价品种 tick 合理(0.3)', getTickSize('WIF', 0.3) < 0.001 && getTickSize('WIF', 0.3) > 1e-7);
+    h += T('未传价格时不产生 0/负值', getTickSize('ZZZ') > 0);
+    h += T('SHIB 滑点不再产生负成交价',
+      Slippage.applyAdversePrice(0.05, 'short', 2, getTickSize('SHIB', 0.05), 'entry').filledPrice > 0);
 
     // ---- 9. 保存门与组合视图存在性 ----
     h += group('9. assertSavableCalculation / renderPortfolioRisk');
     h += T('calculator.js 可独立加载（无 CalculationUI 不崩）', typeof assertSavableCalculation === 'function');
     h += T('空态保存门安全返回', typeof assertSavableCalculation === 'function' && assertSavableCalculation().ok === false);
     h += T('renderPortfolioRisk 已定义', typeof renderPortfolioRisk === 'function');
+
+    // ---- 10. 在仓口径统一（2026-09-23 开仓逻辑审计 P1）----
+    // risk.js 曾以裸标识符 util.isClosedTrade 判定，而全局只有 window.utils（复数）——
+    // typeof util 恒为 undefined，getOpenPositions() 的权威分支在生产从未执行，
+    // partialTP/reducePosition 剩余仓位被排除在保证金占用 / 集中度 / 组合热量 / 强平监控之外。
+    h += group('10. 在仓口径统一 getOpenPositions / isTradeStillOpen');
+    h += T('统一入口 isTradeStillOpen 已定义', typeof isTradeStillOpen === 'function');
+    window.logs = [
+      { closeType: '', pnlAmount: null, positionSize: 1000, leverage: 10 },
+      { closeType: 'partialTP', closes: [{ratio:50}], closedRatio: 50, pnlAmount: 5, positionSize: 100, leverage: 10 },
+      { closeType: 'partialTP', closes: [{ratio:100}], closedRatio: 100, pnlAmount: 5, positionSize: 0, leverage: 10 },
+      { closeType: 'takeProfit', pnlAmount: -50, positionSize: 500, leverage: 10 }
+    ];
+    var _openPos = getOpenPositions();
+    h += T('partialTP 50% 剩余仓位计入在仓（修复前被排除）', _openPos.length === 2);
+    h += T('在仓集合内不存在已平仓记录', _openPos.every(function(p) { return isTradeStillOpen(p); }));
+    h += T('calculator.js 在仓过滤与 risk.js 同口径',
+      window.logs.filter(isTradeStillOpen).length === _openPos.length);
 
     document.getElementById('out').innerHTML = h;
     var sum = document.getElementById('summary');

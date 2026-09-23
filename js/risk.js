@@ -27,11 +27,13 @@ function getAccountCapital() {
 function getOpenPositions() {
   var open = [];
   for (var i = 0; i < logs.length; i++) {
-    if (typeof util !== 'undefined' && typeof util.isClosedTrade === 'function') {
-      if (!util.isClosedTrade(logs[i])) open.push(logs[i]);
-    } else {
-      if (!logs[i].closeType || logs[i].closeType === '') open.push(logs[i]);
-    }
+    // P1 FIX（2026-09-23 开仓逻辑审计）：原以裸标识符 util.isClosedTrade 判定，
+    // 但全局只有 window.utils（复数）—— typeof util 恒为 undefined，本分支在生产从未执行，
+    // 本函数实际一直走 else，把 partialTP/reducePosition 剩余仓位判为「已平」，
+    // 从而排除在组合热量 / 集中度 / 强平预警 / 保证金占用之外。语义（见上方注释）
+    // 与实际执行长期不符。改走统一入口 isTradeStillOpen（constants.js），
+    // 与 dashboard.js / logs.js / planner.js / calculator.js 同口径。
+    if (isTradeStillOpen(logs[i])) open.push(logs[i]);
   }
   return open;
 }

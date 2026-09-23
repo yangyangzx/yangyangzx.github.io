@@ -2,7 +2,8 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+  <!-- 允许用户缩放（WCAG 1.4.4）；viewport-fit=cover 使 env(safe-area-inset-*) 生效 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="theme-color" content="#0f1419" media="(prefers-color-scheme: dark)">
   <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -18,19 +19,19 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <link rel="stylesheet" href="css/variables.css?v=5.0">
-  <link rel="stylesheet" href="css/base.css?v=5.0">
-  <link rel="stylesheet" href="css/calculator.css?v=5.0">
-  <link rel="stylesheet" href="css/table.css?v=5.0">
-  <link rel="stylesheet" href="css/modals.css?v=5.0">
-  <link rel="stylesheet" href="css/responsive.css?v=5.0">
-  <link rel="stylesheet" href="css/layout.css?v=5.0">
-  <link rel="stylesheet" href="css/dashboard.css?v=5.0">
-  <link rel="stylesheet" href="css/planner.css?v=5.0">
-  <link rel="stylesheet" href="css/risk.css?v=5.0">
-  <link rel="stylesheet" href="css/analytics.css?v=5.0">
-  <link rel="stylesheet" href="css/review.css?v=5.0">
-  <link rel="stylesheet" href="css/settings.css?v=5.0">
+  <link rel="stylesheet" href="css/variables.css?v=5.2">
+  <link rel="stylesheet" href="css/base.css?v=5.2">
+  <link rel="stylesheet" href="css/calculator.css?v=5.2">
+  <link rel="stylesheet" href="css/table.css?v=5.2">
+  <link rel="stylesheet" href="css/modals.css?v=5.2">
+  <link rel="stylesheet" href="css/responsive.css?v=5.2">
+  <link rel="stylesheet" href="css/layout.css?v=5.2">
+  <link rel="stylesheet" href="css/dashboard.css?v=5.2">
+  <link rel="stylesheet" href="css/planner.css?v=5.2">
+  <link rel="stylesheet" href="css/risk.css?v=5.2">
+  <link rel="stylesheet" href="css/analytics.css?v=5.2">
+  <link rel="stylesheet" href="css/review.css?v=5.2">
+  <link rel="stylesheet" href="css/settings.css?v=5.2">
 </head>
 <body>
 <nav id="mainNav" role="navigation" aria-label="主导航">
@@ -44,33 +45,35 @@
     </div>
   </div>
   <div class="nav-menu">
-    <a class="nav-item active" data-view="dashboard" aria-current="page">
+    <a class="nav-item active" href="#dashboard" tabindex="0" role="link" data-view="dashboard" aria-current="page">
       <i class="fas fa-tachometer-alt"></i> <span>仪表盘</span>
     </a>
-    <a class="nav-item" data-view="planner">
+    <a class="nav-item" href="#planner" tabindex="0" role="link" data-view="planner">
       <i class="fas fa-calculator"></i> <span>开仓计划</span>
     </a>
-    <a class="nav-item" data-view="journal">
+    <a class="nav-item" href="#journal" tabindex="0" role="link" data-view="journal">
       <i class="fas fa-history"></i> <span>交易日志</span>
     </a>
-    <a class="nav-item" data-view="risk" style="--nav-hue: 25">
+    <a class="nav-item" href="#risk" tabindex="0" role="link" data-view="risk" style="--nav-hue: 25">
       <i class="fas fa-shield-alt"></i> <span>风控中心</span>
     </a>
-    <a class="nav-item" data-view="analytics">
+    <a class="nav-item" href="#analytics" tabindex="0" role="link" data-view="analytics">
       <i class="fas fa-chart-line"></i> <span>统计分析</span>
     </a>
-    <a class="nav-item" data-view="review" style="--nav-hue: 158">
+    <a class="nav-item" href="#review" tabindex="0" role="link" data-view="review" style="--nav-hue: 158">
       <i class="fas fa-clipboard-check"></i> <span>复盘中心</span>
     </a>
-    <a class="nav-item" data-view="settings">
+    <a class="nav-item" href="#settings" tabindex="0" role="link" data-view="settings">
       <i class="fas fa-cog"></i> <span>系统设置</span>
     </a>
   </div>
   <div class="nav-footer">
-    <div class="nav-version">v5.0-beta</div>
+    <div class="nav-version">v5.2-beta</div>
     <!-- 主题切换开关（Uiverse swift_9148 spark-switch） -->
-    <label class="spark-switch" title="切换主题" aria-label="切换深色/浅色主题">
-      <input type="checkbox" id="themeToggleCheckbox">
+    <label class="spark-switch" title="切换主题">
+      <!-- aria-label 加在 input 上才产生可访问名（加在 label 上不生效）；
+           input 现为可见性隐藏而非 display:none，可聚焦，:focus-visible 规则可达 -->
+      <input type="checkbox" id="themeToggleCheckbox" role="switch" aria-label="切换深色/浅色主题" aria-checked="false">
       <span class="track">
         <span class="stars">
           <span class="star"></span>
@@ -790,7 +793,7 @@
             <th class="batch-col-th"><input type="checkbox" id="batchSelectAll" class="batch-checkbox" title="全选" /></th>
             <th style="width:32px;"></th>
       <th data-label="时间">时间</th><th data-label="品种">品种</th><th data-label="方向/状态">方向/状态</th>
-            <th data-label="入场价">入场价</th><th data-label="平仓价">平仓价</th><th style="min-width:100px;" data-label="盈亏">盈亏</th>
+            <th class="num" data-label="入场价">入场价</th><th class="num" data-label="平仓价">平仓价</th><th style="min-width:100px;" data-label="盈亏">盈亏</th>
             <th data-label="操作">操作</th>
           </tr>
         </thead>
@@ -798,13 +801,14 @@
           <tr><td colspan="9" class="empty"><div class="empty-icon"><i class="fas fa-chart-bar"></i></div><div class="empty-title">暂无交易记录</div><div class="empty-sub">填写上方计算器，点击「保存日志」开始</div></td></tr>
         </tbody>
       </table>
-    <!-- 批量操作栏 — 移入 table-wrap 内部，使 .batch-mode .batch-bar 选择器生效 -->
+    </div>
+    <!-- 批量操作栏 — 移出 table-wrap，避免随表格横向滚动或被 overflow-y:auto 截断；
+         .batch-mode 已改挂 #view-journal，.batch-mode .batch-bar 后代选择器依然命中 -->
     <div class="batch-bar" id="batchBar">
       <span class="batch-count" id="batchCount">已选 0 条</span>
       <button class="batch-btn batch-btn-primary" id="batchExportBtn"><i class="fas fa-file-code"></i> 批量导出</button>
       <button class="batch-btn batch-btn-danger" id="batchDeleteBtn"><i class="fas fa-trash"></i> 批量删除</button>
       <button class="batch-btn batch-btn-ghost" id="batchCancelBtn">取消</button>
-    </div>
     </div>
     <div style="margin-top:16px; display:flex; gap:12px; flex-wrap:wrap; align-items:center; justify-content:space-between;">
       <span style="font-size:12px; color:var(--color-text-muted); display:flex; align-items:center; gap:6px;">
@@ -1211,30 +1215,30 @@
 
 </main>
 
-  <script src="js/constants.js?v=5.0"></script>
-  <script src="js/utils.js?v=5.0"></script>
-  <script src="js/toast.js?v=5.0"></script>
-  <script src="js/slippage.js?v=5.0"></script>
-  <script src="js/storage.js?v=5.0"></script>
-  <script src="js/skills-integration.js?v=5.0"></script>
-  <script src="js/calculation-ui.js?v=5.0"></script>
-  <script src="js/calculator.js?v=5.0"></script>
-  <script src="js/logs.js?v=5.0"></script>
-  <script src="js/rendering.js?v=5.0"></script>
-  <script src="js/stats.js?v=5.0"></script>
-  <script src="js/modals.js?v=5.0"></script>
-  <script src="js/navigation.js?v=5.0"></script>
-  <script src="js/dashboard.js?v=5.0"></script>
-  <script src="js/planner.js?v=5.0"></script>
-  <script src="js/settings.js?v=5.0"></script>
-  <script src="js/risk.js?v=5.0"></script>
-  <script src="js/chart-factory.js?v=5.0"></script>
-  <script src="js/analytics.js?v=5.0"></script>
-  <script src="js/review.js?v=5.0"></script>
-  <script src="js/io.js?v=5.0"></script>
-  <script src="js/dom-cache.js?v=5.0"></script>
-  <script src="js/app.js?v=5.0"></script>
-<script src="js/version.js?v=5.0"></script>
+  <script src="js/constants.js?v=5.2"></script>
+  <script src="js/utils.js?v=5.2"></script>
+  <script src="js/toast.js?v=5.2"></script>
+  <script src="js/slippage.js?v=5.2"></script>
+  <script src="js/storage.js?v=5.2"></script>
+  <script src="js/skills-integration.js?v=5.2"></script>
+  <script src="js/calculation-ui.js?v=5.2"></script>
+  <script src="js/calculator.js?v=5.2"></script>
+  <script src="js/logs.js?v=5.2"></script>
+  <script src="js/rendering.js?v=5.2"></script>
+  <script src="js/stats.js?v=5.2"></script>
+  <script src="js/modals.js?v=5.2"></script>
+  <script src="js/navigation.js?v=5.2"></script>
+  <script src="js/dashboard.js?v=5.2"></script>
+  <script src="js/planner.js?v=5.2"></script>
+  <script src="js/settings.js?v=5.2"></script>
+  <script src="js/risk.js?v=5.2"></script>
+  <script src="js/chart-factory.js?v=5.2"></script>
+  <script src="js/analytics.js?v=5.2"></script>
+  <script src="js/review.js?v=5.2"></script>
+  <script src="js/io.js?v=5.2"></script>
+  <script src="js/dom-cache.js?v=5.2"></script>
+  <script src="js/app.js?v=5.2"></script>
+<script src="js/version.js?v=5.2"></script>
 
   <div id="toastContainer" style="position:fixed;top:24px;right:24px;z-index:400;display:flex;flex-direction:column;gap:8px;pointer-events:none;"></div>
 

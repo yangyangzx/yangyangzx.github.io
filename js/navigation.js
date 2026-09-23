@@ -16,8 +16,11 @@ var _currentView = 'planner';
 /**
  * 切换到指定视图
  * @param {string} viewName - dashboard | planner | journal | risk | analytics | review | settings
+ * @param {boolean} [writeHistory] - true: 用户主动导航（pushState，浏览器后退可回退视图）
+ *                                   false: popstate 回退触发（不写历史，避免 popstate→pushState 递归）
+ *                                   未传: 首次加载/深链（replaceState，不产生多余历史条目）
  */
-function switchView(viewName) {
+function switchView(viewName, writeHistory) {
   // 合法性检查
   if (!_viewMap[viewName]) {
     console.warn('[Navigation] 无效视图名:', viewName);
@@ -41,9 +44,16 @@ function switchView(viewName) {
   // 更新导航高亮
   updateNavActive(viewName);
 
-  // 更新 URL hash
+  // 更新 URL hash：
+  //  pushState 用于用户主动导航，使浏览器后退可回退视图；
+  //  replaceState 用于首次加载/深链，避免产生多余历史条目；
+  //  writeHistory === false 时完全不写（popstate 回退路径，写历史会造成递归）
   if (window.location.hash.substring(1) !== viewName) {
-    history.replaceState(null, '', '#' + viewName);
+    if (writeHistory === true) {
+      history.pushState(null, '', '#' + viewName);
+    } else if (writeHistory !== false) {
+      history.replaceState(null, '', '#' + viewName);
+    }
   }
 
   _currentView = viewName;
@@ -59,24 +69,29 @@ function switchView(viewName) {
   }
 
   // 切出非日志/统计视图时清除过滤器状态
+  // P2-5 FIX：复位为全空串对象（不是 {}，字段为 undefined 会让过滤判断走异常分支）
+  // 并同步下拉框 DOM——原实现只清 _activeFilters 对象，下拉框仍停在旧值（如 "BTC"），
+  // 表格显示全部但再动任意过滤器时旧条件会突然重新生效
   if (viewName !== 'journal' && viewName !== 'risk' && viewName !== 'analytics') {
-    window._activeFilters = {};
-  }
-
-  // 切出开仓计划时清理分批建仓残留状态，防止切换回来时历史数据干扰新计算
-  if (viewName !== 'planner') {
-    _splitMode = false;
-    _splitBatches = [];
-    persistSplitState();
+    _activeFilters = { direction: '', symbol: '', strategy: '', status: '', pnl: '', time: '' };
+    if (typeof syncFilterDOM === 'function') syncFilterDOM();
   }
 
   // 切回开仓计划时恢复分批建仓状态（从 localStorage 读取）
+  // P1-3 FIX：删除原"切出即清空 _splitMode/_splitBatches 并 persistSplitState"块——
+  // 它先把 localStorage 抹成空状态，紧接着的恢复块读到的正是刚被抹空的值（恢复逻辑实为死代码），
+  // 且切出期间 DOM 保持"分批开启"外观而引擎已按单笔计算（入场价取空 → NaN）。
+  // 分批状态应在 planner 生命周期内持续，仅由用户主动关闭（toggleSplitMode）或保存日志后
+  // 由 calculator.js 自行重置。此处仅在内存尚无状态时恢复，避免用 localStorage 里的旧值
+  // 覆盖切出期间用户刚输入、尚未 persistSplitState 的分批明细
   if (viewName === 'planner') {
     try {
       var _resumedSplit = JSON.parse(localStorage.getItem('trade_split_persist') || '{}');
-      _splitMode = !!_resumedSplit.mode;
-      _splitBatches = _resumedSplit.batches || [];
-    } catch(e) { _splitMode = false; _splitBatches = []; }
+      if ((!_splitMode || !_splitBatches.length) && _resumedSplit.mode && _resumedSplit.batches && _resumedSplit.batches.length) {
+        _splitMode = true;
+        _splitBatches = _resumedSplit.batches.slice();
+      }
+    } catch(e) { /* 忽略损坏的持久化数据，保持内存现状 */ }
   }
 
   // 切出仪表盘时销毁 equity 图表实例，防止重复创建累积内存
@@ -89,6 +104,11 @@ function switchView(viewName) {
 
   // 视图切换后的钩子：重新渲染该视图内的动态内容
   onViewActivated(viewName);
+
+  // P1-2 FIX：真正的滚动容器是 #mainContent（layout.css overflow-y:auto），
+  // 切换后必须回到顶部——否则新视图带着旧 scrollTop 出现，短视图下半页整片空白
+  var _main = document.getElementById('mainContent');
+  if (_main) _main.scrollTop = 0;
 }
 
 /**
@@ -105,6 +125,27 @@ function updateNavActive(viewName) {
       items[i].classList.remove('active');
       items[i].removeAttribute('aria-current');
     }
+  }
+}
+
+/**
+ * 同步分批建仓 UI 与引擎状态（_splitMode / _splitBatches）
+ * 只调整按钮/区域外观并重绘分批行，不改变状态本身（不调用 toggleSplitMode）。
+ */
+function syncSplitModeUI() {
+  var btn = document.getElementById('splitToggleBtn');
+  var area = document.getElementById('splitArea');
+  if (!btn || !area) return;
+  if (_splitMode) {
+    btn.classList.add('active');
+    btn.innerHTML = '<i class="fas fa-layer-group"></i> 关闭分批';
+    area.classList.add('open');
+    if (typeof renderSplitBatches === 'function') renderSplitBatches();
+    if (typeof updateSplitButtons === 'function') updateSplitButtons();
+  } else {
+    btn.classList.remove('active');
+    btn.innerHTML = '<i class="fas fa-layer-group"></i> + 分批建仓';
+    area.classList.remove('open');
   }
 }
 
@@ -126,6 +167,9 @@ function onViewActivated(viewName) {
   }
   // 开仓计划：初始化多止盈位事件监听
   if (viewName === 'planner') {
+    // P1-3 FIX：同步分批建仓 DOM 与引擎状态。分批状态跨视图切换保持（见 switchView），
+    // 原实现在切出时只清内存不动 DOM，切回后界面显示"分批开启"而引擎按单笔计算
+    syncSplitModeUI();
     if (typeof initMultiTPListeners === 'function') {
       initMultiTPListeners();
     }
@@ -186,16 +230,30 @@ document.addEventListener('DOMContentLoaded', function() {
   // 加载日志后自动填充凯利参数
   if (typeof autoFillKellyFromLogs === 'function') autoFillKellyFromLogs();
 
-  // 绑定导航点击事件
+  // 绑定导航事件
+  // P1-7 FIX：nav-item 补上 href="#view" 后进入 tab 序列（键盘可访问），需要：
+  //  - click 必须 preventDefault：否则浏览器会先走 href 的 hash 导航（触发 hashchange），
+  //    与点击处理器各调一次 switchView，一次点击产生两条 pushState 历史条目
+  //  - 补 keydown 键盘激活：Enter/Space 若不 preventDefault，href 锚点会触发页面跳转/滚动
+  function activateNav(viewName, e) {
+    if (e) e.preventDefault();
+    if (!viewName) return;
+    // 第二参 true：用户主动导航写入历史，浏览器后退可回退视图
+    switchView(viewName, true);
+  }
   var navItems = document.querySelectorAll('#mainNav .nav-item');
   for (var i = 0; i < navItems.length; i++) {
-    navItems[i].addEventListener('click', function(e) {
-      e.preventDefault();
-      var viewName = this.getAttribute('data-view');
-      if (viewName) {
-        switchView(viewName);
-      }
-    });
+    (function(item) {
+      var viewName = item.getAttribute('data-view');
+      item.addEventListener('click', function(e) {
+        activateNav(viewName, e);
+      });
+      item.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+          activateNav(viewName, e);
+        }
+      });
+    })(navItems[i]);
   }
 
   // URL hash 路由：读取初始 hash
@@ -208,10 +266,20 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   // 监听浏览器前进/后退
+  // P2-4 FIX：pushState 写入的历史条目在 popstate 时回退视图。
+  // pushState/replaceState 不触发 hashchange，后退/前进只触发 popstate，两者互不干扰；
+  // hashchange 分支保留，处理用户手改地址栏的场景。
   window.addEventListener('hashchange', function() {
     var newHash = window.location.hash.substring(1);
     if (newHash && _viewMap[newHash] && newHash !== _currentView) {
       switchView(newHash);
+    }
+  });
+  // 第二参 false：popstate 回退路径不再写历史，避免 popstate → pushState 递归
+  window.addEventListener('popstate', function() {
+    var v = (location.hash || '').replace('#', '');
+    if (v && _viewMap[v] && v !== _currentView) {
+      switchView(v, false);
     }
   });
 
@@ -245,8 +313,8 @@ document.addEventListener('DOMContentLoaded', function() {
   }
   // 切换视图后关闭移动端菜单
   var _origSwitchView = switchView;
-  window.switchView = function(viewName) {
-    _origSwitchView(viewName);
+  window.switchView = function(viewName, writeHistory) {
+    _origSwitchView(viewName, writeHistory);
     if (window.innerWidth <= 768) closeMobileNav();
   };
   // 窗口放大回桌面时重置状态

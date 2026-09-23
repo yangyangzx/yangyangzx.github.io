@@ -152,13 +152,42 @@ const TICK_SIZE_MAP = {
   'XRP': 0.0001, 'DOGE': 0.00001, 'BNB': 0.01, 'ADA': 0.0001, 'AVAX': 0.01
 };
 
-function getTickSize(symbol) {
-  if (!symbol) return 0.1;
-  const upper = symbol.toUpperCase();
+// P0 FIX（2026-09-23 开仓逻辑审计）：原实现未命中即兜底 0.1。TICK_SIZE_MAP 仅 9 个品种，
+// 而 #symbol 是自由文本输入——SHIB(0.05)/PEPE/TRX/USDC 等低价品种会拿到 0.1 的 tick，
+// 即每腿 200% 滑点，或直接让 applyAdversePrice 得到负价而 throw（曾永久卡死 _calculating）。
+// 现改为按价格量级估算：1 个 tick ≈ 价格的 1e-5（对齐主流交易所 4-6 位小数报价精度）。
+function guessTickSize(price) {
+  var p = Number(price);
+  if (!isFinite(p) || p <= 0) return 1e-6;
+  var raw = p * 1e-5;
+  var mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  var mult = Math.round(raw / mag);
+  if (!(mult > 0)) mult = 1;
+  return mult * mag;
+}
+
+function getTickSize(symbol, price) {
+  const upper = symbol ? symbol.toUpperCase() : '';
   for (const [key, value] of Object.entries(TICK_SIZE_MAP)) {
     if (upper.includes(key)) return value;
   }
-  return 0.1;
+  return guessTickSize(price);
+}
+
+// 持仓中（未全部平仓）的统一判定。
+// 权威实现是 utils.js 的 util.isClosedTrade，挂载为 window.utils（复数）；
+// partialTP / reducePosition 且累计平仓 < 99.999% 视为仍在仓。
+// P1 历史坑（2026-09-23 开仓逻辑审计）：risk.js 曾以裸标识符 util.isClosedTrade 调用，
+// 而全局只有 window.utils —— `typeof util` 恒为 undefined，该分支在生产从未执行，
+// getOpenPositions() 静默退化为「closeType 非空即已平」，把部分平仓的剩余仓位排除在
+// 保证金占用 / 集中度 / 组合热量 / 强平监控之外。测试曾以 `var util = window.utils`
+// 伪造别名，掩盖了这一点。dashboard/logs/planner 等模块用的是正确的 window.utils 形式。
+// 此处收口为单一入口，禁止各处自行改写判定。
+function isTradeStillOpen(item) {
+  if (typeof window.utils !== 'undefined' && typeof window.utils.isClosedTrade === 'function') {
+    return !window.utils.isClosedTrade(item);
+  }
+  return !item.closeType || item.closeType === '';
 }
 
 // ======== 计算配置常量 ========

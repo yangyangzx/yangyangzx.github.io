@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>开仓逻辑审计修复验证（2026-09-23）</title>
+<script src="../js/constants.js"></script>
+<script src="../js/utils.js"></script>
+<script src="../js/storage.js"></script>
+<script src="../js/slippage.js"></script>
+<script src="../js/skills-integration.js"></script>
+<script src="../js/calculator.js"></script>
+<script src="../js/risk.js"></script>
+</head>
+<body>
+<!--
+  2026-09-23 开仓逻辑审计的修复验证页。与 run-tests.html 的关系：
+  - run-tests.html 是回归套件（39 条断言），覆盖第 1/2/3/4/5 节所依赖的真实代码；
+  - 本页额外覆盖 modals.js 相关修复。modals.js 依赖完整 DOM 无法在最小环境下加载，
+    因此第 6/7/8/9 节内联复现了修复算法用于数值核验，**不是**对真实代码的回归测试，
+    代码改动后这些节不会自动失效——改动 modals.js/calculator.js 对应逻辑时请同步更新。
+-->
+<h2 style="font-size:14px;margin:8px 0;">
+  修复验证：第 1–5 节测真实代码；第 6–9 节为内联算法数值核验（非回归测试）
+</h2>
+<pre id="out"></pre>
+<script>
+var pass = 0, fail = 0;
+function T(name, cond, extra) {
+  if (cond) { pass++; } else { fail++; }
+  document.getElementById('out').textContent += (cond ? 'PASS ' : 'FAIL ') + name + (extra ? '  → ' + extra : '') + '\n';
+}
+
+// ---------- 1. P0: tick size 价格自适应 ----------
+var tsShib = getTickSize('SHIB', 0.05);
+var shibShort = Slippage.applyAdversePrice(0.05, 'short', 2, tsShib, 'entry').filledPrice;
+T('SHIB(0.05) tick 自适应不产生负价', shibShort > 0, 'tick=' + tsShib + ' filled=' + shibShort);
+var tsWif = getTickSize('WIF', 0.3);
+T('WIF(0.3) 每腿滑点 < 10% 价格', tsWif * 2 < 0.03, 'tick=' + tsWif);
+T('SHIB 相对滑点 < 1%（原 0.1 tick 为 200%）', tsShib / 0.05 < 0.01, (tsShib / 0.05 * 100).toFixed(3) + '%');
+T('映射品种不受影响 BTC', getTickSize('BTC', 60000) === 0.1);
+T('映射品种不受影响 ETH', getTickSize('ETH', 2000) === 0.01);
+T('无价格时兜底为正值', getTickSize('ZZZ') > 0);
+T('极端低价不产生 0/负 tick', getTickSize('XX', 0.000001) > 0);
+T('极高价不产生 0/负 tick', getTickSize('XX', 1e9) > 0);
+
+// ---------- 2. P2: Kelly 0/0 NaN 防护 ----------
+T('avgWin=0 → null（原为 NaN 穿透全部钳制）', calcKelly(1, 0, 100, 10000) === null);
+T('avgWin=0.5 半胜率 → null', calcKelly(0.5, 0, 100, 10000) === null);
+T('avgLoss<=0 仍为 null', calcKelly(0.6, 100, 0, 10000) === null);
+// 原始 Kelly = (0.55*100 - 0.45*60)/100 = 0.28，被 5%/杠杆 上限截断到 0.05
+var k1 = calcKelly(0.55, 100, 60, 10000);
+T('正常样本仍有效（非 NaN、非 null）', k1 !== null && isFinite(k1.kellyPct) && !isNaN(k1.halfKellyPct),
+  'kellyPct=' + (k1 && k1.kellyPct) + ' halfKellyPct=' + (k1 && k1.halfKellyPct));
+T('正常样本被 5% 杠杆感知上限截断', k1 !== null && Math.abs(k1.kellyPct - 0.05) < 1e-9 && k1.kellyCapped === true,
+  'kellyCapped=' + (k1 && k1.kellyCapped));
+T('正常样本半凯利同样被截断到 0.05', k1 !== null && Math.abs(k1.halfKellyPct - 0.05) < 1e-9);
+T('低于上限时不截断', Math.abs(calcKelly(0.51, 100, 98, 10000).kellyPct - 0.0298) < 1e-9 && calcKelly(0.51, 100, 98, 10000).kellyCapped === false, 'kellyPct=' + calcKelly(0.51, 100, 98, 10000).kellyPct);
+
+// ---------- 3. P1: 在仓口径统一（calculator.js 应与 risk.js 一致）----------
+var logs = [
+  { symbol: 'BTC', closeType: '', positionSize: 1000, leverage: 10, slippageCost: 1, fee: 2 },
+  { symbol: 'BTC', closeType: 'partialTP', closedRatio: 50, closes: [{ratio:50}], positionSize: 100, leverage: 10, slippageCost: 1, fee: 0.5, realizedFee: 0.5 },
+  { symbol: 'ETH', closeType: 'partialTP', closedRatio: 99.9995, closes: [{ratio:100}], pnlAmount: 4, positionSize: 0, leverage: 10 },
+  { symbol: 'ETH', closeType: 'takeProfit', pnlAmount: -50, positionSize: 500, leverage: 10 }
+];
+T('裸标识符 util 不存在（risk.js 踩过的坑）', typeof util === 'undefined', 'typeof util=' + typeof util);
+T('正确全局为 window.utils', typeof window.utils === 'object' && typeof window.utils.isClosedTrade === 'function');
+T('统一入口 isTradeStillOpen 已定义', typeof isTradeStillOpen === 'function');
+function closed(item) { return isTradeStillOpen(item); }
+var openByUtil = logs.filter(closed);
+T('权威口径判在仓数=2（未平 + partialTP50%）', openByUtil.length === 2, '实得 ' + openByUtil.length);
+T('reducePosition 未达 100% 仍在仓', closed({closeType:'reducePosition', closedRatio:30, closes:[{ratio:30}]}));
+T('closedRatio>=99.999 判已平', !closed({closeType:'partialTP', closedRatio:100, closes:[{ratio:100}], pnlAmount:4}));
+T('旧格式 partialTP 无 closes 视为在仓', closed({closeType:'partialTP', closedRatio:50}));
+
+// getOpenPositions() 回归：修复前静默走 else，把部分平仓剩余仓位判为「已平」
+logs = [
+  { closeType: '', positionSize: 1000, leverage: 10 },
+  { closeType: 'partialTP', closedRatio: 50, closes: [{ratio:50}], pnlAmount: 5, positionSize: 100, leverage: 10 },
+  { closeType: 'partialTP', closedRatio: 100, closes: [{ratio:100}], pnlAmount: 5, positionSize: 0, leverage: 10 },
+  { closeType: 'takeProfit', pnlAmount: -50, positionSize: 500, leverage: 10 }
+];
+var openPos = getOpenPositions();
+T('getOpenPositions 含 partialTP 50% 剩余仓位（修复前被排除）', openPos.length === 2, '实得 ' + openPos.length);
+T('getOpenPositions 排除已平仓', openPos.every(function(p){ return isTradeStillOpen(p); }));
+
+// ---------- 4. P2: 手动滑点空输入不再静默为 0 ----------
+var manualEmpty = Slippage.readPlanInput({ mode: 'manual', orderType: 'market', entryTicks: '', exitTicks: '' });
+T('手动模式空输入回退到默认 ticks', manualEmpty.entryTicks === 1 && manualEmpty.exitTicks === 1,
+  'entry=' + manualEmpty.entryTicks + ' exit=' + manualEmpty.exitTicks);
+var manualZero = Slippage.readPlanInput({ mode: 'manual', orderType: 'limit', entryTicks: '0', exitTicks: '1' });
+T('手动模式显式 0 仍尊重为 0', manualZero.entryTicks === 0 && manualZero.exitTicks === 1,
+  'entry=' + manualZero.entryTicks + ' exit=' + manualZero.exitTicks);
+var threwNaN = false;
+try { Slippage.readPlanInput({ mode: 'manual', orderType: 'market', entryTicks: 'abc', exitTicks: 0 }); }
+catch (e) { threwNaN = true; }
+T('手动模式非法值仍抛错（不被静默吞掉）', threwNaN);
+
+// ---------- 5. P2: stopType 直出值可解析为 stop 专用 ticks ----------
+T('stop-market 命中 stop 默认(2,2)', Slippage.getDefaultTicks('stop-market').entry === 2 && Slippage.getDefaultTicks('stop-market').exit === 2);
+T('stop-limit 命中 stop 默认(2,2)', Slippage.getDefaultTicks('stop-limit').entry === 2 && Slippage.getDefaultTicks('stop-limit').exit === 2);
+T('market 仍为 (1,1)', Slippage.getDefaultTicks('market').entry === 1 && Slippage.getDefaultTicks('market').exit === 1);
+T('limit 仍为 (0,1)', Slippage.getDefaultTicks('limit').entry === 0 && Slippage.getDefaultTicks('limit').exit === 1);
+T('未知类型仍回退 market', Slippage.getDefaultTicks('nonsense').entry === 1);
+
+// ---------- 6. P2: 分批单批亏损分母（bloss = bstopDist * bpos / bp）----------
+// 场景：b0=100/50%/止损90(d=10)，b1=60/50%/止损55(d=5)，wsd=7.5，eff=80，risk=100
+var eff = 80, wsd = 7.5, risk = 100;
+var cap = risk * eff / wsd;
+var batches = [{p:100, sl:90, a:50}, {p:60, sl:55, a:50}];
+var deviations = batches.map(function(b) {
+  var d = Math.abs(b.p - b.sl), ba = b.a / 100;
+  var bRisk = risk * ba, bpos = cap * ba;
+  var code = Math.min(bRisk, (d > 0 && b.p > 0) ? (d * bpos / b.p) : bRisk);   // 修复后（/bp）
+  var wrong = Math.min(bRisk, d > 0 ? (d * bpos / eff) : bRisk);                // 修复前（/eff）
+  return { code: code, wrong: wrong };
+});
+T('b1 修复后为真实值 44.44（原 33.33，低估 25%）', Math.abs(deviations[1].code - 44.444) < 0.01,
+  '修复后=' + deviations[1].code.toFixed(3) + ' 修复前=' + deviations[1].wrong.toFixed(3));
+T('b0 不受影响（bp=eff 情形）', Math.abs(deviations[0].code - 50) < 1e-6, deviations[0].code.toFixed(3));
+
+// ---------- 7. P1: partialRatio 幂等性（复现 saveEditLog 的还原逻辑）----------
+function applyPartial(item, partialRatio) {
+  item.partialRatio = partialRatio;
+  var origPos = parseFloat(item.positionSize) || 0;
+  var cumClosed = 0;
+  if (Array.isArray(item.closes)) cumClosed = item.closes.reduce(function(s, c) { return s + (parseFloat(c.ratio) || 0); }, 0);
+  if (!isFinite(cumClosed) || cumClosed <= 0) cumClosed = parseFloat(item.closedRatio) || 0;
+  if (!isFinite(cumClosed) || cumClosed < 0) cumClosed = 0;
+  if (cumClosed > 100) cumClosed = 100;
+  var fracNow = 1 - cumClosed / 100;
+  function anchor(current, initial, field) {
+    var base = parseFloat(initial);
+    if (!isFinite(base) || base <= 0) {
+      base = (fracNow > 0) ? (parseFloat(current) / fracNow) : (parseFloat(current) || 0);
+      if (isFinite(base) && base > 0) item[field] = base;
+    }
+    return base;
+  }
+  var basePos = anchor(item.positionSize, item.initialPositionSize, 'initialPositionSize');
+  item.positionSize = parseFloat((basePos * (1 - partialRatio / 100)).toFixed(2));
+  var baseRisk = anchor(item.riskAmount, item.initialRiskAmount, 'initialRiskAmount');
+  item.riskAmount = parseFloat((baseRisk * (1 - partialRatio / 100)).toFixed(2));
+  var baseMargin = anchor(item.actualMargin, item.initialMargin, 'initialMargin');
+  item.actualMargin = parseFloat((baseMargin * (1 - partialRatio / 100)).toFixed(2));
+  var baseFee = (parseFloat(item.fee) || 0) + (parseFloat(item.realizedFee) || 0);
+  item.fee = parseFloat((baseFee * (1 - partialRatio / 100)).toFixed(8));
+}
+// 场景 A：正常关闭流程已记录（initialPositionSize 存在，closedRatio=50）
+var recA = { positionSize: 500, initialPositionSize: 1000, riskAmount: 5, initialRiskAmount: 10,
+             actualMargin: 50, initialMargin: 100, fee: 0.5, realizedFee: 0.5, closedRatio: 50,
+             closes: [{ratio:50}], partialRatio: 50 };
+applyPartial(recA, 50);  // 用户不改值直接保存
+T('A: 不改值保存后 positionSize 不变（幂等）', recA.positionSize === 500, '得 ' + recA.positionSize);
+applyPartial(recA, 50);  // 再保存一次
+T('A: 第二次保存仍幂等', recA.positionSize === 500, '得 ' + recA.positionSize);
+applyPartial(recA, 50);  // 第三次
+T('A: 第三次仍幂等（原实现第三次会变 312.5）', recA.positionSize === 500, '得 ' + recA.positionSize);
+T('A: fee 幂等', recA.fee === 0.5, '得 ' + recA.fee);
+
+// 场景 A2：改比例应正确
+var recA2 = JSON.parse(JSON.stringify({ positionSize: 500, initialPositionSize: 1000, riskAmount: 5,
+  initialRiskAmount: 10, actualMargin: 50, initialMargin: 100, fee: 0.5, realizedFee: 0.5,
+  closedRatio: 50, closes: [{ratio:50}], partialRatio: 50 }));
+applyPartial(recA2, 80);
+T('A2: 改比例 50→80 后 positionSize=200（80% 已平）', recA2.positionSize === 200, '得 ' + recA2.positionSize);
+
+// 场景 B：编辑弹窗首次记录部分平仓（无 initialPositionSize，无 closes）
+var recB = { positionSize: 1000, riskAmount: 10, actualMargin: 100, fee: 1, closeType: 'partialTP' };
+applyPartial(recB, 50);
+var bFirst = recB.positionSize;
+applyPartial(recB, 50);
+applyPartial(recB, 50);
+T('B: 首次记录后连续保存不再累积腰斩', recB.positionSize === bFirst,
+  '首次=' + bFirst + ' 三次后=' + recB.positionSize);
+
+// ---------- 8. P1: splitEntries 形状对齐 ----------
+var splitEntries = [
+  { index: 1, price: 100, alloc: 50, positionSize: 100, fee: 0.1, slippageCost: 0.05, riskAmount: 5, label: '主', stopLoss: 90 },
+  { index: 2, price: 110, alloc: 50, positionSize: 100, fee: 0.1, slippageCost: 0.05, riskAmount: 5, label: '第2笔', stopLoss: 95 }
+];
+var weSum = 0, waSum = 0;
+for (var i = 0; i < splitEntries.length; i++) {
+  var wp = parseFloat(splitEntries[i].price), wa = parseFloat(splitEntries[i].alloc);
+  if (isFinite(wp) && wp > 0 && isFinite(wa) && wa > 0) { weSum += wp * wa; waSum += wa; }
+}
+var splitDetail = { entries: splitEntries, weightedEntry: waSum > 0 ? parseFloat((weSum / waSum).toFixed(5)) : null };
+T('写入形状可被读取端识别', Array.isArray(splitDetail.entries) && splitDetail.entries.length >= 2);
+T('加权入场价正确 (100+110)/2=105', splitDetail.weightedEntry === 105, '得 ' + splitDetail.weightedEntry);
+T('每批含 price/alloc/stopLoss', splitDetail.entries[0].price === 100 && splitDetail.entries[0].alloc === 50 && splitDetail.entries[0].stopLoss === 90);
+
+// ---------- 9. P2: 分批止损方向校验 ----------
+function checkStopDir(costsStop, effEntry, direction) {
+  if (costsStop == null || effEntry <= 0) return false;
+  return (direction === 'short') ? (costsStop > effEntry) : (costsStop < effEntry);
+}
+T('做多 止损<入场 合法', checkStopDir(90, 100, 'long'));
+T('做多 止损>入场 非法（原 Math.abs 静默通过）', !checkStopDir(110, 100, 'long'));
+T('做空 止损>入场 合法', checkStopDir(110, 100, 'short'));
+T('做空 止损<入场 非法', !checkStopDir(90, 100, 'short'));
+T('止损==入场 判非法', !checkStopDir(100, 100, 'long'));
+
+document.getElementById('out').textContent += '\n===== PASS=' + pass + ' FAIL=' + fail + ' =====';
+</script>
+</body>
+</html>

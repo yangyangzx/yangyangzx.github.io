@@ -1004,9 +1004,13 @@ button:disabled {
 
 /* 移动端触控优化 */
 @media (hover: none) and (pointer: coarse) {
-  /* 增大触控目标 */
-  button, .btn, .nav-item, input, select, textarea {
+  /* 增大触控目标 — checkbox/radio 豁免，避免撑乱行内排版 */
+  button, .btn, .nav-item, select, textarea,
+  input:not([type="checkbox"]):not([type="radio"]) {
     min-height: 44px;
+  }
+  /* 按钮保留最小宽度；输入框不强制最小宽度 */
+  button, .btn {
     min-width: 44px;
   }
   /* 禁用文本选中，避免误触 */

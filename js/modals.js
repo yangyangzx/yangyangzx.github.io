@@ -161,38 +161,8 @@ function openEditModal(idx) {
   var _pnlHasValue = item.closeType && item.closeType !== '' && item.pnlAmount != null && !isNaN(parseFloat(item.pnlAmount));
   window._emPnlManual = _pnlHasValue;  // 已平仓且 PnL 已有值 → 禁止自动重算覆盖
 
-  // Diff-based dirty detection: store initial values from DOM（必须在 emRecalc 之后捕获，因为 emRecalc 会覆写 PnL/R 字段）
-  const _emInitValues = {};
-  (function captureInit() {
-    const ids = ['emSymbol','emDirection','emOrderType','emEntryPrice','emStopLoss','emTargetPrice',
-      'emPositionSize','emLeverage','emRiskAmount','emStrategyFramework','emStrategyPattern',
-      'emCloseType','emClosePrice','emRMultiple','emPnlAmount','emPnlPercent','emFee','emSlippageCost',
-      'emCloseNote','emSession','emMarketCondition','emExitReason','emLowPrice','emHighPrice'];
-    ids.forEach(function(id) {
-      const el = document.getElementById(id);
-      if (el) _emInitValues[id] = el.value;
-    });
-    _emInitValues['emMindsetScore'] = window._emMindsetScore;
-    _emInitValues['emSignals'] = (function() {
-      const cbs = document.querySelectorAll('#emSignalGroup input[type="checkbox"]');
-      const arr = []; cbs.forEach(function(cb) { arr.push(cb.checked); }); return arr.join(',');
-    })();
-    _emInitValues['emExecScore'] = (document.getElementById('emExecPlanEntry')?.checked ? 1 : 0) +
-      (document.getElementById('emExecStopLoss')?.checked ? 1 : 0) +
-      (document.getElementById('emExecPlanExit')?.checked ? 1 : 0);
-    _emInitValues['emLossReason'] = (function() {
-      const cbs = document.querySelectorAll('#emLossReason input[type="checkbox"]');
-      const arr = []; cbs.forEach(function(cb) { arr.push(cb.checked ? cb.value : ''); }); return arr.join(',');
-    })();
-    _emInitValues['emEmotions'] = (function() {
-      const cbs = document.querySelectorAll('#emEmotions input[type="checkbox"]');
-      const arr = []; cbs.forEach(function(cb) { arr.push(cb.checked ? cb.value : ''); }); return arr.join(',');
-    })();
-    _emInitValues['emEntryReason'] = (function() {
-      const cbs = document.querySelectorAll('#emEntryReason input[type="checkbox"]');
-      const arr = []; cbs.forEach(function(cb) { arr.push(cb.checked ? cb.value : ''); }); return arr.join(',');
-    })();
-  })();
+  // Diff-based dirty detection: store initial values from DOM
+  // 捕获动作见下方 emRecalc(item) 之后——必须在 emRecalc 之后捕获，因为 emRecalc 会覆写 PnL/R 字段
 
   // Check dirty before close
   window.emCheckDirty = function() {
@@ -243,6 +213,40 @@ function openEditModal(idx) {
   emBindRecalc(item);
   // 初始渲染一次预览
   emRecalc(item);
+
+  // Diff-based dirty detection: 捕获初始值（必须在 emRecalc 之后，否则 _emInitValues 记录的是
+  // emRecalc 覆写前的空值，emCheckDirty 会把自动填充误判为"用户修改"，取消时误报未保存）
+  const _emInitValues = {};
+  (function captureInit() {
+    const ids = ['emSymbol','emDirection','emOrderType','emEntryPrice','emStopLoss','emTargetPrice',
+      'emPositionSize','emLeverage','emRiskAmount','emStrategyFramework','emStrategyPattern',
+      'emCloseType','emClosePrice','emRMultiple','emPnlAmount','emPnlPercent','emFee','emSlippageCost',
+      'emCloseNote','emSession','emMarketCondition','emExitReason','emLowPrice','emHighPrice'];
+    ids.forEach(function(id) {
+      const el = document.getElementById(id);
+      if (el) _emInitValues[id] = el.value;
+    });
+    _emInitValues['emMindsetScore'] = window._emMindsetScore;
+    _emInitValues['emSignals'] = (function() {
+      const cbs = document.querySelectorAll('#emSignalGroup input[type="checkbox"]');
+      const arr = []; cbs.forEach(function(cb) { arr.push(cb.checked); }); return arr.join(',');
+    })();
+    _emInitValues['emExecScore'] = (document.getElementById('emExecPlanEntry')?.checked ? 1 : 0) +
+      (document.getElementById('emExecStopLoss')?.checked ? 1 : 0) +
+      (document.getElementById('emExecPlanExit')?.checked ? 1 : 0);
+    _emInitValues['emLossReason'] = (function() {
+      const cbs = document.querySelectorAll('#emLossReason input[type="checkbox"]');
+      const arr = []; cbs.forEach(function(cb) { arr.push(cb.checked ? cb.value : ''); }); return arr.join(',');
+    })();
+    _emInitValues['emEmotions'] = (function() {
+      const cbs = document.querySelectorAll('#emEmotions input[type="checkbox"]');
+      const arr = []; cbs.forEach(function(cb) { arr.push(cb.checked ? cb.value : ''); }); return arr.join(',');
+    })();
+    _emInitValues['emEntryReason'] = (function() {
+      const cbs = document.querySelectorAll('#emEntryReason input[type="checkbox"]');
+      const arr = []; cbs.forEach(function(cb) { arr.push(cb.checked ? cb.value : ''); }); return arr.join(',');
+    })();
+  })();
   // 检测 PnL 是否被手动覆盖：比较 DOM 中的值与自动计算值
   // 如果用户之前手动填过 PnL/R，emRecalc 会覆盖 DOM，需要恢复用户的值
   var _pnlWasManual = false;
@@ -261,9 +265,11 @@ function openEditModal(idx) {
   updateCheckboxStyle();
 }
 
-function closeEditModal() {
-  if (window.emCheckDirty) window.emCheckDirty();
-  if (window._editDirty) {
+function closeEditModal(force) {
+  // force=true 仅在「保存成功」路径使用，跳过脏检查直接关闭；
+  // 其余调用点（✕ / 取消 / 点击遮罩）不传参，保留未保存确认语义。
+  if (!force && window.emCheckDirty) window.emCheckDirty();
+  if (!force && window._editDirty) {
     if (!confirm('有未保存的修改，确定关闭？')) return;
   }
   const modal = document.getElementById('editModal');
@@ -591,19 +597,46 @@ function saveEditLog(idx) {
     var partialRatio = ratioEl ? parseFloat(ratioEl.value) : NaN;
     if (!isNaN(partialRatio) && partialRatio > 0 && partialRatio < 100) {
       item.partialRatio = partialRatio;
+      // P1 FIX（2026-09-23 开仓逻辑审计）：原以「已被前次平仓削减过」的 positionSize 为基准
+      // 再乘 (1−ratio)。而 emPartialRatio 预填的正是 item.partialRatio —— 用户不改任何值直接
+      // 保存，positionSize / riskAmount / actualMargin / fee 就被重复削减一次（连存两次即腰斩），
+      // 而 pnlAmount 不动 → 盈亏与仓位脱节。
+      // 现锚定开仓原始仓位还原：优先 initialPositionSize（logs.js 关闭流程维护），
+      // 缺失时按真实累计平仓比例反推并一次性补写，此后每次保存均幂等。
       var origPos = parseFloat(item.positionSize) || 0;
-      var remainingPos = origPos * (1 - partialRatio / 100);
-      item.positionSize = parseFloat(remainingPos.toFixed(2));
+      // 真实累计平仓比例：closes[] 事件数组最可靠，其次 closedRatio
+      var cumClosed = 0;
+      if (Array.isArray(item.closes)) {
+        cumClosed = item.closes.reduce(function(s, c) { return s + (parseFloat(c.ratio) || 0); }, 0);
+      }
+      if (!isFinite(cumClosed) || cumClosed <= 0) cumClosed = parseFloat(item.closedRatio) || 0;
+      if (!isFinite(cumClosed) || cumClosed < 0) cumClosed = 0;
+      if (cumClosed > 100) cumClosed = 100;
+      var fracNow = 1 - cumClosed / 100;   // 当前剩余仓位占原始仓位的比例
+      var anchor = function(current, initial, field) {
+        var base = parseFloat(initial);
+        if (!isFinite(base) || base <= 0) {
+          base = (fracNow > 0) ? (parseFloat(current) / fracNow) : (parseFloat(current) || 0);
+          if (isFinite(base) && base > 0) item[field] = base;  // 一次性补写，保证后续幂等
+        }
+        return base;
+      };
+      var basePos = anchor(item.positionSize, item.initialPositionSize, 'initialPositionSize');
+      item.positionSize = parseFloat((basePos * (1 - partialRatio / 100)).toFixed(2));
       // 按比例缩减风险额与保证金
+      var baseRisk = anchor(item.riskAmount, item.initialRiskAmount, 'initialRiskAmount');
       if (!isNaN(item.riskAmount) && item.riskAmount != null) {
-        item.riskAmount = parseFloat((item.riskAmount * (1 - partialRatio / 100)).toFixed(2));
+        item.riskAmount = parseFloat((baseRisk * (1 - partialRatio / 100)).toFixed(2));
       }
+      var baseMargin = anchor(item.actualMargin, item.initialMargin, 'initialMargin');
       if (!isNaN(item.actualMargin) && item.actualMargin != null) {
-        item.actualMargin = parseFloat((item.actualMargin * (1 - partialRatio / 100)).toFixed(2));
+        item.actualMargin = parseFloat((baseMargin * (1 - partialRatio / 100)).toFixed(2));
       }
-      // P1-3 FIX：编辑部分平仓时同步缩减剩余 round-trip 费用，避免最终平仓重复扣费
+      // P1-3 FIX：编辑部分平仓时同步缩减剩余 round-trip 费用，避免最终平仓重复扣费。
+      // 原始费用 = 剩余 fee + 已平仓部分 realizedFee（logs.js 累加维护），无重复计算。
+      var baseFee = (parseFloat(item.fee) || 0) + (parseFloat(item.realizedFee) || 0);
       if (!isNaN(item.fee) && item.fee != null) {
-        item.fee = parseFloat((item.fee * (1 - partialRatio / 100)).toFixed(8));
+        item.fee = parseFloat((baseFee * (1 - partialRatio / 100)).toFixed(8));
       }
     } else {
       delete item.partialRatio;
@@ -781,7 +814,8 @@ function saveEditLog(idx) {
   if (typeof renderDashboard === 'function') renderDashboard();
   // 刷新表格与统计数据（表格更新后再关闭弹窗，避免闪烁）
   if (typeof renderLogs === 'function') renderLogs();
-  closeEditModal();
+  // 保存成功路径：跳过脏检查，避免刚保存的值被判为"未保存修改"而二次弹窗
+  closeEditModal(true);
   return true;
 }
 window.saveEditLog = saveEditLog;
@@ -926,6 +960,7 @@ function doSaveSplit(calc, count) {
   });
 
   const splitEntries = [];
+  let _stopBadCount = 0;  // P2 FIX：止损方向与仓位方向相反的批次计数
   for (let i = 0; i < count; i++) {
     const isLast = (i === count - 1);
     const pos = isLast ? remainderPos : splitPos;
@@ -939,14 +974,29 @@ function doSaveSplit(calc, count) {
     // 与主计算器 positionSize × |entry − stopLoss| / entry 口径一致；
     // 无独立止损时自动退化为 calc.riskAmount / count 均分。
     const effEntry = calc.effectiveEntryPrice || calc.entryPrice;
-    const batchRisk = (costs.stopLoss != null && effEntry > 0)
+    // P2 FIX（2026-09-23 开仓逻辑审计）：原 Math.abs 吞掉方向，止损设在错误侧也照样算出
+    // "有效"风险额并落库（例如做多却填了高于入场价的止损价）。主计算器的分批路径已按方向
+    // 跳过非法批次（calculator.js skippedCount），此处对称校验：非法批次回退等分风险。
+    var _stopDirOk = false;
+    if (costs.stopLoss != null && effEntry > 0) {
+      _stopDirOk = (calc.direction === 'short') ? (costs.stopLoss > effEntry) : (costs.stopLoss < effEntry);
+      if (!_stopDirOk) _stopBadCount++;
+    }
+    const batchRisk = (_stopDirOk && effEntry > 0)
       ? pos * Math.abs(effEntry - costs.stopLoss) / effEntry
       : NaN;
     const risk = !isNaN(batchRisk) && batchRisk >= 0 ? batchRisk : (calc.riskAmount / count);
     const label = i === 0 ? '主' : ('第' + (i + 1) + '笔');
     const entry = makeEntry(pos, costs, risk, label, i);
+    // P1 FIX（2026-09-23 开仓逻辑审计）：补 price / alloc——读取端（编辑弹窗明细表）
+    // 按 e.price、e.alloc、e.stopLoss、se.weightedEntry 读取，原写入形状缺前两者。
+    var _b = splitBatches[i];
+    var _bPrice = (_b && !isNaN(parseFloat(_b.price))) ? parseFloat(_b.price) : (calc.entryPrice || null);
+    var _bAlloc = (_b && !isNaN(parseFloat(_b.alloc))) ? parseFloat(_b.alloc) : (100 / count);
     splitEntries.push({
       index: i + 1,
+      price: _bPrice,
+      alloc: _bAlloc,
       positionSize: parseFloat(pos.toFixed(2)),
       fee: parseFloat(costs.fee.toFixed(8)),
       slippageCost: parseFloat(costs.slippage.planning.totalCost.toFixed(8)),
@@ -958,13 +1008,31 @@ function doSaveSplit(calc, count) {
     logs.push(entry);
   }
   // F4: 将分批明细写入刚生成的条目（最后 count 条）
+  // P1 FIX：原直接写纯数组，而读取端（编辑弹窗 :38）要求 { entries:[...], weightedEntry }
+  // 对象 → 形状永不相等，saveSplit 生成的每笔记录分批明细在编辑弹窗中永不显示（死分支）。
+  var _weSum = 0, _waSum = 0;
+  for (var _wi = 0; _wi < splitEntries.length; _wi++) {
+    var _wp = parseFloat(splitEntries[_wi].price), _wa = parseFloat(splitEntries[_wi].alloc);
+    if (isFinite(_wp) && _wp > 0 && isFinite(_wa) && _wa > 0) { _weSum += _wp * _wa; _waSum += _wa; }
+  }
+  var splitDetail = {
+    entries: splitEntries,
+    weightedEntry: _waSum > 0
+      ? parseFloat((_weSum / _waSum).toFixed(5))
+      : (calc.weightedEntryPrice || calc.effectiveEntryPrice || null)
+  };
   for (var li = logs.length - count; li < logs.length; li++) {
-    if (logs[li]) logs[li].splitEntries = splitEntries;
+    if (logs[li]) logs[li].splitEntries = splitDetail;
   }
   if (!saveLogs()) {
     logs.splice(logs.length - count, count);
     showToast('拆分日志未保存：浏览器本地存储写入失败。', 'error');
     return false;
+  }
+  if (_stopBadCount > 0) {
+    showToast('分批建仓有 ' + _stopBadCount + ' 批止损价与'
+      + (calc.direction === 'short' ? '做空' : '做多')
+      + '方向相反，该批已按等分风险保存，请检查止损价设置。', 'warn');
   }
   openClosePanelIdx = -1;
   actionPanelIdx = -1;

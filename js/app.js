@@ -32,8 +32,14 @@ var ThemeManager = (function() {
     var checkbox = document.getElementById('themeToggleCheckbox');
     if (checkbox) {
       checkbox.checked = isDark;
+      // role="switch" 必须保持 aria-checked 与实际状态同步（深色 = checked）
+      checkbox.setAttribute('aria-checked', isDark ? 'true' : 'false');
     }
     localStorage.setItem(THEME_KEY, theme);
+    // P2-6 FIX：派发事件通知图表重绘——Chart.js 只在 new Chart() 时读取一次 CSS 变量，
+    // 主题切换不会自动重绘（--chart-tooltip-bg 暗色白底/浅色黑底，切换后 tooltip 与
+    // 卡片背景同色，悬停读数交互直接消失）
+    window.dispatchEvent(new CustomEvent('themechange', { detail: { theme: theme } }));
   }
 
   function toggle() {
@@ -69,6 +75,23 @@ if (document.readyState === 'loading') {
 } else {
   ThemeManager.init();
 }
+
+// ==================== 主题切换后重绘图表 ====================
+// P2-6 FIX：直接调用当前激活视图的渲染函数重绘（复用 onViewActivated 同一套逻辑）。
+// 只在视图已激活时执行，避免对隐藏视图做无意义的 0 尺寸图表渲染。
+// 三个 render 函数内部都会先销毁旧实例（destroyAnalyticsCharts / destroyReviewCharts /
+// _renderEquityChart 内同步 destroy），因此不会产生重复实例或内存泄漏。
+// 注册在顶层而非 DOMContentLoaded 内，确保初始主题应用（ThemeManager.init）也能触发。
+window.addEventListener('themechange', function() {
+  var v = (typeof getCurrentView === 'function') ? getCurrentView() : '';
+  if (v === 'dashboard' && typeof renderDashboard === 'function') {
+    renderDashboard();
+  } else if (v === 'analytics' && typeof renderAnalytics === 'function') {
+    renderAnalytics();
+  } else if (v === 'review' && typeof renderReview === 'function') {
+    renderReview();
+  }
+});
 
 // ==================== 初始化 ====================
 document.addEventListener('DOMContentLoaded', function() {
@@ -114,7 +137,13 @@ document.addEventListener('DOMContentLoaded', function() {
     if (e.target.type === 'checkbox') updateCheckboxStyle();
   });
 
-  var calcBtn = document.getElementById('calcBtn'); if (calcBtn) calcBtn.addEventListener('click', calculate);
+  // P2 FIX（2026-09-23 开仓逻辑审计）：原裸绑定 calculate。_calculating 在函数体中部才置位，
+  // 挡不住快速双击导致的重入；同时无 try/catch（现已由 calculate 内层兜底，此处再留一道）。
+  var calcBtn = document.getElementById('calcBtn');
+  if (calcBtn) calcBtn.addEventListener('click', function() {
+    if (window._calculating) return;   // 计算进行中，忽略重入点击
+    try { calculate(); } catch (e) { console.error('[calcBtn] 未捕获异常:', e); }
+  });
 
   // 亏损比例选择时更新金额提示
   var riskInputEl = document.getElementById('riskInput');
@@ -221,6 +250,9 @@ function onFilterChange() {
   openClosePanelIdx = -1;
   actionPanelIdx = -1;
   // BUG#10 修复：移除递归调用 _debouncedFilterChange，避免防抖嵌套导致延迟翻倍
+  // P1-1 FIX：防抖已在 _debouncedFilterChange 层合并，此处直接同步刷表即可，
+  // 不再二次防抖——原修复删掉递归调用时把唯一的触发点一起删了，导致改过滤器不刷表
+  if (typeof renderLogs === 'function') renderLogs();
 }
 
 function applyPreset(preset) {

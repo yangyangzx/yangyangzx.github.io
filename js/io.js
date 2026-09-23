@@ -9,8 +9,16 @@ function exportCSV() {
   window.__exportingCSV = true;
   try {
   const headers = ['时间','品种','方向','订单类型','入场价','有效入场价','止损价','目标价','仓位(USDT)','杠杆','风险额','本金','心态评分','形态/策略','信号K','交易时段','市场环境','平仓类型','平仓价','平仓时间','持仓时长(分钟)','R倍数','盈亏金额','盈亏百分比','MAE%','MFE%','执行评分','出场理由','亏损原因','交易情绪','平仓备注','入场原因','手续费','滑点成本','计算版本','滑点Schema','入场Ticks','退出Ticks','TickSize','计划有效退出价','GroupId','已实现盈亏','累计手续费','已平仓比例%','初始风险','初始仓位','平仓明细','部分平仓'];
+  // P2: 导出当前过滤结果（复用 logs.js 的 _filterMatch），无过滤时导出全部
+  var hasActiveFilter = !!( _activeFilters.direction || _activeFilters.symbol || _activeFilters.strategy ||
+                            _activeFilters.status || _activeFilters.pnl || _activeFilters.time );
+  var exportRows = (hasActiveFilter && typeof _filterMatch === 'function')
+    ? logs.filter(function(l) { return _filterMatch(l); })
+    : logs;
+  if (!exportRows.length) { showToast('当前筛选条件下无记录可导出', 'info'); return; }
+  var scopeLabel = hasActiveFilter ? '当前筛选范围' : '全部日志';
   let csv = headers.join(',') + '\n';
-  for (const row of logs) {
+  for (const row of exportRows) {
     const ms = row.mindsetScore ? '★'.repeat(row.mindsetScore)+'☆'.repeat(5-row.mindsetScore) : '';
     let sf = row.strategyFramework || '';
     if (row.strategyPattern) {
@@ -27,6 +35,8 @@ function exportCSV() {
   }
   const b = new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'});
   const a = document.createElement('a'); a.href=URL.createObjectURL(b); a.download='trade_logs_'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
+  // P2: 明确标注导出范围，避免用户误以为导出全部
+  showToast('已导出 ' + exportRows.length + ' 条（' + scopeLabel + '）', 'success');
   } catch(e) { showToast('导出失败: ' + e.message, 'error'); }
   finally { window.__exportingCSV = false; }
 }
@@ -244,6 +254,11 @@ function importJSON(file) {
           return;
         }
         showToast(`成功导入 ${candidates.length} 条记录`, 'success');
+        // P1: 导入后同步刷新日志表，并清空索引依赖型状态，避免索引错位
+        if (window._pendingDeleteIndices) window._pendingDeleteIndices.clear();
+        if (typeof _expandedRows !== 'undefined') _expandedRows.clear();
+        if (typeof _closePriceEdited !== 'undefined') { for (var _ik in _closePriceEdited) delete _closePriceEdited[_ik]; }
+        if (typeof renderLogs === 'function') renderLogs();
         // P0-6: 导入后刷新仪表盘
         if (typeof renderDashboard === 'function') renderDashboard();
       }

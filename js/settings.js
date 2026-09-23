@@ -80,6 +80,22 @@ function _clearSettingsCache() {
 }
 
 /**
+ * 设置写入 localStorage（带配额保护）
+ * 与 storage.js 的 saveLogs 防护对齐：setItem 抛 QuotaExceededError 时不得静默丢失——
+ * 必须给出错误提示并让调用方感知失败，否则会误报"已保存"而数据实际未落盘。
+ * @returns {boolean} 写入成功返回 true；失败（含存储空间不足）返回 false
+ */
+function _safeSetSettings(settings) {
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  } catch (e) {
+    if (typeof showToast === 'function') showToast('设置保存失败：存储空间不足，请清理或先导出数据', 'error');
+    return false;
+  }
+  return true;
+}
+
+/**
  * 渲染设置表单
  */
 function renderSettings() {
@@ -146,7 +162,14 @@ function saveSettings() {
     { key: 'maxDrawdownAlert',id: 'setMaxDrawdownAlert',parser: parseFloat },
     { key: 'defaultLeverage', id: 'setDefaultLeverage', parser: parseFloat },
     { key: 'mmr',             id: 'setMmr',             parser: parseFloat },
-    { key: 'backupCount',     id: 'setBackupCount',     parser: parseInt }
+    { key: 'backupCount',     id: 'setBackupCount',     parser: parseInt },
+    // ✅ Skills 融合字段：接入同一校验循环（原先仅判 NaN 后直接赋值，可写入越界值）
+    { key: 'atrDefaultMultiplier', id: 'setAtrMultiplier',        parser: parseFloat },
+    { key: 'portfolioHeatMax',     id: 'setPortfolioHeatMax',     parser: parseFloat },
+    { key: 'riskHeatMax',          id: 'setRiskHeatMax',          parser: parseFloat },
+    { key: 'minRRRatio',           id: 'setMinRRRatio',           parser: parseFloat },
+    { key: 'singleSymbolMaxPct',   id: 'setSingleSymbolMaxPct',   parser: parseFloat },
+    { key: 'dailyTradeMax',        id: 'setDailyTradeMax',        parser: parseFloat }
   ];
 
   for (var i = 0; i < fields.length; i++) {
@@ -167,55 +190,22 @@ function saveSettings() {
   }
 
   // ✅ 新增：保存 mindsetMinScore（整数，范围 1-5）
+  // 与主字段校验一致：解析失败或越界均报错并拒绝保存，不做静默回退/钳位
   var mindsetEl = document.getElementById('setMindsetMinScore');
   if (mindsetEl) {
-    var msVal = parseInt(mindsetEl.value) || 3;
-    if (msVal < 1) msVal = 1;
-    if (msVal > 5) msVal = 5;
+    var msVal = parseInt(mindsetEl.value);
+    if (isNaN(msVal) || msVal < 1 || msVal > 5) {
+      showToast('心态评分最低通过值需为 1–5 的整数', 'warn');
+      return;
+    }
     settings.mindsetMinScore = msVal;
   }
 
-  // ✅ Skills 融合：保存 ATR 配置
+  // ✅ Skills 融合：保存 ATR 动态止损开关（布尔值）
+  // 数值型 Skills 字段（ATR 倍数 / 组合热量上限 / 热量安全上限 / 最低盈亏比 / 单品种占比 / 日最大笔数）
+  // 已接入上方 fields 校验循环，NaN 或越界会 showToast 并拒绝保存，不再在此重复赋值。
   var atrEnableEl = document.getElementById('setAtrStopEnabled');
   if (atrEnableEl) settings.atrStopEnabled = atrEnableEl.checked;
-  var atrMultEl = document.getElementById('setAtrMultiplier');
-  if (atrMultEl) {
-    var amVal = parseFloat(atrMultEl.value);
-    if (!isNaN(amVal)) settings.atrDefaultMultiplier = amVal;
-  }
-
-  // ✅ Skills 融合：保存组合热量配置
-  var phMaxEl = document.getElementById('setPortfolioHeatMax');
-  if (phMaxEl) {
-    var phVal = parseFloat(phMaxEl.value);
-    if (!isNaN(phVal)) settings.portfolioHeatMax = phVal;
-  }
-  var rHeatEl = document.getElementById('setRiskHeatMax');
-  if (rHeatEl) {
-    var rhVal = parseFloat(rHeatEl.value);
-    if (!isNaN(rhVal)) settings.riskHeatMax = rhVal;
-  }
-
-  // ✅ Skills 融合：保存盈亏比限制
-  var minRREl = document.getElementById('setMinRRRatio');
-  if (minRREl) {
-    var minRRVal = parseFloat(minRREl.value);
-    if (!isNaN(minRRVal)) settings.minRRRatio = minRRVal;
-  }
-
-  // ✅ Skills 融合：保存单品种限制
-  var ssEl = document.getElementById('setSingleSymbolMaxPct');
-  if (ssEl) {
-    var ssVal = parseFloat(ssEl.value);
-    if (!isNaN(ssVal)) settings.singleSymbolMaxPct = ssVal;
-  }
-
-  // ✅ Skills 融合：保存日最大笔数
-  var dtmEl = document.getElementById('setDailyTradeMax');
-  if (dtmEl) {
-    var dtmVal = parseFloat(dtmEl.value);
-    if (!isNaN(dtmVal)) settings.dailyTradeMax = dtmVal;
-  }
 
   // ✅ 新增：保存 customStopLimit（JSON 格式字符串解析）
   var stopLimitEl = document.getElementById('setCustomStopLimit');
@@ -244,7 +234,8 @@ function saveSettings() {
     settings.autoBackup = autoBackupEl.checked;
   }
 
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  // 配额不足时不得误报"设置已保存"；失败则保留内存中的设置对象，避免表单输入被回滚
+  if (!_safeSetSettings(settings)) return;
   _clearSettingsCache();
 
   // 同步全局变量（如果有的话）
@@ -296,6 +287,8 @@ function importLogs() {
             // 所有导入数据先通过统一 Schema 迁移；v2 只标记历史现金滑点，绝不伪造 ticks。
             if (typeof migrateLogsToCurrentSchema === 'function') migrateLogsToCurrentSchema(data, 0);
             else if (typeof _migrateTimes === 'function') _migrateTimes(data);
+            // 导入为全量覆盖，先明确提示数量差异（现有日志为空时无数据可丢，跳过确认）
+            if (logs.length > 0 && !confirm('将用文件中的 ' + data.length + ' 条记录【覆盖】现有 ' + logs.length + ' 条日志，原有数据不可恢复。确定继续？')) return;
             logs = data;
             saveLogs();
             showToast('已导入 ' + data.length + ' 条日志', 'success');
@@ -401,6 +394,8 @@ function parseCSVImport(csvText) {
 
   if (typeof migrateLogsToCurrentSchema === 'function') migrateLogsToCurrentSchema(imported, 0);
   else if (typeof _migrateTimes === 'function') _migrateTimes(imported);
+  // 导入为全量覆盖，先明确提示数量差异（现有日志为空时无数据可丢，跳过确认）
+  if (logs.length > 0 && !confirm('将用文件中的 ' + imported.length + ' 条记录【覆盖】现有 ' + logs.length + ' 条日志，原有数据不可恢复。确定继续？')) return;
   logs = imported;
   saveLogs();
   showToast('已导入 ' + imported.length + ' 条日志', 'success');
@@ -501,7 +496,7 @@ function importSettings() {
             }
           });
         }
-        localStorage.setItem(SETTINGS_KEY, JSON.stringify(current));
+        if (!_safeSetSettings(current)) return;
         _clearSettingsCache();
         renderSettings();
         if (typeof renderCustomSymbols === 'function') renderCustomSymbols();
@@ -558,7 +553,7 @@ function addCustomSymbol() {
   var settings = loadSettings();
   if (!settings.customSymbols) settings.customSymbols = [];
   settings.customSymbols.push({ symbol: '', desc: '' });
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  if (!_safeSetSettings(settings)) return;
   _clearSettingsCache();
   renderCustomSymbols();
 }
@@ -567,7 +562,7 @@ function removeCustomSymbol(idx) {
   var settings = loadSettings();
   if (!settings.customSymbols) return;
   settings.customSymbols.splice(idx, 1);
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  if (!_safeSetSettings(settings)) return;
   _clearSettingsCache();
   renderCustomSymbols();
 }
@@ -583,7 +578,7 @@ function saveCustomSymbols() {
   });
   var settings = loadSettings();
   settings.customSymbols = symbols;
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  if (!_safeSetSettings(settings)) return;
   _clearSettingsCache();
   syncSymbolDatalist();
   showToast('品种列表已保存', 'success');

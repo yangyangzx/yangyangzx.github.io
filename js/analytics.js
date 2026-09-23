@@ -188,7 +188,6 @@ function renderEquityChart(closed) {
 
   var ctx = canvas.getContext('2d');
   var cc = utils.getChartColors();
-  var c = utils.getCanvasColors();
   _analyticsCharts['chartEquity'] = new Chart(ctx, {
     type: 'line',
     data: {
@@ -198,12 +197,14 @@ function renderEquityChart(closed) {
           var chart = context.chart;
           var gctx = chart.ctx;
           var gradient = gctx.createLinearGradient(0, 0, 0, chart.height);
-          gradient.addColorStop(0, 'rgba(59, 130, 246, 0.2)');
-          gradient.addColorStop(1, 'rgba(59, 130, 246, 0.02)');
+          // P3-18 FIX：原写死蓝色渐变，改读主题色并按 alpha 分档（不依赖 CSS alpha 字面值）
+          gradient.addColorStop(0, withAlpha(cc.barWin, 0.2));
+          gradient.addColorStop(1, withAlpha(cc.barWin, 0.02));
           return gradient;
         },
         pointBackgroundColor: cc.positivePoint,
-        pointBorderColor: 'rgba(255,255,255,0.6)',
+        // P3-18 FIX：原硬编码白点描边在浅色主题下近乎隐形，改读主题变量
+        pointBorderColor: readCssVar('--chart-canvas-ptcenter', 'rgba(255,255,255,0.6)'),
         pointBorderWidth: 1.5
       })]
     },
@@ -681,14 +682,17 @@ function renderMAEMFEScatter(closed) {
         var yMin = yAxis.getPixelForValue(Math.min(5, yAxis.max));
         var yMax = yAxis.getPixelForValue(yAxis.max);
         ctx2.save();
-        ctx2.fillStyle = c.up.replace('0.95', '0.06');
+        // P3-18 FIX：原用 c.up.replace('0.95', '0.06')，把透明度调整耦合到
+        // --chart-canvas-up 当前的 alpha 字面值——CSS 一改 alpha 就静默失败，
+        // "理想区域"会变成 0.95 不透明实心块盖住整个散点图。改为解析后重写 alpha
+        ctx2.fillStyle = withAlpha(c.up, 0.06);
         ctx2.fillRect(xMin, yMin, xMax - xMin, yMax - yMin);
-        ctx2.strokeStyle = c.up.replace('0.95', '0.2');
+        ctx2.strokeStyle = withAlpha(c.up, 0.2);
         ctx2.lineWidth = 1;
         ctx2.setLineDash([6, 4]);
         ctx2.strokeRect(xMin, yMin, xMax - xMin, yMax - yMin);
         ctx2.setLineDash([]);
-        ctx2.fillStyle = c.up.replace('0.95', '0.5');
+        ctx2.fillStyle = withAlpha(c.up, 0.5);
         ctx2.font = '11px sans-serif';
         ctx2.textAlign = 'left';
         ctx2.fillText('理想区域', xMin + 6, yMin + 16);
@@ -708,7 +712,15 @@ function renderMAEMFEScatter(closed) {
 
 // ==================== 表格排序 ====================
 
-function bindTableSort(tableId, rows) {
+/**
+ * 绑定表格表头排序
+ * @param {string} tableId 表格元素 id
+ * @param {Array}  rows    行数据（不被原地排序，内部 slice 副本）
+ * @param {function} [renderRow] 可选行渲染器 renderRow(row, rowClass) -> 完整 <tr> HTML。
+ *                            传入时用它重排 tbody；省略则走策略/形态明细表的内置渲染器
+ *                            （含 row-best/row-worst 高亮，仅这两张表有此语义）
+ */
+function bindTableSort(tableId, rows, renderRow) {
   var table = document.getElementById(tableId);
   if (!table) return;
 
@@ -743,10 +755,16 @@ function bindTableSort(tableId, rows) {
         // 重新渲染 tbody
         var tbody = table.querySelector('tbody');
         if (!tbody) return;
+
+        // row-best/row-worst 高亮只有策略/形态明细表有语义（按 avgPnl 标出最佳/最差形态），
+        // 其余表初始渲染时不带行高亮，排序重排时也不加
+        var legacy = (tableId === 'strategyDetailTable' || tableId === 'patternDetailTable');
         var bestIdx = 0, worstIdx = 0;
-        for (var r = 1; r < sorted.length; r++) {
-          if (sorted[r].avgPnl > sorted[bestIdx].avgPnl) bestIdx = r;
-          if (sorted[r].avgPnl < sorted[worstIdx].avgPnl) worstIdx = r;
+        if (legacy && sorted.length > 1) {
+          for (var r = 1; r < sorted.length; r++) {
+            if (sorted[r].avgPnl > sorted[bestIdx].avgPnl) bestIdx = r;
+            if (sorted[r].avgPnl < sorted[worstIdx].avgPnl) worstIdx = r;
+          }
         }
 
         var isStrategyTable = (tableId === 'strategyDetailTable');
@@ -754,26 +772,33 @@ function bindTableSort(tableId, rows) {
         for (var j = 0; j < sorted.length; j++) {
           var row = sorted[j];
           var rowClass = '';
-          if (j === bestIdx && bestIdx !== worstIdx) rowClass = 'row-best';
-          else if (j === worstIdx && bestIdx !== worstIdx) rowClass = 'row-worst';
-
-          html += '<tr class="' + rowClass + '">';
-          if (isStrategyTable) {
-            // strategyDetailTable: 9 列（framework + patternName 分列）
-            html += '<td>' + esc(row.framework) + '</td>';
-            html += '<td>' + esc(row.patternName) + '</td>';
-          } else {
-            // patternDetailTable: 8 列（name 合并列）
-            html += '<td>' + esc(row.name) + '</td>';
+          if (legacy) {
+            if (j === bestIdx && bestIdx !== worstIdx) rowClass = 'row-best';
+            else if (j === worstIdx && bestIdx !== worstIdx) rowClass = 'row-worst';
           }
-          html += '<td class="col-num">' + row.count + '</td>';
-          html += '<td class="col-num">' + row.winRate.toFixed(1) + '%</td>';
-          html += '<td class="' + (row.totalPnl >= 0 ? 'col-pnl-pos' : 'col-pnl-neg') + '">' + (row.totalPnl >= 0 ? '+' : '') + row.totalPnl.toFixed(2) + '</td>';
-          html += '<td class="' + (row.avgPnl >= 0 ? 'col-pnl-pos' : 'col-pnl-neg') + '">' + (row.avgPnl >= 0 ? '+' : '') + row.avgPnl.toFixed(2) + '</td>';
-          html += '<td class="col-num">' + (row.avgRR != null ? row.avgRR.toFixed(2) : '—') + '</td>';
-          html += '<td class="col-num">' + (row.avgMAE != null ? row.avgMAE.toFixed(2) + '%' : '—') + '</td>';
-          html += '<td class="col-num">' + (row.avgMFE != null ? row.avgMFE.toFixed(2) + '%' : '—') + '</td>';
-          html += '</tr>';
+
+          if (typeof renderRow === 'function') {
+            // 通用表：由调用方提供的行模板渲染（与初始渲染共用同一份，避免两处漂移）
+            html += renderRow(row, rowClass);
+          } else {
+            html += '<tr class="' + rowClass + '">';
+            if (isStrategyTable) {
+              // strategyDetailTable: 9 列（framework + patternName 分列）
+              html += '<td>' + esc(row.framework) + '</td>';
+              html += '<td>' + esc(row.patternName) + '</td>';
+            } else {
+              // patternDetailTable: 8 列（name 合并列）
+              html += '<td>' + esc(row.name) + '</td>';
+            }
+            html += '<td class="col-num">' + row.count + '</td>';
+            html += '<td class="col-num">' + row.winRate.toFixed(1) + '%</td>';
+            html += '<td class="' + (row.totalPnl >= 0 ? 'col-pnl-pos' : 'col-pnl-neg') + '">' + (row.totalPnl >= 0 ? '+' : '') + row.totalPnl.toFixed(2) + '</td>';
+            html += '<td class="' + (row.avgPnl >= 0 ? 'col-pnl-pos' : 'col-pnl-neg') + '">' + (row.avgPnl >= 0 ? '+' : '') + row.avgPnl.toFixed(2) + '</td>';
+            html += '<td class="col-num">' + (row.avgRR != null ? row.avgRR.toFixed(2) : '—') + '</td>';
+            html += '<td class="col-num">' + (row.avgMAE != null ? row.avgMAE.toFixed(2) + '%' : '—') + '</td>';
+            html += '<td class="col-num">' + (row.avgMFE != null ? row.avgMFE.toFixed(2) + '%' : '—') + '</td>';
+            html += '</tr>';
+          }
         }
         tbody.innerHTML = html;
       };
@@ -926,23 +951,35 @@ function renderDimensionBreakdown(closed) {
   // 按总盈亏排序
   allRows.sort(function(a, b) { return b.totalPnl - a.totalPnl; });
 
-  var html = '<table class="analytics-table"><thead><tr>' +
-    '<th>维度</th><th>分组</th><th data-sort="num">笔数</th><th data-sort="num">胜率</th><th data-sort="num">总盈亏</th><th data-sort="num">均盈亏</th>' +
+  // P2-10 FIX：补 table id、data-col 与 sort-arrow——原表头只有 data-sort（无 data-col、
+  // 无箭头 span）且从未经 bindTableSort 绑定，点击"笔数/胜率/总盈亏/均盈亏"无任何反应
+  var html = '<table id="dimensionDetailTable" class="analytics-table"><thead><tr>' +
+    '<th>维度</th><th>分组</th>' +
+    '<th data-col="count" data-sort="num">笔数 <span class="sort-arrow"></span></th>' +
+    '<th data-col="winRate" data-sort="num">胜率 <span class="sort-arrow"></span></th>' +
+    '<th data-col="totalPnl" data-sort="num">总盈亏 <span class="sort-arrow"></span></th>' +
+    '<th data-col="avgPnl" data-sort="num">均盈亏 <span class="sort-arrow"></span></th>' +
     '</tr></thead><tbody>';
-  for (var r = 0; r < allRows.length; r++) {
-    var row = allRows[r];
+
+  // 行渲染器：初始渲染与点击表头重排共用同一份单元格模板（避免两处漂移）
+  var _dimRenderRow = function(row, rowClass) {
     var cls = row.totalPnl >= 0 ? 'col-pnl-pos' : 'col-pnl-neg';
-    html += '<tr>' +
-      '<td style="color:var(--color-text-secondary);font-size:12px;">' + row.dimension + '</td>' +
-      '<td>' + row.groupName + '</td>' +
+    return '<tr class="' + rowClass + '">' +
+      '<td style="color:var(--color-text-secondary);font-size:12px;">' + esc(row.dimension) + '</td>' +
+      '<td>' + esc(row.groupName) + '</td>' +
       '<td class="col-num">' + row.count + '</td>' +
       '<td class="col-num">' + row.winRate.toFixed(1) + '%</td>' +
       '<td class="' + cls + '">' + (row.totalPnl >= 0 ? '+' : '') + row.totalPnl.toFixed(2) + '</td>' +
       '<td class="' + cls + '">' + (row.avgPnl >= 0 ? '+' : '') + row.avgPnl.toFixed(2) + '</td>' +
       '</tr>';
+  };
+
+  for (var r = 0; r < allRows.length; r++) {
+    html += _dimRenderRow(allRows[r], '');
   }
   html += '</tbody></table>';
   wrap.innerHTML = html;
+  bindTableSort('dimensionDetailTable', allRows, _dimRenderRow);
 }
 
 // ==================== 辅助 ====================
@@ -1033,6 +1070,15 @@ function renderDayOfWeekChart(closed) {
     else if (pnl < 0) groups[adjustedDow].losses++;
   }
 
+  // P2-9 FIX：空态走与同文件其他图表一致的空态——原实现在零数据时画 7 根高度 0 的柱子，
+  // 且 wr=0 < 40 全部着色 barLoss，语义等于"周一至周日全是亏损日"
+  var totalCount = 0;
+  for (var dc = 0; dc < 7; dc++) totalCount += groups[dc].count;
+  if (totalCount === 0) {
+    _setCanvasEmpty(canvas, 'fa-calendar-alt', '暂无交易数据');
+    return;
+  }
+
   var cc = utils.getChartColors();
   var labels = [], data = [], bgColors = [];
   for (var di = 0; di < 7; di++) {
@@ -1040,7 +1086,9 @@ function renderDayOfWeekChart(closed) {
     data.push(parseFloat(groups[di].pnl.toFixed(2)));
     var groupCount = groups[di].count;
     var wr = groupCount > 0 ? (groups[di].wins / groupCount * 100) : 0;
-    if (wr >= 60) bgColors.push(cc.barWin);
+    // P2-9 FIX：从未交易的某天（count=0）用中性色，不用 barLoss（那是"亏损日"语义）
+    if (groupCount === 0) bgColors.push(cc.barNeutral);
+    else if (wr >= 60) bgColors.push(cc.barWin);
     else if (wr >= 40) bgColors.push(cc.barWarn);
     else bgColors.push(cc.barLoss);
   }
@@ -1342,13 +1390,30 @@ function renderMindsetAnalysis(closed) {
   tHtml += '</div>';
 
   tHtml += '<div style="font-size:12px;color:var(--color-text-muted);margin-bottom:8px;">各评分详细统计：</div>';
-  tHtml += '<table class="analytics-table"><thead><tr>' +
+  tHtml += '<table id="mindsetDetailTable" class="analytics-table"><thead><tr>' +
     '<th>心态评分</th><th data-col="count" data-sort="num">笔数 <span class="sort-arrow"></span></th>' +
     '<th data-col="wins" data-sort="num">盈利/亏损 <span class="sort-arrow"></span></th>' +
     '<th data-col="winRate" data-sort="num">胜率 <span class="sort-arrow"></span></th>' +
     '<th data-col="avgPnl" data-sort="num">平均盈亏 <span class="sort-arrow"></span></th>' +
     '<th data-col="wrDev" data-sort="num">vs整体 <span class="sort-arrow"></span></th></tr></thead><tbody>';
 
+  // 行渲染器：初始渲染与点击表头重排共用同一份单元格模板（避免两处漂移）
+  var _mindsetRenderRow = function(row, rowClass) {
+    var wrClass = row.wrDev > 0 ? 'col-pnl-pos' : (row.wrDev < 0 ? 'col-pnl-neg' : '');
+    var devHtml = row.count < 2 ? '<span style="color:var(--color-text-muted);">样本不足</span>' :
+      '<span class="' + wrClass + '">' + (row.wrDev >= 0 ? '+' : '') + row.wrDev.toFixed(1) + '%</span>';
+    var pnlClass = row.avgPnl >= 0 ? 'col-pnl-pos' : 'col-pnl-neg';
+    return '<tr class="' + rowClass + '">' +
+      '<td style="text-align:center;font-weight:600;">' + esc(row.score) + ' <span style="font-size:11px;color:var(--color-text-muted);">/5</span></td>' +
+      '<td class="col-num">' + row.count + '</td>' +
+      '<td class="col-num">' + row.wins + '/' + row.losses + '</td>' +
+      '<td class="col-num">' + row.winRate.toFixed(1) + '%</td>' +
+      '<td class="' + pnlClass + '">' + (row.avgPnl >= 0 ? '+' : '') + row.avgPnl.toFixed(2) + '</td>' +
+      '<td style="text-align:right;">' + devHtml + '</td>' +
+      '</tr>';
+  };
+
+  var _mindsetRows = [];
   for (var k = 0; k < keys.length; k++) {
     var score = keys[k];
     var s = mindsetStats[score];
@@ -1356,24 +1421,17 @@ function renderMindsetAnalysis(closed) {
     // P1-2 FIX：胜率分母为该评分全部已平仓（含保本）
     var wr = s.count > 0 ? (s.wins / s.count * 100) : 0;
     var wrDev = wr - overallWinRate;
-
-    var wrClass = wrDev > 0 ? 'col-pnl-pos' : (wrDev < 0 ? 'col-pnl-neg' : '');
-    var devHtml = s.count < 2 ? '<span style="color:var(--color-text-muted);">样本不足</span>' :
-      '<span class="' + wrClass + '">' + (wrDev >= 0 ? '+' : '') + wrDev.toFixed(1) + '%</span>';
-
-    var pnlClass = avgPnl >= 0 ? 'col-pnl-pos' : 'col-pnl-neg';
-    tHtml += '<tr>' +
-      '<td style="text-align:center;font-weight:600;">' + score + ' <span style="font-size:11px;color:var(--color-text-muted);">/5</span></td>' +
-      '<td class="col-num">' + s.count + '</td>' +
-      '<td class="col-num">' + s.wins + '/' + s.losses + '</td>' +
-      '<td class="col-num">' + wr.toFixed(1) + '%</td>' +
-      '<td class="' + pnlClass + '">' + (avgPnl >= 0 ? '+' : '') + avgPnl.toFixed(2) + '</td>' +
-      '<td style="text-align:right;">' + devHtml + '</td>' +
-      '</tr>';
+    _mindsetRows.push({ score: score, count: s.count, wins: s.wins, losses: s.losses, winRate: wr, avgPnl: avgPnl, wrDev: wrDev });
+  }
+  for (var mi = 0; mi < _mindsetRows.length; mi++) {
+    tHtml += _mindsetRenderRow(_mindsetRows[mi], '');
   }
   tHtml += '</tbody></table>';
   tHtml += '<p style="font-size:11px;color:var(--color-text-muted);margin-top:8px;">注：vs整体表示该评分的胜率与整体胜率的偏差。</p>';
   tableEl.innerHTML = tHtml;
+  // P2-10 FIX：表头早已带 data-col/data-sort 与箭头 span，却从未经 bindTableSort 绑定
+  //（表格无 id 无法按 id 绑定），点击排序无反应
+  bindTableSort('mindsetDetailTable', _mindsetRows, _mindsetRenderRow);
 }
 
 // ==================== P0 市场环境交叉分析 ====================
@@ -1462,7 +1520,9 @@ function renderMarketConditionAnalysis(closed) {
   var labels = [], data = [], bgColors = [];
   for (var i = 0; i < topRows.length; i++) {
     var r = topRows[i];
-    var shortKey = (r.marketCondition.length > 4 ? r.marketCondition.substring(0, 4) + '…' : r.marketCondition) + ' ' + (r.session.length > 2 ? r.session.substring(0, 2) + '…' : r.session) + ' ' + r.direction;
+    // P3-15 FIX：方向改用中文映射，与 :1399 的分组 key 及全站口径一致
+    // （原直接拼 r.direction 原始值 long/short，x 轴出现"强趋势 亚盘 long"中英混排）
+    var shortKey = (r.marketCondition.length > 4 ? r.marketCondition.substring(0, 4) + '…' : r.marketCondition) + ' ' + (r.session.length > 2 ? r.session.substring(0, 2) + '…' : r.session) + ' ' + (r.direction === 'long' ? '多' : '空');
     labels.push(shortKey);
     data.push(parseFloat(r.avgPnl.toFixed(2)));
     bgColors.push(r.avgPnl >= 0 ? cc.barWin : cc.barLoss);
@@ -1483,29 +1543,36 @@ function renderMarketConditionAnalysis(closed) {
   });
 
   // 绘制表格
-  var tHtml = '<div style="font-size:12px;color:var(--color-text-muted);margin-bottom:8px;">环境×时段×方向 交叉分析（样本≥2）：</div>';
-  tHtml += '<table class="analytics-table"><thead><tr>' +
+  // P3-15 FIX：去掉"（样本≥2）"——上方 validRows 就是全部组合（不过滤），文案与实际不符
+  var tHtml = '<div style="font-size:12px;color:var(--color-text-muted);margin-bottom:8px;">环境×时段×方向 交叉分析：</div>';
+  tHtml += '<table id="marketConditionDetailTable" class="analytics-table"><thead><tr>' +
     '<th>市场环境</th><th>时段</th><th>方向</th><th data-col="count" data-sort="num">笔数 <span class="sort-arrow"></span></th>' +
     '<th data-col="winRate" data-sort="num">胜率 <span class="sort-arrow"></span></th>' +
     '<th data-col="totalPnl" data-sort="num">总盈亏 <span class="sort-arrow"></span></th>' +
     '<th data-col="avgPnl" data-sort="num">平均盈亏 <span class="sort-arrow"></span></th></tr></thead><tbody>';
 
-  for (var i = 0; i < validRows.length; i++) {
-    var r = validRows[i];
-    var pnlClass = r.totalPnl >= 0 ? 'col-pnl-pos' : 'col-pnl-neg';
-    var wrClass = r.winRate >= 50 ? 'col-pnl-pos' : 'col-pnl-neg';
-    var sampleNote = r.count < 2 ? ' <span style="font-size:10px;color:var(--color-text-muted);">(n=' + r.count + ')</span>' : '';
-    tHtml += '<tr>' +
-      '<td>' + r.marketCondition + sampleNote + '</td>' +
-      '<td>' + r.session + '</td>' +
-      '<td>' + r.direction + '</td>' +
-      '<td class="col-num">' + r.count + '</td>' +
-      '<td class="col-num ' + wrClass + '">' + r.winRate.toFixed(1) + '%</td>' +
-      '<td class="' + pnlClass + '">' + (r.totalPnl >= 0 ? '+' : '') + r.totalPnl.toFixed(2) + '</td>' +
-      '<td class="' + pnlClass + '">' + (r.avgPnl >= 0 ? '+' : '') + r.avgPnl.toFixed(2) + '</td>' +
+  // 行渲染器：初始渲染与点击表头重排共用同一份单元格模板（避免两处漂移）
+  var _marketRenderRow = function(row, rowClass) {
+    var pnlClass = row.totalPnl >= 0 ? 'col-pnl-pos' : 'col-pnl-neg';
+    var wrClass = row.winRate >= 50 ? 'col-pnl-pos' : 'col-pnl-neg';
+    var sampleNote = row.count < 2 ? ' <span style="font-size:10px;color:var(--color-text-muted);">(n=' + row.count + ')</span>' : '';
+    return '<tr class="' + rowClass + '">' +
+      '<td>' + esc(row.marketCondition) + sampleNote + '</td>' +
+      '<td>' + esc(row.session) + '</td>' +
+      '<td>' + esc(row.direction === 'long' ? '多' : '空') + '</td>' +
+      '<td class="col-num">' + row.count + '</td>' +
+      '<td class="col-num ' + wrClass + '">' + row.winRate.toFixed(1) + '%</td>' +
+      '<td class="' + pnlClass + '">' + (row.totalPnl >= 0 ? '+' : '') + row.totalPnl.toFixed(2) + '</td>' +
+      '<td class="' + pnlClass + '">' + (row.avgPnl >= 0 ? '+' : '') + row.avgPnl.toFixed(2) + '</td>' +
       '</tr>';
+  };
+
+  for (var i = 0; i < validRows.length; i++) {
+    tHtml += _marketRenderRow(validRows[i], '');
   }
   tHtml += '</tbody></table>';
   tHtml += '<p style="font-size:11px;color:var(--color-text-muted);margin-top:8px;">注：显示所有组合，单笔交易结果仅供参考，样本≥2的结果更可靠。</p>';
   tableEl.innerHTML = tHtml;
+  // P2-10 FIX：表头早已带 data-col/data-sort 与箭头 span，却从未经 bindTableSort 绑定
+  bindTableSort('marketConditionDetailTable', validRows, _marketRenderRow);
 }

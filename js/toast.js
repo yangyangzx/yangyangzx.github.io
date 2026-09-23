@@ -25,6 +25,8 @@
       if (window.saveLogs) saveLogs(true);
       // P0-6: 批量删除后刷新仪表盘
       if (typeof renderDashboard === 'function') renderDashboard();
+      // P0: 同步刷新日志表，清除幽灵行（DOM 行残留会导致 data-idx 索引错位）
+      if (typeof renderLogs === 'function') renderLogs();
       if (window._undoToastEl) { window._undoToastEl.remove(); window._undoToastEl = null; }
       return;
     }
@@ -39,6 +41,8 @@
     if (window.saveLogs) window.saveLogs(true);
     // P0-6: 单条删除后刷新仪表盘
     if (typeof renderDashboard === 'function') renderDashboard();
+    // P0: 同步刷新日志表，清除幽灵行（DOM 行残留会导致 data-idx 索引错位）
+    if (typeof renderLogs === 'function') renderLogs();
     if (window._undoToastEl) { window._undoToastEl.remove(); window._undoToastEl = null; }
   };
 

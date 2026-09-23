@@ -13,6 +13,19 @@
   }
 }
 
+/* color-scheme — 让原生控件（select 弹出面板 / 滚动条 / number 步进器）跟随自管主题 */
+html {
+  color-scheme: dark light;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+}
+
 :root, [data-theme="dark"] {
   /* ═══════════════════════════════════════
      锚点色相：hue 220（深蓝），所有中性色微调至同一色相

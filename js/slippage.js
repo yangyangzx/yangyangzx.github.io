@@ -27,7 +27,12 @@
     stopBuy:    { entry: 2, exit: 2 },
     stopSell:   { entry: 2, exit: 2 },
     stopLimit:  { entry: 2, exit: 2 },
-    trailingStop: { entry: 1, exit: 1 }
+    trailingStop: { entry: 1, exit: 1 },
+    // P2 FIX：index.html #stopType 直出的值原本无任何匹配 key，静默回退 market(1,1)——
+    // 止损单成交确定性远低于市价入场，被当成限价入场建模。补 UI 直出别名后
+    // calculator.js 的止损腿可直接按 #stopType 解析。
+    'stop-market': { entry: 2, exit: 2 },
+    'stop-limit':  { entry: 2, exit: 2 }
   });
 
   function finiteNumber(value, fallback) {
@@ -159,8 +164,19 @@
     var defaults = getDefaultTicks(options.orderType || 'market');
     var entryValue = options.entryTicks;
     var exitValue = options.exitTicks;
-    var entryTicks = mode === 'manual' ? nonNegative(entryValue || 0, 'entryTicks') : defaults.entry;
-    var exitTicks = mode === 'manual' ? nonNegative(exitValue || 0, 'exitTicks') : defaults.exit;
+    // P2 FIX：原 `entryValue || 0` 把手动模式下的空输入静默当作 0 ticks——
+    // 等于按零滑点假设风险，且与 default 模式的保守默认值不自洽。
+    // 现区分「空输入」与「显式 0」：空值回退到该订单类型的默认值，显式 0 仍尊重为 0
+    //（限价单入场 0 ticks 是合理配置）。
+    var empty = function(v) { return v === '' || v === null || v === undefined; };
+    var entryTicks, exitTicks;
+    if (mode === 'manual') {
+      entryTicks = empty(entryValue) ? defaults.entry : nonNegative(entryValue, 'entryTicks');
+      exitTicks = empty(exitValue) ? defaults.exit : nonNegative(exitValue, 'exitTicks');
+    } else {
+      entryTicks = defaults.entry;
+      exitTicks = defaults.exit;
+    }
     return {
       mode: mode,
       source: mode === 'manual' ? 'user-input' : 'order-type-default',

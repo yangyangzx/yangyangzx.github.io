@@ -82,6 +82,12 @@ function calcClosePnL(idx) {
     }
   }
 
+  // P1: 同步类型/价格到模块级缓存（供重渲染后 restoreAfterRender 恢复）
+  if (typeof _closePanelType !== 'undefined') {
+    _closePanelType = closeType ? (closeType.value || '') : '';
+    _closePanelPrice = closePriceEl ? (closePriceEl.value || '') : '';
+  }
+
   if (!closeType || !closeType.value || !closePriceEl) {
     if (pnlAmtEl) pnlAmtEl.value = '';
     if (pnlPctEl) pnlPctEl.value = '';
@@ -347,6 +353,9 @@ function confirmClose(idx) {
     return false;
   }
   openClosePanelIdx = -1;
+  // P1: 平仓完成后重置类型/价格缓存
+  _closePanelType = '';
+  _closePanelPrice = '';
   // 平仓后刷新表格与统计数据
   if (typeof renderLogs === 'function') renderLogs();
   // P0-5/6: 平仓后刷新仪表盘，确保 Heat / PnL / 强平预警实时更新
@@ -375,6 +384,15 @@ function updateBatchCount() {
   const bar = document.getElementById('batchBar');
   if (el) el.textContent = '已选 ' + _selectedIndices.size + ' 条';
   if (bar) bar.style.display = _batchMode ? 'flex' : 'none';
+  // P3: 同步表头全选框状态——部分选中显示 indeterminate，全空时复位 checked
+  const allCb = document.getElementById('batchSelectAll');
+  if (allCb) {
+    const tbody = document.getElementById('logBody');
+    const total = tbody ? tbody.querySelectorAll('.batch-checkbox[data-batch-idx]').length : 0;
+    const selected = _selectedIndices.size;
+    allCb.indeterminate = selected > 0 && selected < total;
+    if (selected === 0) { allCb.checked = false; allCb.indeterminate = false; }
+  }
 }
 
 function handleBatchCheck(idx, checked) {
@@ -489,6 +507,9 @@ function clearLogs() {
     logs = [];
     openClosePanelIdx = -1;
     actionPanelIdx = -1;
+    // P1: 清空日志同时清空平仓面板类型/价格缓存
+    _closePanelType = '';
+    _closePanelPrice = '';
     // P2 修复：清空后同步重置索引依赖型全局状态，避免后续操作引用过期索引
     if (typeof _expandedRows !== 'undefined') _expandedRows.clear();
     for (var _k in _closePriceEdited) delete _closePriceEdited[_k];

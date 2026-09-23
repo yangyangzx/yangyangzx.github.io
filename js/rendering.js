@@ -23,6 +23,10 @@ function renderTpPlanHtml(tpPlan) {
 let _expandedRows = new Set();   // 已展开的日志行索引集合
 let _tbodyEventsBound = false;   // 事件委托是否已初始化
 
+// P1: 平仓面板「平仓类型」「平仓价格」跨重渲染持久化（默认空串，关闭面板时重置）
+var _closePanelType = '';
+var _closePanelPrice = '';
+
 // ==================== 纯函数：构建行 HTML ====================
 function buildRowsHTML(dl) {
   let html = '';
@@ -155,14 +159,16 @@ function buildRowsHTML(dl) {
     }
 
     // ====== 核心行 ======
-    html += '<tr data-log-idx="' + realIdx + '" class="log-row ' + groupClass + '">' +
+    // P3/C2: 按数据行序号（不含详情行/面板行）交替着色，避免详情行插入导致斑马纹错位
+    var zebraCls = (ri % 2 === 0) ? ' zebra-a' : ' zebra-b';
+    html += '<tr data-log-idx="' + realIdx + '" class="log-row' + zebraCls + groupClass + '">' +
       '<td class="batch-col"><input type="checkbox" class="batch-checkbox" data-action="batch-check" data-batch-idx="' + realIdx + '" /></td>' +
       '<td><button class="btn-expand" data-action="expand" data-idx="' + realIdx + '">' + (isExpanded ? '\u25bc' : '\u25b6') + '</button></td>' +
       '<td data-label="\u65f6\u95f4">' + groupBadge + fmtTime(item.time) + '</td>' +
       '<td data-label="\u54c1\u79cd">' + (esc(item.symbol) || '') + '</td>' +
       '<td data-label="\u65b9\u5411"><span class="' + dirCls + '">' + dir + ' ' + ctBadge + '</span></td>' +
-      '<td data-label="\u5165\u573a\u4ef7">' + (item.entryPrice != null ? item.entryPrice : '—') + '</td>' +
-      '<td data-label="\u5e73\u4ed3\u4ef7">' + (item.closePrice != null ? item.closePrice : '—') + '</td>' +
+      '<td class="num" data-label="\u5165\u573a\u4ef7">' + (item.entryPrice != null ? item.entryPrice : '—') + '</td>' +
+      '<td class="num" data-label="\u5e73\u4ed3\u4ef7">' + (item.closePrice != null ? item.closePrice : '—') + '</td>' +
       '<td data-label="\u76c8\u4e8f"><span class="pnl-cell">' + pnlHtml + rSubHtml + '</span>' +
         (item.executionScore != null ? '<span class="exec-badge exec-' + item.executionScore + '">执行 ' + item.executionScore + '/3</span>' : '') +
         (item.lossReason ? '<div class="loss-reason-tags">' + (Array.isArray(item.lossReason) ? item.lossReason : [item.lossReason]).map(function(r) { return '<span class="loss-reason-tag">' + esc(r) + '</span>'; }).join('') + '</div>' : '') +
@@ -250,16 +256,16 @@ function buildRowsHTML(dl) {
           '<div class="fp">' +
             '<label>平仓类型 <span style="color:var(--color-danger);margin-left:2px">*</span></label>' +
             '<select id="cpCloseType_' + realIdx + '">' +
-              '<option value="">— 请选择 —</option>' +
-              '<option value="initialSL">初始止损 — 自动填入止损价</option>' +
-              '<option value="trailingSL">追踪止损</option>' +
-              '<option value="initialTP">初始止盈</option>' +
-              '<option value="manualWin">现价手平赢</option>' +
-              '<option value="manualLoss">现价手平损</option>' +
-              '<option value="liquidation">强平/爆仓</option>' +
-              '<option value="partialTP">部分止盈</option>' +
-              '<option value="timeStop">时间止损</option>' +
-              '<option value="reducePosition">减仓</option>' +
+              '<option value=""' + (_closePanelType === '' ? ' selected' : '') + '>— 请选择 —</option>' +
+              '<option value="initialSL"' + (_closePanelType === 'initialSL' ? ' selected' : '') + '>初始止损 — 自动填入止损价</option>' +
+              '<option value="trailingSL"' + (_closePanelType === 'trailingSL' ? ' selected' : '') + '>追踪止损</option>' +
+              '<option value="initialTP"' + (_closePanelType === 'initialTP' ? ' selected' : '') + '>初始止盈</option>' +
+              '<option value="manualWin"' + (_closePanelType === 'manualWin' ? ' selected' : '') + '>现价手平赢</option>' +
+              '<option value="manualLoss"' + (_closePanelType === 'manualLoss' ? ' selected' : '') + '>现价手平损</option>' +
+              '<option value="liquidation"' + (_closePanelType === 'liquidation' ? ' selected' : '') + '>强平/爆仓</option>' +
+              '<option value="partialTP"' + (_closePanelType === 'partialTP' ? ' selected' : '') + '>部分止盈</option>' +
+              '<option value="timeStop"' + (_closePanelType === 'timeStop' ? ' selected' : '') + '>时间止损</option>' +
+              '<option value="reducePosition"' + (_closePanelType === 'reducePosition' ? ' selected' : '') + '>减仓</option>' +
             '</select>' +
           '</div>' +
           '<div class="fp" id="cpPartialRatioRow_' + realIdx + '" style="display:' + ((item.closeType === 'partialTP' || item.closeType === 'reducePosition') ? 'block' : 'none') + ';">' +
@@ -268,7 +274,7 @@ function buildRowsHTML(dl) {
           '</div>' +
           '<div class="fp">' +
             '<label>平仓价格 <span style="color:var(--color-danger);margin-left:2px">*</span></label>' +
-            '<input type="number" id="cpClosePrice_' + realIdx + '" step="0.00001" placeholder="价格" />' +
+            '<input type="number" id="cpClosePrice_' + realIdx + '" step="0.00001" placeholder="价格" value="' + esc(_closePanelPrice) + '" />' +
           '</div>' +
           '<div class="fp readonly">' +
             '<label>盈亏金额 (USDT)</label>' +
@@ -395,7 +401,12 @@ function bindTbodyEvents() {
       case 'close':
         openClosePanelIdx = (openClosePanelIdx === resolvedIdx) ? -1 : resolvedIdx;
         actionPanelIdx = -1;
-        if (openClosePanelIdx === -1) delete _closePriceEdited[resolvedIdx];
+        if (openClosePanelIdx === -1) {
+          delete _closePriceEdited[resolvedIdx];
+          // P1: 关闭面板时重置类型/价格缓存，避免下次打开显示上一条的记录
+          _closePanelType = '';
+          _closePanelPrice = '';
+        }
         renderLogs();
         break;
       case 'action-record':
@@ -433,6 +444,9 @@ function bindTbodyEvents() {
         break;
       case 'cp-cancel':
         delete _closePriceEdited[resolvedIdx];
+        // P1: 取消平仓时重置类型/价格缓存
+        _closePanelType = '';
+        _closePanelPrice = '';
         openClosePanelIdx = -1;
         renderLogs();
         break;
@@ -497,10 +511,26 @@ function handleDeleteClick(idx) {
   if (!confirm(msg)) return;
   if (!confirm('⚠️ 再次确认：删除后将无法恢复，确定继续？')) return;
 
+  // P0: 立即从 DOM 移除该行（含相邻详情行/面板行），待撤销窗口内不再出现幽灵行
+  // 必须先于 _commitPendingDelete() 执行——后者会重绘表格导致 data-idx 变化
+  var _tr = document.querySelector('#logBody tr[data-log-idx="' + idx + '"]');
+  if (_tr) {
+    var _sib = _tr.nextElementSibling;
+    while (_sib && (_sib.classList.contains('detail-row') || _sib.classList.contains('close-panel-row'))) {
+      var _next = _sib.nextElementSibling;
+      _sib.remove();
+      _sib = _next;
+    }
+    _tr.remove();
+  }
+
   if (_pendingDelete) {
     if (window._undoToastTimer) { clearTimeout(window._undoToastTimer); window._undoToastTimer = null; }
     _commitPendingDelete();
   }
+  // P0: _commitPendingDelete() 内的 renderLogs() 会因删除而重排索引，重新定位目标记录
+  idx = logs.indexOf(item);
+  if (idx < 0) { renderLogs(); return; }
   _pendingDelete = { idx: idx, timeoutId: null };
   if (!window._pendingDeleteIndices) window._pendingDeleteIndices = new Set();
   window._pendingDeleteIndices.add(idx);
@@ -541,9 +571,16 @@ function restoreAfterRender() {
     cb.checked = _selectedIndices.has(bidx);
   });
 
-  // 4. 平仓面板自动聚焦
+  // 4. 恢复平仓面板类型/价格并重算盈亏预览（P1: 重渲染后不再归零）
   if (openClosePanelIdx >= 0) {
-    var cpEl = document.getElementById('cpClosePrice_' + openClosePanelIdx);
+    var cpTypeEl = document.getElementById('cpCloseType_' + openClosePanelIdx);
+    if (cpTypeEl) cpTypeEl.value = _closePanelType || '';
+    var cpPriceEl = document.getElementById('cpClosePrice_' + openClosePanelIdx);
+    if (cpPriceEl) cpPriceEl.value = _closePanelPrice || '';
+    var cpRatioRow = document.getElementById('cpPartialRatioRow_' + openClosePanelIdx);
+    if (cpRatioRow) cpRatioRow.style.display = (_closePanelType === 'partialTP' || _closePanelType === 'reducePosition') ? 'block' : 'none';
+    calcClosePnL(openClosePanelIdx);
+    var cpEl = cpPriceEl;
     if (cpEl) {
       setTimeout(function(el) { if (el) el.focus(); }(cpEl), 80);
     }
@@ -590,13 +627,16 @@ function renderLogs() {
     return timeB - timeA;
   });
 
-  // 3. 过滤
+  // 3. 总日志数（未过滤，含待撤销删除前的全部记录）与过滤后数量区分展示
+  var totalCount = dl.length;
+
+  // 4. 过滤
   dl = filterEntries(dl);
 
   var visibleCount = dl.length;
-  document.getElementById('logCount').textContent = '共 ' + visibleCount + ' 条';
+  document.getElementById('logCount').textContent = '共 ' + totalCount + ' 条';
 
-  // 4. 更新过滤结果标签
+  // 5. 更新过滤结果标签（显示过滤后数量）
   var fr = document.getElementById('filterResult');
   if (fr) {
     var hasAnyFilter = !!( _activeFilters.direction || _activeFilters.symbol || _activeFilters.strategy ||
@@ -604,11 +644,12 @@ function renderLogs() {
     fr.textContent = hasAnyFilter ? '\u5f53\u524d\u7b5b\u9009\u7ed3\u679c ' + visibleCount + ' \u6761' : '\u5168\u90e8 ' + visibleCount + ' \u6761';
   }
 
-  // 5. 批量模式 class
-  var tw = document.getElementById('tableWrap');
-  if (tw) tw.classList.toggle('batch-mode', _batchMode);
+  // 6. 批量模式 class（P3/C3: 批量栏已移出 table-wrap，改挂 #view-journal 以保持
+  //    .batch-mode .batch-bar 后代选择器命中）
+  var jv = document.getElementById('view-journal');
+  if (jv) jv.classList.toggle('batch-mode', _batchMode);
 
-  // 6. 空状态处理
+  // 7. 空状态处理
   if (visibleCount === 0) {
     var emptyMsg = logs.length === 0
       ? '填写上方计算器，点击「保存日志」开始'
@@ -628,17 +669,18 @@ function renderLogs() {
 
   document.getElementById('summaryBar').style.display = 'flex';
 
-  // 7. 构建并设置 HTML
+  // 8. 构建并设置 HTML
   var html = buildRowsHTML(dl);
   tbody.innerHTML = html;
 
-  // 8. 恢复动态状态
+  // 9. 恢复动态状态
   restoreAfterRender();
 
-  // 9. 触发统计更新（仅在需要的视图）
+  // 10. 触发统计更新（仅在需要的视图）
   if (_currentView === 'journal' || _currentView === 'stats') {
     try { updateStats(); } catch(e) { console.error('[renderLogs] updateStats error:', e); }
   }
-  autoCountLossStreak();
+  // P3: 连亏计数抛错不得阻断后续 populateFilterOptions()（否则筛选下拉选项无法刷新）
+  try { autoCountLossStreak(); } catch(e) { console.error('[renderLogs] autoCountLossStreak error:', e); }
   populateFilterOptions();
 }

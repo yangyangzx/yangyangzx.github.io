@@ -11,8 +11,6 @@ body {
   flex-direction: row;
   margin: 0;
   background: var(--color-bg);
-  background-image:
-    
   transition: background var(--dur-normal) var(--ease-out), color var(--dur-normal) var(--ease-out);
   /* gate 51: 长词可换行 */
   overflow-wrap: break-word;
@@ -43,6 +41,8 @@ body {
   overflow-x: hidden;
   flex-shrink: 0;
   border-right: 1px solid var(--nav-border);
+  /* 刘海/灵动岛安全区 — box-sizing:border-box，不改 100dvh 盒高 */
+  padding-top: env(safe-area-inset-top);
 }
 
 [data-theme="light"] #mainNav {
@@ -404,6 +404,7 @@ body {
   --sw-gold: oklch(78% 0.16 80);
 
   display: block;
+  position: relative;
   font-size: var(--sw-font);
   margin: 8px auto 0;
   width: max-content;
@@ -411,8 +412,16 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* 可见性隐藏 — 保留可聚焦，使 input:focus-visible 规则可达（gate 26） */
 .spark-switch input {
-  display: none;
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: 0; padding: 0;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+  border: 0;
 }
 
 .spark-switch .track {
@@ -586,6 +595,8 @@ body {
   position: fixed;
   top: 12px;
   left: 12px;
+  /* 安全区用 margin 而非 padding — 避免挤碎 44x44 内的图标居中几何 */
+  margin-top: env(safe-area-inset-top);
   z-index: calc(var(--z-dropdown) + 10);
   width: 44px;
   height: 44px;
@@ -656,28 +667,11 @@ body {
   overflow-y: auto;
   overflow-x: hidden;
   padding: 24px;
+  /* 底部 Home 指示条安全区 — box-sizing:border-box，不改盒高 */
+  padding-bottom: env(safe-area-inset-bottom);
   position: relative;
   z-index: 1;
   color: var(--color-text);
-}
-
-/* 滚动边缘渐变遮罩 */
-#mainContent::before {
-  content: '';
-  position: sticky;
-  top: 0;
-  display: block;
-  width: 100%;
-  height: 8px;
-  background: linear-gradient(to bottom, var(--color-bg), transparent);
-  pointer-events: none;
-  z-index: 5;
-  opacity: 0;
-  transition: opacity var(--dur-short) var(--ease-out);
-}
-
-#mainContent.scrolled::before {
-  opacity: 1;
 }
 
 /* ═══════════════════════════════════════
@@ -748,7 +742,7 @@ body {
   #mainContent {
     margin-left: 0;
     padding: 16px;
-    padding-top: 72px;  /* 留出汉堡按钮空间 */
+    padding-top: calc(72px + env(safe-area-inset-top));  /* 留出汉堡按钮空间（随安全区下移） */
   }
 }
 
@@ -757,7 +751,7 @@ body {
   /* 小屏时也可选择显示图标条而非汉堡，此处保持汉堡模式一致 */
   #mainContent {
     padding: 12px;
-    padding-top: 68px;
+    padding-top: calc(68px + env(safe-area-inset-top));
   }
 }
 
@@ -767,7 +761,6 @@ body {
     max-width: 1400px;
     margin-left: 200px;
     margin-right: auto;
-    margin-left: auto;
   }
 }
 

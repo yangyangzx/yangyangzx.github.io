@@ -13,6 +13,13 @@
 }
 
 
+/* 纵向滚动容器 — 为 th / batch-bar 的 position:sticky 提供滚动参照物 */
+#tableWrap {
+  max-height: calc(100dvh - 230px);
+  overflow-y: auto;
+}
+
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -47,8 +54,20 @@ td {
 }
 
 
-tbody tr:nth-child(even) > td {
+/* 斑马纹按数据行显式类取色 — 展开详情行不再整体翻转 */
+tbody tr.zebra-b > td {
   background: var(--color-surface-hover);
+}
+
+
+/* 数值列对齐 — 契约 C1：右对齐 + 等宽数字 */
+td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+th.num {
+  text-align: right;
 }
 
 
@@ -818,9 +837,9 @@ tbody tr:hover > td {
 }
 
 .batch-bar {
-  display: none; 
-  position: sticky; 
-  bottom: 0; 
+  display: none;
+  /* 移出 .table-wrap 滚动容器后 sticky 无意义，改 static */
+  position: static;
   background: var(--glass-bg-heavy);
   border-top: 2px solid var(--color-primary); 
   padding: 10px 16px; 

@@ -78,8 +78,12 @@ function calcPortfolioHeat() {
 function calcKelly(winRate, avgWin, avgLoss, accountSize, halfKelly, leverage) {
   if (halfKelly === undefined) halfKelly = true;
   if (leverage === undefined) leverage = 1;
-  // P2 边界：avgWin/avgLoss 为 NaN 或 undefined 时无效；avgWin=0（全亏损样本）合法，公式仍成立（凯利→0）
-  if (winRate == null || winRate === undefined || isNaN(avgWin) || isNaN(avgLoss) || avgLoss <= 0) return null;
+  // P2 边界：avgWin/avgLoss 为 NaN 或 undefined 时无效。
+  // P2 FIX（2026-09-23 开仓逻辑审计）：原注释称「avgWin=0 合法，公式仍成立（凯利→0）」不成立——
+  // winRate=1,avgWin=0 得 0/0=NaN；winRate=0.5,avgWin=0 得 -Infinity。而下方 `kellyPct < 0`、
+  // `halfKellyPct < 0`、以及后续所有比较对 NaN 全为 false，NaN 会穿过全部钳制并污染下游
+  //（roundedKelly 变 "NaN%"，与 5%/4.5% 下拉脱节）。与 avgLoss<=0 同权按无效数据处理。
+  if (winRate == null || winRate === undefined || isNaN(avgWin) || isNaN(avgLoss) || avgLoss <= 0 || avgWin <= 0) return null;
   if (winRate < 0 || winRate > 1) return null;
 
   // Kelly 公式：Kelly% = (WR × AvgWin - LR × AvgLoss) / AvgWin

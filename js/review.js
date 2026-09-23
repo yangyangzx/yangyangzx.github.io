@@ -133,7 +133,7 @@ function renderLossReasonPie(closed) {
     options: createStandardOptions(cc, {
       plugins: {
         legend: { position: 'right', labels: { font: { size: 12 }, padding: 12, usePointStyle: true, pointStyleWidth: 10 } },
-        tooltip: { callbacks: { label: function(ctx) { var total = ctx.dataset.data.reduce(function(a, b) { return a + b; }, 0); var pct = ((ctx.parsed / total) * 100).toFixed(1); var pnl = reasonPnl[ctx.label] || 0; return ctx.label + ': ' + ctx.parsed + ' 次 (' + pct + '%)  多因累计 ' + pnl.toFixed(0) + ' U'; } } }
+        tooltip: { callbacks: { label: function(ctx) { var total = ctx.dataset.data.reduce(function(a, b) { return a + b; }, 0); var pct = ((ctx.parsed / total) * 100).toFixed(1); var pnl = reasonPnl[ctx.label] || 0; return ctx.label + ': ' + ctx.parsed + ' 次 (' + pct + '%)  多因累计 ' + pnl.toFixed(2) + ' U'; } } }
       },
       cutout: '55%'
     })
@@ -376,9 +376,11 @@ function renderEmotionAnalysis(closed) {
     },
     options: createStandardOptions(cc, {
       plugins: {
-        legend: { position: 'top', labels: { font: { size: 12 }, padding: 12 } },
-        tooltip: { mode: 'index', intersect: false }
+        legend: { position: 'top', labels: { font: { size: 12 }, padding: 12 } }
       },
+      // P3-14 FIX：mode/intersect 属于 interaction，不是 tooltip 选项——原写法被静默忽略。
+      // tooltip 不再传空对象，深合并（P2-7）会保留 base 的主题化 tooltip 配色
+      interaction: { mode: 'index', intersect: false },
       scales: { x: { grid: { display: false }, ticks: { maxRotation: 45 } }, y: { ticks: { stepSize: 1 } } }
     })
   });
@@ -452,12 +454,14 @@ function renderExecutionQuality(closed) {
   var keys = Object.keys(execStats).map(Number).sort(function(a, b) { return a - b; });
   if (keys.length === 0) {
     var totalClosed = closed.length;
+    // P2-8 FIX：withExec 是 filter().length 得到的数字，.length 恒为 undefined；
+    // 且 `withExec.length === 0` 恒为 false，"平仓时填写执行分后此图表自动生效"提示永不出现
     var withExec = closed.filter(function(l) { return l.executionScore != null && l.executionScore > 0; }).length;
     var msg = '暂无执行评分数据';
     if (totalClosed > 0) {
-      msg += '（共 ' + totalClosed + ' 笔已平仓，其中 ' + withExec.length + ' 笔有执行评分[1-3]）';
+      msg += '（共 ' + totalClosed + ' 笔已平仓，其中 ' + withExec + ' 笔有执行评分[1-3]）';
       // 历史 0 分已自动迁移为未评分；提示用户如何查看
-      if (withExec.length === 0) {
+      if (withExec === 0) {
         msg += ' · 提示：平仓时填写执行分后此图表自动生效';
       }
     } else {

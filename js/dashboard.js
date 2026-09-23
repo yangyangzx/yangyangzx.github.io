@@ -46,49 +46,60 @@ function _fmtPct(val) {
 }
 
 // ==================== P0-8: 数值计数器动画工具 ====================
-window._animateDashValue = function(el, targetText, duration) {
-  duration = duration || 400;
-  var startText = el.dataset.animCurrent || el.getAttribute('data-anim-target') || targetText;
-  // 尝试解析数字（从纯数字文本或 data-anim-target）
-  var parseNum = function(s) {
-    if (!s) return NaN;
-    var m = s.match(/[-+]?\d+\.?\d*/);
-    return m ? parseFloat(m[0]) : NaN;
-  };
-  var numStart = parseNum(startText);
-  var numTarget = parseNum(targetText);
-  if (isNaN(numStart) || isNaN(numTarget)) { delete el.dataset.animCurrent; return; }
-  var suffix = targetText.replace(/[-+]?\d+\.?\d*/g, '').trim();
-  var isPct = targetText.indexOf('%') >= 0;
-  // 保留 HTML 内容（箭头 span）的前缀
-  var prefix = '';
-  if (el.innerHTML) {
-    var m2 = el.innerHTML.match(/^(<[^>]+>)*\s*/);
-    if (m2) prefix = m2[0];
+/**
+ * 数值计数器动画（P0-8）
+ *
+ * P2-11 FIX：改为结构化参数，不再从展示字符串反解数字/后缀。
+ * 原实现用「去掉数字后剩下的字符串」当后缀，对 "+ 12.34 USDT" 得到 "+  USDT"
+ * （+ 后有空格，正则匹配不到它），动画期间显示成 "12.34+  USDT"；终帧又被调用方的
+ * innerHTML 覆盖，涨跌箭头从不显示；被打断时还会带入上次渲染的旧箭头 span（"▲ 配负数"）。
+ *
+ * @param {HTMLElement} el    目标元素（写入 innerHTML）
+ * @param {number}      value 目标数值
+ * @param {Object}      opts
+ *   - {Function} format   (current:number) => 完整展示文本；终帧也用它，保证与目标文本一致
+ *   - {string}   prefix   前缀 HTML（如涨跌箭头 span），每一帧原样保留，动画不覆盖箭头
+ *   - {number}   duration 时长 ms（默认 400）
+ *   - {number}   start    起始数值（默认取上次动画的中断值或 0）
+ */
+window._animateDashValue = function(el, value, opts) {
+  opts = opts || {};
+  var duration = opts.duration || 400;
+  var format = typeof opts.format === 'function' ? opts.format : function(v) { return String(v); };
+  var prefix = opts.prefix || '';
+
+  var targetNum = typeof value === 'number' ? value : (parseFloat(value) || 0);
+  if (isNaN(targetNum)) targetNum = 0;
+
+  // 中断上一次未完成的动画，避免两个 rAF 循环互相覆盖
+  if (el._animRaf) { cancelAnimationFrame(el._animRaf); el._animRaf = null; }
+
+  var startNum = opts.start;
+  if (startNum == null) {
+    startNum = parseFloat(el.dataset.animCurrent);
+    if (isNaN(startNum)) startNum = 0;
   }
+
   var startTime = null;
   function step(ts) {
     if (!startTime) startTime = ts;
     var progress = Math.min((ts - startTime) / duration, 1);
     var ease = progress === 1 ? 1 : 1 - Math.pow(2, -10 * progress);
-    var current = numStart + (numTarget - numStart) * ease;
-    var formatted;
-    if (isPct) {
-      formatted = current.toFixed(1) + '%';
+    var current = startNum + (targetNum - startNum) * ease;
+    el.innerHTML = prefix + format(current);
+    el.dataset.animCurrent = String(current);
+    if (progress < 1) {
+      el._animRaf = requestAnimationFrame(step);
     } else {
-      formatted = current.toFixed(2) + suffix;
-    }
-    el.innerHTML = prefix + formatted;
-    el.dataset.animCurrent = current;
-    el.dataset.animTarget = targetText;
-    if (progress < 1) requestAnimationFrame(step);
-    else {
-      el.innerHTML = prefix + targetText;
-      delete el.dataset.animCurrent;
-      delete el.dataset.animTarget;
+      // 终帧严格等于 prefix + format(target)，与调用方写入的目标文本一致
+      el.innerHTML = prefix + format(targetNum);
+      // 保留终值作为下次动画的起点（原实现用 data-anim-target 承载，效果相同），
+      // 使"今日 PnL 100 → 125"这类更新从旧值滚动到新值，而不是每次归零重播
+      el.dataset.animCurrent = String(targetNum);
+      el._animRaf = null;
     }
   }
-  requestAnimationFrame(step);
+  el._animRaf = requestAnimationFrame(step);
 };
 
 // ==================== 卡片 1：今日 PnL ====================
@@ -122,11 +133,14 @@ function _renderTodayPnl() {
   var cls = totalPnl > 0 ? 'pnl-positive' : (totalPnl < 0 ? 'pnl-negative' : 'pnl-neutral');
   valueEl.className = 'dash-card-value ' + cls;
 
-  var arrow = totalPnl > 0 ? '<span class="pnl-arrow-up">&#9650;</span>' : (totalPnl < 0 ? '<span class="pnl-arrow-down">&#9660;</span> ' : '');
+  var arrow = totalPnl > 0 ? '<span class="pnl-arrow-up">&#9650;</span>' : (totalPnl < 0 ? '<span class="pnl-arrow-down">&#9660;</span>' : '');
+  // P2-11 FIX：箭头由 prefix 统一提供，动画期间不再覆盖/丢失箭头（原实现在箭头后
+  // 补空格与 format 生成的 "+ 12.34 USDT" 叠加，且终帧被下面的 innerHTML 覆盖）
+  var prefix = arrow ? arrow + ' ' : '';
   var displayTxt = _fmtUSDT(totalPnl);
-  // P0-8: 数值计数器动画
-  window._animateDashValue(valueEl, displayTxt, 350);
-  valueEl.innerHTML = arrow + ' ' + displayTxt;
+  // P0-8: 数值计数器动画（结构化参数，format 与终帧口径一致）
+  window._animateDashValue(valueEl, totalPnl, { prefix: prefix, format: _fmtUSDT, duration: 350 });
+  valueEl.innerHTML = prefix + displayTxt;
   subEl.textContent = '共 ' + count + ' 笔已平仓';
 
   var card = document.getElementById('dashTodayPnl');
@@ -284,8 +298,12 @@ function _renderLossStreak() {
 
   valueEl.textContent = streak;
   valueEl.className = 'dash-card-value';
-  // P0-8: 连亏数值动画
-  window._animateDashValue(valueEl, String(streak), 300);
+  // P0-8/P2-11: 连亏数值动画——笔数是整数，必须走整数格式化分支；
+  // 原实现传 String(streak) 会被金额逻辑 toFixed(2) 成 "1.00"
+  window._animateDashValue(valueEl, streak, {
+    format: function(v) { return String(Math.round(v)); },
+    duration: 300
+  });
 
   var tag = '';
   var tip = '';
@@ -322,6 +340,8 @@ function _renderLiqWarn() {
   }
 
   var warnings = [];
+  // P2-12：有杠杆但未设置止损的仓位——无法计算强平距离，不计入"安全"数量
+  var noSlPositions = [];
 
   for (var i = 0; i < openLogs.length; i++) {
     var log = openLogs[i];
@@ -330,7 +350,12 @@ function _renderLiqWarn() {
 
     var entry = log.entryPrice;
     var sl = log.stopLoss;
-    if (sl == null || isNaN(sl) || sl <= 0) continue; // 无止损或止损≤0的仓位跳过，防止除零
+    // P2-12 FIX：原实现此处 continue 只考虑除零防御，没有"跳过即安全"的语义补偿，
+    // 50x 多单不填止损也会落到"所有仓位安全"。这类仓位单独收集，保持"有止损才算强平距离"的原逻辑
+    if (sl == null || isNaN(sl) || sl <= 0) {
+      noSlPositions.push(log);
+      continue;
+    }
     var dir = log.direction;
 
     // 强平价：统一使用 utils.calcLiquidationPrice
@@ -387,11 +412,20 @@ function _renderLiqWarn() {
     }
   }
 
+  // P2-12 FIX：无止损的杠杆仓位给出独立警示，不计入"所有仓位安全"
+  var noSlHtml = '';
+  if (noSlPositions.length > 0) {
+    noSlHtml = '<div style="padding:6px 10px;background:var(--color-warning-bg);border-left:3px solid var(--color-warning);border-radius:var(--radius-xs);color:var(--color-warning);font-size:var(--font-sm);">' +
+      '<i class="fas fa-exclamation-triangle"></i> ' + noSlPositions.length + ' 个杠杆仓位未设置止损，无法计算强平距离</div>';
+  }
+  var safeHtml = '<span class="liq-safe"><i class="fas fa-check-circle"></i> ' +
+    (noSlPositions.length > 0 ? '已设止损的仓位安全' : '所有仓位安全') + '</span>';
+
   if (warnings.length === 0) {
-    listEl.innerHTML = '<span class="liq-safe"><i class="fas fa-check-circle"></i> 所有仓位安全</span>';
+    listEl.innerHTML = noSlHtml + safeHtml;
     var card = document.getElementById('dashLiqWarn');
     card.className = card.className.replace(/\bstatus-\w+/g, '');
-    card.classList.add('status-positive');
+    card.classList.add(noSlPositions.length > 0 ? 'status-warning' : 'status-positive');
     return;
   }
 
@@ -408,7 +442,7 @@ function _renderLiqWarn() {
       noteText +
     '</div>';
   }
-  listEl.innerHTML = html;
+  listEl.innerHTML = html + noSlHtml;
   var card = document.getElementById('dashLiqWarn');
   card.className = card.className.replace(/\bstatus-\w+/g, '');
   card.classList.add('status-negative');
@@ -456,16 +490,21 @@ function _renderEquityChart() {
   }
 
   const curve = window.utils.calcEquityCurve(closed);
+  // P3-13 FIX：排序键与 utils.calcEquityCurve 对齐（closeTime || time）——
+  // 原实现只看 closeTime，缺 closeTime 的已平仓记录 x 轴日期与权益值会错位
   const sorted = closed.slice().sort(function(a, b) {
-    const ta = a.closeTime ? new Date(a.closeTime).getTime() : 0;
-    const tb = b.closeTime ? new Date(b.closeTime).getTime() : 0;
+    const ta = new Date(a.closeTime || a.time).getTime();
+    const tb = new Date(b.closeTime || b.time).getTime();
     return ta - tb;
   });
+
+  // P3-13 FIX：占位/报错文字改读主题色（原 #ffffff / #ff4444 在浅色主题下基本不可见）
+  const cc = utils.getChartColors();
 
   if (sorted.length === 0) {
     // 绘制占位文字（使用 CSS 像素坐标，因为 ctx 已缩放）
     ctx.clearRect(0, 0, rectWidth, rectHeight);
-    ctx.fillStyle = '#ffffff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = cc.canvasText; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.font = '13px -apple-system, sans-serif';
     ctx.fillText('暂无交易数据', rectWidth / 2, rectHeight / 2);
     return;
@@ -485,7 +524,6 @@ function _renderEquityChart() {
   }
 
   // 正/负分段颜色
-  const cc = utils.getChartColors();
   const pointColors = [];
   for (let j = 0; j < sorted.length; j++) {
     pointColors.push((sorted[j].pnlAmount || 0) >= 0 ? cc.positivePoint : cc.negativePoint);
@@ -505,15 +543,18 @@ function _renderEquityChart() {
           var chart = context.chart;
           var ctx2 = chart.ctx;
           var gradient = ctx2.createLinearGradient(0, 0, 0, chart.height);
-          gradient.addColorStop(0, 'rgba(59, 130, 246, 0.25)');
-          gradient.addColorStop(1, 'rgba(59, 130, 246, 0.02)');
+          // P3-18 FIX（越出清单，同 analytics.js:202 的同类硬编码蓝渐变，一并改为主题色）
+          gradient.addColorStop(0, withAlpha(cc.barWin, 0.25));
+          gradient.addColorStop(1, withAlpha(cc.barWin, 0.02));
           return gradient;
         },
         borderWidth: 2.5,
         pointRadius: 3,
         pointHoverRadius: 6,
         pointBackgroundColor: pointColors,
-        pointBorderColor: 'rgba(255,255,255,0.6)',
+        // P3-19 FIX：原 'rgba(255,255,255,0.6)' 硬编码——浅色主题下白点边框在白卡片上消失；
+        // 改读 --chart-canvas-ptcenter（与 chart-factory.js 散点图同一口径）
+        pointBorderColor: readCssVar('--chart-canvas-ptcenter', 'rgba(255,255,255,0.6)'),
         pointBorderWidth: 1.5,
         fill: true,
         tension: 0.25
@@ -611,8 +652,8 @@ function _renderEquityChart() {
       window.ChartManager.unregister('dashboard_equity_chart', true);
     }
     
-    // 绘制错误提示
-    ctx.fillStyle = '#ff4444'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    // 绘制错误提示（P3-13 FIX：原 #ff4444 硬编码，浅色主题下偏淡，改读主题色）
+    ctx.fillStyle = cc.barLoss; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.font = '14px sans-serif';
     ctx.fillText('图表创建失败', rectWidth/2, rectHeight/2);
   }

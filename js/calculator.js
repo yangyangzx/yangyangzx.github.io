@@ -1,6 +1,11 @@
 // ==================== 核心计算 ====================
 var _calculating = false;
 
+// 金额千分位格式化（仅用于展示，不参与任何计算或持久化）
+function fmtMoney(v, decimals) {
+  return Number(v).toLocaleString('zh-CN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+
 // 计算结束清理：确保 _calculating 始终被复位
 function _calcCleanup() {
   _calculating = false;
@@ -35,7 +40,7 @@ Object.defineProperty(window, '_lastCalcDirty', {
   configurable: false
 });
 
-function readPlanSlippage(symbol, orderType) {
+function readPlanSlippage(symbol, orderType, price) {
   var modeEl = document.getElementById('slippageMode');
   var entryEl = document.getElementById('entrySlippageTicks');
   var exitEl = document.getElementById('exitSlippageTicks');
@@ -44,7 +49,10 @@ function readPlanSlippage(symbol, orderType) {
     orderType: orderType,
     entryTicks: entryEl ? entryEl.value : 0,
     exitTicks: exitEl ? exitEl.value : 0,
-    tickSize: getTickSize(symbol)
+    // P2 FIX：透传价格估算出的 tickSize。Slippage.readPlanInput 当前忽略该字段，
+    // 显式传入是为了让"调用方声明的 tick 单位"与下方 applyAdversePrice 使用的一致，
+    // 避免将来 readPlanInput 一旦读取它却拿到与主路径不同的值。
+    tickSize: getTickSize(symbol, price)
   });
 }
 
@@ -72,7 +80,29 @@ function getProvisionalStopLoss(entryPrice, direction, symbol, settings) {
   };
 }
 
+// P0 FIX（2026-09-23 开仓逻辑审计）：原 calculate() 主体 ~900 行无 try/finally，
+// _calculating 在 :102 置真后仅由函数尾部 :972 复位，任何运行时异常（典型：
+// slippage.js applyAdversePrice 对 SHIB 等未映射低价品种 throw「滑点后的成交价必须大于 0」）
+// 都会让 _calculating 永真 → markCalculationDirty()(:1608) 永久短路 → 「结果已过期」提示
+// 从此不再出现，且结果区已被 resetForCalculation 清空却无任何错误提示。
+// 现将主体收敛为 _calculateImpl()，外层统一兜底：复位 _calculating + 显式报错，不静默吞异常。
 function calculate() {
+  try {
+    return _calculateImpl();
+  } catch (e) {
+    _calcCleanup();
+    console.error('[calculate] 未捕获异常:', e);
+    try {
+      CalculationUI.renderValidationError(
+        CalculationUI.getResultUI(), '计算失败',
+        (e && e.message ? e.message : '未知错误') + '。请检查品种/价格输入后重试。'
+      );
+    } catch (e2) { console.error('[calculate] 错误提示渲染失败:', e2); }
+    return null;
+  }
+}
+
+function _calculateImpl() {
   // P0-01：先建立所有结果区引用，任何阻断分支均不可访问未初始化变量。
   const ui = CalculationUI.getResultUI();
   const posD = ui.position;
@@ -133,8 +163,9 @@ function calculate() {
   const targetPrice = targetPriceEl ? parseFloat(targetPriceEl.value) : NaN;
 
   // ===== P0-05：统一滑点模型（双侧 ticks，禁止百分比/点数混用） =====
-  const tickSize = getTickSize(symbol);
-  const planSlippageInput = readPlanSlippage(symbol, orderType);
+  // P0 FIX：传入价格，未映射品种按量级估算 tick，避免低价品种拿到 0.1 而产生负成交价。
+  const tickSize = getTickSize(symbol, entryPrice);
+  const planSlippageInput = readPlanSlippage(symbol, orderType, entryPrice);
   const effectiveEntryPrice = Slippage.applyAdversePrice(
     entryPrice, direction, planSlippageInput.entryTicks, tickSize, 'entry'
   ).filledPrice;
@@ -281,7 +312,7 @@ function calculate() {
     if (!isNaN(p) && p > 0 && p <= 10) {
       riskPercent = p / 100;
       riskAmount = capital * riskPercent;
-      document.getElementById('riskHint').textContent = '= ' + riskAmount.toFixed(2) + ' USDT (' + p.toFixed(1) + '% 本金)';
+      document.getElementById('riskHint').textContent = '= ' + fmtMoney(riskAmount, 2) + ' USDT (' + p.toFixed(1) + '% 本金)';
     } else {
       showCalcError('风险比例无效', '请输入有效的亏损比例（0.5%-10%）');
       return;
@@ -292,7 +323,7 @@ function calculate() {
     if (!isNaN(fixed) && fixed > 0) {
       riskAmount = fixed;
       riskPercent = fixed / capital;
-      document.getElementById('riskHint').textContent = '= ' + riskAmount.toFixed(2) + ' USDT (最大亏损)';
+      document.getElementById('riskHint').textContent = '= ' + fmtMoney(riskAmount, 2) + ' USDT (最大亏损)';
     } else {
       showCalcError('风险金额无效', '请输入正数作为固定风险金额');
       return;
@@ -381,7 +412,7 @@ function calculate() {
         kellyRiskEl.value = roundedKelly + '%';
       }
       var riskHintEl = document.getElementById('riskHint');
-      if (riskHintEl) riskHintEl.textContent = '= ' + riskAmount.toFixed(2) + ' USDT（半凯利驱动 ' + (riskPercent * 100).toFixed(2) + '%）';
+      if (riskHintEl) riskHintEl.textContent = '= ' + fmtMoney(riskAmount, 2) + ' USDT（半凯利驱动 ' + (riskPercent * 100).toFixed(2) + '%）';
     } else if (kellyData && kellyData.isNegative) {
       // 策略期望为负 → 硬阻断开仓
       _calcCleanup();
@@ -393,6 +424,7 @@ function calculate() {
       );
     } else {
       showCalcError('凯利数据无效', '启用凯利驱动前，请先填写胜率/平均盈利/平均亏损并点击计算');
+      _calcCleanup();  // P2 FIX：其余早退分支均调用，此处漏改会残留上次的 #portfolioRiskLine
       return;
     }
     // 凯利驱动的风险同样受系统单笔风险上限约束（与手动输入同权，P0-4 语义）
@@ -467,6 +499,18 @@ function calculate() {
     // A 优化：ATR 与分批独立止损冲突时显示明确提示，而非静默跳过
     rw = '<span class="warning-tag alert"><i class="fas fa-exclamation-triangle"></i> ATR 动态止损与分批独立止损不可同时使用，已优先使用分批止损计算。</span>';
     atrStopMode = false;
+    // P1 FIX（2026-09-23 开仓逻辑审计）：仓位规模已改用加权分批止损距离，但 stopLoss
+    // 仍停留在上方 ATR 分支写入的值，随后被 setCalc() 持久化并供给强平检查与止损腿滑点
+    // —— 仓位规模与止损风险从此按两个不同口径计算。这里按方向还原与 stopDistance
+    // 一致的止损价，使全链路口径统一。
+    var _derivedStop = direction === 'short'
+      ? (effectiveEntryPrice + stopDistance)
+      : (effectiveEntryPrice - stopDistance);
+    if (isFinite(_derivedStop) && _derivedStop > 0) {
+      stopLoss = _derivedStop;
+      var _slInputW = document.getElementById('stopLoss');
+      if (_slInputW) { _slInputW.value = stopLoss.toFixed(5); delete _slInputW.dataset.provisionalStop; }
+    }
   }
 
   if (!useWeightedStop && !atrStopMode) {
@@ -479,7 +523,7 @@ function calculate() {
       else { stopDistance=Math.abs(stopLoss-effectiveEntryPrice); positionSize=riskAmount*effectiveEntryPrice/stopDistance; }
     }
   }
-  if (!valid) { showCalcError(err, ''); return; }
+  if (!valid) { showCalcError(err, ''); _calcCleanup(); return; }  // P2 FIX：见上，避免残留上次组合风险行
 
   // 零止损距离硬阻断（止损距离 < 入场价 0.1%）：仓位会被放大到危险值，不允许继续计算
   if (stopDistance < effectiveEntryPrice * 0.001) {
@@ -496,8 +540,15 @@ function calculate() {
   // ===== 仓位硬上限：所有未平仓日志的保证金均须相加 =====
   // 拆分保存的同 groupId 条目是同一计划的分段仓位，不是重复记录，不能去重。
   var usedMargin = 0;
-  var consumedCapital = 0; // 已消耗的总资金：保证金 + 滑点成本
-  var openPositions = logs.filter(function(l) { return !l.closeType || l.closeType === ''; });
+  var consumedCapital = 0; // 已消耗的总资金：保证金 + 滑点成本 + 手续费
+  // P1 FIX（2026-09-23 开仓逻辑审计）：原 `!closeType || closeType === ''` 把所有非空
+  // closeType 判为已平仓，而权威口径（utils.isClosedTrade）把 partialTP / reducePosition
+  // 且 closedRatio < 99.999% 判为**仍在仓**。部分平仓的剩余仓位因此被排除在
+  // usedMargin / consumedCapital / 80% 保证金上限 / 90% 总风险上限 /
+  // checkSymbolConcentration 之外——系统性低估已用资金，且方向是危险的。
+  // 另注：此处不得写成 util.isClosedTrade（裸标识符）——全局只有 window.utils（复数），
+  // typeof util 恒为 undefined，会静默退化回错误分支（risk.js 曾因此踩坑）。
+  var openPositions = logs.filter(isTradeStillOpen);
   for (var i = 0; i < openPositions.length; i++) {
     var pos = openPositions[i];
     var lev = Number(pos.leverage);
@@ -507,8 +558,12 @@ function calculate() {
       usedMargin += ps / lev;
       consumedCapital += ps / lev;
     }
-    // 滑点成本在开仓时已支付，从可用资金中扣除
-    consumedCapital += parseFloat(pos.slippageCost) || 0;
+    // 滑点成本与手续费在开仓时已支付，从可用资金中扣除。
+    // P2 FIX：原只扣滑点不扣手续费，与"成本侵蚀"口径（stats.js 用 realizedFee 计累计费用）不一致。
+    // fee + realizedFee 不会重复计算：realizedFee 仅累加已平仓部分，fee 只保留剩余仓位部分。
+    consumedCapital += (parseFloat(pos.slippageCost) || 0)
+                     + (parseFloat(pos.fee) || 0)
+                     + (parseFloat(pos.realizedFee) || 0);
   }
   var availableCapital = capital - consumedCapital;
   if (availableCapital < 0) availableCapital = 0;
@@ -702,14 +757,23 @@ function calculate() {
   if (feeRate <= 0) feeRate = orderType === 'limit' ? 0.04 : 0.08;
 
   const quantity = effectivePositionSize / effectiveEntryPrice;
+  // P2 FIX：止损腿原复用入场腿的 ticks（planSlippageInput 按 #orderType 解析），
+  // 使止损成交被假设得与限价入场一样从容。自动模式下改按 #stopType 解析默认 ticks
+  // （stop-market → 2/2，stop-limit → 2/2）；手动模式下保留用户显式填写的数值。
+  let stopEntryTicks = planSlippageInput.entryTicks, stopExitTicks = planSlippageInput.exitTicks;
+  if (planSlippageInput.mode !== 'manual') {
+    const stopDefaults = Slippage.getDefaultTicks(stopType);
+    stopEntryTicks = stopDefaults.entry;
+    stopExitTicks = stopDefaults.exit;
+  }
   const stopSlippageModel = Slippage.calculate({
     direction: direction,
     expectedEntryPrice: entryPrice,
     expectedExitPrice: stopLoss,
     quantity: quantity,
     tickSize: tickSize,
-    entryTicks: planSlippageInput.entryTicks,
-    exitTicks: planSlippageInput.exitTicks
+    entryTicks: stopEntryTicks,
+    exitTicks: stopExitTicks
   });
   const stopSlippage = Slippage.toLogSnapshot(stopSlippageModel, { source: planSlippageInput.source });
 
@@ -759,10 +823,10 @@ function calculate() {
   }
 
   // ===== 三卡片：仓位 =====
-  posD.textContent = effectivePositionSize.toFixed(2) + ' U';
+  posD.textContent = fmtMoney(effectivePositionSize, 2) + ' U';
 
   // ===== 三卡片：保证金 =====
-  marginD.textContent = effectiveMargin.toFixed(2) + ' USDT';
+  marginD.textContent = fmtMoney(effectiveMargin, 2) + ' USDT';
   if (leverage > 0) {
     levD.textContent = leverage + 'x 杠杆';
   } else {
@@ -805,9 +869,9 @@ function calculate() {
   let riskClass = (effectiveRiskPercent*100) <= 2 ? 'low' : ((effectiveRiskPercent*100) <= 5 ? 'mid' : 'high');
   // stopCost：用于与"最大亏损"并列，始终基于止损路径计算（不受目标价影响）
   const stopCost = stopFee + stopSlippage.totalCost;
-  let costL1HTML = '<span>最大亏损 <span class="cost-loss ' + riskClass + '">' + effectiveRiskAmount.toFixed(2) + ' USDT (' + (effectiveRiskPercent*100).toFixed(2) + '%)</span></span>';
+  let costL1HTML = '<span>最大亏损 <span class="cost-loss ' + riskClass + '">' + fmtMoney(effectiveRiskAmount, 2) + ' USDT (' + (effectiveRiskPercent*100).toFixed(2) + '%)</span></span>';
   if (stopCost > 0) {
-    costL1HTML += '<span>止损预估费用 ' + stopCost.toFixed(2) + ' USDT</span>';
+    costL1HTML += '<span>止损预估费用 ' + fmtMoney(stopCost, 2) + ' USDT</span>';
     costL1HTML += '<span>滑点 ' + planSlippageInput.entryTicks + '+' + planSlippageInput.exitTicks + ' ticks</span>';
   }
   if (atrStopMode) {
@@ -844,15 +908,20 @@ function calculate() {
         const bpos = effectivePositionSize * ba / 100;
         const bstopDist = direction === 'long' ? bp - bsl : bsl - bp;
         // 实际损失取风险额和计算值的较小者（考虑仓位被截断的情况）
-        const bloss = Math.min(bRisk, bstopDist > 0 ? (bstopDist * bpos / effectiveEntryPrice) : bRisk);
+        // P2 FIX（2026-09-23 开仓逻辑审计）：单批数量应按本批自己的成交价 bp 折算，
+        // 而非全局 effectiveEntryPrice——分批建仓的前提就是各批入场价不同，分母混用使
+        // 价格跨区间时损失失真（bp<加权入场价且本批止损更窄时低估，反之高估）。
+        // 注：bloss 仅用于 triggerHTML 展示，不参与持久化与风控门，故为展示级缺陷。
+        const bloss = Math.min(bRisk,
+          (bstopDist > 0 && bp > 0) ? (bstopDist * bpos / bp) : bRisk);
         const blossPct = capital > 0 ? (bloss / capital * 100) : 0;
-        triggerHTML += '<div class="trigger-line"><span class="trigger-batch">#' + (i + 1) + '</span><span class="trigger-price">' + bsl.toFixed(5) + '</span><span class="trigger-arrow">→</span><span>损失</span><span class="trigger-loss">' + bloss.toFixed(2) + ' U (' + blossPct.toFixed(2) + '%)</span></div>';
+        triggerHTML += '<div class="trigger-line"><span class="trigger-batch">#' + (i + 1) + '</span><span class="trigger-price">' + bsl.toFixed(5) + '</span><span class="trigger-arrow">→</span><span>损失</span><span class="trigger-loss">' + fmtMoney(bloss, 2) + ' U (' + blossPct.toFixed(2) + '%)</span></div>';
       });
     } else {
-      triggerHTML = '<div class="trigger-line"><span class="trigger-price">' + (stopLoss ? parseFloat(stopLoss).toFixed(5) : '—') + '</span><span class="trigger-arrow">→</span><span>损失</span><span class="trigger-loss">' + effectiveRiskAmount.toFixed(2) + ' USDT (' + (effectiveRiskPercent * 100).toFixed(2) + '%)</span></div>';
+      triggerHTML = '<div class="trigger-line"><span class="trigger-price">' + (stopLoss ? parseFloat(stopLoss).toFixed(5) : '—') + '</span><span class="trigger-arrow">→</span><span>损失</span><span class="trigger-loss">' + fmtMoney(effectiveRiskAmount, 2) + ' USDT (' + (effectiveRiskPercent * 100).toFixed(2) + '%)</span></div>';
     }
   } else {
-    triggerHTML = '<div class="trigger-line"><span class="trigger-price">' + (stopLoss ? parseFloat(stopLoss).toFixed(5) : '—') + '</span><span class="trigger-arrow">→</span><span>损失</span><span class="trigger-loss">' + effectiveRiskAmount.toFixed(2) + ' USDT (' + (effectiveRiskPercent * 100).toFixed(2) + '%)</span></div>';
+    triggerHTML = '<div class="trigger-line"><span class="trigger-price">' + (stopLoss ? parseFloat(stopLoss).toFixed(5) : '—') + '</span><span class="trigger-arrow">→</span><span>损失</span><span class="trigger-loss">' + fmtMoney(effectiveRiskAmount, 2) + ' USDT (' + (effectiveRiskPercent * 100).toFixed(2) + '%)</span></div>';
   }
   if (triggerHTML) {
     triggerContent.innerHTML = triggerHTML;
@@ -887,7 +956,7 @@ function calculate() {
   if (adjMsg) wh += '<div class="warning-tag" style="margin-top:6px;">' + adjMsg + '</div>';
   if (!cappedByMargin && effectiveMargin > capital) {
     const needLeverage = effectivePositionSize /  capital;
-    wh += '<div class="warning-tag alert" style="margin-top:6px;"><i class="fas fa-exclamation-triangle"></i> 保证金不足: 需 ' + effectiveMargin.toFixed(2) + ' USDT，本金仅 ' + capital.toFixed(2) + ' USDT。建议提高杠杆至 ≥ ' + needLeverage.toFixed(1) + 'x，或降低风险额 / 收紧止损</div>';
+    wh += '<div class="warning-tag alert" style="margin-top:6px;"><i class="fas fa-exclamation-triangle"></i> 保证金不足: 需 ' + fmtMoney(effectiveMargin, 2) + ' USDT，本金仅 ' + fmtMoney(capital, 2) + ' USDT。建议提高杠杆至 ≥ ' + needLeverage.toFixed(1) + 'x，或降低风险额 / 收紧止损</div>';
   }
   warnD.innerHTML = wh;
   const resultBox = document.getElementById('resultBox');
@@ -1030,8 +1099,8 @@ function renderPortfolioRisk(calc) {
   line.innerHTML =
     '<div style="display:flex;gap:16px;flex-wrap:wrap;">' +
       '<span>现有持仓 <strong>' + openLogs.length + '</strong> 笔</span>' +
-      '<span>组合风险 <strong style="' + riskCls + '">' + portRisk.toFixed(2) + ' U（' + (portRisk / capital * 100).toFixed(1) + '%）</strong></span>' +
-      '<span>本仓后总风险 <strong style="' + riskCls + '">' + totalRisk.toFixed(2) + ' U（' + riskPct.toFixed(1) + '%）</strong></span>' +
+      '<span>组合风险 <strong style="' + riskCls + '">' + fmtMoney(portRisk, 2) + ' U（' + (portRisk / capital * 100).toFixed(1) + '%）</strong></span>' +
+      '<span>本仓后总风险 <strong style="' + riskCls + '">' + fmtMoney(totalRisk, 2) + ' U（' + riskPct.toFixed(1) + '%）</strong></span>' +
       '<span>保证金占用 <strong style="' + marginCls + '">' + marginPct.toFixed(1) + '%</strong></span>' +
     '</div>' +
     (atrNote ? '<div style="margin-top:4px;color:var(--color-warning);">' + atrNote + '</div>' : '');
@@ -1402,7 +1471,7 @@ function addSplitBatch() {
   const MAX_SPLITS = 5;  // 最多5批
   
   if (_splitBatches.length >= MAX_SPLITS) {
-    showToast(`分批建仓最多支持${MAX_SPLITS}批，当前已有${_splitBatches.length}批`, "warning");
+    showToast(`分批建仓最多支持${MAX_SPLITS}批，当前已有${_splitBatches.length}批`, "warn");
     return false; // 明确返回false表示添加失败
   }
   
@@ -1419,7 +1488,7 @@ function removeSplitBatch(idx) {
   const MAX_SPLITS = 5;  // 最多5批
   
   if (_splitBatches.length <= MIN_SPLITS) {
-    showToast(`分批建仓最少需要${MIN_SPLITS}批，当前已有${_splitBatches.length}批`, "warning");
+    showToast(`分批建仓最少需要${MIN_SPLITS}批，当前已有${_splitBatches.length}批`, "warn");
     return false; // 明确返回false表示删除失败
   }
   

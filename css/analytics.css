@@ -17,19 +17,9 @@
   height: 300px;
   border-radius: var(--radius-md);
   overflow: hidden;
-  background: var(--glass-bg-light);
+  /* 底部渐变并入卡片背景，位于 canvas 之下 — 不再遮挡 x 轴标签/柱底/tooltip */
+  background: linear-gradient(180deg, transparent 65%, var(--glass-bg-light) 100%), var(--glass-bg-light);
   border: 1px solid var(--glass-border);
-}
-
-/* 图表容器底部渐变遮罩 */
-.chart-wrap::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, transparent 65%, var(--glass-bg-light) 100%);
-  pointer-events: none;
-  z-index: 1;
-  border-radius: var(--radius-md);
 }
 
 .chart-wrap canvas {

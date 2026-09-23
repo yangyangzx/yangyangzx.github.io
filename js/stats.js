@@ -428,7 +428,7 @@ function drawEquityCurve(closed) {
     if (closest === null || closestDist > 30) { tooltip.style.display = 'none'; return; }
     const d = data[closest];
     var sc = sortedClosed[closest];
-    tooltip.innerHTML = '<b>#' + (closest + 1) + ' ' + (sc.symbol || '') + '</b><br>' +
+    tooltip.innerHTML = '<b>#' + (closest + 1) + ' ' + (sc.symbol ? esc(sc.symbol) : '') + '</b><br>' +
       _getTradeDate(sc) + '<br>' +
       '盈亏: ' + (d.pnl >= 0 ? '+' : '') + d.pnl.toFixed(2) + ' USDT<br>' +
       '累计权益: ' + d.eq.toFixed(2) + ' USDT';
@@ -515,8 +515,8 @@ function renderStrategyBreakdown(closed) {
     const cls = r.lowSample ? ' class="low-sample"' : '';
     const pnlCls = r.tPnl > 0 ? 'positive' : r.tPnl < 0 ? 'negative' : '';
     html += '<tr' + cls + '>' +
-      '<td>' + r.framework + '</td>' +
-      '<td>' + r.patternName + (r.lowSample ? ' <span style="font-size:10px;">(n<' + r.cnt + ')</span>' : '') + '</td>' +
+      '<td>' + esc(r.framework) + '</td>' +
+      '<td>' + esc(r.patternName) + (r.lowSample ? ' <span style="font-size:10px;">(n<' + r.cnt + ')</span>' : '') + '</td>' +
       '<td>' + r.cnt + '</td>' +
       '<td>' + r.wr.toFixed(1) + '%</td>' +
       '<td class="' + pnlCls + '">' + (r.tPnl >= 0 ? '+' : '') + r.tPnl.toFixed(2) + '</td>' +
@@ -721,7 +721,8 @@ function autoCountLossStreak() {
       el.style.borderColor = streak > 0 ? 'var(--color-warning)' : '';
       el.style.boxShadow = streak > 0 ? '0 0 0 3px var(--color-warning-bg)' : '';
     }
-    calculate();
+    // P3: calculate() 抛错不得向上冒泡（调用点 rendering.js 无 try/catch 保护）
+    try { calculate(); } catch(e) { console.error('[autoCountLossStreak] calculate error:', e); }
   } else {
     // Manual mode: only update style based on current value
     if (el) {
