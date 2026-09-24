@@ -1,4 +1,16 @@
 // ==================== 编辑模态框 ====================
+
+// 模态框退出：先加 .closing 播放 springOut（内容）+ overlayOut（遮罩），
+// 动画结束后再移除。时长与 --dur-normal（200ms）对齐。
+// 摘掉 id 防止退出动画期间重复打开同名弹窗时 getElementById 命中退场中的旧节点。
+window.closeModalOverlay = function(overlay) {
+  if (!overlay || overlay._closing) return;
+  overlay._closing = true;
+  overlay.id = '';
+  overlay.classList.add('closing');
+  setTimeout(function() { overlay.remove(); }, 200);
+};
+
 function openEditModal(idx) {
   const item = logs[idx];
   if (!item) return;
@@ -273,7 +285,7 @@ function closeEditModal(force) {
     if (!confirm('有未保存的修改，确定关闭？')) return;
   }
   const modal = document.getElementById('editModal');
-  if (modal) modal.remove();
+  if (modal) window.closeModalOverlay(modal);
   window._editDirty = false;
   // 清理事件监听器，防止重复绑定
   if (window._emRecalcCleanup) { window._emRecalcCleanup(); window._emRecalcCleanup = null; }
@@ -832,25 +844,25 @@ function saveSplit() {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = '<div class="modal-content" style="max-width:400px;">' +
-    '<div class="modal-header"><h3>拆分保存</h3><button class="modal-close" onclick="this.closest(\'.modal-overlay\').remove()">✕</button></div>' +
+    '<div class="modal-header"><h3>拆分保存</h3><button class="modal-close" onclick="closeModalOverlay(this.closest(\'.modal-overlay\'))">✕</button></div>' +
     '<div class="modal-body">' +
       '<div class="fp"><label>拆分为几笔？</label>' +
       '<input type="number" id="splitCountInput" min="2" max="10" value="2" />' +
       '</div></div>' +
     '<div class="modal-footer">' +
       '<button class="btn btn-primary" id="splitConfirmBtn">确定</button>' +
-      '<button class="btn btn-outline" onclick="this.closest(\'.modal-overlay\').remove()">取消</button>' +
+      '<button class="btn btn-outline" onclick="closeModalOverlay(this.closest(\'.modal-overlay\'))">取消</button>' +
     '</div></div>';
 
   document.body.appendChild(overlay);
-  overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+  overlay.addEventListener('click', function(e) { if (e.target === overlay) window.closeModalOverlay(overlay); });
   setTimeout(() => { const inp = document.getElementById('splitCountInput'); if (inp) inp.focus(); }, 50);
 
   document.getElementById('splitConfirmBtn').addEventListener('click', function() {
     const n = document.getElementById('splitCountInput').value;
     const count = parseInt(n, 10);
     if (isNaN(count) || count < 2 || count > 10) { showToast('请输入 2~10 之间的数字','warn'); return; }
-    overlay.remove();
+    window.closeModalOverlay(overlay);
     doSaveSplit(calc, count);
   });
 }

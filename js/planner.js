@@ -1,7 +1,89 @@
 // ==================== 盈亏比反推 ====================
+//
+// 口径统一说明（2026-09-23 RR 审计）：
+// 本模块所有盈亏比一律用「含费净 RR」，定义为
+//     rr = ((tpDist/ep) − 往返费率×(1 + exit/ep)) / ((stopDist/ep) + 止损腿往返费)
+// 与盈亏比卡片、多止盈各行、checkRR / checkTPWeighted 门完全同源。
+// 费用按「腿的成交价」直接由 feeRate 计算，绝不再从 calc.fee 反推——calc.fee 在
+// 无目标价时是止损腿费、有目标价时是目标腿费（calculator.js:788 / :816），据此反推
+// 会让多止盈 RR 随无关的 #targetPrice 漂移。
+// 滑点不在此建模（主卡把滑点折入成交价，此处只处理费用）；实测滑点影响约费用的 1/4，
+// 与费用项同量级以下，属可接受的近似（实测反推 RR=2 时主卡显示 2.00:1，内部值 1.9994）。
+// 门比较一律走 rrMeetsMin()（skills-integration.js）：按卡片 toFixed(2) 的显示精度取整
+// 后再比阈值，否则反推解的浮点残差会让「显示 2.00:1」与「判 ✗」并存。
+
+/**
+ * 取多止盈/反推共用的单位口径（每 1U 名义本金）。
+ * @returns {{ep:number, sd:number, stopLoss:number, unitStop:number,
+ *            feeRateFrac:number, unitLoss:number, legFee:Function}|null}
+ */
+function getTPUnits() {
+  var calc = getCalc();
+  if (!calc || !calc.entryPrice) return null;
+  var ep = calc.effectiveEntryPrice || calc.entryPrice;
+  var stopLoss = calc.stopLoss;
+  var sd = calc.stopDistance != null ? calc.stopDistance
+    : (!isNaN(stopLoss) ? Math.abs(stopLoss - ep) : 0);
+  if (!(ep > 0) || !(sd > 0)) return null;
+  var feeRateFrac = (calc.feeRate != null ? parseFloat(calc.feeRate) : 0) / 100;
+  if (isNaN(feeRateFrac) || feeRateFrac < 0) feeRateFrac = 0;
+  var legFee = function(exitPrice) {
+    return feeRateFrac * (1 + (exitPrice > 0 ? exitPrice / ep : 1));
+  };
+  return {
+    ep: ep,
+    sd: sd,
+    stopLoss: stopLoss,
+    unitStop: sd / ep,
+    feeRateFrac: feeRateFrac,
+    unitLoss: sd / ep + legFee(stopLoss),
+    legFee: legFee
+  };
+}
+
+/**
+ * 解出使净 RR 恰为 rr 的止盈价。
+ * rr = ((d/ep) − f×(1 + exit/ep)) / unitLoss；费用项虽依赖 exit，但整体是 d 的
+ * 线性方程，有闭式解（long：exit=ep+d → 分母 (1−f)；short：exit=ep−d → (1+f)）：
+ *     d = ep × (rr×unitLoss + 2f) / (1 ± f)
+ * @returns {number|null} 止盈价；无解（费率吃掉全部空间）返回 null
+ */
+function solveTPForRR(u, rr, direction) {
+  if (!u || !(rr > 0)) return null;
+  var ep = u.ep, f = u.feeRateFrac;
+  var denomFactor = direction === 'long' ? (1 - f) : (1 + f);
+  if (!(denomFactor > 0)) return null;
+  var d = ep * (rr * u.unitLoss + 2 * f) / denomFactor;
+  if (!(d > 0)) return null;
+  var tp = direction === 'long' ? (ep + d) : (ep - d);
+  return (tp > 0 && isFinite(tp)) ? tp : null;
+}
+
+/**
+ * 已知止盈价，解出使净 RR 恰为 rr 的止损价。
+ * 分子 num = tpDist/ep − f×(1+tp/ep)（净单位毛利）必须先为正，否则目标价连手续费
+ * 都覆盖不了。分母 = unitStop + 止损腿费，同为 sd 的线性方程：
+ *     sd = ep × (num/rr − 2f) / (1 ± f)
+ * @returns {number|null} 止损价；无解返回 null
+ */
+function solveSLForRR(u, rr, tp, direction) {
+  if (!u || !(rr > 0) || !(tp > 0)) return null;
+  var ep = u.ep, f = u.feeRateFrac;
+  var tpDist = Math.abs(tp - ep);
+  var num = tpDist / ep - f * (1 + tp / ep);
+  if (!(num > 0)) return null;
+  var denom = num / rr;
+  var denomFactor = direction === 'long' ? (1 - f) : (1 + f);
+  if (!(denomFactor > 0) || !(denom > 2 * f)) return null;
+  var sd = ep * (denom - 2 * f) / denomFactor;
+  if (!(sd > 0)) return null;
+  var stopLoss = direction === 'long' ? (ep - sd) : (ep + sd);
+  return (stopLoss > 0 && isFinite(stopLoss)) ? stopLoss : null;
+}
 
 /**
  * 读取当前入场价、止损价、方向，根据期望盈亏比反推目标价
+ * 反推值回填后，盈亏比卡片应显示 requested RR（含费口径）。
  */
 function calcReverseTP() {
   if (getCalcDirty()) { showToast('计算器参数已变更，请先点击「计算仓位」更新结果', 'warn'); return; }
@@ -39,26 +121,19 @@ function calcReverseTP() {
     return;
   }
 
-  // 优先使用 _lastCalc 中的精确止损距离（含 ATR 模式和分批加权模式），
-  // 避免从 round 后的 stopLoss 反推精度丢失
-  var stopDistance;
-  if (calc) {
-    // ATR 模式：stopDistance 由 ATR × multiplier 计算得出，已存入 calc.stopDistance
-    // 分掰模式：stopDistance 可能为 weightedStopDistance（独立止损）或全局 stopDistance
-    if (calc.stopDistance != null) {
-      stopDistance = calc.stopDistance;
-    } else {
-      stopDistance = Math.abs(entryPrice - stopLoss);
-    }
-  } else {
-    stopDistance = Math.abs(entryPrice - stopLoss);
-  }
-  var targetPrice;
+  // 含费净 RR 口径（优先）：反推值回填后盈亏比卡片即显示 requested RR。
+  // 原实现按 stopDistance × desiredRR 直接乘，是纯毛利距离，回填后实际 RR 恒低于
+  // 请求值——实测请求 2R 得 1.7770R（达成率 88.9%），ATR 1% 止损时仅 79.2%；
+  // 于是「按 2 倍止损距离放的目标价」会被 2R 门判为不达标，自相矛盾。
+  var u = getTPUnits();
+  var targetPrice = u ? solveTPForRR(u, desiredRR, direction) : null;
 
-  if (direction === 'long') {
-    targetPrice = entryPrice + stopDistance * desiredRR;
-  } else {
-    targetPrice = entryPrice - stopDistance * desiredRR;
+  if (!targetPrice) {
+    // 无 _lastCalc 时退化为纯毛利反推（无费率口径可用）
+    var stopDistance = Math.abs(entryPrice - stopLoss);
+    targetPrice = direction === 'long'
+      ? entryPrice + stopDistance * desiredRR
+      : entryPrice - stopDistance * desiredRR;
   }
 
   document.getElementById('reverseTP').value = targetPrice.toFixed(5);
@@ -111,14 +186,23 @@ function calcReverseSL() {
   // 根据目标价与期望盈亏比反推止损距离
   // calcReverseSL 的目的是"给定目标价和期望RR，反推止损价"
   // 不应受 calc.stopDistance（ATR 或分批结果）影响，否则失去反推意义
-  var targetDistance = Math.abs(targetPrice - entryPrice);
-  var stopDistance = targetDistance / desiredRR;
+  // 含费净 RR 口径，与 calcReverseTP / 盈亏比卡片同源
+  var u = getTPUnits();
+  var stopLoss = u ? solveSLForRR(u, desiredRR, targetPrice, direction) : null;
 
-  var stopLoss;
-  if (direction === 'long') {
-    stopLoss = entryPrice - stopDistance;
-  } else {
-    stopLoss = entryPrice + stopDistance;
+  if (stopLoss == null) {
+    if (u && !isNaN(targetPrice)) {
+      var num = Math.abs(targetPrice - entryPrice) / u.ep
+        - u.feeRateFrac * (1 + targetPrice / u.ep);
+      if (num <= 0) {
+        document.getElementById('reverseSL').value = '目标价太近，覆盖手续费后无正收益，无法反推';
+        return;
+      }
+    }
+    // 无 _lastCalc 时退化为纯毛利反推
+    var targetDistance = Math.abs(targetPrice - entryPrice);
+    var stopDistance = targetDistance / desiredRR;
+    stopLoss = direction === 'long' ? entryPrice - stopDistance : entryPrice + stopDistance;
   }
 
   // 止损价方向正确性校验
@@ -135,7 +219,8 @@ function calcReverseSL() {
 
 /**
  * 自动计算多止盈位价格
- * 根据止损距离和默认盈亏比自动填充 TP1/TP2/TP3 价格
+ * 按 settings.tpRRs 的「含费净 RR」解出每档 TP 价格（不是 stopDistance × rr 的纯毛利
+ * 距离），使 updateMultiTP 显示的 RR 与设定的 tpRR 一致。
  * 如果用户已手动编辑过某个 TP 价格，则跳过该价位
  */
 function autoCalcMultiTP() {
@@ -170,15 +255,21 @@ function autoCalcMultiTP() {
     : [1.5, 2.0, 3.0];
   var tpIds = ['tp1Price', 'tp2Price', 'tp3Price'];
 
+  // 含费净 RR 口径：每档 TP 按「净 RR 恰等于该档 tpRR」求解，使下面 updateMultiTP
+  // 显示的 RR 与 settings.tpRRs 一致。原实现按 stopDistance × rr 直接乘，是纯毛利
+  // 距离，显示出来的净 RR 恒低于设定的 tpRR（实测 tpRR=1.5 => 显示 1.32R）。
+  var u = getTPUnits();
+
   for (var i = 0; i < 3; i++) {
     var rr = tpRRs[i];
-    var profitDistance = stopDistance * rr;
-    var tpPrice;
+    var tpPrice = u ? solveTPForRR(u, rr, direction) : null;
 
-    if (direction === 'long') {
-      tpPrice = entryPrice + profitDistance;
-    } else {
-      tpPrice = entryPrice - profitDistance;
+    if (tpPrice == null) {
+      // 无 _lastCalc 时退化为纯毛利反推
+      var profitDistance = stopDistance * rr;
+      tpPrice = direction === 'long'
+        ? entryPrice + profitDistance
+        : entryPrice - profitDistance;
     }
 
     var el = document.getElementById(tpIds[i]);
@@ -194,9 +285,11 @@ function autoCalcMultiTP() {
 }
 
 /**
- * 计算多止盈组合的加权期望盈亏比（含费，每 1U 仓位口径）
- * - 每档：单位净盈 = (TP距/入场) − 单位往返费；逆势档为负毛利，自然拉低期望
+ * 计算多止盈组合的加权期望盈亏比（含费净 RR，每 1U 名义本金口径）
+ * - 每档：单位净盈 = (TP距/入场) − 该档成交价的往返费；逆势档为负毛利，自然拉低期望
  * - 剩余仓位（100−Σ比例）按止损路径计（保守口径，鼓励规划满 100%）
+ * - 往返费按腿的成交价由 feeRate 直接算（各腿各付各的），不依赖 calc.fee，
+ *   因此本函数返回值不受无关的 #targetPrice 影响
  * - 返回 { rr, remain, sumRatio, unitLoss, overLimit }；未规划返回 null
  */
 function computeWeightedTPRR() {
@@ -210,11 +303,16 @@ function computeWeightedTPRR() {
   if (!(entryPrice > 0) || !(stopDistance > 0)) return null;
   var ep = entryPrice;
 
-  // 单位往返费用（每 1U 仓位），与主计算同费率口径
-  var posSize = calc.positionSize || 0;
-  var fee = calc.fee || 0;
-  var feePerUnit = posSize > 0 ? fee / posSize : 0;
-  var unitLoss = stopDistance / ep + feePerUnit;
+  // 单位往返费用（每 1U 仓位）：按腿的成交价直接由费率算出。
+  // 修复（2026-09-23 RR 审计）：原实现从 calc.fee / calc.positionSize 反推，
+  // 而 calc.fee 在无目标价时是止损腿费、有目标价时是目标腿费，导致本函数返回值
+  // 随无关的 #targetPrice 漂移（实测未改任何止盈输入，加权 RR 与各行 RR 均位移）。
+  var feeRateFrac = (calc.feeRate != null ? parseFloat(calc.feeRate) : 0) / 100;
+  if (isNaN(feeRateFrac) || feeRateFrac < 0) feeRateFrac = 0;
+  var legFee = function(exitPrice) {
+    return feeRateFrac * (1 + (exitPrice > 0 ? exitPrice / ep : 1));
+  };
+  var unitLoss = stopDistance / ep + legFee(stopLoss);   // 止损路径付止损腿费
   if (!(unitLoss > 0)) return null;
 
   var ids = ['tp1', 'tp2', 'tp3'];
@@ -238,7 +336,7 @@ function computeWeightedTPRR() {
     if (prices[j] === null) continue;
     var dist = direction === 'long' ? (prices[j] - ep) : (ep - prices[j]);
     var unitGross = dist / ep;
-    eNet += (ratios[j] / 100) * (unitGross - feePerUnit);
+    eNet += (ratios[j] / 100) * (unitGross - legFee(prices[j]));
   }
   // 剩余仓位按止损路径计
   eNet -= (remain / 100) * unitLoss;
@@ -331,19 +429,26 @@ function updateMultiTP() {
       // BUG-10 修复：使用 stopDistance 反推原始仓位（而非可能被截断的 positionSize）
       // grossLoss = stopDistance * positionSize / effectiveEntryPrice = riskAmount
       // 所以 positionSize = riskAmount * effectiveEntryPrice / stopDistance
-      var ep = calc.effectiveEntryPrice || entryPrice;
-      var riskAmt = calc.riskAmount || 0;
-      var origPosSize = stopDistance > 0 && ep > 0 ? (riskAmt * ep / stopDistance) : (calc.positionSize || 0);
-      var grossProfit = profitDistance * origPosSize / ep;
-      var grossLoss = stopDistance * origPosSize / ep;
-      // 费用口径 FIX：按单位费率还原到原始仓位（截断前后口径一致）
-      // 原先直接使用 calc.fee（基于截断后仓位），与反推原始仓位的毛利不在同一口径
-      var posSize = calc.positionSize || 0;
-      var feePerUnit = posSize > 0 ? (calc.fee || 0) / posSize : 0;
-      var feeThis = feePerUnit * origPosSize;
-      var netProfit = grossProfit - feeThis;
-      var netLoss = grossLoss + feeThis;
-      var rr = netLoss > 0 ? netProfit / netLoss : grossProfit / grossLoss;
+      // 守卫（2026-09-23）：无 _lastCalc 但表单止损距离有效时 calc 为 null，原实现
+      // 直接读 calc.effectiveEntryPrice 会抛 TypeError。
+      var ep = (calc && calc.effectiveEntryPrice) || entryPrice;
+      var riskAmt = (calc && calc.riskAmount) || 0;
+      var origPosSize = (stopDistance > 0 && ep > 0)
+        ? (riskAmt * ep / stopDistance)
+        : ((calc && calc.positionSize) || 0);
+      // 费用口径 FIX（2026-09-23 RR 审计）：
+      // 1) 按腿的成交价由费率直接算，不再从 calc.fee 反推——calc.fee 在无目标价时是
+      //    止损腿费、有目标价时是目标腿费，导致未改任何止盈输入、仅改 #targetPrice
+      //    就让本行 RR 位移（实测 1.32R → 1.31R）。
+      // 2) 各腿各付各的往返费：毛利侧扣止盈腿费，亏损侧付止损腿费，
+      //    与 computeWeightedTPRR 的 unitLoss 定义一致。
+      var f = (calc && calc.feeRate != null) ? parseFloat(calc.feeRate) / 100 : 0;
+      if (isNaN(f) || f < 0) f = 0;
+      var feeTP = f * (1 + (tp > 0 ? tp / ep : 1));
+      var feeStop = f * (1 + (stopLoss > 0 ? stopLoss / ep : 1));
+      var netProfit = (profitDistance / ep - feeTP) * origPosSize;
+      var netLoss = (stopDistance / ep + feeStop) * origPosSize;
+      var rr = netLoss > 0 ? netProfit / netLoss : 0;
       rrEl.textContent = rr.toFixed(2) + 'R';
       rrEl.className = 'tp-rr' + (rr < 1.5 ? ' negative' : '');
     }
@@ -495,7 +600,7 @@ function updateChecklist() {
   updateCheckItemWithResult('checkRR', function() {
     if (!calc || calc.targetRR == null) return null;
     var minRR = (settings.minRRRatio != null && settings.minRRRatio > 0) ? settings.minRRRatio : 2;
-    var passed = calc.targetRR >= minRR;
+    var passed = rrMeetsMin(calc.targetRR, minRR);   // 容差对齐卡片 toFixed(2) 显示
     return { result: passed, message: '盈亏比 ' + calc.targetRR.toFixed(2) + ':1 ' + (passed ? '达标' : '偏低') };
   });
 
@@ -568,7 +673,7 @@ function updateChecklist() {
     if (!w || w.rr == null) return null; // 未规划多止盈 → 跳过
     if (w.overLimit) return { result: false, message: 'TP 减仓比例合计 ' + w.sumRatio + '% 超过 100%，请调整' };
     var minRR = (settings.minRRRatio != null && settings.minRRRatio > 0) ? settings.minRRRatio : 2;
-    var passed = w.rr >= minRR;
+    var passed = rrMeetsMin(w.rr, minRR);   // 容差对齐卡片 toFixed(2) 显示
     return { result: passed, message: '多止盈加权期望 ' + w.rr.toFixed(2) + 'R（剩余仓位 ' + w.remain + '% 按止损计）' + (passed ? ' ≥ ' + minRR + ' 达标' : ' < ' + minRR + ' 偏低') };
   });
 

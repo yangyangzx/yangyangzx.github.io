@@ -72,7 +72,7 @@
 
 /* §1: Instant :active */
 .analytics-table th:active {
-  transform: scale(0.97);
+  transform: scale(0.96);
   transition: transform var(--dur-fast) var(--ease-out);
 }
 

@@ -28,7 +28,14 @@ var ThemeManager = (function() {
 
   function applyTheme(theme) {
     var isDark = theme === 'dark';
+    // 主题翻转会同时改全页 color/background/border/shadow——先全局禁用过渡，
+    // 强制 reflow 后下一帧恢复，避免整页颜色拖影涂抹（better-ui: suppress transitions on theme switch）
+    var suppress = document.createElement('style');
+    suppress.textContent = '*,*::before,*::after{transition:none !important}';
+    document.head.appendChild(suppress);
     document.documentElement.setAttribute('data-theme', theme);
+    void document.documentElement.offsetHeight; // 强制 reflow，让禁用先生效
+    requestAnimationFrame(function() { suppress.remove(); });
     var checkbox = document.getElementById('themeToggleCheckbox');
     if (checkbox) {
       checkbox.checked = isDark;

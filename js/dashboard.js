@@ -485,7 +485,9 @@ function _renderEquityChart() {
     canvas._chart.destroy();
   }
   // 同时清理 ChartManager 注册（立即销毁，不走延迟队列）
-  if (window.ChartManager) {
+  // 仅在确有注册时 unregister：首次渲染 / 无平仓数据时 key 从未注册，
+  // 直接调会打出「Chart实例不存在」的无意义告警
+  if (window.ChartManager && window.ChartManager.getInstance(CHART_KEY)) {
     window.ChartManager.unregister(CHART_KEY, true);
   }
 

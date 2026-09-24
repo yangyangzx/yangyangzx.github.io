@@ -9,6 +9,7 @@
     --color-text:           oklch(22% 0.012 250);
     --color-text-secondary: oklch(42% 0.015 250);
     --color-text-muted:     oklch(38% 0.014 250);
+    --color-text-subtle:    oklch(48% 0.012 250);
     --color-text-inverse:   oklch(97% 0.008 250);
   }
 }
@@ -35,6 +36,8 @@ html {
   --color-primary:        oklch(58% 0.18 248);
   --color-primary-dark:   oklch(48% 0.17 248);
   --color-primary-light:  oklch(68% 0.16 248);
+  /* 文本级主色：原 --color-primary 作文字时仅 3.9:1（暗底），此值实测 ≥5.2:1 */
+  --color-primary-strong: oklch(66% 0.16 248);
   --color-primary-bg:     oklch(58% 0.18 248 / 0.10);
   --color-primary-border: oklch(58% 0.18 248 / 0.25);
 
@@ -45,7 +48,12 @@ html {
   --color-success-bg:     oklch(62% 0.16 158 / 0.10);
   --color-success-border: oklch(62% 0.16 158 / 0.25);
 
-  --color-danger:         oklch(58% 0.20 25);
+  /* 58%→62%：对 --color-bg 的对比度 4.20→4.99，补齐 WCAG AA 4.5 门槛（2026-09-23）。
+     此前深色下的红色文字（风险徽章 / 强平价行 / planner 数字）只有 4.20:1，
+     仅够 AA 大字档。该 token 另被 dashboard.css:68、risk.css:81 用作纯装饰填充
+     （卡片描边光晕、进度条），其上无文字，故提亮不影响反向对比度。
+     --color-danger-bg / -border 保持 58% 不变，按钮的淡红底不受影响。 */
+  --color-danger:         oklch(62% 0.20 25);
   --color-danger-dark:    oklch(48% 0.18 25);
   --color-danger-bg:      oklch(58% 0.20 25 / 0.10);
   --color-danger-border:  oklch(58% 0.20 25 / 0.25);
@@ -86,6 +94,8 @@ html {
   --color-text:           oklch(94% 0.006 250);
   --color-text-secondary: oklch(85% 0.008 250);
   --color-text-muted:     oklch(72% 0.010 250);
+  /* 次级说明文字（hint / 空态 / 时间戳）：比 muted 安静，暗底实测 ≥4.9:1 */
+  --color-text-subtle:    oklch(64% 0.012 250);
   --color-text-placeholder: oklch(60% 0.010 250);
   --color-text-inverse:   oklch(14% 0.010 250);
 
@@ -256,8 +266,6 @@ html {
   /* formFieldIn: 表单字段交错入场 */
   /* streakPulse: 连亏计数脉冲警告 */
   /* emptyFloat: 空状态浮动 */
-  /* successPop: 成功按钮微弹 */
-  /* btnGlowPulse: 按钮 loading 微光 */
 }
 
 /* ———— 浅色主题模式 ———— */
@@ -265,6 +273,8 @@ html {
   --color-primary:        oklch(52% 0.18 250);
   --color-primary-dark:   oklch(44% 0.17 250);
   --color-primary-light:  oklch(60% 0.16 250);
+  /* 文本级主色：原 --color-primary-light 作文字时仅 3.3:1（浅底），此值实测 ≥4.8:1 */
+  --color-primary-strong: oklch(48% 0.16 248);
   --color-primary-bg:     oklch(52% 0.18 250 / 0.08);
   --color-primary-border: oklch(52% 0.18 250 / 0.25);
 
@@ -307,6 +317,8 @@ html {
   --color-text:           oklch(22% 0.012 250);
   --color-text-secondary: oklch(38% 0.014 250);
   --color-text-muted:     oklch(38% 0.014 250);
+  /* 次级说明文字：浅色下介于 muted 与 placeholder 之间，实测 ≥4.9:1 */
+  --color-text-subtle:    oklch(48% 0.012 250);
   --color-text-placeholder: oklch(58% 0.012 250);
   --color-text-inverse:   oklch(97% 0.008 250);
 
@@ -374,18 +386,16 @@ html {
 [data-theme="light"] .result-card.margin-danger {
   animation-name: marginPulseLight;
 }
-[data-theme="light"] .mindset-reminder {
-  animation-name: mindsetGlowLight;
-}
 
 
 /* ─── Apple Design §14: Reduced Motion ─── */
 @media (prefers-reduced-motion: reduce) {
-  :root {
-    --transition-fast:   0s;
-    --transition-normal: 0s;
-    --transition-slow:   0s;
-  }
+  /* 注意：不要在此把 --transition-fast/normal/slow 覆盖成 0s。
+     这些 token 的值是「background-color 100ms …, border-color …, color …」
+     这样的多属性简写列表；`transition: 0s` 缺属性名，会被浏览器丢弃，
+     整个声明按 `all 0s ease` 解析——transition-duration 变成 0，
+     transition-property 反而变成 all。真正生效的关闭开关是下面那条
+     transition-duration: 0.01ms !important（覆盖简写里的时长）。 */
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
@@ -461,37 +471,8 @@ html {
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-@keyframes toastIn {
-  from { opacity: 0; transform: translateX(40px); }
-  to   { opacity: 1; transform: translateX(0); }
-}
-
-@keyframes toastOut {
-  from { opacity: 1; }
-  to   { opacity: 0; transform: translateX(40px); }
-}
-
-/* mindsetGlow: 单次入场，非无限循环 */
-@keyframes mindsetGlow {
-  0%   {
-    background: var(--color-primary-bg);
-    border-left-color: var(--color-primary-light);
-    box-shadow: none;
-  }
-  100% {
-    background: var(--color-primary-bg);
-    border-left-color: var(--color-primary-light);
-    box-shadow: none;
-  }
-}
-
-/* ─── 临界阻尼弹簧入场（无过冲） — 替代 springBounceIn ─── */
-@keyframes springIn {
-  0%   { transform: scale(0.92); opacity: 0; }
-  60%  { transform: scale(1.002); }
-  80%  { transform: scale(0.999); }
-  100% { transform: scale(1); opacity: 1; }
-}
+/* toastIn/toastOut（translateX 版）、mindsetGlow（0%/100% 全等的空动画）、
+   springIn、tapShrink、materialInLarge、btnGlowPulse、successPop 已删除 — 零调用 */
 
 @keyframes springOut {
   0%   { transform: scale(1); opacity: 1; }
@@ -505,18 +486,6 @@ html {
   100% { transform: scale(1); filter: blur(0px); opacity: 1; }
 }
 
-@keyframes materialInLarge {
-  0%   { transform: scale(0.96); filter: blur(6px); opacity: 0; }
-  50%  { filter: blur(1px); }
-  100% { transform: scale(1); filter: blur(0px); opacity: 1; }
-}
-
-/* ─── Instant tap feedback ─── */
-@keyframes tapShrink {
-  0%   { transform: scale(1); }
-  100% { transform: scale(0.97); }
-}
-
 /* ─── 浅色主题 @keyframes（适配浅色背景的发光色） ─── */
 @keyframes flashBorderLight {
   0%   { border-color: var(--color-warning); box-shadow: 0 0 0 4px var(--color-warning-bg); }
@@ -525,18 +494,6 @@ html {
 @keyframes marginPulseLight {
   0%, 100% { box-shadow: 0 0 12px var(--color-danger-bg); }
   50%      { box-shadow: 0 0 24px var(--color-danger-bg); }
-}
-@keyframes mindsetGlowLight {
-  0%, 100% {
-    background: var(--color-primary-bg);
-    border-left-color: var(--color-primary-light);
-    box-shadow: none;
-  }
-  50% {
-    background: oklch(52% 0.18 250 / 0.12);
-    border-left-color: var(--color-primary);
-    box-shadow: 0 0 12px oklch(52% 0.18 250 / 0.12);
-  }
 }
 
 /* ═══════════════════════════════════════
@@ -565,18 +522,6 @@ html {
 @keyframes emptyFloat {
   0%, 100% { transform: translateY(0); opacity: 0.4; }
   50%       { transform: translateY(-6px); opacity: 0.6; }
-}
-
-/* successPop: 成功按钮微弹反馈 */
-@keyframes successPop {
-  0%, 100% { transform: scale(1); }
-  50%       { transform: scale(1.03); }
-}
-
-/* btnGlowPulse: loading 按钮微光 */
-@keyframes btnGlowPulse {
-  0%, 100% { box-shadow: 0 0 0 3px oklch(58% 0.18 248 / 0.10); }
-  50%       { box-shadow: 0 0 0 5px oklch(58% 0.18 248 / 0.18); }
 }
 
 /* navDotPulse 见 layout.css（导航按钮激活态辉光点呼吸） */

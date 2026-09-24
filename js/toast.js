@@ -6,6 +6,17 @@
 
   var TOAST_DEFAULT_DURATION = 4000; // 4s — WCAG 建议可交互通知 ≥ 4s
   var TOAST_UNDO_DURATION = 5000;    // 5s — undo toast 更长时间让用户有操作空间
+  var TOAST_EXIT_MS = 200;           // 退出动画时长，与 --dur-normal 一致
+
+  // 退出动画由 JS 驱动：先加 .toast-exit 播 toastOutBottom，结束后再移除。
+  // 修复 CSS 固定 2.5s 退出 vs JS 4s/5s 移除的错位（不可见 toast 曾拦截点击，
+  // 撤销按钮后半程不可见）。
+  function _dismissToast(el) {
+    if (!el || el._toastDismissing) return;
+    el._toastDismissing = true;
+    el.classList.add('toast-exit');
+    setTimeout(function() { el.remove(); }, TOAST_EXIT_MS);
+  }
 
   // ── 待删除状态（由 storage.js 中 delete 逻辑设置） ──
   window._pendingDelete = null;
@@ -27,7 +38,7 @@
       if (typeof renderDashboard === 'function') renderDashboard();
       // P0: 同步刷新日志表，清除幽灵行（DOM 行残留会导致 data-idx 索引错位）
       if (typeof renderLogs === 'function') renderLogs();
-      if (window._undoToastEl) { window._undoToastEl.remove(); window._undoToastEl = null; }
+      if (window._undoToastEl) { _dismissToast(window._undoToastEl); window._undoToastEl = null; }
       return;
     }
 
@@ -43,7 +54,7 @@
     if (typeof renderDashboard === 'function') renderDashboard();
     // P0: 同步刷新日志表，清除幽灵行（DOM 行残留会导致 data-idx 索引错位）
     if (typeof renderLogs === 'function') renderLogs();
-    if (window._undoToastEl) { window._undoToastEl.remove(); window._undoToastEl = null; }
+    if (window._undoToastEl) { _dismissToast(window._undoToastEl); window._undoToastEl = null; }
   };
 
   /**
@@ -62,7 +73,7 @@
   function _restartToastTimer(el, onDismiss, duration) {
     if (window._undoToastTimer) clearTimeout(window._undoToastTimer);
     window._undoToastTimer = setTimeout(function() {
-      if (window._undoToastEl === el) { el.remove(); window._undoToastEl = null; }
+      if (window._undoToastEl === el) { _dismissToast(el); window._undoToastEl = null; }
       window._undoToastTimer = null;
       if (onDismiss) onDismiss();
     }, duration);
@@ -84,15 +95,15 @@
     el.textContent = msg;
     container.appendChild(el);
     // 4s 自动消失
-    var timer = setTimeout(function() { el.remove(); }, TOAST_DEFAULT_DURATION);
+    var timer = setTimeout(function() { _dismissToast(el); }, TOAST_DEFAULT_DURATION);
     // pause-on-hover / pause-on-focus — WCAG 2.2.2
     el.addEventListener('mouseenter', function() { clearTimeout(timer); });
     el.addEventListener('focus', function() { clearTimeout(timer); });
     el.addEventListener('mouseleave', function() {
-      timer = setTimeout(function() { el.remove(); }, 1500); // 重新计时 1.5s
+      timer = setTimeout(function() { _dismissToast(el); }, 1500); // 重新计时 1.5s
     });
     el.addEventListener('blur', function() {
-      timer = setTimeout(function() { el.remove(); }, 1500);
+      timer = setTimeout(function() { _dismissToast(el); }, 1500);
     });
   };
 
@@ -110,7 +121,8 @@
     if (!container) return;
     var el = document.createElement('div');
     el.className = 'toast info';
-    el.setAttribute('role', 'alert');
+    // 容器 #toastContainer 已挂 role="status" + aria-live="polite"，
+    // 这里不再单独挂 role="alert"——两个朗读源会让读屏把同一条消息念两遍
     el.innerHTML = '<span style="flex:1;">' + msg + '</span>' +
       '<button class="toast-undo-btn" aria-label="撤销操作">撤销</button>';
     var undoBtn = el.querySelector('.toast-undo-btn');
@@ -118,7 +130,7 @@
       undoBtn.addEventListener('click', function(e) {
         e.stopPropagation();
         _clearToastTimer(el);
-        el.remove();
+        _dismissToast(el);
         window._undoToastEl = null;
         if (onUndo) onUndo();
       });
@@ -127,7 +139,7 @@
     window._undoToastEl = el;
     var duration = timeoutMs || TOAST_UNDO_DURATION;
     window._undoToastTimer = setTimeout(function() {
-      if (window._undoToastEl === el) { el.remove(); window._undoToastEl = null; }
+      if (window._undoToastEl === el) { _dismissToast(el); window._undoToastEl = null; }
       window._undoToastTimer = null;
       if (onDismiss) onDismiss();
     }, duration);

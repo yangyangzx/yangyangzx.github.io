@@ -162,6 +162,20 @@ function calcATRStop(entryPrice, atrValue, multiplier, direction) {
 }
 
 /**
+ * RR 阈值比较（按显示精度对齐）。
+ * 盈亏比卡片 / 各行 RR 均用 toFixed(2) 展示，而门原本与未取整的浮点值比较，
+ * 于是出现「卡片显示 2.00 : 1、门判 ✗」的同一数值两种结论：
+ *  - 反推求解的解自带约 4e-9 浮点残差（实测 1.9999999962 对阈值 2）；
+ *  - 任何恰好落在阈值上的手输目标价。
+ * 故按显示精度取整后再比较，保证门的结论与用户看到的数字一致。
+ * 真实不足不受影响：1.994 仍显示 1.99 并判 ✗，1.95 对 2 仍判 ✗。
+ * 三处 RR 门（checkRRRequirement / checkRR 清单项 / checkTPWeighted）共用，避免各自漂移。
+ */
+function rrMeetsMin(rr, min) {
+  return Math.round(rr * 100) / 100 >= min;
+}
+
+/**
  * 检查 R:R 是否满足最低要求
  * @param {number} targetRR - 盈亏比
  * @param {number} minRR - 最低要求 (默认 2)
@@ -170,7 +184,7 @@ function calcATRStop(entryPrice, atrValue, multiplier, direction) {
 function checkRRRequirement(targetRR, minRR) {
   if (targetRR == null || isNaN(targetRR)) return { pass: false, currentRR: null, minRR: minRR || 2, message: '未设置目标价，无法计算盈亏比' };
   minRR = minRR || 2;
-  var pass = targetRR >= minRR;
+  var pass = rrMeetsMin(targetRR, minRR);
   var message = pass
     ? '盈亏比 ' + targetRR.toFixed(2) + ':1 满足最低要求 (' + minRR + ':1)'
     : '盈亏比 ' + targetRR.toFixed(2) + ':1 不足 ' + minRR + ':1，建议跳过此交易';

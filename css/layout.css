@@ -70,6 +70,13 @@ body {
   flex-shrink: 0;
   background: var(--color-primary-bg);
   padding: 8px;
+  /* 1px 低透明描边：暗底纯白、浅底纯黑，不用着色调（会拾取底色显脏） */
+  outline: 1px solid oklch(100% 0 0 / 0.1);
+  outline-offset: -1px;
+}
+
+[data-theme="light"] .nav-logo-img {
+  outline-color: oklch(0% 0 0 / 0.1);
 }
 
 .nav-title {
@@ -99,102 +106,33 @@ body {
   gap: 2px;
 }
 
-.nav-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 11px 16px;
-  margin: 0 8px;
-  border-radius: var(--radius-md);
-  color: var(--color-text-muted);
-  font-size: var(--font-base);
-  font-weight: var(--font-weight-medium);
-  text-decoration: none;
-  cursor: pointer;
-  transition: background-color var(--dur-short) var(--ease-out),
-              color var(--dur-short) var(--ease-out),
-              border-color var(--dur-short) var(--ease-out),
-              transform var(--dur-fast) var(--ease-out);
-  border: 1px solid transparent;
-  user-select: none;
-  min-height: 44px;
-  /* 可点击文字不换行 — gate 49 */
-  white-space: nowrap;
-  position: relative;
-  overflow: hidden;
-}
+/* .nav-item 基础定义已合并到下方「立体风格」块（单一定义来源）。
+   旧涟漪 ::after 与 3px active 指示条已删除：前者被辉光点 ::after 完全覆盖从未渲染，
+   后者引用的 navIndicatorIn keyframes 从未定义，且 left:-8px 整条被 overflow:hidden 裁剪，
+   实际效果是吞掉了 active 态的浮起层 */
 
-/* nav-item 按下涟漪 */
-.nav-item::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(circle at center, oklch(58% 0.18 248 / 0.12) 0%, transparent 70%);
-  opacity: 0;
-  transform: scale(0.5);
-  transition: opacity var(--dur-normal) var(--ease-out),
-              transform var(--dur-normal) var(--ease-out);
-  pointer-events: none;
-  border-radius: var(--radius-md);
-}
-
-.nav-item:active::after {
-  opacity: 1;
-  transform: scale(2);
-  transition: opacity 0s, transform 0s;
-}
-
-.nav-item.active::after {
-  opacity: 0;
-}
-
-/* hover 仅桌面 */
+/* hover 仅桌面 — 反馈收敛为「凹槽变色 + 3D 抬升 + 辉光」（后者见立体块）。
+   旧设计的 translateX(4px) 右移与 shadow-sm 已删：与 3D 抬升动效堆叠、
+   且 box-shadow 与 drop-shadow 两种投影语言互相打架 */
 @media (hover: hover) and (pointer: fine) {
   .nav-item:hover {
     background: var(--glass-bg-light);
     color: var(--color-text);
     border-color: var(--glass-border-light);
-    transform: translateX(4px);
-    box-shadow: var(--shadow-sm);
-  }
-  .nav-item.active:hover {
-    transform: translateX(4px);
-    box-shadow: var(--shadow-sm);
   }
 }
 
 .nav-item:active {
-  transform: scale(0.97);
+  transform: scale(0.96);
   transition: transform var(--dur-fast) var(--ease-out);
 }
 
 .nav-item.active {
   background: var(--color-primary-bg);
-  color: var(--color-primary-light);
+  color: var(--color-primary-strong);
   border-color: var(--color-primary-border);
   font-weight: var(--font-weight-title);
   position: relative;
-}
-
-.nav-item.active::before {
-  content: '';
-  position: absolute;
-  left: -8px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 3px;
-  height: 20px;
-  background: var(--color-primary);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-  animation: navIndicatorIn 280ms var(--ease-out) forwards;
-}
-
-.nav-item i,
-.nav-item .nav-icon {
-  width: 18px;
-  text-align: center;
-  font-size: 15px;
-  flex-shrink: 0;
 }
 
 .nav-footer {
@@ -205,7 +143,7 @@ body {
 
 .nav-version {
   font-size: var(--font-xs);
-  color: var(--color-text-placeholder);
+  color: var(--color-text-subtle);
   text-align: center;
 }
 
@@ -247,7 +185,12 @@ body {
     2px 2px 8px var(--nav-recess, oklch(0% 0 0 / 0.05)) inset;
 
   perspective: 150px;
+  /* 合并自旧基础块的颜色类过渡 + 立体层的阴影/滤镜过渡 */
   transition:
+    background-color var(--dur-short) var(--ease-out),
+    color var(--dur-short) var(--ease-out),
+    border-color var(--dur-short) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out),
     box-shadow var(--dur-short) var(--ease-out),
     filter 300ms var(--ease-out);
 }
@@ -356,12 +299,12 @@ body {
 }
 
 .nav-item.active span {
-  color: var(--color-primary-light);
+  color: var(--color-primary-strong);
 }
 
 .nav-item.active i,
 .nav-item.active .nav-icon {
-  color: var(--color-primary-light);
+  color: var(--color-primary-strong);
 }
 
 /* 仅 active 按钮 dot 呼吸 — 非 active 静态微亮 */
@@ -436,7 +379,10 @@ body {
   box-shadow:
     inset 0 0.2em 0.5em oklch(0% 0 0 / 0.6),
     0 0.2em 0.4em oklch(0% 0 0 / 0.2);
-  transition: all 0.4s ease;
+  /* 显式属性，不用 transition: all — 与旋钮 0.4s 行程保持一致 */
+  transition: background-color 400ms var(--ease-out),
+              border-color 400ms var(--ease-out),
+              box-shadow 400ms var(--ease-out);
 }
 
 /* 点亮渐变层 */
@@ -446,7 +392,7 @@ body {
   inset: 0;
   background: linear-gradient(90deg, var(--sw-blue), var(--sw-gold));
   opacity: 0;
-  transition: opacity 0.4s ease;
+  transition: opacity 400ms var(--ease-out);
 }
 
 /* 星星层 */
@@ -460,7 +406,7 @@ body {
   position: absolute;
   background: #f7f7f7;
   border-radius: 50%;
-  transition: width 0.3s, height 0.3s, background 0.3s, border-radius 0.3s;
+  transition: width 300ms var(--ease-out), height 300ms var(--ease-out), background-color 300ms var(--ease-out), border-radius 300ms var(--ease-out);
 }
 .spark-switch .star:nth-child(1) {
   top: 0.4em; left: 100%;
@@ -505,20 +451,19 @@ body {
   width: 1.2em;
   height: 1.2em;
   color: #272727;
-  transition: color 0.4s ease, transform 0.4s ease, opacity 0.3s ease;
+  transition: color 400ms var(--ease-out), transform 400ms var(--ease-out), opacity 300ms var(--ease-out);
   position: absolute;
 }
+/* 月亮默认隐藏（月亮=深色主题态）；太阳用描边、月亮用实心 */
 .spark-switch .knob .icon-moon {
   opacity: 0;
+  fill: currentColor;
 }
 .spark-switch .knob .icon-sun {
   opacity: 1;
   stroke-width: 1.6;
   fill: none;
   stroke: currentColor;
-}
-.spark-switch .knob .icon-moon {
-  fill: currentColor;
 }
 
 /* ── 深色（checked）：track 点亮、旋钮右移、月亮图标 ── */
@@ -615,7 +560,7 @@ body {
 }
 
 .nav-mobile-toggle:hover { background: var(--glass-bg-light); }
-.nav-mobile-toggle:active { transform: scale(0.95); }
+.nav-mobile-toggle:active { transform: scale(0.96); }
 .nav-mobile-toggle:focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
@@ -683,7 +628,14 @@ body {
 
 .view.active {
   display: block;
-  animation: materialIn var(--dur-normal) var(--ease-out) forwards;
+  /* 视图切换是最高频导航交互：整容器只做 ≤150ms 淡入（原为 200ms blur+scale 的
+     materialIn，每次点击都收取注意力成本且 blur 作用于整视图易首帧抖动）。
+     层次交给下方卡片交错入场表达 */
+  animation: viewFadeIn var(--dur-short) var(--ease-out);
+}
+
+@keyframes viewFadeIn {
+  from { opacity: 0; }
 }
 
 .view > .card {

@@ -19,19 +19,19 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <link rel="stylesheet" href="css/variables.css?v=5.3">
-  <link rel="stylesheet" href="css/base.css?v=5.3">
-  <link rel="stylesheet" href="css/calculator.css?v=5.3">
-  <link rel="stylesheet" href="css/table.css?v=5.3">
-  <link rel="stylesheet" href="css/modals.css?v=5.3">
-  <link rel="stylesheet" href="css/responsive.css?v=5.3">
-  <link rel="stylesheet" href="css/layout.css?v=5.3">
-  <link rel="stylesheet" href="css/dashboard.css?v=5.3">
-  <link rel="stylesheet" href="css/planner.css?v=5.3">
-  <link rel="stylesheet" href="css/risk.css?v=5.3">
-  <link rel="stylesheet" href="css/analytics.css?v=5.3">
-  <link rel="stylesheet" href="css/review.css?v=5.3">
-  <link rel="stylesheet" href="css/settings.css?v=5.3">
+  <link rel="stylesheet" href="css/variables.css?v=5.4">
+  <link rel="stylesheet" href="css/base.css?v=5.4">
+  <link rel="stylesheet" href="css/calculator.css?v=5.4">
+  <link rel="stylesheet" href="css/table.css?v=5.4">
+  <link rel="stylesheet" href="css/modals.css?v=5.4">
+  <link rel="stylesheet" href="css/responsive.css?v=5.4">
+  <link rel="stylesheet" href="css/layout.css?v=5.4">
+  <link rel="stylesheet" href="css/dashboard.css?v=5.4">
+  <link rel="stylesheet" href="css/planner.css?v=5.4">
+  <link rel="stylesheet" href="css/risk.css?v=5.4">
+  <link rel="stylesheet" href="css/analytics.css?v=5.4">
+  <link rel="stylesheet" href="css/review.css?v=5.4">
+  <link rel="stylesheet" href="css/settings.css?v=5.4">
 </head>
 <body>
 <nav id="mainNav" role="navigation" aria-label="主导航">
@@ -57,7 +57,7 @@
     <a class="nav-item" href="#risk" tabindex="0" role="link" data-view="risk" style="--nav-hue: 25">
       <i class="fas fa-shield-alt"></i> <span>风控中心</span>
     </a>
-    <a class="nav-item" href="#analytics" tabindex="0" role="link" data-view="analytics">
+    <a class="nav-item" href="#analytics" tabindex="0" role="link" data-view="analytics" style="--nav-hue: 80">
       <i class="fas fa-chart-line"></i> <span>统计分析</span>
     </a>
     <a class="nav-item" href="#review" tabindex="0" role="link" data-view="review" style="--nav-hue: 158">
@@ -68,7 +68,7 @@
     </a>
   </div>
   <div class="nav-footer">
-    <div class="nav-version">v5.3-beta</div>
+    <div class="nav-version">v5.4-beta</div>
     <!-- 主题切换开关（Uiverse swift_9148 spark-switch） -->
     <label class="spark-switch" title="切换主题">
       <!-- aria-label 加在 input 上才产生可访问名（加在 label 上不生效）；
@@ -159,7 +159,7 @@
       <div class="card planner-form-card">
         <div class="card-header">
           <h2><i class="fas fa-calculator"></i> 仓位计算器</h2>
-          <span class="badge-soft"><i class="far fa-clock"></i> 实时 · 动态风控</span>
+          <span class="badge-soft"><i class="fas fa-clock"></i> 实时 · 动态风控</span>
         </div>
 
         <div class="mindset-reminder"><i class="fas fa-lightbulb reminder-icon"></i> <span class="reminder-text">【有情绪是正常的，请不要被情绪所驱动，作出破坏规则的交易。】</span></div>
@@ -562,7 +562,7 @@
         <div class="card" id="rrReverseCard">
           <div class="card-header">盈亏比反推</div>
           <div class="form-row">
-            <label>期望盈亏比</label>
+            <label>期望盈亏比（含费净 RR）</label>
             <input type="number" id="desiredRR" step="0.1" min="0.5" value="2" placeholder="如 2">
           </div>
           <div class="form-row">
@@ -572,6 +572,9 @@
           <div class="form-row">
             <label>推算止损价</label>
             <input type="text" id="reverseSL" readonly placeholder="输入目标价后反向推算">
+          </div>
+          <div style="font-size:11px;color:var(--color-text-muted);line-height:1.5;">
+            按含往返手续费的净盈亏比求解，回填后与「盈亏比」卡片口径一致。
           </div>
           <div style="display:flex;gap:8px;">
             <button class="btn btn-sm" onclick="calcReverseTP()">反推目标价</button>
@@ -606,7 +609,7 @@
             </div>
             <div style="margin-top:6px;font-size:12px;color:var(--color-text-muted);">
               多止盈组合 <span id="tpWeightedRR" class="tp-rr">—</span>
-              <span style="font-size:11px;">（按减仓比例加权，剩余仓位按止损计，含费）</span>
+              <span style="font-size:11px;">（按减仓比例加权的含费净 RR；剩余仓位按止损计）</span>
             </div>
           </div>
         </div>
@@ -1107,7 +1110,7 @@
         <div class="card-header"><i class="fas fa-robot"></i> Skills 融合参数</div>
         <div class="settings-form">
           <div class="setting-row">
-            <label>ATR 动态止损</label>
+            <label for="setAtrStopEnabled">ATR 动态止损</label>
             <label class="switch">
               <input type="checkbox" id="setAtrStopEnabled">
               <span class="slider"></span>
@@ -1163,7 +1166,7 @@
             <input type="number" id="setBackupCount" min="3" max="50" step="1">
           </div>
           <div class="setting-row">
-            <label>自动备份</label>
+            <label for="setAutoBackup">自动备份</label>
             <label class="switch">
               <input type="checkbox" id="setAutoBackup">
               <span class="slider"></span>
@@ -1215,31 +1218,31 @@
 
 </main>
 
-  <script src="js/constants.js?v=5.3"></script>
-  <script src="js/utils.js?v=5.3"></script>
-  <script src="js/toast.js?v=5.3"></script>
-  <script src="js/slippage.js?v=5.3"></script>
-  <script src="js/storage.js?v=5.3"></script>
-  <script src="js/skills-integration.js?v=5.3"></script>
-  <script src="js/calculation-ui.js?v=5.3"></script>
-  <script src="js/calculator.js?v=5.3"></script>
-  <script src="js/logs.js?v=5.3"></script>
-  <script src="js/rendering.js?v=5.3"></script>
-  <script src="js/stats.js?v=5.3"></script>
-  <script src="js/modals.js?v=5.3"></script>
-  <script src="js/navigation.js?v=5.3"></script>
-  <script src="js/dashboard.js?v=5.3"></script>
-  <script src="js/planner.js?v=5.3"></script>
-  <script src="js/settings.js?v=5.3"></script>
-  <script src="js/risk.js?v=5.3"></script>
-  <script src="js/chart-factory.js?v=5.3"></script>
-  <script src="js/analytics.js?v=5.3"></script>
-  <script src="js/review.js?v=5.3"></script>
-  <script src="js/io.js?v=5.3"></script>
-  <script src="js/dom-cache.js?v=5.3"></script>
-  <script src="js/app.js?v=5.3"></script>
-<script src="js/version.js?v=5.3"></script>
+  <script src="js/constants.js?v=5.4"></script>
+  <script src="js/utils.js?v=5.4"></script>
+  <script src="js/toast.js?v=5.4"></script>
+  <script src="js/slippage.js?v=5.4"></script>
+  <script src="js/storage.js?v=5.4"></script>
+  <script src="js/skills-integration.js?v=5.4"></script>
+  <script src="js/calculation-ui.js?v=5.4"></script>
+  <script src="js/calculator.js?v=5.4"></script>
+  <script src="js/logs.js?v=5.4"></script>
+  <script src="js/rendering.js?v=5.4"></script>
+  <script src="js/stats.js?v=5.4"></script>
+  <script src="js/modals.js?v=5.4"></script>
+  <script src="js/navigation.js?v=5.4"></script>
+  <script src="js/dashboard.js?v=5.4"></script>
+  <script src="js/planner.js?v=5.4"></script>
+  <script src="js/settings.js?v=5.4"></script>
+  <script src="js/risk.js?v=5.4"></script>
+  <script src="js/chart-factory.js?v=5.4"></script>
+  <script src="js/analytics.js?v=5.4"></script>
+  <script src="js/review.js?v=5.4"></script>
+  <script src="js/io.js?v=5.4"></script>
+  <script src="js/dom-cache.js?v=5.4"></script>
+  <script src="js/app.js?v=5.4"></script>
+<script src="js/version.js?v=5.4"></script>
 
-  <div id="toastContainer" style="position:fixed;top:24px;right:24px;z-index:400;display:flex;flex-direction:column;gap:8px;pointer-events:none;"></div>
+  <div id="toastContainer" role="status" aria-live="polite" style="position:fixed;top:24px;right:24px;z-index:400;display:flex;flex-direction:column;gap:8px;pointer-events:none;"></div>
 
 </html>

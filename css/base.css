@@ -54,7 +54,7 @@ button:disabled {
 
 ::selection {
   background: var(--color-primary-bg);
-  color: var(--color-primary-light);
+  color: var(--color-primary-strong);
 }
 
 /* ═══════════════════════════════════════
@@ -72,7 +72,6 @@ button:disabled {
   transition: var(--transition-normal);
   position: relative;
   overflow: hidden;
-  will-change: transform;
 }
 
 [data-theme="light"] .card {
@@ -146,7 +145,7 @@ button:disabled {
 }
 
 .card-header h2 i {
-  color: var(--color-primary);
+  color: var(--color-primary-strong);
   font-size: var(--font-xl);
 }
 
@@ -157,7 +156,7 @@ button:disabled {
   border-radius: var(--radius-full);
   font-size: var(--font-sm);
   font-weight: var(--font-weight-medium);
-  color: var(--color-primary);
+  color: var(--color-primary-strong);
   letter-spacing: var(--letter-spread);
   transition: var(--transition-fast);
   /* 可点击文字不换行 — gate 49 */
@@ -203,14 +202,14 @@ button:disabled {
 }
 
 .form-group label i {
-  color: var(--color-primary-light);
+  color: var(--color-primary-strong);
   font-size: 13px;
   width: 16px;
 }
 
 .form-group .hint {
   font-size: var(--font-xs);
-  color: var(--color-text-placeholder);
+  color: var(--color-text-subtle);
   font-weight: var(--font-weight-normal);
   margin-left: var(--space-xs);
 }
@@ -222,7 +221,7 @@ button:disabled {
 }
 
 .form-group label .optional-tag {
-  color: var(--color-text-placeholder);
+  color: var(--color-text-subtle);
   font-weight: var(--font-weight-normal);
   font-size: 11px;
   margin-left: var(--space-xs);
@@ -230,7 +229,7 @@ button:disabled {
 
 .field-tip {
   font-size: 11px;
-  color: var(--color-text-placeholder);
+  color: var(--color-text-subtle);
   line-height: 1.4;
   margin-top: 0;
   /* 辅助文本保留最小高度，避免错误文本出现时布局跳动 — gate 39 */
@@ -360,7 +359,7 @@ button:disabled {
   grid-column: span 2;
   font-weight: var(--font-weight-bold);
   font-size: 13px;
-  color: var(--color-primary-light);
+  color: var(--color-primary-strong);
   margin-top: var(--space-md);
   padding: 10px 0 10px 14px;
   border-left: 3px solid var(--color-primary);
@@ -435,11 +434,12 @@ button:disabled {
   border-radius: var(--radius-full);
   background: var(--glass-bg-light);
   border: 1.5px solid var(--glass-border);
-  transition: background var(--transition-fast),
-              border-color var(--transition-fast),
-              color var(--transition-fast),
-              box-shadow var(--transition-fast),
-              transform var(--transition-fast);
+  /* 显式属性 — var() 嵌套过渡列表会展开成非法声明（IACVT），过渡静默失效 */
+  transition: background-color var(--dur-fast) var(--ease-out),
+              border-color var(--dur-fast) var(--ease-out),
+              color var(--dur-fast) var(--ease-out),
+              box-shadow var(--dur-fast) var(--ease-out),
+              transform var(--dur-fast) var(--ease-out);
   user-select: none;
   white-space: nowrap;
   position: relative;
@@ -468,9 +468,9 @@ button:disabled {
   border: 1.5px solid var(--glass-border);
   border-radius: 3px;
   background: transparent;
-  transition: background var(--transition-fast),
-              border-color var(--transition-fast),
-              transform var(--transition-fast);
+  transition: background-color var(--dur-fast) var(--ease-out),
+              border-color var(--dur-fast) var(--ease-out),
+              transform var(--dur-fast) var(--ease-out);
   /* checkmark shape via clip-path */
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 10'%3E%3Cpath d='M1 5 L4.5 8.5 L11 2' fill='none' stroke='%23fff' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-size: 80%;
@@ -482,7 +482,7 @@ button:disabled {
   .checkbox-group label:hover {
     background: var(--color-primary-bg);
     border-color: var(--color-primary-border);
-    color: var(--color-primary);
+    color: var(--color-primary-strong);
     transform: translateY(-1px);
   }
   .checkbox-group label:hover::before {
@@ -499,7 +499,7 @@ button:disabled {
 .checkbox-group label.checked {
   background: var(--color-primary-bg);
   border-color: var(--color-primary);
-  color: var(--color-primary);
+  color: var(--color-primary-strong);
   box-shadow: 0 1px 4px var(--color-primary-bg);
 }
 
@@ -550,7 +550,7 @@ button:disabled {
 }
 
 .btn:active {
-  transform: scale(0.97);
+  transform: scale(0.96);
   transition: transform var(--dur-fast) var(--ease-out);
 }
 
@@ -574,13 +574,19 @@ button:disabled {
     transform: translateY(-2px);
     box-shadow: 0 6px 24px oklch(58% 0.18 248 / 0.40);
   }
+  /* 特异性 0,3,0 > .btn-primary:active 的 0,2,0，鼠标点击时 hover 恒成立，
+     所以这条是 .btn-primary 实际的按压缩放来源。若这里漏写 scale(0.96)，
+     全站「按压缩放统一 0.96」在最显眼的按钮上会整个失效（静默、无报错）。
+     box-shadow 一并归位，避免按下时 hover 的大阴影硬切。 */
   .btn-primary:hover:active {
-    transform: translateY(0);
+    transform: translateY(0) scale(0.96);
+    box-shadow: 0 1px 6px oklch(58% 0.18 248 / 0.30);
   }
 }
 
+/* 触屏无 :hover，走这条；与上面 :hover:active 保持同一目标值 */
 .btn-primary:active {
-  transform: translateY(0) scale(0.97);
+  transform: translateY(0) scale(0.96);
   box-shadow: 0 1px 6px oklch(58% 0.18 248 / 0.30);
   transition: transform var(--dur-fast) var(--ease-out),
               box-shadow var(--dur-fast) var(--ease-out);
@@ -599,41 +605,8 @@ button:disabled {
   box-shadow: none;
 }
 
-/* ─── 按钮 loading / success 状态 ─── */
-.btn[data-state="loading"] {
-  pointer-events: none;
-  opacity: 0.75;
-  cursor: wait;
-  box-shadow: 0 0 0 3px oklch(58% 0.18 248 / 0.10);
-  animation: btnGlowPulse 1.5s ease-in-out infinite;
-}
-.btn[data-state="loading"]::after {
-  content: '';
-  width: 14px;
-  height: 14px;
-  border: 2px solid currentColor;
-  border-right-color: transparent;
-  border-radius: 50%;
-  display: inline-block;
-  margin-left: 6px;
-  animation: btnSpin var(--dur-normal) linear infinite;
-  vertical-align: middle;
-}
-@keyframes btnSpin {
-  to { transform: rotate(360deg); }
-}
-
-.btn[data-state="success"] {
-  pointer-events: none;
-  opacity: 0.85;
-  cursor: default;
-  animation: successPop 1500ms forwards;
-}
-.btn[data-state="success"]::after {
-  content: '✓';
-  margin-left: 6px;
-  font-size: 14px;
-}
+/* .btn[data-state] loading/success 规则已删除 — JS 从未写入 data-state，
+   整套规则（含 btnGlowPulse/btnSpin/successPop keyframes）零触发 */
 
 .btn-danger {
   background: var(--color-danger-bg);
@@ -664,8 +637,11 @@ button:disabled {
 }
 
 .btn-success:active {
-  transform: translateY(0) scale(0.97);
-  transition: transform var(--dur-fast) var(--ease-out);
+  transform: translateY(0) scale(0.96);
+  /* box-shadow 必须一起过渡——--transition-fast 列表里没有 box-shadow，
+     漏掉的话 hover 的大阴影在按下瞬间硬切（.btn-primary:active 已含此项） */
+  transition: transform var(--dur-fast) var(--ease-out),
+              box-shadow var(--dur-fast) var(--ease-out);
   box-shadow: 0 1px 4px oklch(62% 0.16 158 / 0.30);
 }
 
@@ -686,7 +662,7 @@ button:disabled {
 }
 
 .btn-danger-outline:active {
-  transform: scale(0.97);
+  transform: scale(0.96);
   transition: transform var(--dur-fast) var(--ease-out);
 }
 
@@ -720,31 +696,8 @@ button:disabled {
   color: var(--color-text);
 }
 
-/* 涟漪效果 — 仅视觉反馈，不影响布局 */
-.btn-ripple {
-  position: relative;
-  overflow: hidden;
-}
-
-.btn-ripple::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 300px;
-  height: 300px;
-  background: oklch(94% 0.006 250 / 0.30);
-  border-radius: 50%;
-  transform: translate(-50%, -50%) scale(0);
-  transition: transform var(--dur-slow) var(--ease-out),
-              opacity var(--dur-slow) var(--ease-out);
-  opacity: 0;
-}
-
-.btn-ripple:active::after {
-  transform: translate(-50%, -50%) scale(1);
-  opacity: 1;
-}
+/* .btn-ripple 规则已删除 — 该类在 HTML/JS 中零引用。
+   下方主操作按钮涟漪为纯 CSS :active 驱动，保留 */
 
 /* ─── 主操作按钮涟漪扩展 ─── */
 .btn-primary,
@@ -914,7 +867,7 @@ button:disabled {
 
 .form-section-header.active .form-section-header-title,
 .section-header.active .section-title-text {
-  color: var(--color-primary);
+  color: var(--color-primary-strong);
 }
 
 .form-section-header-chevron,
@@ -927,7 +880,7 @@ button:disabled {
 .form-section-header-chevron.rotated,
 .section-header.active .section-icon {
   transform: rotate(90deg);
-  color: var(--color-primary);
+  color: var(--color-primary-strong);
 }
 
 .form-section-content,
@@ -976,10 +929,11 @@ button:disabled {
   transform: translateY(8px);
 }
 
-.view.active .card:nth-child(1) { animation: viewCardIn 300ms 60ms var(--ease-out) forwards; }
-.view.active .card:nth-child(2) { animation: viewCardIn 300ms 120ms var(--ease-out) forwards; }
-.view.active .card:nth-child(3) { animation: viewCardIn 300ms 180ms var(--ease-out) forwards; }
-.view.active .card:nth-child(n+4) { animation: viewCardIn 300ms 240ms var(--ease-out) forwards; }
+/* ~100ms 步进 — 间隔太小（60ms）时"依次到来"的层次读不出来 */
+.view.active .card:nth-child(1) { animation: viewCardIn 300ms 100ms var(--ease-out) forwards; }
+.view.active .card:nth-child(2) { animation: viewCardIn 300ms 200ms var(--ease-out) forwards; }
+.view.active .card:nth-child(3) { animation: viewCardIn 300ms 300ms var(--ease-out) forwards; }
+.view.active .card:nth-child(n+4) { animation: viewCardIn 300ms 400ms var(--ease-out) forwards; }
 
 /* ═══════════════════════════════════════
    表单折叠字段交错入场
@@ -991,14 +945,15 @@ button:disabled {
   animation: formFieldIn 200ms var(--ease-out) forwards;
 }
 
-.form-section.animating:not(.collapsed) .form-section-content .form-group:nth-child(1) { animation-delay: 40ms; }
-.form-section.animating:not(.collapsed) .form-section-content .form-group:nth-child(2) { animation-delay: 80ms; }
-.form-section.animating:not(.collapsed) .form-section-content .form-group:nth-child(n+3) { animation-delay: 120ms; }
+/* 手风琴展开属中频交互，步进取 60ms——低于视图级 100ms 引导值，避免每次展开都显拖沓 */
+.form-section.animating:not(.collapsed) .form-section-content .form-group:nth-child(1) { animation-delay: 60ms; }
+.form-section.animating:not(.collapsed) .form-section-content .form-group:nth-child(2) { animation-delay: 120ms; }
+.form-section.animating:not(.collapsed) .form-section-content .form-group:nth-child(n+3) { animation-delay: 180ms; }
 
 .form-section-optional {
   font-weight: var(--font-weight-normal);
   font-size: var(--font-xs);
-  color: var(--color-text-placeholder);
+  color: var(--color-text-subtle);
   margin-left: var(--space-xs);
 }
 

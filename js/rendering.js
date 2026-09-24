@@ -507,9 +507,9 @@ function bindTbodyEvents() {
 function handleDeleteClick(idx) {
   var item = logs[idx];
   if (!item) return;
-  var msg = '确定删除 ' + (item.symbol || '') + ' ' + (item.direction === 'long' ? '做多' : '做空') + ' 这笔日志？';
+  // 下方 showUndoToast 提供 5 秒撤销，故不做二次确认，也不声称不可恢复
+  var msg = '确定删除 ' + (item.symbol || '') + ' ' + (item.direction === 'long' ? '做多' : '做空') + ' 这笔日志？（5 秒内可撤销）';
   if (!confirm(msg)) return;
-  if (!confirm('⚠️ 再次确认：删除后将无法恢复，确定继续？')) return;
 
   // P0: 立即从 DOM 移除该行（含相邻详情行/面板行），待撤销窗口内不再出现幽灵行
   // 必须先于 _commitPendingDelete() 执行——后者会重绘表格导致 data-idx 变化

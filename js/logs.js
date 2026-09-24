@@ -420,8 +420,8 @@ function batchDelete() {
   }
   if (_selectedIndices.size === 0) { showToast('请先勾选要删除的日志','warn'); return; }
   const count = _selectedIndices.size;
-  if (!confirm('确认删除已选的 ' + count + ' 条日志？')) return;
-  if (!confirm('⚠️ 再次确认：删除后将无法恢复，确定继续？')) return;
+  // 下方 showUndoToast 提供 5 秒撤销，故不做二次确认，也不声称不可恢复
+  if (!confirm('确认删除已选的 ' + count + ' 条日志？（5 秒内可撤销）')) return;
   
   const sorted = Array.from(_selectedIndices).sort(function(a, b) { return b - a; });
   const deletedLogs = [];

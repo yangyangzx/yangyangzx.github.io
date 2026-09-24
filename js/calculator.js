@@ -838,9 +838,14 @@ function _calculateImpl() {
   let rrCheckResult = null;
   if (targetRR !== null) {
     rrD.textContent = targetRR.toFixed(2) + ' : 1';
-    if (targetRR >= 3) {
+    // 颜色分级必须与上面 toFixed(2) 的显示口径一致，否则反推解自带的约 4e-9 浮点
+    // 残差（实测 1.9993518302）会让「显示 2.00 : 1、checkRR 判 ✓」的卡片被染成红色——
+    // 同一数值给出「绿/黄/红 + ✓/✗」两种互相矛盾的结论。与三处 RR 门共用 rrMeetsMin()
+    // （skills-integration.js），保证颜色、文字、门三者对同一数字给出同一档结论。
+    // 注：2/3 两个档位阈值仍为原硬编码值，未改为读取 settings.minRRRatio。
+    if (rrMeetsMin(targetRR, 3)) {
       cardRR.className = 'result-card rr-green';
-    } else if (targetRR >= 2) {
+    } else if (rrMeetsMin(targetRR, 2)) {
       cardRR.className = 'result-card rr-amber';
     } else {
       cardRR.className = 'result-card rr-red';

@@ -36,6 +36,7 @@
 <script src="../js/skills-integration.js"></script>
 <script src="../js/calculator.js"></script>
 <script src="../js/risk.js"></script>
+<script src="../js/planner.js"></script>
 <script>
 (function() {
   // ---- 环境 mock（与生产隔离） ----
@@ -182,6 +183,103 @@
     h += T('在仓集合内不存在已平仓记录', _openPos.every(function(p) { return isTradeStillOpen(p); }));
     h += T('calculator.js 在仓过滤与 risk.js 同口径',
       window.logs.filter(isTradeStillOpen).length === _openPos.length);
+
+    h += group('11. 盈亏比反推 / 多止盈 含费净 RR 口径');
+    // 口径定义（planner.js 顶部注释）：
+    //   rr = ((tpDist/ep) − f×(1 + tp/ep)) / ((sd/ep) + f×(1 + sl/ep))
+    // 修复前生成端按纯毛利 stopDistance×rr 求解，回填后实际净 RR 恒低于请求值
+    // （实测 85%~90% 达成率），且「按 2 倍止损距离放的 TP」会被 2R 门判不达标。
+    var _stubCalc = {
+      entryPrice: 50000, effectiveEntryPrice: 50000, stopLoss: 49000,
+      direction: 'long', stopDistance: 1000, positionSize: 3000,
+      riskAmount: 60, fee: 4.75, feeRate: 0.08, capital: 10000
+    };
+    setCalc(_stubCalc);
+    var _f = 0.08 / 100;
+    function _netRR(ep, sd, sl, tp, dir) {
+      var tpDist = dir === 'long' ? (tp - ep) : (ep - tp);
+      return ((tpDist / ep) - _f * (1 + tp / ep)) / ((sd / ep) + _f * (1 + sl / ep));
+    }
+    h += T('getTPUnits 返回含费口径', typeof getTPUnits === 'function' && !!getTPUnits());
+    var _u = getTPUnits();
+    h += T('getTPUnits.ep 取 effectiveEntryPrice', _u.ep === 50000);
+    h += T('getTPUnits.unitStop = 止损距离/入场', Math.abs(_u.unitStop - 0.02) < 1e-9);
+    h += T('getTPUnits.unitLoss 含止损腿往返费', _u.unitLoss > 0.02);
+
+    var _okTP = true;
+    [1, 1.5, 2, 3, 5].forEach(function(rr) {
+      var tp = solveTPForRR(_u, rr, 'long');
+      if (!tp || Math.abs(_netRR(50000, 1000, 49000, tp, 'long') - rr) > 1e-6) _okTP = false;
+    });
+    h += T('solveTPForRR 解出的 TP 净 RR 精确等于请求值', _okTP);
+    h += T('solveTPForRR 结果高于纯毛利距离（费用需额外价格空间）',
+      solveTPForRR(_u, 2, 'long') > 50000 + 1000 * 2);
+    h += T('solveTPForRR 单调：RR 越大止盈价越远',
+      solveTPForRR(_u, 1, 'long') < solveTPForRR(_u, 2, 'long') &&
+      solveTPForRR(_u, 2, 'long') < solveTPForRR(_u, 3, 'long'));
+
+    var _sl = solveSLForRR(_u, 2, 52000, 'long');
+    h += T('solveSLForRR 解出的止损使净 RR = 请求值', _sl != null &&
+      Math.abs(_netRR(50000, 50000 - _sl, _sl, 52000, 'long') - 2) < 1e-6);
+    // 与止盈方向相反：含费口径下止损更【紧】而非更宽。
+    // 费用同时压缩分子（净毛利）、膨胀分母（净止损），故需收紧止损才能守住净 RR。
+    // 纯毛利反推 sd=1000，含费反推 sd≈880。
+    h += T('solveSLForRR 止损距离小于纯毛利反推（费用压缩分子+膨胀分母）',
+      _sl != null && (50000 - _sl) < 1000 && (50000 - _sl) > 0);
+    h += T('solveSLForRR 目标价过近时返回 null（覆盖不了费用）',
+      solveSLForRR(_u, 2, 50010, 'long') === null);
+
+    setCalc({ entryPrice: 50000, effectiveEntryPrice: 50000, stopLoss: 51000,
+              direction: 'short', stopDistance: 1000, feeRate: 0.08 });
+    var _us = getTPUnits();
+    var _tps = solveTPForRR(_us, 2, 'short');
+    h += T('solveTPForRR 做空对称（目标价在入场下方且净 RR 精确）',
+      _tps < 50000 && Math.abs(_netRR(50000, 1000, 51000, _tps, 'short') - 2) < 1e-6);
+
+    // 加权 RR 不得随无关的 calc.fee（目标腿/止损腿）漂移——fee drift 修复回归
+    var _stub = document.createElement('div');
+    ['tp1', 'tp2', 'tp3'].forEach(function(p) {
+      var pe = document.createElement('input'); pe.id = p + 'Price';
+      var re = document.createElement('input'); re.id = p + 'Ratio';
+      _stub.appendChild(pe); _stub.appendChild(re);
+    });
+    document.body.appendChild(_stub);
+    _stub.querySelector('#tp1Price').value = '52000'; _stub.querySelector('#tp1Ratio').value = '100';
+    _stub.querySelector('#tp2Price').value = '';   _stub.querySelector('#tp2Ratio').value = '0';
+    _stub.querySelector('#tp3Price').value = '';   _stub.querySelector('#tp3Ratio').value = '0';
+    setCalc(Object.assign({}, _stubCalc, { fee: 4.75, targetPrice: null }));
+    var _w1 = computeWeightedTPRR();
+    setCalc(Object.assign({}, _stubCalc, { fee: 9.99, targetPrice: 60000 }));
+    var _w2 = computeWeightedTPRR();
+    h += T('加权 RR 不随 calc.fee（目标腿/止损腿）漂移',
+      _w1 && _w2 && Math.abs(_w1.rr - _w2.rr) < 1e-12);
+    h += T('加权 RR 单档满仓时等于该档净 RR',
+      _w1 && Math.abs(_w1.rr - _netRR(50000, 1000, 49000, 52000, 'long')) < 1e-9);
+    _stub.parentNode.removeChild(_stub);
+
+    // RR 门与显示对齐（2026-09-23）：卡片用 toFixed(2) 展示，门若与未取整浮点值比较，
+    // 反推解自带约 4e-9 残差（实测 1.9999999962 对阈值 2）就会「显示 2.00:1、判 ✗」——
+    // 同一数值两种结论。按显示精度取整后比较；真实不足（1.95 对 2）仍判 ✗。
+    h += T('rrMeetsMin 吸收反推浮点残差（1.9999999962 对 2）', rrMeetsMin(1.9999999962, 2) === true);
+    h += T('rrMeetsMin 显示 2.00 即通过（1.996 对 2）', rrMeetsMin(1.996, 2) === true);
+    h += T('rrMeetsMin 显示 1.99 即不通过（1.994 对 2）', rrMeetsMin(1.994, 2) === false);
+    h += T('rrMeetsMin 默认多止盈配置仍不达标（1.95 对 2）', rrMeetsMin(1.95, 2) === false);
+    h += T('rrMeetsMin 恰好等于阈值通过（1.5 对 1.5）', rrMeetsMin(1.5, 1.5) === true);
+    h += T('checkRRRequirement 用同一容差（卡片与门结论一致）',
+      checkRRRequirement(1.9999999962, 2).pass === true && checkRRRequirement(1.78, 2).pass === false);
+
+    // 颜色分档回归（2026-09-23）：盈亏比卡片的 rr-green/rr-amber/rr-red 原本用未取整的
+    // targetRR 与 2/3 比较（calculator.js），于是「显示 2.00 : 1、checkRR ✓」的卡片仍被
+    // 染成红色——同一数值三个信号给出两种结论。现已改走 rrMeetsMin()。
+    // 下列两个值取自真实 DOM 端到端实测（BTC 多单 50000/止损 49000/feeRate 0.08%）：
+    //   calcReverseTP(期望 2R) 回填后 targetRR = 1.9993518302112037  → 应判 amber（修复前 red）
+    //   几何手输 52000（纯毛利 2R，未含费）targetRR = 1.7767691737680744 → 仍应判 red（防误放行）
+    h += T('反推回填的 1.9993518302 按显示精度达 2R（卡片走 amber 而非 red）',
+      rrMeetsMin(1.9993518302112037, 2) === true);
+    h += T('反推回填的 1.9993518302 未到 3R（不误升 green）',
+      rrMeetsMin(1.9993518302112037, 3) === false);
+    h += T('纯毛利 2R 的 1.7767691738 仍不达标（保持 red，未因取整被放行）',
+      rrMeetsMin(1.7767691737680744, 2) === false);
 
     document.getElementById('out').innerHTML = h;
     var sum = document.getElementById('summary');
