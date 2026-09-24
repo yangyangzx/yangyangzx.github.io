@@ -1216,6 +1216,9 @@ function assertSavableCalculation() {
     }
   }
   if (totalExecutables >= 2 && failCount > 0) {
+    // 在闸门内调用而非在调用方：saveLog 与拆分保存两处共用这一个断言，
+    // 只改这里两处都会把失败项滚到眼前（原先只弹 toast，不指路）。
+    try { if (typeof focusChecklistFailures === 'function') focusChecklistFailures(); } catch(e) { }
     return { ok: false, message: '风控检查有 ' + failCount + ' 项未通过，不能保存。' };
   }
   return { ok: true, calc: calc };

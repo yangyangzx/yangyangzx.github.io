@@ -519,35 +519,53 @@ function updateChecklist() {
     void cc.offsetWidth;
     cc.classList.add('checklist-anim');
   }
-  if (getCalcDirty()) { showToast('计算器参数已变更，请先点击「计算仓位」更新结果', 'warn'); return; }
+  // 结论行先同步再判 dirty：参数已变更但用户没重算时，上一轮结果仍是卡片上
+  // 实际显示的事实，早退不该让结论行停在更旧的状态
   var calc = getCalc();
+  updateChecklistSummary(calc);
+  if (getCalcDirty()) { showToast('计算器参数已变更，请先点击「计算仓位」更新结果', 'warn'); return; }
 
   // 获取设置（包含可配的止损比例和日亏损上限等）
   var settings = typeof loadSettings === 'function' ? loadSettings() : {};
 
   // ========== 辅助函数：带结果的更新 ==========
   // 返回对象：{ result: boolean|undefined, message?: string }
+  // 三类状态各带一个类，折叠态靠 fail-row 判断「哪几项挡路」：
+  //   fail-row → 阻断，内联显示原因；pass-row / skipped-row → 折叠时隐藏
   function updateCheckItemWithResult(itemId, checkFn) {
     var item = document.getElementById(itemId);
     if (!item) return null;
     var icon = item.querySelector('.check-icon');
+    var note = item.querySelector('.check-note');
     var resultObj = checkFn();
 
     if (resultObj === null || resultObj.result === undefined) {
       icon.textContent = '—';
       icon.className = 'check-icon skipped';
       item.classList.remove('fail-row');
+      item.classList.add('skipped-row');
+      item.classList.remove('pass-row');
+      if (note) note.textContent = '';
+      item.removeAttribute('title');
       return null;
     } else if (resultObj.result) {
       icon.textContent = '✓';
       icon.className = 'check-icon pass';
       item.classList.remove('fail-row');
-      if (resultObj.message) item.title = resultObj.message;
+      item.classList.add('pass-row');
+      item.classList.remove('skipped-row');
+      // 通过项的原因留在 title 悬浮里即可——内联铺开 12 行会让闸门又变回长清单
+      if (note) note.textContent = '';
+      if (resultObj.message) item.title = resultObj.message; else item.removeAttribute('title');
     } else {
       icon.textContent = '✗';
       icon.className = 'check-icon fail';
       item.classList.add('fail-row');
-      if (resultObj.message) item.title = resultObj.message;
+      item.classList.remove('pass-row');
+      item.classList.remove('skipped-row');
+      // 失败原因必须内联：原先只写 item.title，触屏完全看不到，桌面端也没人逐行 hover
+      if (note) note.textContent = resultObj.message || '';
+      if (resultObj.message) item.title = resultObj.message; else item.removeAttribute('title');
     }
     return resultObj.result;
   }
@@ -677,26 +695,10 @@ function updateChecklist() {
     return { result: passed, message: '多止盈加权期望 ' + w.rr.toFixed(2) + 'R（剩余仓位 ' + w.remain + '% 按止损计）' + (passed ? ' ≥ ' + minRR + ' 达标' : ' < ' + minRR + ' 偏低') };
   });
 
-  // ========== P1 修复：当 _lastCalc 为 null 时所有检查项均为 null，显示提示 ==========
-  var hintEl = document.getElementById('checklistHint');
-  if (!calc) {
-    if (!hintEl) {
-      var container = document.getElementById('checklistCard');
-      if (container) {
-        hintEl = document.createElement('div');
-        hintEl.id = 'checklistHint';
-        hintEl.textContent = '请先在计算器页面点击「计算仓位」后再查看检查清单';
-        hintEl.style.cssText = 'color: var(--color-text-muted); font-size: var(--font-sm); padding: 8px 12px;';
-        container.appendChild(hintEl);
-      }
-    } else {
-      hintEl.style.display = '';
-    }
-  } else if (hintEl) {
-    // 彻底移除，避免元素永久驻留 DOM；下次 _lastCalc 为 null 时重新创建
-    hintEl.remove();
-    hintEl = null;
-  }
+  // ========== 结论行 + 折叠态 ==========
+  // 原先 _lastCalc 为 null 时是往卡片末尾 append 一段提示文字（checklistHint），
+  // 现在提示并入卡片顶部的结论行，状态切换不再增删 DOM 节点。
+  updateChecklistSummary(calc);
 
   // ========== 将检查结果持久化到 _lastCalc，供日志保存时使用 ==========
   if (calc) {
@@ -722,6 +724,106 @@ function updateChecklist() {
 }
 
 /**
+ * 汇总检查清单成一行结论，并同步折叠开关文案。
+ * 闸门要回答的是「能不能保存」，不是 12 行等权状态。
+ * @param {Object|null} calc  传入 null 表示尚未计算过（显示引导文案）
+ */
+function updateChecklistSummary(calc) {
+  var card = document.getElementById('checklistCard');
+  var summary = document.getElementById('checklistSummary');
+  if (!summary) return;
+  var icon = document.getElementById('csIcon');
+  var text = document.getElementById('csText');
+  var count = document.getElementById('csCount');
+  var items = card ? card.querySelectorAll('.check-item') : [];
+  var fails = 0, passes = 0, skipped = 0;
+  for (var i = 0; i < items.length; i++) {
+    var ic = items[i].querySelector('.check-icon');
+    if (!ic) continue;
+    var c = ic.className || '';
+    if (c.indexOf('fail') !== -1) fails++;
+    else if (c.indexOf('pass') !== -1) passes++;
+    else skipped++;
+  }
+  var total = items.length;
+  if (!calc) {
+    summary.dataset.state = 'idle';
+    icon.textContent = '—';
+    text.textContent = '点击「计算仓位」后生成检查结果';
+    count.textContent = '';
+  } else if (fails > 0) {
+    summary.dataset.state = 'fail';
+    icon.textContent = '✗';
+    text.textContent = fails + ' 项未通过，不能保存';
+    count.textContent = passes + '/' + total + ' 通过' + (skipped ? ' · ' + skipped + ' 待补充' : '');
+  } else if (skipped > 0) {
+    summary.dataset.state = 'warn';
+    icon.textContent = '◐';
+    text.textContent = '无阻断项，' + skipped + ' 项待补充';
+    count.textContent = passes + '/' + total + ' 通过';
+  } else {
+    summary.dataset.state = 'pass';
+    icon.textContent = '✓';
+    text.textContent = '全部通过，可以保存';
+    count.textContent = passes + '/' + total + ' 通过';
+  }
+  // 折叠时只藏通过/待补充项，失败项始终可见——开关文案只数被藏起来的部分
+  var toggle = document.getElementById('checklistToggle');
+  if (toggle) {
+    var hidden = total - fails;
+    toggle.textContent = isChecklistExpanded() ? '收起明细' : ('展开明细（' + hidden + ' 项）');
+    toggle.setAttribute('aria-expanded', String(isChecklistExpanded()));
+  }
+}
+
+function isChecklistExpanded() {
+  var card = document.getElementById('checklistCard');
+  return !!card && !card.classList.contains('gates-collapsed');
+}
+
+/**
+ * 折叠/展开明细。失败项两种状态都可见（闸门必须能看见挡路的那几项）。
+ */
+function toggleChecklistDetail() {
+  var card = document.getElementById('checklistCard');
+  if (!card) return;
+  card.classList.toggle('gates-collapsed');
+  // 参数已变更时仍是上一次的结果，比显示「尚未计算」更接近事实
+  updateChecklistSummary(getCalc());
+}
+
+/**
+ * 保存被风控拒绝时调用：展开明细、滚到第一个失败项、闪一下把 toast 指路过来。
+ * 原先只弹 toast，用户得自己翻 4000px 去找是哪一项没过。
+ */
+function focusChecklistFailures() {
+  var card = document.getElementById('checklistCard');
+  if (!card) return;
+  // 闸门可能被复盘视图的「拆分保存」触发；开仓计划视图不可见时不要抢滚动
+  if (card.offsetParent === null) {
+    card.classList.remove('gates-collapsed');
+    updateChecklistSummary(getCalc());
+    return;
+  }
+  card.classList.remove('gates-collapsed');
+  var fails = card.querySelectorAll('.check-item.fail-row');
+  if (!fails.length) fails = [document.getElementById('checklistSummary')].filter(Boolean);
+  if (!fails.length) return;
+  fails[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+  for (var i = 0; i < fails.length; i++) {
+    fails[i].classList.remove('gate-flash');
+    void fails[i].offsetWidth; // 强制 reflow，重启动画（连续点两次保存也要闪）
+    fails[i].classList.add('gate-flash');
+  }
+  (function() {
+    setTimeout(function() {
+      for (var j = 0; j < fails.length; j++) fails[j].classList.remove('gate-flash');
+    }, 1000);
+  })();
+  updateChecklistSummary(getCalc());
+}
+
+/**
  * 动态刷新检查清单标签文字，使其与当前设置一致
  * 通过 data-default 属性保留静态 fallback 文本
  */
@@ -737,7 +839,9 @@ function refreshChecklistLabels() {
     var r = rules[i];
     var el = document.getElementById(r.id);
     if (!el) continue;
-    var span = el.querySelector('span:last-child');
+    // 必须按类选择：行末是 .check-note（失败原因槽），用 span:last-child 会把
+    // 动态标签写进原因槽，标签消失、原因槽显示规则文字——静默错行。
+    var span = el.querySelector('.check-label');
     if (!span) continue;
     var rawVal = settings[r.key];
     if (rawVal != null && rawVal !== '') {

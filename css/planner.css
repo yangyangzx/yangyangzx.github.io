@@ -94,7 +94,87 @@
   color: var(--color-danger);
 }
 
-/* ——— 检查清单卡片 ——— */
+/* ——— 检查清单闸门 ———
+   闸门要给的是「结论」，不是 12 行等权 ✓/✗ 让人自己数。
+   结构：摘要条（结论）→ 折叠的明细列表（默认只露失败项）。 */
+
+/* 明细开关 */
+#checklistCard .checklist-toggle {
+  flex: none;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg-light);
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: var(--font-weight-medium);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-out),
+              background-color var(--dur-fast) var(--ease-out),
+              border-color var(--dur-fast) var(--ease-out);
+}
+#checklistCard .checklist-toggle:hover {
+  color: var(--color-text);
+  background: var(--color-bg);
+}
+#checklistCard .checklist-toggle:active {
+  transform: scale(0.96);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+
+/* 结论行 */
+#checklistCard .checklist-summary {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  border: 1px solid var(--glass-border);
+  font-size: 13px;
+  line-height: 1.45;
+}
+#checklistCard .checklist-summary .cs-icon {
+  flex: none;
+  width: 18px;
+  text-align: center;
+  font-size: 15px;
+  font-weight: var(--font-weight-bold);
+}
+#checklistCard .checklist-summary .cs-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: var(--font-weight-semibold);
+}
+#checklistCard .checklist-summary .cs-count {
+  flex: none;
+  font-size: 12px;
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+}
+#checklistCard .checklist-summary[data-state="pass"] {
+  background: var(--color-success-bg);
+  border-color: var(--color-success-border);
+  color: var(--color-success-dark);
+}
+#checklistCard .checklist-summary[data-state="pass"] .cs-count { color: var(--color-success-dark); opacity: 0.75; }
+#checklistCard .checklist-summary[data-state="warn"] {
+  background: var(--color-primary-bg);
+  border-color: var(--color-primary-border);
+  color: var(--color-primary-strong);
+}
+#checklistCard .checklist-summary[data-state="warn"] .cs-count { color: var(--color-primary-strong); opacity: 0.75; }
+#checklistCard .checklist-summary[data-state="fail"] {
+  background: var(--color-danger-bg);
+  border-color: var(--color-danger-border);
+  border-left-width: 3px;
+  color: var(--color-danger-dark);
+}
+#checklistCard .checklist-summary[data-state="fail"] .cs-count { color: var(--color-danger-dark); opacity: 0.8; }
+
 #checklistCard .checklist {
   display: flex;
   flex-direction: column;
@@ -142,6 +222,33 @@
   flex-shrink: 0;
 }
 
+#checklistCard .check-item .check-label {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+#checklistCard .check-item .check-note {
+  display: none;
+}
+
+/* 失败项展开成两行：标签 + 原因。
+   原因原先只写在 item.title（原生悬浮提示）——触屏/移动端完全看不到，
+   桌面端也没人会逐行 hover 12 条。失败项是闸门唯一需要读者当场处理的行，
+   多占一行高度值得。缩进对齐标签文字（图标 20px + gap 8px）。 */
+#checklistCard .check-item.fail-row {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+#checklistCard .check-item.fail-row .check-note {
+  display: block;
+  margin-left: calc(20px + var(--space-sm));
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--color-danger-dark);
+  opacity: 0.85;
+}
+
+
 #checklistCard .check-item .check-icon.pass {
   color: var(--color-success);
 }
@@ -163,6 +270,24 @@
   background: var(--color-danger-bg);
   border-left: 3px solid var(--color-danger);
   color: var(--color-danger-dark);
+}
+
+/* 折叠态：只留失败项。闸门读的是「哪几项挡住了我」，通过项是背景噪声。
+   折叠时不能给可见的失败项套用按位置错开的入场延迟——第 11 条失败项
+   不该等 540ms 才出现，它正是需要立刻被看见的东西。 */
+#checklistCard.gates-collapsed .check-item:not(.fail-row) { display: none; }
+#checklistCard.gates-collapsed .check-item { transition-delay: 0ms; }
+/* 折叠到「零条失败项」时列表容器不该留下空 gap 占位 */
+#checklistCard.gates-collapsed .checklist:has(.check-item:not(.fail-row)) { display: none; }
+
+/* 保存被风控拒绝时闪一下失败项，把 toast 和失败项联系起来 */
+@keyframes gateFlash {
+  0%   { box-shadow: 0 0 0 0 var(--color-danger-border); }
+  35%  { box-shadow: 0 0 0 4px var(--color-danger-border); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+#checklistCard .check-item.fail-row.gate-flash {
+  animation: gateFlash 900ms var(--ease-out);
 }
 
 /* ——— 响应式 ——— */

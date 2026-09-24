@@ -419,6 +419,10 @@ html {
     from { opacity: 0; }
     to   { opacity: 1; }
   }
+  /* 导航液体波浪是纯装饰循环动画，静态渲染 */
+  .nav-item.active::before {
+    animation: none !important;
+  }
 }
 
 /* ─── Apple Design §14: Reduced Transparency ─── */

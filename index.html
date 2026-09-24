@@ -528,6 +528,92 @@
           </div>
         </div>
 
+        <!-- 开仓前检查清单卡片 —— 置顶到「计算结果」正下方。
+             闸门的作用是给结论，不是列清单：原先排在右栏最底部（1440px 宽下
+             y=1197，12 条全部在 900px 视口折线之外），保存被拒后只弹 toast、
+             不指路，用户得自己去找哪一项没过。现在紧跟计算结果，失败项直接
+             内联显示原因（原先只藏在 item.title 悬浮里，触屏完全看不到）。 -->
+        <div class="card gates-collapsed" id="checklistCard">
+          <div class="card-header">
+            <span>开仓前检查</span>
+            <button type="button" class="checklist-toggle" id="checklistToggle"
+                    aria-expanded="false" aria-controls="checklistList">展开明细（12 项）</button>
+          </div>
+          <div class="checklist-summary" id="checklistSummary" data-state="idle">
+            <span class="cs-icon" id="csIcon">—</span>
+            <span class="cs-text" id="csText">点击「计算仓位」后生成</span>
+            <span class="cs-count" id="csCount"></span>
+          </div>
+          <div class="checklist" id="checklistList">
+            <div class="check-item" id="checkRiskPct">
+              <span class="check-icon skipped">—</span>
+              <span class="check-label" data-default="单笔风险 ≤ 账户 2%">单笔风险 ≤ 账户 2%</span>
+              <span class="check-note"></span>
+            </div>
+            <div class="check-item" id="checkStopDist">
+              <span class="check-icon skipped">—</span>
+              <span class="check-label">止损距离合理（品种可配）</span>
+              <span class="check-note"></span>
+            </div>
+            <div class="check-item" id="checkLiqSafe">
+              <span class="check-icon skipped">—</span>
+              <span class="check-label">止损在强平价格之上（安全）</span>
+              <span class="check-note"></span>
+            </div>
+            <div class="check-item" id="checkLossStreak">
+              <span class="check-icon skipped">—</span>
+              <span class="check-label">连亏未触发熔断（＜3 笔）</span>
+              <span class="check-note"></span>
+            </div>
+            <div class="check-item" id="checkRR">
+              <span class="check-icon skipped">—</span>
+              <span class="check-label" data-default="盈亏比 ≥ 2:1">盈亏比 ≥ 2:1</span>
+              <span class="check-note"></span>
+            </div>
+            <div class="check-item" id="checkMargin">
+              <span class="check-icon skipped">—</span>
+              <span class="check-label">保证金 ≤ 本金 80%</span>
+              <span class="check-note"></span>
+            </div>
+            <div class="check-item" id="checkReason">
+              <span class="check-icon skipped">—</span>
+              <span class="check-label">入场理由已明确</span>
+              <span class="check-note"></span>
+            </div>
+            <!-- 【增强8】当日未超日亏损上限 -->
+            <div class="check-item" id="checkDailyLoss">
+              <span class="check-icon skipped">—</span>
+              <span class="check-label">当日亏损未超上限</span>
+              <span class="check-note"></span>
+            </div>
+            <!-- 【增强9】心态评分检查 -->
+            <div class="check-item" id="checkMindset">
+              <span class="check-icon skipped">—</span>
+              <span class="check-label" data-default="心态评分 ≥ 3（平静/良好）">心态评分 ≥ 3（平静/良好）</span>
+              <span class="check-note"></span>
+            </div>
+            <!-- Skills 融合：组合热量检查 -->
+            <div class="check-item" id="checkPortfolioHeat">
+              <span class="check-icon skipped">—</span>
+              <span class="check-label" data-default="6">组合热量安全（≤ 6%）</span>
+              <span class="check-note"></span>
+            </div>
+            <!-- Skills 融合：品种集中度检查 -->
+            <div class="check-item" id="checkSymbolConc">
+              <span class="check-icon skipped">—</span>
+              <span class="check-label">品种集中度未超限</span>
+              <span class="check-note"></span>
+            </div>
+            <!-- 【增强12】多止盈加权期望盈亏比（提示性指标，不参与保存门槛） -->
+            <div class="check-item" id="checkTPWeighted">
+              <span class="check-icon skipped">—</span>
+              <span class="check-label">多止盈加权期望盈亏比达标</span>
+              <span class="check-note"></span>
+            </div>
+          </div>
+          <div id="checklistAtrNote" style="font-size:11px;color:var(--color-text-muted);padding:4px 8px;line-height:1.5;"></div>
+        </div>
+
         <!-- 凯利公式参考卡片 -->
         <div class="card" id="kellyCard" style="display:none;">
           <div class="card-header"><i class="fas fa-square-root-alt" style="color:var(--color-primary);"></i> 凯利参考</div>
@@ -614,68 +700,8 @@
           </div>
         </div>
 
-        <!-- 开仓前检查清单卡片 -->
-        <div class="card" id="checklistCard">
-          <div class="card-header">开仓前检查</div>
-          <div class="checklist">
-            <div class="check-item" id="checkRiskPct">
-              <span class="check-icon skipped">—</span>
-              <span data-default="2">单笔风险 ≤ 账户 2%</span>
-            </div>
-            <div class="check-item" id="checkStopDist">
-              <span class="check-icon skipped">—</span>
-              <span>止损距离合理（品种可配）</span>
-            </div>
-            <div class="check-item" id="checkLiqSafe">
-              <span class="check-icon skipped">—</span>
-              <span>止损在强平价格之上（安全）</span>
-            </div>
-            <div class="check-item" id="checkLossStreak">
-              <span class="check-icon skipped">—</span>
-              <span>连亏未触发熔断（＜3 笔）</span>
-            </div>
-            <div class="check-item" id="checkRR">
-              <span class="check-icon skipped">—</span>
-              <span data-default="2">盈亏比 ≥ 2:1</span>
-            </div>
-            <div class="check-item" id="checkMargin">
-              <span class="check-icon skipped">—</span>
-              <span>保证金 ≤ 本金 80%</span>
-            </div>
-            <div class="check-item" id="checkReason">
-              <span class="check-icon skipped">—</span>
-              <span>入场理由已明确</span>
-            </div>
-            <!-- 【增强8】当日未超日亏损上限 -->
-            <div class="check-item" id="checkDailyLoss">
-              <span class="check-icon skipped">—</span>
-              <span>当日亏损未超上限</span>
-            </div>
-            <!-- 【增强9】心态评分检查 -->
-            <div class="check-item" id="checkMindset">
-              <span class="check-icon skipped">—</span>
-              <span data-default="3">心态评分 ≥ 3（平静/良好）</span>
-            </div>
-            <!-- Skills 融合：组合热量检查 -->
-            <div class="check-item" id="checkPortfolioHeat">
-              <span class="check-icon skipped">—</span>
-              <span data-default="6">组合热量安全（≤ 6%）</span>
-            </div>
-            <!-- Skills 融合：品种集中度检查 -->
-            <div class="check-item" id="checkSymbolConc">
-              <span class="check-icon skipped">—</span>
-              <span>品种集中度未超限</span>
-            </div>
-            <!-- 【增强12】多止盈加权期望盈亏比 -->
-            <div class="check-item" id="checkTPWeighted">
-              <span class="check-icon skipped">—</span>
-              <span>多止盈加权期望盈亏比达标</span>
-            </div>
-
-          </div>
-          <div id="checklistAtrNote" style="font-size:11px;color:var(--color-text-muted);padding:4px 8px;line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></div>
-        </div>
-      </div>
+        <!-- 开仓前检查清单卡片已移至「计算结果」正下方（见上） -->
+</div>
     </div>
   </section>
 

@@ -107,6 +107,10 @@ document.addEventListener('DOMContentLoaded', function() {
   if (typeof syncSettingsToForm === 'function') syncSettingsToForm();
   // 刷新检查清单标签文字（使其与当前设置一致）
   if (typeof refreshChecklistLabels === 'function') refreshChecklistLabels();
+  // 同步初始折叠开关文案（按钮 HTML 里是静态「展开明细（12 项）」，这里按实际条目数校正）
+  if (typeof updateChecklistSummary === 'function') updateChecklistSummary(null);
+  var checklistToggleEl = document.getElementById('checklistToggle');
+  if (checklistToggleEl) checklistToggleEl.addEventListener('click', toggleChecklistDetail);
   updateLastUpdate();
   populateFilterOptions();
   updateBackupTime();
