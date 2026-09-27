@@ -169,8 +169,8 @@ Kelly% = (胜率 × 平均盈利 − 败率 × 平均亏损) ÷ 平均盈利
 
 ```
 notes/
-├── index.html              入口（加载 24 个 JS + Chart.js CDN）
-├── css/                    12 个样式文件（变量/布局/各模块）
+├── index.html              入口（加载 25 个 JS + Chart.js CDN）
+├── css/                    14 个样式文件（变量/布局/各模块）
 ├── js/
 │   ├── constants.js        全局状态与常量（STORAGE_KEY、选项表）
 │   ├── utils.js            日期/判定/强平价/权益曲线（权威实现）
@@ -180,6 +180,7 @@ notes/
 │   ├── calculation-ui.js   计算器 UI 状态渲染
 │   ├── calculator.js       开仓计算管线（~1750 行，核心）
 │   ├── planner.js          开仓计划：多止盈/反推/12 项检查清单
+│   ├── discipline-led.js   开仓计划纪律 LED 滚动屏（上轨 A 组 / 下轨 B 组 反向横滚）
 │   ├── logs.js             平仓生命周期（结算单一入口）
 │   ├── rendering.js        日志列表渲染
 │   ├── modals.js           编辑/平仓/拆分面板
@@ -196,7 +197,7 @@ notes/
 │   ├── app.js              事件绑定/主题/初始化
 │   ├── toast.js            轻提示
 │   └── version.js          版本号
-├── test/run-tests.html     浏览器内回归测试（31 断言，打开即跑）
+├── test/run-tests.html     浏览器内回归测试（81 断言，打开即跑）
 └── assets/ img/            图标与资源
 ```
 
@@ -206,7 +207,7 @@ notes/
 
 ## 六、测试与验证
 
-- **浏览器内回归**：打开 `test/run-tests.html` 自动运行 31 条断言（平仓三态、凯利链、集中度、一致性门等）；
+- **浏览器内回归**：打开 `test/run-tests.html` 自动运行 81 条断言（平仓三态、凯利链、集中度、一致性门、纪律 LED 文案条数与顺序等）；
 - 修改 JS 后建议：`node --check js/<file>.js` 语法检查 → 浏览器强刷（URL 追加 `?cb=<时间戳>` 避开缓存）→ 关键链路 E2E。
 
 ---

@@ -58,6 +58,11 @@ function switchView(viewName, writeHistory) {
 
   _currentView = viewName;
 
+  // P1 接缝（v5.5）：常驻动画按视图暂停 —— 开仓计划的纪律 LED 滚动屏靠此事件
+  // 在切走时置 animation-play-state: paused，避免在 display:none 的隐藏视图上空转。
+  // 模式对齐 app.js 的 themechange：解耦、与脚本加载顺序无关，接收方无需 typeof 判空。
+  window.dispatchEvent(new CustomEvent('viewchange', { detail: { view: viewName } }));
+
   // 从日志视图切出时退出批量模式
   if (viewName !== 'journal' && window._batchMode) {
     window._batchMode = false;

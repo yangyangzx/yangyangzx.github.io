@@ -1,0 +1,252 @@
+/* ==================== 纪律 LED 滚动屏 ==================== */
+/*
+   开仓计划视图顶部的满宽提示条：两轨反向横滚。A 轨放 A 组 14 条、B 轨放 B 组
+   20 条，两轨合起来就是全部 34 条——**没有**第三个逐行滚动面板，那只会把同一
+   批文案再重复播一遍。
+
+   「屏」的隐喻要求近黑底，因此浅色主题下也保留暗底（与卡片体系的白玻璃相反），
+   仅微调色相与边框使它在浅底上仍明确为「一块屏」。色值走模块级局部 token，
+   hue 锚定 248 与全站一致，写法对齐 variables.css 的 [data-theme="light"] 分层。
+
+   动画时长（--led-track-dur-*）由 js/discipline-led.js 测量后注入，
+   CSS 里的值只是缺省兜底——条数不在 CSS 写死。
+*/
+
+.led-wall {
+  /* ── 模块局部色 token（hue 248，锚定全站主色相） ── */
+  --led-bg:        oklch(8% 0.010 250);
+  --led-panel:     oklch(11% 0.011 250);
+  --led-text:      oklch(87% 0.13 248);
+  --led-dim:       oklch(68% 0.09 248);
+  --led-glow:      0 0 10px oklch(70% 0.16 248 / 0.45);
+  --led-glow-soft: 0 0 8px  oklch(70% 0.15 248 / 0.30);
+  --led-line:      oklch(60% 0.015 250 / 0.16);
+  --led-edge:      oklch(65% 0.14 248 / 0.38);
+  --led-scan:      oklch(0% 0 0 / 0.20);
+
+  /* ── 几何缺省值（JS 测量后会覆写；这里保证 JS 未跑时也能看） ── */
+  --led-track-dur-a: 96s;
+  --led-track-dur-b: 82s;
+
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--led-edge);
+  border-radius: var(--radius-md);
+  background: linear-gradient(180deg, var(--led-panel), var(--led-bg));
+  box-shadow: inset 0 1px 0 oklch(100% 0 0 / 0.05), 0 4px 18px oklch(0% 0 0 / 0.30);
+  /* 面板内的原生控件/滚动条按暗色渲染（浅主题下依然是一块暗屏） */
+  color-scheme: dark;
+  margin-bottom: var(--space-lg);
+}
+
+/* 浅色主题：屏幕仍为暗底，仅微提以与白玻璃卡片拉开层次 */
+[data-theme="light"] .led-wall {
+  --led-bg:      oklch(9% 0.010 250);
+  --led-panel:   oklch(12% 0.011 250);
+  --led-text:    oklch(86% 0.12 248);
+  --led-dim:     oklch(64% 0.09 248);
+  --led-glow:      0 0 10px oklch(66% 0.14 248 / 0.50);
+  --led-glow-soft: 0 0 8px  oklch(66% 0.13 248 / 0.34);
+  --led-edge:      oklch(60% 0.13 248 / 0.48);
+  --led-line:      oklch(60% 0.015 250 / 0.20);
+  box-shadow: inset 0 1px 0 oklch(100% 0 0 / 0.05), 0 4px 14px oklch(0% 0 0 / 0.16);
+}
+
+/* ── 扫描线纹理：横贯整屏，压在内容之上 ── */
+.led-wall::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: repeating-linear-gradient(
+    0deg,
+    var(--led-scan) 0 1px,
+    transparent 1px 3px
+  );
+}
+
+/* ── 条头 ── */
+.led-wall-head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: 6px 12px;
+  background: oklch(0% 0 0 / 0.22);
+  border-bottom: 1px solid var(--led-line);
+}
+
+.led-wall-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--font-xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--letter-spread);
+  text-transform: uppercase;
+  color: var(--led-dim);
+}
+
+.led-wall-title i {
+  font-size: 12px;
+  color: var(--led-text);
+  text-shadow: var(--led-glow-soft);
+}
+
+/* ── 收起按钮：透明描边，按下时轻微反白 ── */
+.led-wall-toggle {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid var(--led-line);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--led-dim);
+  font-family: inherit;
+  font-size: var(--font-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.4;
+  cursor: pointer;
+  transition: color var(--dur-short) var(--ease-out),
+              border-color var(--dur-short) var(--ease-out),
+              background-color var(--dur-short) var(--ease-out);
+}
+
+.led-wall-toggle:hover {
+  color: var(--led-text);
+  border-color: var(--led-edge);
+  background: oklch(100% 0 0 / 0.05);
+}
+
+/* 项目 :focus-visible 全局规则用 var(--color-primary)；暗屏上主色不够亮，这里提亮一档 */
+.led-wall-toggle:focus-visible {
+  outline: 2px solid var(--led-text);
+  outline-offset: 2px;
+}
+
+.led-wall-chevron {
+  font-size: 10px;
+  transition: transform var(--dur-short) var(--ease-out);
+}
+
+/* ── 主体折叠：沿用 base.css 的 max-height + opacity + pointer-events 约定 ── */
+.led-wall-body {
+  /* 上界 = 2 轨 + 1 条描边 + 余量：桌面 13px×1.2 行高 + 18px 上下 padding = 33.6px/轨，
+     合计 68.2px；移动端 11.5px 合计 56.6px。取 80px 留 17% 余量。
+     上界贴内容很要紧：折叠动画从该值降到 0，max-height 掉到内容高度之前
+     面板尺寸不变（120px 时白等 ~130ms / 300ms ≈ 43% 的动画时间在原地不动）。 */
+  max-height: 80px;
+  overflow: hidden;
+  opacity: 1;
+  transition: max-height var(--dur-slow) var(--ease-out),
+              opacity var(--dur-short) var(--ease-out);
+}
+
+.led-wall[data-collapsed="true"] .led-wall-body {
+  max-height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ── 横滚轨道 ── */
+.led-track {
+  position: relative;
+  overflow: hidden;
+  /* 左右渐隐：模拟屏边缘被边框吃掉，避免文字在边沿硬切断 */
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 6%, #000 94%, transparent 100%);
+          mask-image: linear-gradient(90deg, transparent 0, #000 6%, #000 94%, transparent 100%);
+}
+
+.led-track + .led-track {
+  border-top: 1px solid var(--led-line);
+}
+
+.led-track-inner {
+  display: flex;
+  width: max-content;
+  white-space: nowrap;
+  padding: 9px 0;
+  will-change: transform;
+  animation: ledScrollX var(--led-track-dur-a) linear infinite;
+}
+
+/* B 轨反向：复用同一 keyframes，靠 animation-direction 反转（从 -50% 走向 0） */
+.led-track[data-dir="right"] .led-track-inner {
+  animation-duration: var(--led-track-dur-b);
+  animation-direction: reverse;
+}
+
+/* 间距必须落在项自身的 padding-right 上，容器不得有 gap——
+   否则总宽 = 2w + gap，translateX(-50%) 偏移半格，每次循环跳一帧 */
+.led-item {
+  flex-shrink: 0;
+  padding-right: 36px;
+  font-size: var(--font-sm);
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+  color: var(--led-text);
+  text-shadow: var(--led-glow);
+}
+
+.led-item::before {
+  content: '◆';
+  margin-right: 10px;
+  font-size: 9px;
+  color: var(--led-dim);
+  text-shadow: none;
+  vertical-align: 2px;
+}
+
+/* ── 暂停：切离开仓计划视图 / 收起时停在当前位置 ──
+   移除或替换 animation 会从 0 重启，animation-play-state 才会续播 */
+.led-wall[data-active="false"] .led-track-inner {
+  animation-play-state: paused;
+}
+
+/* ── keyframes 内不得用 var()（项目约定），这里只写几何终态 ── */
+@keyframes ledScrollX {
+  to { transform: translateX(-50%); }
+}
+
+/* ── 收起后标题与主体的间距收紧（:has() 项目已有先例，planner.css:281） ── */
+.view-title:has(+ .led-wall) {
+  margin-bottom: var(--space-md);
+}
+
+/* ═══════════════════════════════════
+   响应式（沿用 responsive.css 的 48rem 统一断点）
+   ═══════════════════════════════════ */
+@media (max-width: 48rem) {
+  .led-wall-head {
+    padding: 6px 10px;
+  }
+  .led-track-inner {
+    padding: 7px 0;
+  }
+  .led-item {
+    font-size: 11.5px;
+    padding-right: 26px;
+  }
+  .led-wall-toggle {
+    padding: 4px 8px;
+  }
+}
+
+/* ═══════════════════════════════════
+   Reduced Motion
+   ═══════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  /* 静态停在左端；同时撤掉左右渐隐，否则左 6% 的起首文字会被压暗 */
+  .led-track-inner {
+    animation: none !important;
+  }
+  .led-track {
+    -webkit-mask-image: none;
+            mask-image: none;
+  }
+}

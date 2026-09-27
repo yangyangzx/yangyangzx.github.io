@@ -37,6 +37,7 @@
 <script src="../js/calculator.js"></script>
 <script src="../js/risk.js"></script>
 <script src="../js/planner.js"></script>
+<script src="../js/discipline-led.js"></script>
 <script>
 (function() {
   // ---- 环境 mock（与生产隔离） ----
@@ -280,6 +281,58 @@
       rrMeetsMin(1.9993518302112037, 3) === false);
     h += T('纯毛利 2R 的 1.7767691738 仍不达标（保持 red，未因取整被放行）',
       rrMeetsMin(1.7767691737680744, 2) === false);
+
+    // ---- 12. 纪律 LED 滚动屏 ----
+    h += group('12. 纪律 LED 滚动屏（文案条数 / 顺序 / 兜底测量）');
+    if (typeof DisciplineLed === 'undefined') {
+      h += loadErr('discipline-led.js');
+    } else {
+      var _rl = DisciplineLed.rules();
+      var _all = DisciplineLed.all();
+      h += T('A 组 = 14 条', _rl.A.length === 14);
+      h += T('B 组 = 20 条', _rl.B.length === 20);
+      h += T('合计 = 34 条（逐行面板全量）', _all.length === 34);
+      h += T('逐行顺序为 A 组在前、B 组在后',
+        _all[0] === _rl.A[0] && _all[14] === _rl.B[0] && _all[33] === _rl.B[19]);
+      // 文案完整性：全部非空字符串，无占位符残留
+      var _clean = true;
+      for (var _ri = 0; _ri < _all.length; _ri++) {
+        if (typeof _all[_ri] !== 'string' || !_all[_ri].trim() || /NaN|undefined|TODO/.test(_all[_ri])) _clean = false;
+      }
+      h += T('34 条均非空且无占位符', _clean);
+      function _noDup(arr) {
+        for (var _di = 0; _di < arr.length; _di++) {
+          for (var _dj = _di + 1; _dj < arr.length; _dj++) {
+            if (arr[_di] === arr[_dj]) return false;
+          }
+        }
+        return true;
+      }
+      h += T('A 组内无重复条目', _noDup(_rl.A));
+      h += T('B 组内无重复条目', _noDup(_rl.B));
+      h += T('全 34 条跨组无重复', _noDup(_all));
+      // 冻结：防止运行期被业务代码改写导致条数漂移
+      h += T('LED_RULES.A 已冻结', Object.isFrozen(window.LED_RULES.A));
+      h += T('LED_RULES.B 已冻结', Object.isFrozen(window.LED_RULES.B));
+      // 兜底测量：真实布局量不出（未渲染 / display:none / jsdom）时不得返回 0
+      var _fb = DisciplineLed.fallbackCopyWidth(_all, 13, 36);
+      h += T('兜底宽度为正数（无布局环境也不返 0）', _fb > 0);
+      h += T('measure 在 scrollWidth=0 时走兜底且为正',
+        DisciplineLed.measure(document.createElement('div'), _rl.A) > 0);
+      h += T('measure 有真实 scrollWidth 时优先用之（÷2 取单份）', (function() {
+        var _el = document.createElement('div');
+        Object.defineProperty(_el, 'scrollWidth', { value: 4000, configurable: true });
+        return DisciplineLed.measure(_el, _rl.A) === 2000;
+      })());
+      // 测试页无 #disciplineLed：init() 必须零副作用不抛错
+      h += T('无 #disciplineLed 时 init() 安全 no-op', (function() {
+        try { DisciplineLed.init(); return true; } catch (e) { return false; }
+      })());
+      h += T('无宿主时 applyActive/applyCollapsed 不抛错', (function() {
+        try { DisciplineLed.applyActive(false); DisciplineLed.applyCollapsed(true); return true; }
+        catch (e) { return false; }
+      })());
+    }
 
     document.getElementById('out').innerHTML = h;
     var sum = document.getElementById('summary');
