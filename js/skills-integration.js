@@ -3,23 +3,36 @@
 
 /**
  * 计算组合热量（Portfolio Heat）
- * 返回当前未平仓持仓的总风险占比百分比
  * 使用实际止损距离重新计算每笔风险，而非依赖存储的 riskAmount（防止止损调整后低估风险）
  *
- * 口径说明（有意为之，勿当作 bug 修正）：
- * 只统计**已持久化的在仓持仓**（getOpenPositions() → logs），**不含**调用方正在待开的
- * 仓位——待开仓位存在 _lastCalcStore，与本函数无交集。所以这是一道
- * 「已开持仓已过热就别再加仓」的门，不是「含本仓的总热量上限」。
- * 本次待开仓位的单笔风险由 riskPercent（single-risk-exceeds-limit）与保证金 80%/90%
- * 上限分别约束。UI 文案（index.html 设置页 riskHeatMax 提示、下方 renderPortfolioHeat
- * 卡片副标题）已同步为「已开持仓」口径，避免与实现不符。
- * 若要改成含本仓，需重排 calculator.js 门链：热量检查当前执行在仓位规模计算之前，
- * 此时 riskAmount 尚未产出。见记忆 tradingdiscipline-v53-optimization.md。
+ * 口径变更（2026-10-03，v5.6.3）：原先只统计已持久化持仓、不含待开仓位，
+ * 「已开持仓已过热就别再加仓」——但 checkSymbolConcentration 一直把本仓算进去，
+ * 同一张卡片两层组合口径不对称，「已持仓 5.5% + 本仓 2% > 上限 6%」整类超配漏过。
+ * 现改为可选传入本仓风险，闸门（calculator 硬阻断 + planner 软检查）统一用含本仓口径。
+ * 不带参数调用（风险面板 renderPortfolioHeat）仍是纯「已持仓」口径，未变。
  */
-function calcPortfolioHeat() {
+/**
+ * 组合风险（已持仓 + 可选的待开仓位）占本金百分比。
+ *
+ * 闸门语义必须是「开仓后」口径：只算已持仓会让「已持仓 5.5% + 本仓 2% = 7.5%，
+ * 而上限 6%」这一整类超配漏过——同一张卡片里 checkSymbolConcentration 却是把本仓
+ * 算进去的，两层口径不对称。软检查（planner）和硬阻断（calculator）都传本仓风险。
+ *
+ * @param {number} [pendingRiskAmount] 本仓（待开仓位）计划风险 USDT；不传则只算已持仓
+ * @param {string} [pendingSymbol]     本仓品种，仅用于明细标记
+ * @param {number} [capitalOverride]   本金口径覆盖；不传则用 getAccountCapital()
+ * @returns {{heat:number, existingHeat:number, existingRisk:number, planRisk:number,
+ *            planPct:number, details:Array, warning:string|null, blocked:boolean}}
+ */
+function calcPortfolioHeat(pendingRiskAmount, pendingSymbol, capitalOverride) {
   var openPositions = getOpenPositions();
-  var capital = getAccountCapital();
-  if (!capital || capital <= 0) return { heat: 0, details: [], warning: null, blocked: false };
+  // 表单本金可用时优先用它：本仓风险就是按表单本金算出来的，两者必须同一分母，
+  // 否则求和口径自相矛盾。账户余额未设置时 getAccountCapital() 为 null，heat 恒为 0，
+  // 等于热量检查永久失效。
+  var capital = (capitalOverride != null && capitalOverride > 0) ? capitalOverride : getAccountCapital();
+  if (!capital || capital <= 0) {
+    return { heat: 0, existingHeat: 0, existingRisk: 0, planRisk: 0, planPct: 0, details: [], warning: null, blocked: false };
+  }
 
   var totalRisk = 0;
   var details = [];
@@ -45,7 +58,15 @@ function calcPortfolioHeat() {
     });
   }
 
-  var heat = totalRisk / capital * 100;
+  // 本仓风险并入总热量（只算已持仓会漏掉整类「加上本仓才超限」的情况）
+  var planRisk = pendingRiskAmount > 0 ? pendingRiskAmount : 0;
+  var planPct = planRisk / capital * 100;
+  if (planRisk > 0) {
+    details.push({ symbol: pendingSymbol || 'NEW', risk: planRisk, pct: planPct, pending: true });
+  }
+
+  var existingHeat = totalRisk / capital * 100;
+  var heat = existingHeat + planPct;
   var settings = loadSettings();
   var maxHeat = settings.riskHeatMax || 6;
   var warning = null;
@@ -53,12 +74,35 @@ function calcPortfolioHeat() {
 
   if (heat >= maxHeat) {
     blocked = true;
-    warning = '组合热量已达 ' + heat.toFixed(1) + '%，超过安全上限 ' + maxHeat + '%。建议平仓后再开新仓。';
+    warning = '组合总风险已达 ' + heat.toFixed(1) + '%（已持仓 ' + existingHeat.toFixed(1)
+      + '% + 本仓 ' + planPct.toFixed(1) + '%），超过上限 ' + maxHeat + '%。建议减仓后再开新仓。';
   } else if (heat >= settings.portfolioHeatMax || heat >= maxHeat * 0.8) {
-    warning = '组合热量 ' + heat.toFixed(1) + '% 接近上限 (' + maxHeat + '%)，注意控制新开仓风险。';
+    warning = '组合总风险 ' + heat.toFixed(1) + '% 接近上限 (' + maxHeat + '%)，注意控制新开仓风险。';
   }
 
-  return { heat: heat, details: details, warning: warning, blocked: blocked };
+  return {
+    heat: heat,
+    existingHeat: existingHeat,
+    existingRisk: totalRisk,
+    planRisk: planRisk,
+    planPct: planPct,
+    details: details,
+    warning: warning,
+    blocked: blocked
+  };
+}
+
+/**
+ * 品种止损距离上限（%）——唯一权威实现。
+ * 自定义设置优先，未配置时回退 ETH 2% / 其余 3%。
+ * calculator.js 的色标与硬阻断、planner.js 的检查清单都必须读这里；
+ * 边界在两个文件各写一份正是这次失配的来源。
+ */
+function getStopLimitPct(symbol) {
+  var settings = loadSettings();
+  var custom = settings.customStopLimit || {};
+  var s = String(symbol || '').toUpperCase();
+  return custom[s] != null ? custom[s] : (s === 'ETH' ? 2 : 3);
 }
 
 /**
@@ -284,6 +328,22 @@ function checkDailyLossLimit() {
     pctOfLimit: dailyLossLimit > 0 ? (Math.abs(Math.min(todayPnl, 0)) / dailyLossLimit * 100) : 0,
     blocked: overLimit
   };
+}
+
+/**
+ * 读取当前心态评分（1-5）——唯一权威实现。
+ * NaN / 缺失 / <1 视为未评分，回退到最低要求分。
+ *
+ * 原先四处分读 `parseInt(...) || 3`：默认分 3 是硬编码，与 settings.mindsetMinScore 脱节，
+ * 把最低要求调到 4 后「未评分」仍按 3 通过；「未填」和显式 0 也被静默合并成同一个值。
+ * 这里统一回退到 minScore，语义是「未评分按临界通过分处理」，与星级控件的默认 3 一致。
+ */
+function getMindsetScore() {
+  var el = document.getElementById('mindsetScore');
+  var raw = el ? parseInt(el.value, 10) : NaN;
+  var settings = loadSettings();
+  var minScore = settings.mindsetMinScore != null ? settings.mindsetMinScore : 3;
+  return (Number.isFinite(raw) && raw >= 1) ? raw : minScore;
 }
 
 /**

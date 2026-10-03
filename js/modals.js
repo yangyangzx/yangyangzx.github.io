@@ -1160,7 +1160,7 @@ function doSaveSplit(calc, count) {
       return { prices: p, ratios: r, weightedRR: (w && w.rr != null && !w.overLimit) ? w.rr : null, remain: w.remain };
     })(),
     reason: calc.reason || getReason(),
-    mindsetScore: calc.mindsetScore != null ? calc.mindsetScore : (parseInt(document.getElementById('mindsetScore').value) || 3),
+    mindsetScore: calc.mindsetScore != null ? calc.mindsetScore : getMindsetScore(),
     strategyFramework: document.getElementById('strategyFramework').value,
     strategyPattern: document.getElementById('strategyPattern').value,
     signals: calc.signals,

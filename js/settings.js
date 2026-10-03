@@ -7,6 +7,10 @@ var SETTINGS_CACHE = null; // 缓存已解析的设置对象，避免重复 loca
 var SETTINGS_DEFAULTS = {
   accountBalance: 0,
   riskPercent: 2,
+  // 未填止损价时生成临时止损价的止损宽度（%）。null = 未配置：calculator 走内置默认
+  //（ETH 0.8%，其余 1%），与历史行为一致；设置页留空保存时同样写回 null。
+  // 不用 0 作默认：0 会被 calculator 判为越界值，虽会回退到同一默认，但语义含糊。
+  provisionalStopPct: null,
   dailyLossLimit: 5,
   maxDrawdownAlert: 20,
   defaultLeverage: 10,
@@ -35,6 +39,9 @@ var SETTINGS_DEFAULTS = {
 var SETTINGS_VALIDATORS = {
   accountBalance:  { min: 0,     max: Infinity,  label: '账户余额' },
   riskPercent:     { min: 1,     max: 10,        label: '单笔风险比例' },
+  // 临时止损宽度的 % 口径（唯一权威）；calculator.getProvisionalStopLoss 按此判定是否越界，
+  // 越界回退内置默认，采用值时再 ÷100 换成小数参与价格计算。改这里的边界是唯一入口。
+  provisionalStopPct: { min: 0.3, max: 5,       label: '临时止损宽度' },
   dailyLossLimit:  { min: 1,     max: 50,        label: '日亏损上限' },
   maxDrawdownAlert:{ min: 5,     max: 50,        label: '最大回撤告警' },
   defaultLeverage: { min: 1,     max: 125,       label: '默认杠杆' },
@@ -46,7 +53,8 @@ var SETTINGS_VALIDATORS = {
   singleSymbolMaxPct: { min: 5, max: 50,        label: '单品种最大占比' },
   dailyTradeMax:   { min: 5,     max: 30,        label: '日最大交易笔数', integer: true },
   riskHeatMax:     { min: 3,     max: 15,        label: '组合热量安全上限' }
-  // customStopLimit 和 mindsetMinScore 不需要简单的数值验证，特殊处理
+  // customStopLimit、mindsetMinScore、provisionalStopPct 不在上方 fields 循环里校验，
+  // 原因各不相同，见 saveSettings() 内各段注释
 };
 
 /**
@@ -103,6 +111,10 @@ function renderSettings() {
 
   var el = document.getElementById('setAccountBalance'); if (el) el.value = settings.accountBalance;
   el = document.getElementById('setRiskPercent');      if (el) el.value = settings.riskPercent;
+  // 临时止损宽度：null（未配置）渲染为空，让用户看得出当前用的是内置默认规则
+  // （loadSettings 合并后该值只会是 null 或已保存的数字，故无需 != null 判空）
+  el = document.getElementById('setProvisionalStopPct');
+  if (el) el.value = settings.provisionalStopPct === null ? '' : settings.provisionalStopPct;
   el = document.getElementById('setDailyLossLimit');   if (el) el.value = settings.dailyLossLimit;
   el = document.getElementById('setMaxDrawdownAlert'); if (el) el.value = settings.maxDrawdownAlert;
   el = document.getElementById('setDefaultLeverage');  if (el) el.value = settings.defaultLeverage;
@@ -211,6 +223,29 @@ function saveSettings() {
       return;
     }
     settings.mindsetMinScore = msVal;
+  }
+
+  // ✅ 保存临时止损宽度（%）：留空 = 恢复内置默认规则（ETH 0.8%，其余 1%）。
+  // 不进上方 fields 循环——那里对空字符串报「不是有效数字」，而留空正是本字段
+  // 表达「用默认」的唯一方式（同 customStopLimit 的特殊处理思路）。
+  var provEl = document.getElementById('setProvisionalStopPct');
+  if (provEl) {
+    var provRaw = provEl.value.trim();
+    if (provRaw === '') {
+      settings.provisionalStopPct = null;
+    } else {
+      var provVal = parseFloat(provRaw);
+      var provRule = SETTINGS_VALIDATORS.provisionalStopPct;
+      if (isNaN(provVal)) {
+        showToast(provRule.label + ' 不是有效数字', 'error');
+        return;
+      }
+      if (provVal < provRule.min || provVal > provRule.max) {
+        showToast(provRule.label + ' 需在 ' + provRule.min + ' ~ ' + provRule.max + ' 之间', 'error');
+        return;
+      }
+      settings.provisionalStopPct = provVal;
+    }
   }
 
   // ✅ Skills 融合：保存 ATR 动态止损开关（布尔值）

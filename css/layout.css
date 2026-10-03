@@ -290,9 +290,21 @@ body {
   outline-offset: 3px;
 }
 
-/* 激活态（switchView 管理）：液态波浪填充 + 抬升辉光 + 呼吸 dot
-   液体占按钮底部 1/3：#5D416C → #009B4C 垂直渐变（下紫上绿），
-   液面是正弦波浪且缓慢左右流动（background-position 循环动画） */
+/* 激活态（switchView 管理）：三波扫光 + 抬升辉光 + 呼吸 dot
+   仍是「淡色朦胧」这一路。四道叠加、颜色全部从 --nav-hue 派生：
+     ① 底层薄雾：常驻的极淡下缘光，弧错开时也不出现死黑断层
+     ② 慢波：峰头偏斜（18° 起爬，82° 才开始缓降）——隆起的坡而不是对称亮点
+     ③ 快波：反向、更小更淡，和慢波错峰
+     ④ 慢涨：最宽最淡最慢（11s），像水底缓涨的底色，让前两波在其中起伏
+   波动感来自多波明暗干涉，不是旋转本身——单道刚体 conic 再柔也只会匀速平移。
+   全部靠 @property 把 --sweep / --sweep2 / --sweep3 注册成 <angle> 才有法插值
+   （不注册时浏览器只在首尾两帧之间跳变）。三个周期 4.5 / 7.2 / 11s：
+   4.5 与 7.2 的最小公倍数是 36s，再叠 11s 后整体 396s 才回一次初相——
+   约 6.6 分钟，实际观感是「不会同步」而不是机械循环。
+   加第三道会累积亮度，所以②③的峰值从 0.19 / 0.12 压到 0.16 / 0.10，
+   整体仍留在同一档朦胧区间，不会变成一块亮斑。
+   不用 mix-blend-mode / mask 复合 / SVG filter（本库已两次静默失效，
+   且会把 --nav-hue 的模块辨识度抹平）；且只有 active 那一个按钮在播。 */
 .nav-item.active {
   border-color: oklch(48% 0.12 150 / 0.55);
   font-weight: var(--font-weight-title);
@@ -301,22 +313,73 @@ body {
 
 .nav-item.active::before {
   transform: translate3d(0, -2px, 2px);
-  /* 流水式液体：单层波浪 + 液体内部贯穿紫→绿垂直渐变，
-     整张图 repeat-x 无缝循环流动；液体高度 36px（约按钮 1/5） */
+  /* 三波扫光：扇形中心放在按钮下缘外面，越靠外（142% → 160% → 185%）
+     同一道弧在按钮上铺得越宽越平、边缘越不硬。慢涨的中心最靠外，
+     所以它在按钮上几乎是一整片缓涨的水色，只有最上缘那一缕会进出视野。
+     blur 只压到 2.5px：更大的模糊会连 ::before 上的立体投影一起糊掉，
+     按钮的厚度就没了；柔和感靠宽弧 + 长渐变 + 低不透明度出，不靠大模糊。
+     若 @property 不可用，三道弧定格在起始角，退化成一记静态柔光，按钮仍可读。 */
   background-color: transparent;
-  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22160%22%20height%3D%2224%22%20viewBox%3D%220%200%20160%2024%22%20preserveAspectRatio%3D%22none%22%3E%0A%20%20%3Cdefs%3E%0A%20%20%20%20%3ClinearGradient%20id%3D%22liq%22%20x1%3D%220%22%20y1%3D%221%22%20x2%3D%220%22%20y2%3D%220%22%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%220%22%20stop-color%3D%22%235D416C%22%2F%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%221%22%20stop-color%3D%22%23009B4C%22%2F%3E%0A%20%20%20%20%3C%2FlinearGradient%3E%0A%20%20%3C%2Fdefs%3E%0A%20%20%3Cpath%20fill%3D%22url%28%23liq%29%22%20d%3D%22M0%204%20Q%2020%2012%2040%204%20T%2080%204%20T%20120%204%20T%20160%204%20V24%20H0%20Z%22%2F%3E%0A%3C%2Fsvg%3E");;;;;
-  background-repeat: repeat-x;
-  background-size: 160px 24px;
-  background-position: 0 100%;
-  filter: blur(1px);
-  animation: navLiquid 4s linear infinite;
+  background-image:
+    linear-gradient(180deg, transparent 48%,
+                    oklch(62% 0.06 var(--nav-hue) / 0.10) 100%),
+    conic-gradient(from calc(var(--sweep) + 150deg) at 50% 142%,
+      transparent 0deg,
+      oklch(62% 0.13 var(--nav-hue) / 0.09) 18deg,
+      oklch(66% 0.11 var(--nav-hue) / 0.16) 48deg,
+      oklch(70% 0.10 calc(var(--nav-hue) + 45) / 0.16) 82deg,
+      oklch(58% 0.16 var(--nav-hue) / 0.09) 122deg,
+      transparent 158deg),
+    conic-gradient(from calc(32deg - var(--sweep2)) at 50% 160%,
+      transparent 0deg,
+      oklch(70% 0.11 calc(var(--nav-hue) + 55) / 0.07) 42deg,
+      oklch(66% 0.15 var(--nav-hue) / 0.10) 96deg,
+      transparent 146deg),
+    conic-gradient(from calc(var(--sweep3) + 200deg) at 50% 185%,
+      transparent 0deg,
+      oklch(64% 0.11 calc(var(--nav-hue) + 30) / 0.06) 34deg,
+      oklch(68% 0.09 var(--nav-hue) / 0.10) 78deg,
+      oklch(66% 0.13 calc(var(--nav-hue) + 60) / 0.09) 130deg,
+      oklch(60% 0.14 var(--nav-hue) / 0.05) 176deg,
+      transparent 200deg);
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  filter: blur(2.5px);
+  animation: navSweep 4.5s linear infinite, navSweep2 7.2s linear infinite,
+             navSweep3 11s linear infinite;
 }
 
-@keyframes navLiquid {
-  from { background-position: 0 100%; }
-  to   { background-position: -160px 100%; }
+/* 角度必须注册成 <angle> 类型才会被插值；inherits: false 避免子元素继承残留值。
+   三个变量分别驱动三个 keyframes，互不改对方的属性，所以能同挂在一个元素上。
+   快波用 `32deg - var(--sweep2)` 反向跑：0deg→-360deg 仍是一整圈，循环无接缝。 */
+@property --sweep {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
 }
-/* 文本颜色不变（液体只占下 1/3，文字在上方 2/3 的浮起层上） */
+@property --sweep2 {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+@property --sweep3 {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+@keyframes navSweep {
+  from { --sweep: 0deg; }
+  to   { --sweep: 360deg; }
+}
+@keyframes navSweep2 {
+  from { --sweep2: 0deg; }
+  to   { --sweep2: 360deg; }
+}
+@keyframes navSweep3 {
+  from { --sweep3: 0deg; }
+  to   { --sweep3: 360deg; }
+}
+/* 文本颜色不变（扫光只落在下缘一弧，文字在上方的浮起层上，不被扫光压住） */
 .nav-item.active span {
   color: var(--color-primary-strong);
 }

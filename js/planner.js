@@ -507,11 +507,91 @@ function initMultiTPListeners() {
 
 // ==================== 检查清单 ====================
 
+// 12 项并不是 12 个平权的闸门。上游 renderHardBlock 会 setCalc(null)，此后所有检查项都返回
+// null（skipped）——所以任何「由硬阻断覆盖」的条件在清单里永远不可能显示 ✗，它们只是状态行。
+// STATUS_CHECK_ITEMS 是唯一的归类来源：结论行分母、保存闸门、结果采集都用它做排除，
+// 三者必须共用同一张名单，否则会出现结论行说「2 项未通过」、toast 说「1 项未通过」的计数差 1。
+// HTML 里对应 data-status 属性，新增检查项时必须两边同步。
+// 注意：STATUS 项里的 checkTPWeighted 是提示性指标（默认 50/30/20+1.5/2/3R 配置下加权期望
+// 天然低于单档 2R 门槛，每笔新计划都会红一条），因此它永不阻断保存。
+var STATUS_CHECK_ITEMS = ['checkLossStreak', 'checkDailyLoss', 'checkSymbolConc', 'checkTPWeighted'];
+
+/**
+ * 是否参与结论行计数与保存闸门。STATUS 项要么被上游硬阻断覆盖（永不 fail），
+ * 要么是提示性指标，任何情况下都不该进闸门。
+ */
+function isStatusCheckItem(itemId) {
+  for (var i = 0; i < STATUS_CHECK_ITEMS.length; i++) {
+    if (STATUS_CHECK_ITEMS[i] === itemId) return true;
+  }
+  return false;
+}
+
+/**
+ * 硬阻断时刷清单：所有项置 skipped，结论行显示阻断原因。
+ * 上一轮的 PASS/FAIL 必须清掉——否则卡片上残留着另一笔合法计划的「10 项 PASS」，
+ * 而真正的阻断原因（如止损越过强平价）在清单里完全没痕迹。
+ */
+function renderChecklistBlocked(blocker) {
+  var card = document.getElementById('checklistCard');
+  var items = card ? card.querySelectorAll('.check-item') : [];
+  for (var i = 0; i < items.length; i++) {
+    var item = items[i];
+    var icon = item.querySelector('.check-icon');
+    var note = item.querySelector('.check-note');
+    if (icon) { icon.textContent = '—'; icon.className = 'check-icon skipped'; }
+    item.classList.remove('fail-row');
+    item.classList.remove('warn-row');
+    item.classList.remove('pass-row');
+    item.classList.add('skipped-row');
+    if (note) note.textContent = '';
+    item.removeAttribute('title');
+  }
+  var summary = document.getElementById('checklistSummary');
+  if (summary) {
+    summary.dataset.state = 'fail';
+    var ci = document.getElementById('csIcon');
+    var tx = document.getElementById('csText');
+    var ct = document.getElementById('csCount');
+    if (ci) ci.textContent = '⛔';
+    if (tx) tx.textContent = '已阻断：' + (blocker.title || '风控未通过');
+    if (ct) ct.textContent = '';
+    summary.title = blocker.detail || '';
+  }
+  var toggle = document.getElementById('checklistToggle');
+  if (toggle) {
+    toggle.textContent = isChecklistExpanded() ? '收起明细' : ('展开明细（' + items.length + ' 项）');
+    toggle.setAttribute('aria-expanded', String(isChecklistExpanded()));
+  }
+}
+
 /**
  * 更新开仓前检查清单（读取 _lastCalc）
  * 增强版：新增日亏损上限检查、心态评分检查，支持可配止损阈值，检查结果持久化至日志
  */
 function updateChecklist() {
+  // P0-10: 检查清单逐条入场动效
+  var cc = document.getElementById('checklistCard');
+  if (cc) {
+    cc.classList.remove('checklist-anim');
+    void cc.offsetWidth;
+    cc.classList.add('checklist-anim');
+  }
+
+  // 硬阻断态：renderHardBlock 早退使尾部的本函数不执行，除非在这里渲染阻断态，
+  // 卡片上就会完整保留上一轮合法计划的「10 项 PASS」——用户看到的清单描述的是另一笔
+  // 计划，真正的阻断原因在清单里毫无痕迹。
+  var blocker = getCalcBlocker();
+  if (blocker) {
+    renderChecklistBlocked(blocker);
+    return;
+  }
+
+  // 结论行先同步再判 dirty：参数已变更但用户没重算时，上一轮结果仍是卡片上
+  // 实际显示的事实，早退不该让结论行停在更旧的状态
+  var calc = getCalc();
+  updateChecklistSummary(calc);
+  if (getCalcDirty()) { showToast('计算器参数已变更，请先点击「计算仓位」更新结果', 'warn'); return; }
   // P0-10: 检查清单逐条入场动效
   var cc = document.getElementById('checklistCard');
   if (cc) {
@@ -529,9 +609,12 @@ function updateChecklist() {
   var settings = typeof loadSettings === 'function' ? loadSettings() : {};
 
   // ========== 辅助函数：带结果的更新 ==========
-  // 返回对象：{ result: boolean|undefined, message?: string }
-  // 三类状态各带一个类，折叠态靠 fail-row 判断「哪几项挡路」：
-  //   fail-row → 阻断，内联显示原因；pass-row / skipped-row → 折叠时隐藏
+  // 返回对象：{ result: boolean|undefined, message?: string, level?: 'fail'|'warn' }
+  // 四态：
+  //   fail-row   → 阻断保存，内联显示原因
+  //   warn-row   → 不阻断但必须可见（仓位被截断、心态降仓、加权 RR 偏低）
+  //   pass-row   → 折叠时隐藏，原因留在 title
+  //   skipped-row→ 折叠时隐藏
   function updateCheckItemWithResult(itemId, checkFn) {
     var item = document.getElementById(itemId);
     if (!item) return null;
@@ -539,30 +622,37 @@ function updateChecklist() {
     var note = item.querySelector('.check-note');
     var resultObj = checkFn();
 
+    item.classList.remove('fail-row');
+    item.classList.remove('warn-row');
+    item.classList.remove('pass-row');
+    item.classList.remove('skipped-row');
+
     if (resultObj === null || resultObj.result === undefined) {
       icon.textContent = '—';
       icon.className = 'check-icon skipped';
-      item.classList.remove('fail-row');
       item.classList.add('skipped-row');
-      item.classList.remove('pass-row');
       if (note) note.textContent = '';
       item.removeAttribute('title');
       return null;
     } else if (resultObj.result) {
       icon.textContent = '✓';
       icon.className = 'check-icon pass';
-      item.classList.remove('fail-row');
       item.classList.add('pass-row');
-      item.classList.remove('skipped-row');
       // 通过项的原因留在 title 悬浮里即可——内联铺开 12 行会让闸门又变回长清单
       if (note) note.textContent = '';
+      if (resultObj.message) item.title = resultObj.message; else item.removeAttribute('title');
+    } else if (resultObj.level === 'warn') {
+      // 不阻断但必须看见。原先这些情况只能靠红色 FAIL 表达，导致默认配置下每笔计划都
+      // 挂着「2 项未通过」，而 gate 又把它们排除在外——结论行和 toast 各说一个数。
+      icon.textContent = '⚠';
+      icon.className = 'check-icon warn';
+      item.classList.add('warn-row');
+      if (note) note.textContent = resultObj.message || '';
       if (resultObj.message) item.title = resultObj.message; else item.removeAttribute('title');
     } else {
       icon.textContent = '✗';
       icon.className = 'check-icon fail';
       item.classList.add('fail-row');
-      item.classList.remove('pass-row');
-      item.classList.remove('skipped-row');
       // 失败原因必须内联：原先只写 item.title，触屏完全看不到，桌面端也没人逐行 hover
       if (note) note.textContent = resultObj.message || '';
       if (resultObj.message) item.title = resultObj.message; else item.removeAttribute('title');
@@ -570,31 +660,31 @@ function updateChecklist() {
     return resultObj.result;
   }
 
-  // 1. 单笔风险 ≤ 表单接受亏损比例（优先读表单值，其次系统设置）
+  // 1. 实际风险是否等于计划风险
+  // 原先比的是「计算后比例 ≤ 表单值」——plRisk 取自截断后的 calc.riskPercent，allowed 取自
+  // 同一个 riskInput，两边同源且前者已被后者约束，恒为真（杠杆 1x 实测计划 2% 实际 0.5% 仍 PASS）。
+  // 真正该报的是仓位截断：计划 2% 实际只落到 0.5%。
   updateCheckItemWithResult('checkRiskPct', function() {
     if (!calc || calc.riskPercent == null) return null;
-    var plRisk = calc.riskPercent * 100;
-    // 直接读取表单中用户选择的亏损比例
-    var riskInputEl = document.getElementById('riskInput');
-    var formVal = riskInputEl ? parseFloat(riskInputEl.value.replace('%', '')) : NaN;
-    var allowed = !isNaN(formVal) && formVal > 0 ? formVal : (settings.riskPercent || 2);
-    return { result: plRisk <= allowed, message: '风险 ' + plRisk.toFixed(1) + '% ≤ 设置 ' + allowed + '%' };
+    var plPct = calc.plannedRiskPercent != null ? calc.plannedRiskPercent * 100 : calc.riskPercent * 100;
+    var actPct = calc.riskPercent * 100;
+    var gap = plPct - actPct;
+    if (gap > 1e-9) {
+      return {
+        result: false,
+        level: 'warn',
+        message: '计划风险 ' + plPct.toFixed(2) + '% → 实际 ' + actPct.toFixed(2)
+          + '%（仓位被保证金/聚合/集中度/心态调整截断 '
+          + Math.round(plPct > 0 ? gap / plPct * 100 : 0) + '%）'
+      };
+    }
+    return { result: true, message: '实际风险 ' + actPct.toFixed(2) + '% = 计划 ' + plPct.toFixed(2) + '%' };
   });
 
-  // 2. 止损距离合理（可配阈值，原 ETH ≤2%/其他 ≤3% 改为从设置读取）
+  // 2. 止损距离合理（边界统一走 getStopLimitPct()，原先此处把 ETH 2%/其余 3% 又抄了一份）
   updateCheckItemWithResult('checkStopDist', function() {
     if (!calc || calc.stopPct == null) return null;
-    // 从设置读取品种特异性止损比例，若未设置则回退到原规则
-    var customLimits = settings.customStopLimit || {}; // { "BTC": 3, "ETH": 2, ... }
-    var symbol = (calc.symbol || '').toUpperCase();
-    var maxPct;
-    if (customLimits && customLimits[symbol] != null) {
-      maxPct = customLimits[symbol];
-    } else if (symbol === 'ETH') {
-      maxPct = 2;
-    } else {
-      maxPct = 3;
-    }
+    var maxPct = getStopLimitPct(calc.symbol);
     var passed = calc.stopPct <= maxPct;
     return { result: passed, message: '止损 ' + calc.stopPct.toFixed(2) + '% ≤ 上限 ' + maxPct + '%' };
   });
@@ -622,12 +712,21 @@ function updateChecklist() {
     return { result: passed, message: '盈亏比 ' + calc.targetRR.toFixed(2) + ':1 ' + (passed ? '达标' : '偏低') };
   });
 
-  // 6. 保证金占本金 ≤ 80%（与计算器硬上限一致）
+  // 6. 保证金占本金 ≤ 80%
+  // 80% 是 calculator.js 的**截断**边界而非阻断，截断后 actualMargin 恰好等于 80% 本金，
+  // 所以 `ratio <= 0.8` 恒为真。改为报告「是否被截断过」，标志需从 calc 读取
+  // （原先 cappedByMargin 没有暴露到 calc 对象，清单想报也拿不到）。
   updateCheckItemWithResult('checkMargin', function() {
     if (!calc || calc.actualMargin == null || calc.capital == null || calc.capital <= 0) return null;
     var ratio = calc.actualMargin / calc.capital;
-    var passed = ratio <= 0.8;
-    return { result: passed, message: '保证金占比 ' + (ratio*100).toFixed(1) + '% ≤ 80%' };
+    if (calc.cappedByMargin) {
+      return {
+        result: false,
+        level: 'warn',
+        message: '保证金占比 ' + (ratio * 100).toFixed(1) + '%，仓位已被保证金 80%/聚合 90%/交易所上限/集中度上限截断'
+      };
+    }
+    return { result: true, message: '保证金占比 ' + (ratio * 100).toFixed(1) + '% ≤ 80%' };
   });
 
   // 7. 入场理由已明确选择
@@ -654,23 +753,44 @@ function updateChecklist() {
     return { result: !dailyCheck.blocked, message: '今日净盈亏 ' + dailyCheck.todayPnl.toFixed(2) + ' / 上限 ' + dailyCheck.limit.toFixed(2) + ' (' + dailyCheck.pctOfLimit.toFixed(0) + '%)' };
   });
 
-  // 【增强9】心态评分检查（新增检查项，评分<3时警告）
+  // 【增强9】心态评分检查
+  // 判定统一走 getMindsetAdjustment()，与仓位管线共用同一套语义：1 分禁止开仓、
+  // 2 分降仓 50%、其余低于最低分降仓 80%。原先用 `score >= minScore` 判，把计算层已经
+  // 接受并降仓的 2 分又拦了一遍——卡片显示「建议降仓至 50%」，点保存却被拒。
   updateCheckItemWithResult('checkMindset', function() {
     if (!calc) return null;
-    var mindsetScore = calc.mindsetScore || 3;
+    var adj = getMindsetAdjustment(calc.mindsetScore);
     var minScore = settings.mindsetMinScore != null ? settings.mindsetMinScore : 3;
-    var passed = mindsetScore >= minScore;
-    return { result: passed, message: '心态评分 ' + mindsetScore + '/5 ' + (passed ? '(平静/良好)' : '(低于最低要求 ' + minScore + ')') };
+    if (adj.blocked) {
+      return { result: false, message: '心态评分 ' + calc.mindsetScore + '/5 — 禁止开仓（最低要求 ' + minScore + '）' };
+    }
+    if (adj.adjustment < 1) {
+      return {
+        result: false,
+        level: 'warn',
+        message: '心态评分 ' + calc.mindsetScore + '/5 — 已自动降仓至 ' + Math.round(adj.adjustment * 100) + '% 仓位'
+      };
+    }
+    return { result: true, message: '心态评分 ' + calc.mindsetScore + '/5（平静/良好）' };
   });
 
   // Skills 融合：组合热量检查
+  // 必须含本仓，且与 calculator.js 的硬阻断同口径（同一 calcPortfolioHeat 调用方式）。
+  // 阈值比较用 < 而不是 <=：硬阻断是 `heat >= maxHeat`，清单用 <= 会在恰好等于上限时
+  // 一边放行一边阻断。
   updateCheckItemWithResult('checkPortfolioHeat', function() {
     if (!calc || !calc.capital || calc.capital <= 0) return null;
-    var heatCheck = calcPortfolioHeat();
+    var heatCheck = calcPortfolioHeat(calc.riskAmount, calc.symbol, calc.capital);
     if (!heatCheck || heatCheck.heat === undefined) return null;
     var maxHeat = settings.riskHeatMax || 6;
-    var passed = heatCheck.heat <= maxHeat;
-    return { result: passed, message: '组合热量 ' + heatCheck.heat.toFixed(1) + '% ≤ 上限 ' + maxHeat + '%' };
+    var passed = heatCheck.heat < maxHeat;
+    return {
+      result: passed,
+      message: '组合总风险 ' + heatCheck.heat.toFixed(1)
+        + '%（已持仓 ' + (heatCheck.existingHeat != null ? heatCheck.existingHeat.toFixed(1) : '0.0')
+        + '% + 本仓 ' + (heatCheck.planPct != null ? heatCheck.planPct.toFixed(1) : '0.0')
+        + '%）/ 上限 ' + maxHeat + '%'
+    };
   });
 
   // Skills 融合：品种集中度检查
@@ -683,16 +803,28 @@ function updateChecklist() {
     return { result: passed, message: concCheck.warning || (passed ? '品种集中度正常' : '集中度超限') };
   });
 
-  // 【增强12】多止盈组合加权期望盈亏比达标（组合止盈计划 ≥ minRRRatio）
+  // 【增强12】多止盈加权期望（提示性指标，永不阻断保存）
+  // 默认 50/30/20 + 1.5/2/3R 配置下加权期望天然低于单档 2R 门槛，所以它显示为「注意」
+  // 而不是红色 FAIL——原先两边都用 FAIL 表达，但 gate 又把它排除在外，
+  // 结论行「2 项未通过」和 toast「1 项未通过」各说一个数。
   updateCheckItemWithResult('checkTPWeighted', function() {
     if (!calc) return null;
     if (typeof computeWeightedTPRR !== 'function') return null;
     var w = computeWeightedTPRR();
     if (!w || w.rr == null) return null; // 未规划多止盈 → 跳过
-    if (w.overLimit) return { result: false, message: 'TP 减仓比例合计 ' + w.sumRatio + '% 超过 100%，请调整' };
     var minRR = (settings.minRRRatio != null && settings.minRRRatio > 0) ? settings.minRRRatio : 2;
+    if (w.overLimit) {
+      return { result: false, level: 'warn', message: 'TP 减仓比例合计 ' + w.sumRatio + '% 超过 100%，请调整' };
+    }
     var passed = rrMeetsMin(w.rr, minRR);   // 容差对齐卡片 toFixed(2) 显示
-    return { result: passed, message: '多止盈加权期望 ' + w.rr.toFixed(2) + 'R（剩余仓位 ' + w.remain + '% 按止损计）' + (passed ? ' ≥ ' + minRR + ' 达标' : ' < ' + minRR + ' 偏低') };
+    if (passed) {
+      return { result: true, message: '多止盈加权期望 ' + w.rr.toFixed(2) + 'R ≥ ' + minRR + '（剩余仓位 ' + w.remain + '% 按止损计）' };
+    }
+    return {
+      result: false,
+      level: 'warn',
+      message: '多止盈加权期望 ' + w.rr.toFixed(2) + 'R < ' + minRR + '（剩余仓位 ' + w.remain + '% 按止损计）'
+    };
   });
 
   // ========== 结论行 + 折叠态 ==========
@@ -702,7 +834,8 @@ function updateChecklist() {
 
   // ========== 将检查结果持久化到 _lastCalc，供日志保存时使用 ==========
   if (calc) {
-    // 收集所有检查的结果（用于写入日志）
+    // 收集所有检查的结果（用于写入日志复盘）。状态项也一并记录供复盘对照，
+    // 但保存闸门只认非 status 项（见 isStatusCheckItem）。
     var checklistResults = {};
     var checkItems = ['checkRiskPct','checkStopDist','checkLiqSafe','checkLossStreak','checkRR','checkMargin','checkReason','checkDailyLoss','checkMindset','checkPortfolioHeat','checkSymbolConc','checkTPWeighted'];
     for (var i = 0; i < checkItems.length; i++) {
@@ -714,6 +847,7 @@ function updateChecklist() {
           var className = icon.className;
           if (className && className.indexOf('pass') !== -1) checklistResults[id] = 'pass';
           else if (className && className.indexOf('fail') !== -1) checklistResults[id] = 'fail';
+          else if (className && className.indexOf('warn') !== -1) checklistResults[id] = 'warn';
           else checklistResults[id] = 'skipped';
         }
       }
@@ -725,7 +859,8 @@ function updateChecklist() {
 
 /**
  * 汇总检查清单成一行结论，并同步折叠开关文案。
- * 闸门要回答的是「能不能保存」，不是 12 行等权状态。
+ * 闸门要回答的是「能不能保存」，不是 12 行等权状态：STATUS 项（被上游硬阻断覆盖，
+ * 永不 fail）不进分母，结论行与保存闸门因此给出同一个数。
  * @param {Object|null} calc  传入 null 表示尚未计算过（显示引导文案）
  */
 function updateChecklistSummary(calc) {
@@ -736,16 +871,22 @@ function updateChecklistSummary(calc) {
   var text = document.getElementById('csText');
   var count = document.getElementById('csCount');
   var items = card ? card.querySelectorAll('.check-item') : [];
-  var fails = 0, passes = 0, skipped = 0;
+  var fails = 0, warns = 0, passes = 0, skipped = 0;
+  var total = 0;
   for (var i = 0; i < items.length; i++) {
-    var ic = items[i].querySelector('.check-icon');
+    var it = items[i];
+    if (isStatusCheckItem(it.id)) continue;
+    var ic = it.querySelector('.check-icon');
     if (!ic) continue;
+    total++;
     var c = ic.className || '';
     if (c.indexOf('fail') !== -1) fails++;
+    else if (c.indexOf('warn') !== -1) warns++;
     else if (c.indexOf('pass') !== -1) passes++;
     else skipped++;
   }
-  var total = items.length;
+  // 注意项不阻断，故按「未失败」计入通过比
+  var ok = passes + warns;
   if (!calc) {
     summary.dataset.state = 'idle';
     icon.textContent = '—';
@@ -755,19 +896,26 @@ function updateChecklistSummary(calc) {
     summary.dataset.state = 'fail';
     icon.textContent = '✗';
     text.textContent = fails + ' 项未通过，不能保存';
-    count.textContent = passes + '/' + total + ' 通过' + (skipped ? ' · ' + skipped + ' 待补充' : '');
+    count.textContent = ok + '/' + total + ' 通过'
+      + (warns ? ' · ' + warns + ' 注意' : '')
+      + (skipped ? ' · ' + skipped + ' 待补充' : '');
+  } else if (warns > 0) {
+    summary.dataset.state = 'warn';
+    icon.textContent = '⚠';
+    text.textContent = '可以保存，' + warns + ' 项需注意';
+    count.textContent = ok + '/' + total + ' 通过' + (skipped ? ' · ' + skipped + ' 待补充' : '');
   } else if (skipped > 0) {
     summary.dataset.state = 'warn';
     icon.textContent = '◐';
     text.textContent = '无阻断项，' + skipped + ' 项待补充';
-    count.textContent = passes + '/' + total + ' 通过';
+    count.textContent = ok + '/' + total + ' 通过';
   } else {
     summary.dataset.state = 'pass';
     icon.textContent = '✓';
     text.textContent = '全部通过，可以保存';
-    count.textContent = passes + '/' + total + ' 通过';
+    count.textContent = ok + '/' + total + ' 通过';
   }
-  // 折叠时只藏通过/待补充项，失败项始终可见——开关文案只数被藏起来的部分
+  // 折叠时只藏通过/注意/待补充项，失败项始终可见——开关文案只数被藏起来的部分
   var toggle = document.getElementById('checklistToggle');
   if (toggle) {
     var hidden = total - fails;
@@ -829,11 +977,12 @@ function focusChecklistFailures() {
  */
 function refreshChecklistLabels() {
   var settings = loadSettings();
+  // checkRiskPct 不再是「≤ 账户风险比例」的重复表述（那是 :353 硬阻断的事），
+  // 现在比较的是计划风险 vs 实际风险，与设置项无关，故不在此处动态改写标签。
   var rules = [
-    { id: 'checkRiskPct',      key: 'riskPercent',        format: function(v) { return '单笔风险 ≤ 账户 ' + v + '%'; } },
     { id: 'checkRR',           key: 'minRRRatio',         format: function(v) { return '盈亏比 ≥ ' + v + ':1'; } },
-    { id: 'checkMindset',      key: 'mindsetMinScore',    format: function(v) { return '心态评分 ≥ ' + v + '（平静/良好）'; } },
-    { id: 'checkPortfolioHeat', key: 'riskHeatMax',       format: function(v) { return '组合热量安全（≤ ' + v + '%）'; } }
+    { id: 'checkMindset',      key: 'mindsetMinScore',    format: function(v) { return '心态评分达标（≥ ' + v + '，2 分减半仓）'; } },
+    { id: 'checkPortfolioHeat', key: 'riskHeatMax',       format: function(v) { return '组合总风险含本仓（≤ ' + v + '%）'; } }
   ];
   for (var i = 0; i < rules.length; i++) {
     var r = rules[i];
@@ -862,8 +1011,8 @@ function refreshChecklistLabels() {
     atrNote.textContent = '当前生效规则：' +
       (atrOn ? 'ATR 动态止损 ×' + atrMult.toFixed(1) + ' · ' : '') +
       '盈亏比 ≥ ' + (settings.minRRRatio || 2) + ':1 · ' +
-      '心态评分 ≥ ' + (settings.mindsetMinScore || 3) +
-      ' · 组合热量 ≤ ' + (settings.riskHeatMax || 6) + '%';
+      '心态评分 ≥ ' + (settings.mindsetMinScore || 3) + '（2 分自动降仓 50%）' +
+      ' · 组合总风险含本仓 ≤ ' + (settings.riskHeatMax || 6) + '%';
     atrNote.style.display = 'block';
   } catch(e) { console.error('[planner] refreshChecklistLabels atrNote error:', e); }
 }

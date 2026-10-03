@@ -67,12 +67,23 @@ function calcRoundTripFee(quantity, entryFill, exitFill, feeRatePct) {
   return quantity * entryFill * rate + quantity * exitFill * rate;
 }
 
+// 临时止损宽度的可接受区间（%）。与设置页 SETTINGS_VALIDATORS.provisionalStopPct 是同一个
+// 口径（用户填多少 % 就按多少 % 用），此处只做「是否越界」判定，越界回退内置默认。
+// 边界优先读设置页的唯一口径，读不到（如测试页未加载 settings.js）才用字面量兜底，
+// 避免两处各自硬编码范围后漂移。改范围只需改设置页那一份。
+var PROVISIONAL_STOP_PCT_MIN = 0.3;
+var PROVISIONAL_STOP_PCT_MAX = 5;
+
 function getProvisionalStopLoss(entryPrice, direction, symbol, settings) {
   // 仅用于未填止损时的测算预览；保存前必须由用户确认或改写。
-  var configuredPct = Number(settings && settings.provisionalStopPct);
+  var rule = (typeof SETTINGS_VALIDATORS !== 'undefined' && SETTINGS_VALIDATORS.provisionalStopPct)
+    || { min: PROVISIONAL_STOP_PCT_MIN, max: PROVISIONAL_STOP_PCT_MAX };
+  // 设置页存 %，本函数返回小数（stopPct 直接乘价格），所以这里做一次换算。
+  var configuredPct = Number(settings && settings.provisionalStopPct); // %
+  // 默认 null：Number(null) === 0，落在 0.3 之下，自然回退内置默认。
   var fallbackPct = String(symbol || '').toUpperCase() === 'ETH' ? 0.008 : 0.01;
-  var stopPct = Number.isFinite(configuredPct) && configuredPct >= 0.003 && configuredPct <= 0.05
-    ? configuredPct
+  var stopPct = Number.isFinite(configuredPct) && configuredPct >= rule.min && configuredPct <= rule.max
+    ? configuredPct / 100
     : fallbackPct;
   return {
     stopPrice: direction === 'long' ? entryPrice * (1 - stopPct) : entryPrice * (1 + stopPct),
@@ -232,7 +243,19 @@ function _calculateImpl() {
   }
 
   // ===== P0-01：组合热量检查 =====
-  var heatCheck = calcPortfolioHeat();
+  // v5.6.3：必须计入本仓。此处 riskAmount 尚未产出（在下方 :307 之后按风险输入计算），
+  // 故按表单风险输入预估——这是闸门口径（本仓计划风险），最终数值由管线确定。
+  // 只算已持仓会让「已持仓 5.5% + 本仓 2% = 7.5% > 上限 6%」整类超配漏过。
+  var heatPlanRisk = 0;
+  var _heatRiskEl = document.getElementById('riskInput');
+  if (_heatRiskEl && capital > 0) {
+    var _heatRaw = String(_heatRiskEl.value).trim();
+    var _heatVal = _heatRaw.endsWith('%') ? parseFloat(_heatRaw.replace('%', '').trim()) : parseFloat(_heatRaw);
+    if (Number.isFinite(_heatVal) && _heatVal > 0) {
+      heatPlanRisk = _heatRaw.endsWith('%') ? capital * _heatVal / 100 : _heatVal;
+    }
+  }
+  var heatCheck = calcPortfolioHeat(heatPlanRisk, symbol, capital);
   if (heatCheck.blocked) {
     _calcCleanup();
     return renderHardBlock(
@@ -257,6 +280,9 @@ function _calculateImpl() {
     setCalcBlocker({ code: code, title: title, detail: detail, raw: raw || null, checkedAt: new Date().toISOString() });
     CalculationUI.renderBlocker(ui, getCalcBlocker());
     showToast(detail, 'error');
+    // 清单一并刷成阻断态。renderHardBlock 在此 return null 使 _calculateImpl 尾部的
+    // updateChecklist() 不执行，卡片上就会残留上一轮合法计划的「10 项 PASS」。
+    try { if (typeof updateChecklist === 'function') updateChecklist(); } catch(e) { console.error('[calculate] updateChecklist error:', e); }
     return null;
   }
 
@@ -699,7 +725,8 @@ function _calculateImpl() {
   }
 
   // ===== P0-01：心态评分影响仓位 =====
-  const mindsetScore = parseInt(document.getElementById('mindsetScore').value, 10) || 3;
+  // 评分统一走 getMindsetScore()（skills-integration.js），默认分跟随 settings.mindsetMinScore
+  const mindsetScore = getMindsetScore();
   var mindsetAdjust = getMindsetAdjustment(mindsetScore);
   if (mindsetAdjust.blocked) {
     _calcCleanup();
@@ -733,9 +760,9 @@ function _calculateImpl() {
 
   // ===== 止损距离色标 =====
   const isEth = symbol.toUpperCase() === 'ETH';
-  // 优先使用设置中的品种自定义止损比例
-  var customStopLimits = settings.customStopLimit || {};
-  var maxStopPct = customStopLimits[symbol] != null ? customStopLimits[symbol] : (isEth ? 2 : 3);
+  // 品种止损上限统一走 getStopLimitPct()（skills-integration.js）：planner 的检查清单
+  // 也读同一函数，边界不再两处各写一份。
+  var maxStopPct = getStopLimitPct(symbol);
   var minStopPct = isEth ? 0.3 : 0.5;
   let stopTagClass = 'green', stopTagLabel = '适中';
   if (stopPct > 5) { stopTagClass = 'red'; stopTagLabel = '偏大'; rw = '<span class="warning-tag alert"><i class="fas fa-exclamation-triangle"></i> 止损距离 '+stopPct.toFixed(2)+'% 较大，请确认策略</span>'; }
@@ -993,6 +1020,9 @@ function _calculateImpl() {
     stopPct: stopPct,
     liquidationPrice: liquidationPrice,
     cappedByLiquidation: cappedByLiquidation,
+    // v5.6.3：原先只暴露 cappedByLiquidation，保证金 80%/聚合 90%/交易所上限/集中度
+    // 任一截断都只写进了 capMsg 提示，清单想报告「计划风险 2% 实际只落到 0.5%」也拿不到标志
+    cappedByMargin: cappedByMargin,
     targetRR: targetRR,
     targetPct: targetPct,
     reason: getReason(),
@@ -1014,7 +1044,7 @@ function _calculateImpl() {
     atrStopMode: atrStopMode,
     atrValue: atrStopMode ? atrValue : null,                 // ATR 增强：供 saveLog 持久化
     atrMultiplier: atrStopMode ? atrMultiplier : null,       // ATR 增强：供 saveLog 持久化
-    mindsetScore: parseInt(document.getElementById('mindsetScore').value, 10) || 3,
+    mindsetScore: mindsetScore,
     kellyData: kellyData,
     // 暴露分批明细供 saveSplit 使用（独立止损需逐笔保存）
     _splitBatches: _splitMode ? _splitBatches.slice() : null
@@ -1169,7 +1199,13 @@ window.saveTradeAction = saveTradeAction;
 
 function assertSavableCalculation() {
   const calc = getCalc();
+  // 硬阻断时 calc 为 null 但 blocker 有值：用户确实点过「计算仓位」，只是被风控挡了。
+  // 原先统一回「请先点击「计算仓位」生成有效数据」，会引导他去重播同一个阻断。
+  const blocker = getCalcBlocker();
   if (!calc || !calc.positionSize || calc.positionSize <= 0) {
+    if (blocker) {
+      return { ok: false, message: blocker.detail || ('已阻断：' + (blocker.title || '风控未通过')) };
+    }
     return { ok: false, message: '请先点击「计算仓位」生成有效数据。' };
   }
   if (getCalcDirty()) {
@@ -1202,14 +1238,16 @@ function assertSavableCalculation() {
   if (getCalcBlocker()) {
     return { ok: false, message: '当前计划存在硬风控阻断，不能保存。' };
   }
-  // 软检查：最多允许 1 个 fail；可执行项 < 2 时跳过通过率检查
+  // 软检查：零容忍——任何非状态项 fail 都拒绝保存（原注释写「最多允许 1 个 fail」，与实现相反）。
+  // 状态项排除：checkLossStreak/checkDailyLoss/checkSymbolConc 已被上游硬阻断覆盖（永不 fail），
+  // checkTPWeighted 是提示性指标（默认 50/30/20+1.5/2/3R 配置下加权期望天然低于单档 2R 门槛）。
+  // 原先这里只硬编码跳过一个 checkTPWeighted，而结论行没做同样的排除，
+  // 于是同一秒出现「2 项未通过」和「1 项未通过」两个数。名单统一在 planner.js 的
+  // isStatusCheckItem()，两侧共用。
   var failCount = 0, totalExecutables = 0;
   if (calc.checklistResults) {
     for (var k in calc.checklistResults) {
-      // checkTPWeighted 为提示性指标（多止盈组合加权期望），
-      // 默认 50/30/20+1.5/2/3R 配置下加权期望天然低于单档 2R 门槛，
-      // 不参与保存门槛，避免正常计划无法保存（仅警示，不阻断）
-      if (k === 'checkTPWeighted') continue;
+      if (typeof isStatusCheckItem === 'function' && isStatusCheckItem(k)) continue;
       if (calc.checklistResults[k] === 'skipped') continue;
       totalExecutables++;
       if (calc.checklistResults[k] === 'fail') failCount++;
@@ -1281,7 +1319,7 @@ function saveLog() {
     splitMode: _splitMode,
     splitEntries: getSplitEntries(),
     reason: calc.reason || getReason(),
-    mindsetScore: calc.mindsetScore != null ? calc.mindsetScore : (parseInt(document.getElementById('mindsetScore').value, 10) || 3),
+    mindsetScore: calc.mindsetScore != null ? calc.mindsetScore : getMindsetScore(),
     strategyFramework: document.getElementById('strategyFramework').value,
     strategyPattern: document.getElementById('strategyPattern').value,
     signals: calc.signals,

@@ -249,8 +249,33 @@
 }
 
 
+/* 注意项：不阻断保存但必须看得见——仓位被保证金/聚合/交易所/集中度上限截断、
+   心态降仓、多止盈加权 RR 偏低。与失败项同样展开成两行，用 warning 配色区分。
+   原先这些情况只能挤进红色 FAIL，而 gate 又把它们排除在外，
+   于是结论行说「2 项未通过」、toast 说「1 项未通过」。 */
+#checklistCard .check-item.warn-row {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  background: var(--color-warning-bg);
+  border-left: 3px solid var(--color-warning);
+  color: var(--color-warning-dark);
+}
+#checklistCard .check-item.warn-row .check-note {
+  display: block;
+  margin-left: calc(20px + var(--space-sm));
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--color-warning-dark);
+  opacity: 0.9;
+}
+
 #checklistCard .check-item .check-icon.pass {
   color: var(--color-success);
+}
+
+#checklistCard .check-item .check-icon.warn {
+  color: var(--color-warning);
 }
 
 #checklistCard .check-item .check-icon.fail {
@@ -272,13 +297,20 @@
   color: var(--color-danger-dark);
 }
 
-/* 折叠态：只留失败项。闸门读的是「哪几项挡住了我」，通过项是背景噪声。
+/* 折叠态：只留失败项和注意项。闸门读的是「哪几项挡住了我」，通过项是背景噪声。
    折叠时不能给可见的失败项套用按位置错开的入场延迟——第 11 条失败项
    不该等 540ms 才出现，它正是需要立刻被看见的东西。 */
-#checklistCard.gates-collapsed .check-item:not(.fail-row) { display: none; }
+#checklistCard.gates-collapsed .check-item:not(.fail-row):not(.warn-row) { display: none; }
 #checklistCard.gates-collapsed .check-item { transition-delay: 0ms; }
-/* 折叠到「零条失败项」时列表容器不该留下空 gap 占位 */
-#checklistCard.gates-collapsed .checklist:has(.check-item:not(.fail-row)) { display: none; }
+/* 折叠到「零条失败/注意项」时列表容器不该留下空 gap 占位 */
+#checklistCard.gates-collapsed .checklist:has(.check-item:not(.fail-row):not(.warn-row)) { display: none; }
+
+/* 状态项：由 calculator.js 的硬阻断覆盖（连亏熔断/日亏损/品种集中度）或纯提示
+   （多止盈加权期望），永不 fail，因此不进结论行分母。压低视觉权重，
+   避免读成 12 个平权闸门而困惑于「为什么总数是 8 不是 12」。 */
+#checklistCard .check-item[data-status] .check-label {
+  opacity: 0.6;
+}
 
 /* 保存被风控拒绝时闪一下失败项，把 toast 和失败项联系起来 */
 @keyframes gateFlash {

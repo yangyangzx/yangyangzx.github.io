@@ -38,6 +38,7 @@
 <script src="../js/risk.js"></script>
 <script src="../js/planner.js"></script>
 <script src="../js/discipline-led.js"></script>
+<script src="../js/settings.js"></script>
 <script>
 (function() {
   // ---- 环境 mock（与生产隔离） ----
@@ -402,6 +403,193 @@
       // 单一事实来源：isClosedTrade 只有 utils.js 头部一份实现（历史重复定义已删）
       var e7 = { closeType: 'reducePosition', closes: [{}], closedRatio: 100, pnlAmount: 8 };
       h += T('去重后 reducePosition 100% 仍判已平仓', util.isClosedTrade(e7) === true);
+    }
+
+    // ---- 14. 临时止损宽度（未填止损价时的占位止损，v5.6.2 可配置）----
+    h += group('14. 临时止损宽度（未填止损价时的占位止损）');
+    if (typeof getProvisionalStopLoss !== 'function') {
+      h += loadErr('calculator.js getProvisionalStopLoss');
+    } else if (typeof SETTINGS_VALIDATORS === 'undefined' || !SETTINGS_VALIDATORS.provisionalStopPct) {
+      h += loadErr('settings.js SETTINGS_VALIDATORS.provisionalStopPct');
+    } else {
+      // 默认必须未配置：null 而非 0，保持历史行为（ETH 0.8%，其余 1%）
+      h += T('默认未配置：SETTINGS_DEFAULTS 为 null', SETTINGS_DEFAULTS.provisionalStopPct === null);
+      h += T('默认未配置：loadSettings 合并后为 null', loadSettings().provisionalStopPct === null);
+      h += T('未配置 BTC=1%', Math.abs(getProvisionalStopLoss(100, 'long', 'BTC', { provisionalStopPct: null }).stopPct - 0.01) < 1e-12);
+      h += T('未配置 ETH=0.8%', Math.abs(getProvisionalStopLoss(3000, 'long', 'ETH', { provisionalStopPct: null }).stopPct - 0.008) < 1e-12);
+      h += T('未配置 ETH 占位价=2976', Math.abs(getProvisionalStopLoss(3000, 'long', 'ETH', {}).stopPrice - 2976) < 1e-9);
+      h += T('short 向上取 +1%', Math.abs(getProvisionalStopLoss(100, 'short', 'BTC', {}).stopPrice - 101) < 1e-9);
+      // 已配置：覆盖内置默认，ETH 特例也不再保留（设置页存 %，返回值为小数）
+      h += T('已配置 2%：BTC', Math.abs(getProvisionalStopLoss(100, 'long', 'BTC', { provisionalStopPct: 2 }).stopPct - 0.02) < 1e-12);
+      h += T('已配置 2%：覆盖 ETH 特例', Math.abs(getProvisionalStopLoss(3000, 'long', 'ETH', { provisionalStopPct: 2 }).stopPct - 0.02) < 1e-12);
+      // 越界值必须回退内置默认，不得静默接受过窄/过宽
+      h += T('过窄 0.2% 回退 1%', Math.abs(getProvisionalStopLoss(100, 'long', 'BTC', { provisionalStopPct: 0.2 }).stopPct - 0.01) < 1e-12);
+      h += T('过宽 6% 回退 1%', Math.abs(getProvisionalStopLoss(100, 'long', 'BTC', { provisionalStopPct: 6 }).stopPct - 0.01) < 1e-12);
+      h += T('非数字回退 1%', Math.abs(getProvisionalStopLoss(100, 'long', 'BTC', { provisionalStopPct: 'x' }).stopPct - 0.01) < 1e-12);
+      // 边界：设置页 VALIDATORS 是唯一口径，calculator 的兜底常量必须与之一致（防漂移）
+      var vr = SETTINGS_VALIDATORS.provisionalStopPct;
+      h += T('下界 0.3% 被接受', Math.abs(getProvisionalStopLoss(100, 'long', 'BTC', { provisionalStopPct: vr.min }).stopPct - vr.min / 100) < 1e-12);
+      h += T('上界 5% 被接受', Math.abs(getProvisionalStopLoss(100, 'long', 'BTC', { provisionalStopPct: vr.max }).stopPct - vr.max / 100) < 1e-12);
+      h += T('VALIDATORS 与兜底常量一致', vr.min === PROVISIONAL_STOP_PCT_MIN && vr.max === PROVISIONAL_STOP_PCT_MAX);
+
+      // 设置页写入路径：留空=回退默认，越界/非数字拒绝保存
+      var symList = document.createElement('div');
+      symList.id = 'customSymbolsList';
+      symList.innerHTML = '<input class="cs-symbol" value="BTC"><input class="cs-desc" value="比特币">';
+      document.body.appendChild(symList);
+      var pv = document.createElement('input');
+      pv.id = 'setProvisionalStopPct';
+      document.body.appendChild(pv);
+      renderSettings();
+      h += T('设置页默认渲染为空串（提示用默认）', pv.value === '');
+      pv.value = '1.5';
+      saveSettings();
+      h += T('保存 1.5% 生效', loadSettings().provisionalStopPct === 1.5);
+      h += T('设置值换算后参与计算', Math.abs(getProvisionalStopLoss(100, 'long', 'BTC', loadSettings()).stopPct - 0.015) < 1e-12);
+      renderSettings();
+      h += T('已配置值回显到设置页', pv.value === '1.5');
+      pv.value = '';
+      saveSettings();
+      h += T('留空恢复为 null', loadSettings().provisionalStopPct === null);
+      h += T('留空后计算回退 1%', Math.abs(getProvisionalStopLoss(100, 'long', 'BTC', loadSettings()).stopPct - 0.01) < 1e-12);
+      pv.value = '9';
+      saveSettings();
+      h += T('越界 9% 拒绝保存', loadSettings().provisionalStopPct === null);
+      pv.value = '0';
+      saveSettings();
+      h += T('0% 拒绝保存', loadSettings().provisionalStopPct === null);
+      pv.value = 'abc';
+      saveSettings();
+      h += T('非数字拒绝保存', loadSettings().provisionalStopPct === null);
+
+      // ---- 15. 开仓闸门一致性（v5.6.3）----
+      // 12 项清单里只有少数能独立阻断，其余是上游硬阻断的影子。本组锁住的正是
+      // 「两层口径必须一致」的几处：热量含本仓、心态降仓不阻断、止损上限单一来源、
+      // 状态项名单在结论行与保存闸门间共用。
+      h += group('15. 开仓闸门一致性（热量含本仓 / 心态语义 / 止损上限单一来源）');
+
+      function setS(obj) {
+        localStorage.setItem('trade_settings_v1', JSON.stringify(obj));
+        _clearSettingsCache();
+      }
+      setS({ customStopLimit: {} });
+
+      // 15a. 品种止损上限：planner 与 calculator 必须读同一函数，边界不再两处各写一份
+      h += T('getStopLimitPct 已定义', typeof getStopLimitPct === 'function');
+      h += T('BTC 默认 3%', getStopLimitPct('BTC') === 3);
+      h += T('ETH 默认 2%', getStopLimitPct('ETH') === 2);
+      h += T('小写品种名与大写一致', getStopLimitPct('btc') === 3);
+      setS({ customStopLimit: { BTC: 4 } });
+      h += T('customStopLimit 覆盖 BTC=4%', getStopLimitPct('BTC') === 4);
+      h += T('未配置品种仍回退默认 ETH=2%', getStopLimitPct('ETH') === 2);
+      setS({ customStopLimit: {} });
+
+      // 15b. 心态语义：1 分阻断，2 分降仓 50% 且不阻断（计算层与清单层必须一致）
+      h += T('score 1 阻断', getMindsetAdjustment(1).blocked === true);
+      h += T('score 2 降仓至 50%', getMindsetAdjustment(2).adjustment === 0.5);
+      h += T('score 2 不阻断', getMindsetAdjustment(2).blocked === false);
+      setS({ mindsetMinScore: 5 });
+      h += T('minScore=5 时 score 3 降仓至 80% 且不阻断',
+        getMindsetAdjustment(3).adjustment === 0.8 && getMindsetAdjustment(3).blocked === false);
+      setS({ mindsetMinScore: 3 });
+
+      // 15c. getMindsetScore：回退跟随 minScore，不再把空/0 静默合并成硬编码 3
+      var _ms = document.createElement('input'); _ms.id = 'mindsetScore';
+      document.body.appendChild(_ms);
+      _ms.value = '';
+      h += T('空评分 + minScore=3 回退 3', getMindsetScore() === 3);
+      setS({ mindsetMinScore: 4 });
+      h += T('空评分 + minScore=4 回退 4（旧 `|| 3` 会返回 3）', getMindsetScore() === 4);
+      _ms.value = '2';
+      h += T('显式 2 不被静默改成 3', getMindsetScore() === 2);
+      _ms.value = '5';
+      h += T('显式 5 原样返回', getMindsetScore() === 5);
+      _ms.value = '';
+      setS({ mindsetMinScore: 3 });
+
+      // 15d. 组合热量：闸门口径必须含本仓（只算已持仓会漏掉「5.5% + 2% > 6%」整类超配）
+      var _savedLogs = window.logs;
+      window.logs = [{
+        id: 1, symbol: 'BTC', direction: 'long', entryPrice: 60000, effectiveEntryPrice: 60000,
+        stopLoss: 57000, positionSize: 11000, leverage: 10,
+        time: '2026-10-03T08:00:00Z', openTime: '2026-10-03T08:00:00Z',
+        closeType: '', closedRatio: 0, pnlAmount: null, capital: 10000
+      }];
+      setS({ accountBalance: 10000, riskHeatMax: 6 });
+      h += T('已持仓被识别为未平仓', getOpenPositions().length === 1);
+      var heat0 = calcPortfolioHeat();
+      h += T('不带参数 = 仅已持仓 5.5%', Math.abs(heat0.heat - 5.5) < 1e-9);
+      h += T('仅已持仓 5.5% 不阻断', heat0.blocked === false);
+      h += T('返回结构含 planPct/planRisk 字段',
+        Object.prototype.hasOwnProperty.call(heat0, 'planPct') &&
+        Object.prototype.hasOwnProperty.call(heat0, 'planRisk'));
+      var heat1 = calcPortfolioHeat(200, 'BTC', 10000);
+      h += T('含本仓 200U(2%) 后 heat=7.5%', Math.abs(heat1.heat - 7.5) < 1e-9);
+      h += T('含本仓后 7.5% > 6% → 阻断', heat1.blocked === true);
+      h += T('planPct=2.0 计入总热量', Math.abs(heat1.planPct - 2) < 1e-9);
+      h += T('existingHeat=5.5 保留供明细展示', Math.abs(heat1.existingHeat - 5.5) < 1e-9);
+      h += T('pending 明细带 pending 标记',
+        heat1.details.some(function(x) { return x.pending === true && x.symbol === 'BTC'; }));
+      h += T('恰好等于上限 6.0% 仍阻断（>= 口径，与清单的 < 判定互补）',
+        calcPortfolioHeat(50, 'BTC', 10000).blocked === true);
+      window.logs = _savedLogs;
+
+      // 15e. 状态项分类：结论行与保存闸门共用同一张名单，计数才不会差 1
+      h += T('isStatusCheckItem 已定义', typeof isStatusCheckItem === 'function');
+      h += T('连亏/日亏损/集中度/多止盈 均为状态项',
+        isStatusCheckItem('checkLossStreak') === true &&
+        isStatusCheckItem('checkDailyLoss') === true &&
+        isStatusCheckItem('checkSymbolConc') === true &&
+        isStatusCheckItem('checkTPWeighted') === true);
+      h += T('真闸门项不被排除',
+        isStatusCheckItem('checkRR') === false && isStatusCheckItem('checkReason') === false &&
+        isStatusCheckItem('checkRiskPct') === false && isStatusCheckItem('checkMindset') === false);
+      h += T('状态项 4 + 闸门项 8 = 清单全量 12 项',
+        STATUS_CHECK_ITEMS.length === 4 &&
+        STATUS_CHECK_ITEMS.concat(['checkRiskPct', 'checkStopDist', 'checkLiqSafe', 'checkRR',
+          'checkMargin', 'checkReason', 'checkMindset', 'checkPortfolioHeat']).length === 12);
+
+      // 15f. 保存闸门：warn 不阻断、状态项不计 fail、阻断详情区分「未计算」与「被风控挡」
+      function setFakeCalc(results) {
+        setCalc({ positionSize: 100, checklistResults: results });
+        setCalcDirty(false);
+        setCalcBlocker(null);
+      }
+      var all = {
+        checkRiskPct: 'pass', checkStopDist: 'pass', checkLiqSafe: 'pass', checkLossStreak: 'pass',
+        checkRR: 'pass', checkMargin: 'pass', checkReason: 'pass', checkDailyLoss: 'pass',
+        checkMindset: 'pass', checkPortfolioHeat: 'pass', checkSymbolConc: 'pass', checkTPWeighted: 'pass'
+      };
+      setFakeCalc(all);
+      h += T('全部 pass → 可保存', assertSavableCalculation().ok === true);
+
+      var onlyWarn = Object.assign({}, all, {
+        checkRiskPct: 'warn', checkMargin: 'warn', checkMindset: 'warn', checkTPWeighted: 'warn' });
+      setFakeCalc(onlyWarn);
+      h += T('仅有 warn（仓位截断/心态降仓）不阻断保存', assertSavableCalculation().ok === true);
+
+      setFakeCalc(Object.assign({}, all, { checkRR: 'fail' }));
+      var g1 = assertSavableCalculation();
+      h += T('1 项真闸门 fail → 拒绝保存', g1.ok === false);
+      h += T('拒绝消息计 1 项', /1 项/.test(g1.message));
+
+      setFakeCalc(Object.assign({}, all, { checkRR: 'fail', checkTPWeighted: 'fail' }));
+      var g2 = assertSavableCalculation();
+      h += T('状态项 fail 不进闸门（计数仍为 1）', g2.ok === false && /1 项/.test(g2.message));
+
+      setFakeCalc(Object.assign({}, all, { checkRR: 'fail', checkReason: 'fail' }));
+      h += T('两项真闸门 fail → 计 2 项', /2 项/.test(assertSavableCalculation().message));
+
+      setCalc(null); setCalcDirty(false); setCalcBlocker(null);
+      h += T('从未计算 → 提示先点击计算',
+        assertSavableCalculation().ok === false && /计算仓位/.test(assertSavableCalculation().message));
+      setCalc(null); setCalcDirty(true);
+      setCalcBlocker({ code: 'mindset-limit', title: '心态评分不足', detail: '心态极差，禁止交易' });
+      var g3 = assertSavableCalculation();
+      h += T('被硬阻断 → 给出阻断详情而非「请先点击计算」',
+        g3.ok === false && /禁止交易/.test(g3.message) && /计算仓位/.test(g3.message) === false);
+      setCalc(null); setCalcDirty(false); setCalcBlocker(null);
+
     }
 
     document.getElementById('out').innerHTML = h;
