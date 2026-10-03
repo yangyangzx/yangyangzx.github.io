@@ -17,22 +17,16 @@
        data-theme 原先只由 js/app.js 设置，而 app.js 是第 23 个 script，
        等它执行时首屏早已绘制完成。
        判定顺序与 js/app.js ThemeManager.loadPreferredTheme 保持一致
-       （手动标记 → 系统偏好 → 时段 6:00-18:00 浅色 → 深色兜底），改动需同步两处。 -->
+       （系统偏好 → 时段 6:00-18:00 浅色 → 深色兜底），改动需同步两处。 -->
   <script>
     (function() {
       try {
-        var theme = null;
-        if (localStorage.getItem('user_theme_manual_v1') === 'true') {
-          var saved = localStorage.getItem('user_theme_v1');
-          if (saved === 'light' || saved === 'dark') theme = saved;
-        }
-        if (!theme) {
-          if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
-            theme = 'light';
-          } else {
-            var hour = new Date().getHours();
-            theme = (hour >= 6 && hour < 18) ? 'light' : 'dark';
-          }
+        var theme;
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+          theme = 'light';
+        } else {
+          var hour = new Date().getHours();
+          theme = (hour >= 6 && hour < 18) ? 'light' : 'dark';
         }
         document.documentElement.setAttribute('data-theme', theme);
       } catch (e) {
@@ -49,20 +43,20 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <link rel="stylesheet" href="css/variables.css?v=5.6">
-  <link rel="stylesheet" href="css/base.css?v=5.6">
-  <link rel="stylesheet" href="css/calculator.css?v=5.6">
-  <link rel="stylesheet" href="css/table.css?v=5.6">
-  <link rel="stylesheet" href="css/modals.css?v=5.6">
-  <link rel="stylesheet" href="css/responsive.css?v=5.6">
-  <link rel="stylesheet" href="css/layout.css?v=5.6">
-  <link rel="stylesheet" href="css/dashboard.css?v=5.6">
-  <link rel="stylesheet" href="css/planner.css?v=5.6">
-  <link rel="stylesheet" href="css/discipline-led.css?v=5.6">
-  <link rel="stylesheet" href="css/risk.css?v=5.6">
-  <link rel="stylesheet" href="css/analytics.css?v=5.6">
-  <link rel="stylesheet" href="css/review.css?v=5.6">
-  <link rel="stylesheet" href="css/settings.css?v=5.6">
+  <link rel="stylesheet" href="css/variables.css?v=5.6.1">
+  <link rel="stylesheet" href="css/base.css?v=5.6.1">
+  <link rel="stylesheet" href="css/calculator.css?v=5.6.1">
+  <link rel="stylesheet" href="css/table.css?v=5.6.1">
+  <link rel="stylesheet" href="css/modals.css?v=5.6.1">
+  <link rel="stylesheet" href="css/responsive.css?v=5.6.1">
+  <link rel="stylesheet" href="css/layout.css?v=5.6.1">
+  <link rel="stylesheet" href="css/dashboard.css?v=5.6.1">
+  <link rel="stylesheet" href="css/planner.css?v=5.6.1">
+  <link rel="stylesheet" href="css/discipline-led.css?v=5.6.1">
+  <link rel="stylesheet" href="css/risk.css?v=5.6.1">
+  <link rel="stylesheet" href="css/analytics.css?v=5.6.1">
+  <link rel="stylesheet" href="css/review.css?v=5.6.1">
+  <link rel="stylesheet" href="css/settings.css?v=5.6.1">
 </head>
 <body>
 <nav id="mainNav" role="navigation" aria-label="主导航">
@@ -102,7 +96,7 @@
     </a>
   </div>
   <div class="nav-footer">
-    <div class="nav-version">v5.6</div>
+    <div class="nav-version">v5.6.1</div>
     <!-- 主题切换开关（Uiverse swift_9148 spark-switch） -->
     <label class="spark-switch" title="切换主题">
       <!-- aria-label 加在 input 上才产生可访问名（加在 label 上不生效）；
@@ -1333,31 +1327,31 @@
 
 </main>
 
-  <script src="js/constants.js?v=5.6"></script>
-  <script src="js/utils.js?v=5.6"></script>
-  <script src="js/toast.js?v=5.6"></script>
-  <script src="js/slippage.js?v=5.6"></script>
-  <script src="js/storage.js?v=5.6"></script>
-  <script src="js/skills-integration.js?v=5.6"></script>
-  <script src="js/calculation-ui.js?v=5.6"></script>
-  <script src="js/calculator.js?v=5.6"></script>
-  <script src="js/logs.js?v=5.6"></script>
-  <script src="js/rendering.js?v=5.6"></script>
-  <script src="js/stats.js?v=5.6"></script>
-  <script src="js/modals.js?v=5.6"></script>
-  <script src="js/navigation.js?v=5.6"></script>
-  <script src="js/dashboard.js?v=5.6"></script>
-  <script src="js/planner.js?v=5.6"></script>
-  <script src="js/discipline-led.js?v=5.6"></script>
-  <script src="js/settings.js?v=5.6"></script>
-  <script src="js/risk.js?v=5.6"></script>
-  <script src="js/chart-factory.js?v=5.6"></script>
-  <script src="js/analytics.js?v=5.6"></script>
-  <script src="js/review.js?v=5.6"></script>
-  <script src="js/io.js?v=5.6"></script>
-  <script src="js/dom-cache.js?v=5.6"></script>
-  <script src="js/app.js?v=5.6"></script>
-<script src="js/version.js?v=5.6"></script>
+  <script src="js/constants.js?v=5.6.1"></script>
+  <script src="js/utils.js?v=5.6.1"></script>
+  <script src="js/toast.js?v=5.6.1"></script>
+  <script src="js/slippage.js?v=5.6.1"></script>
+  <script src="js/storage.js?v=5.6.1"></script>
+  <script src="js/skills-integration.js?v=5.6.1"></script>
+  <script src="js/calculation-ui.js?v=5.6.1"></script>
+  <script src="js/calculator.js?v=5.6.1"></script>
+  <script src="js/logs.js?v=5.6.1"></script>
+  <script src="js/rendering.js?v=5.6.1"></script>
+  <script src="js/stats.js?v=5.6.1"></script>
+  <script src="js/modals.js?v=5.6.1"></script>
+  <script src="js/navigation.js?v=5.6.1"></script>
+  <script src="js/dashboard.js?v=5.6.1"></script>
+  <script src="js/planner.js?v=5.6.1"></script>
+  <script src="js/discipline-led.js?v=5.6.1"></script>
+  <script src="js/settings.js?v=5.6.1"></script>
+  <script src="js/risk.js?v=5.6.1"></script>
+  <script src="js/chart-factory.js?v=5.6.1"></script>
+  <script src="js/analytics.js?v=5.6.1"></script>
+  <script src="js/review.js?v=5.6.1"></script>
+  <script src="js/io.js?v=5.6.1"></script>
+  <script src="js/dom-cache.js?v=5.6.1"></script>
+  <script src="js/app.js?v=5.6.1"></script>
+<script src="js/version.js?v=5.6.1"></script>
 
   <!-- 样式见 css/modals.css #toastContainer（原为内联，z-index 硬编码 400 低于弹窗遮罩 500 导致提示被盖住） -->
   <div id="toastContainer" role="status" aria-live="polite"></div>

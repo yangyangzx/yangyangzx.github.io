@@ -1,8 +1,6 @@
 // ==================== 主题管理器 ====================
 // 独立于 DOMContentLoaded，页面随时可调用
 var ThemeManager = (function() {
-  var THEME_KEY = 'user_theme_v1';
-  var MANUAL_FLAG_KEY = 'user_theme_manual_v1';
 
   // 根据本地时间判断时段：6:00-18:00 浅色，其余深色
   function getTimeBasedTheme() {
@@ -10,18 +8,13 @@ var ThemeManager = (function() {
     return (hour >= 6 && hour < 18) ? 'light' : 'dark';
   }
 
-  // 从 localStorage 加载主题：手动 > 系统偏好 > 时间自动 > 暗色兜底
+  // 主题按环境推导，每次加载重新判定，不做跨会话持久化：系统偏好 > 时段自动。
+  // 手动切换（toggle）只对当前会话生效。若把选择持久化，用户晚上手动切浅色后，
+  // 次日清晨仍会停在浅色，永远等不到自动转深色——v5.6 的 user_theme_manual_v1
+  // 就是这个坑，已移除。代价：手动选择刷新后不保留，回到环境推导结果。
   // ⚠ 同一套判定逻辑在 index.html <head> 的内联脚本里也有一份（首屏防闪烁，
   //   必须在 app.js 加载前就写好 data-theme）。改这里务必同步改那一份。
   function loadPreferredTheme() {
-    var isManual = localStorage.getItem(MANUAL_FLAG_KEY) === 'true';
-    if (isManual) {
-      var saved = localStorage.getItem(THEME_KEY);
-      if (saved === 'light' || saved === 'dark') {
-        return saved;
-      }
-    }
-    // 无手动标记时：优先系统偏好，其次时间，最后暗色兜底
     if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
       return 'light';
     }
@@ -44,7 +37,16 @@ var ThemeManager = (function() {
       // role="switch" 必须保持 aria-checked 与实际状态同步（深色 = checked）
       checkbox.setAttribute('aria-checked', isDark ? 'true' : 'false');
     }
-    localStorage.setItem(THEME_KEY, theme);
+    // 同步 <meta name="theme-color">，让移动端浏览器地址栏背景色跟随实际主题。
+    // index.html 里的两条 meta 各带 media="(prefers-color-scheme: dark/light)"，是无 JS
+    // 时的兜底；JS 接管后清掉 media 并写入当前主题的色值，否则手动切到浅色而系统仍是
+    // 深色偏好时，地址栏会继续显示深色。两条 meta 写同一值，浏览器取其一，不会冲突。
+    var metaEls = document.querySelectorAll('meta[name="theme-color"]');
+    for (var mi = 0; mi < metaEls.length; mi++) {
+      var m = metaEls[mi];
+      m.removeAttribute('media');
+      m.setAttribute('content', theme === 'dark' ? '#0f1419' : '#ffffff');
+    }
     // P2-6 FIX：派发事件通知图表重绘——Chart.js 只在 new Chart() 时读取一次 CSS 变量，
     // 主题切换不会自动重绘（--chart-tooltip-bg 暗色白底/浅色黑底，切换后 tooltip 与
     // 卡片背景同色，悬停读数交互直接消失）
@@ -54,8 +56,6 @@ var ThemeManager = (function() {
   function toggle() {
     var current = document.documentElement.getAttribute('data-theme');
     var newTheme = current === 'light' ? 'dark' : 'light';
-    // 手动切换时写入标记，阻止后续时间逻辑覆盖
-    localStorage.setItem(MANUAL_FLAG_KEY, 'true');
     applyTheme(newTheme);
     return newTheme;
   }

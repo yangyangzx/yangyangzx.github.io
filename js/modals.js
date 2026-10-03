@@ -484,6 +484,19 @@ function emBindRecalc(item) {
       _emRecalcListeners.push({ el: el, type: 'change', handler: handler });
     }
   });
+  // 分批比例行随平仓类型显隐。该行可见性此前只在弹窗构建时按记录的初始 closeType
+  // 定一次：用户在弹窗内把类型改成 部分止盈/减仓 时字段仍是隐藏的，而 saveEditLog
+  // 会校验该比例——看不见的必填项会把人卡在"无法保存"上。
+  var _ctEl = document.getElementById('emCloseType');
+  if (_ctEl) {
+    var _ctHandler = function() {
+      var _row = document.getElementById('emPartialRatioRow');
+      var _v = _ctEl.value;
+      if (_row) _row.style.display = (_v === 'partialTP' || _v === 'reducePosition') ? 'block' : 'none';
+    };
+    _ctEl.addEventListener('change', _ctHandler);
+    _emRecalcListeners.push({ el: _ctEl, type: 'change', handler: _ctHandler });
+  }
   // 提供清理函数
   window._emRecalcCleanup = function() {
     for (var i = 0; i < _emRecalcListeners.length; i++) {
@@ -784,57 +797,67 @@ function saveEditLog(idx, _raceConfirmed) {
 
   v = gv('emCloseType'); if (v !== undefined) item.closeType = v;
   // P0-3 FIX: partialTP/reducePosition 时记录平仓比例并更新剩余仓位
-  if (item.closeType === 'partialTP' || item.closeType === 'reducePosition') {
-    var ratioEl = document.getElementById('emPartialRatio');
-    var partialRatio = ratioEl ? parseFloat(ratioEl.value) : NaN;
-    if (!isNaN(partialRatio) && partialRatio > 0 && partialRatio < 100) {
-      item.partialRatio = partialRatio;
-      // P1 FIX（2026-09-23 开仓逻辑审计）：原以「已被前次平仓削减过」的 positionSize 为基准
-      // 再乘 (1−ratio)。而 emPartialRatio 预填的正是 item.partialRatio —— 用户不改任何值直接
-      // 保存，positionSize / riskAmount / actualMargin / fee 就被重复削减一次（连存两次即腰斩），
-      // 而 pnlAmount 不动 → 盈亏与仓位脱节。
-      // 现锚定开仓原始仓位还原：优先 initialPositionSize（logs.js 关闭流程维护），
-      // 缺失时按真实累计平仓比例反推并一次性补写，此后每次保存均幂等。
-      var origPos = parseFloat(item.positionSize) || 0;
-      // 真实累计平仓比例：closes[] 事件数组最可靠，其次 closedRatio
-      var cumClosed = 0;
-      if (Array.isArray(item.closes)) {
-        cumClosed = item.closes.reduce(function(s, c) { return s + (parseFloat(c.ratio) || 0); }, 0);
-      }
-      if (!isFinite(cumClosed) || cumClosed <= 0) cumClosed = parseFloat(item.closedRatio) || 0;
-      if (!isFinite(cumClosed) || cumClosed < 0) cumClosed = 0;
-      if (cumClosed > 100) cumClosed = 100;
-      var fracNow = 1 - cumClosed / 100;   // 当前剩余仓位占原始仓位的比例
-      var anchor = function(current, initial, field) {
-        var base = parseFloat(initial);
-        if (!isFinite(base) || base <= 0) {
-          base = (fracNow > 0) ? (parseFloat(current) / fracNow) : (parseFloat(current) || 0);
-          if (isFinite(base) && base > 0) item[field] = base;  // 一次性补写，保证后续幂等
-        }
-        return base;
-      };
-      var basePos = anchor(item.positionSize, item.initialPositionSize, 'initialPositionSize');
-      item.positionSize = parseFloat((basePos * (1 - partialRatio / 100)).toFixed(2));
-      // 按比例缩减风险额与保证金
-      var baseRisk = anchor(item.riskAmount, item.initialRiskAmount, 'initialRiskAmount');
-      if (!isNaN(item.riskAmount) && item.riskAmount != null) {
-        item.riskAmount = parseFloat((baseRisk * (1 - partialRatio / 100)).toFixed(2));
-      }
-      var baseMargin = anchor(item.actualMargin, item.initialMargin, 'initialMargin');
-      if (!isNaN(item.actualMargin) && item.actualMargin != null) {
-        item.actualMargin = parseFloat((baseMargin * (1 - partialRatio / 100)).toFixed(2));
-      }
-      // P1-3 FIX：编辑部分平仓时同步缩减剩余 round-trip 费用，避免最终平仓重复扣费。
-      // 原始费用 = 剩余 fee + 已平仓部分 realizedFee（logs.js 累加维护），无重复计算。
-      var baseFee = (parseFloat(item.fee) || 0) + (parseFloat(item.realizedFee) || 0);
-      if (!isNaN(item.fee) && item.fee != null) {
-        item.fee = parseFloat((baseFee * (1 - partialRatio / 100)).toFixed(8));
-      }
-    } else {
-      delete item.partialRatio;
+  var _isPartialClose = item.closeType === 'partialTP' || item.closeType === 'reducePosition';
+  var ratioEl = document.getElementById('emPartialRatio');
+  var partialRatio = ratioEl ? parseFloat(ratioEl.value) : NaN;
+  // P1 修复（2026-10-03）：比例越界直接拒绝保存。input 的 min="1" max="100" 只在表单提交
+  // 时生效，程序读取不会被拦；此前会静默保存成 closeType=分批但无有效比例，isClosedTrade
+  // 转而看 closedRatio，于是这笔交易落在"既没平完也没平"的悬空状态。
+  if (_isPartialClose && !(partialRatio > 0 && partialRatio < 100)) {
+    showToast('分批平仓比例需在 1-99 之间', 'warn');
+    return;
+  }
+  if (_isPartialClose) {
+    // P1 FIX（2026-09-23 开仓逻辑审计）：原以「已被前次平仓削减过」的 positionSize 为基准
+    // 再乘 (1−ratio)。而 emPartialRatio 预填的正是 item.partialRatio —— 用户不改任何值直接
+    // 保存，positionSize / riskAmount / actualMargin / fee 就被重复削减一次（连存两次即腰斩），
+    // 而 pnlAmount 不动 → 盈亏与仓位脱节。
+    // 现锚定开仓原始仓位还原：优先 initialPositionSize（logs.js 关闭流程维护），
+    // 缺失时按真实累计平仓比例反推并一次性补写，此后每次保存均幂等。
+    // 真实累计平仓比例：closes[] 事件数组最可靠，其次 closedRatio
+    var cumClosed = 0;
+    if (Array.isArray(item.closes)) {
+      cumClosed = item.closes.reduce(function(s, c) { return s + (parseFloat(c.ratio) || 0); }, 0);
     }
+    if (!isFinite(cumClosed) || cumClosed <= 0) cumClosed = parseFloat(item.closedRatio) || 0;
+    if (!isFinite(cumClosed) || cumClosed < 0) cumClosed = 0;
+    if (cumClosed > 100) cumClosed = 100;
+    var fracNow = 1 - cumClosed / 100;   // 当前剩余仓位占原始仓位的比例
+    var anchor = function(current, initial, field) {
+      var base = parseFloat(initial);
+      if (!isFinite(base) || base <= 0) {
+        base = (fracNow > 0) ? (parseFloat(current) / fracNow) : (parseFloat(current) || 0);
+        if (isFinite(base) && base > 0) item[field] = base;  // 一次性补写，保证后续幂等
+      }
+      return base;
+    };
+    var basePos = anchor(item.positionSize, item.initialPositionSize, 'initialPositionSize');
+    item.positionSize = parseFloat((basePos * (1 - partialRatio / 100)).toFixed(2));
+    // 按比例缩减风险额与保证金
+    var baseRisk = anchor(item.riskAmount, item.initialRiskAmount, 'initialRiskAmount');
+    if (!isNaN(item.riskAmount) && item.riskAmount != null) {
+      item.riskAmount = parseFloat((baseRisk * (1 - partialRatio / 100)).toFixed(2));
+    }
+    var baseMargin = anchor(item.actualMargin, item.initialMargin, 'initialMargin');
+    if (!isNaN(item.actualMargin) && item.actualMargin != null) {
+      item.actualMargin = parseFloat((baseMargin * (1 - partialRatio / 100)).toFixed(2));
+    }
+    // P1-3 FIX：编辑部分平仓时同步缩减剩余 round-trip 费用，避免最终平仓重复扣费。
+    // 原始费用 = 剩余 fee + 已平仓部分 realizedFee（logs.js 累加维护），无重复计算。
+    var baseFee = (parseFloat(item.fee) || 0) + (parseFloat(item.realizedFee) || 0);
+    if (!isNaN(item.fee) && item.fee != null) {
+      item.fee = parseFloat((baseFee * (1 - partialRatio / 100)).toFixed(8));
+    }
+    // P1 修复（2026-10-03）：簿记同步。此前只改 positionSize 等"金额字段"、不碰
+    // closedRatio/closes，而 confirmClose 在 logs.js 实际读的是这两个字段，不是
+    // partialRatio —— 下一次部分平仓会在新旧比例之间错误叠加，最终平仓的
+    // ratioFinal = 100 - closedRatio 也套在错误的剩余比例上。权威实现在 utils.js。
+    window.utils.syncCloseBookkeeping(item, item.closeType, partialRatio);
   } else {
-    delete item.partialRatio;
+    // P1 修复（2026-10-03）：closeType 改成非分批类型 = 断言整笔已退出，同步
+    // closedRatio/closes，避免留下 closedRatio=50 + closes 非空的孤立簿记。
+    // 权威实现在 utils.js（closedRatio 置 100 而非 0）。
+    window.utils.syncCloseBookkeeping(item, item.closeType, null);
   }
   v = gn('emClosePrice'); if (v !== undefined && v !== null) item.closePrice = v;
   // 编辑平仓数据时，若尚未有 closeTime 则自动写入

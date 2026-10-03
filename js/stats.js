@@ -301,11 +301,16 @@ function updateStats() {
     avgHoldEl.textContent = '—';
   }
 
-  // 权益曲线 & 策略拆解
+  // 权益曲线 & 订单类型明细
+  // renderStrategyBreakdown / renderEmotionStats 已删除：二者的守卫是 if(!card||!wrap)return，
+  // 而卡片容器 #strategy-breakdown / #emotion-breakdown 在 v5.6 IA 去重时被移除，函数体永久
+  // 短路——属于"被调用但从不执行"的死代码。
+  // ⚠ 表体容器 #strategyTableWrap / #emotionTableWrap 仍然活着，分别由
+  //    analytics.js renderStrategyTable 与 review.js renderEmotionAnalysis 写入，
+  //    这两个 id 不要跟着删。
+  // orderTypeTableWrap 由下方 renderOrderTypeDistribution 管理，容器在 journalStatsBlock 内常驻。
   try { drawEquityCurve(closed); } catch(e) { console.error('[updateStats] drawEquityCurve error:', e); }
-  try { renderStrategyBreakdown(closed); } catch(e) { console.error('[updateStats] renderStrategyBreakdown error:', e); }
   try { renderOrderTypeDistribution(closed); } catch(e) { console.error('[updateStats] renderOrderTypeDistribution error:', e); }
-  try { renderEmotionStats(closed); } catch(e) { console.error('[updateStats] renderEmotionStats error:', e); }
 }
 
 // ==================== 权益概览（峰值 / 最大回撤） ====================
@@ -334,93 +339,16 @@ function drawEquityCurve(closed) {
   ddEl.classList.add(maxDD >= 20 ? 'dd-danger' : maxDD >= 10 ? 'dd-warn' : 'dd-safe');
 }
 
-// ==================== 策略绩效拆解 ====================
-function renderStrategyBreakdown(closed) {
-  const card = document.getElementById('strategy-breakdown');
-  const wrap = document.getElementById('strategyTableWrap');
-  if (!card || !wrap) return;
-  if (!closed || closed.length === 0) {
-    card.style.display = 'block';
-    wrap.innerHTML = '<div class="empty-hint">暂无平仓数据</div>';
-    return;
-  }
-
-  // 分组：使用框架+形态双维度（与 analytics.js 口径一致）
-  const groups = {};
-  for (const l of closed) {
-    const framework = l.strategyFramework || '未分类';
-    const rawPattern = l.strategyPattern || '';
-    const patternName = rawPattern ? (rawPattern.includes('|') ? rawPattern.split('|').pop().trim() : rawPattern.trim()) : '未标记';
-    const key = framework + '|' + patternName;
-    if (!groups[key]) groups[key] = { framework, patternName, trades: [] };
-    groups[key].trades.push(l);
-  }
-
-  const rows = [];
-  for (const [key, group] of Object.entries(groups)) {
-    const trades = group.trades;
-    const cnt = trades.length;
-    const { wins, losses, grossProfit, grossLoss } = computeWinLoss(trades);
-    const sampleCount = trades.length;
-    const wr = sampleCount > 0 ? (wins.length / sampleCount * 100) : 0;
-    const lossRate = sampleCount > 0 ? (losses.length / sampleCount * 100) : 0;
-    const tPnl = grossProfit - grossLoss;
-    const avgW = wins.length > 0 ? grossProfit / wins.length : 0;
-    const avgL = losses.length > 0 ? grossLoss / losses.length : 0;
-    const wlR = avgL > 0 ? avgW / avgL : 0;
-    const exp = sampleCount > 0 ? (wr / 100) * avgW - (lossRate / 100) * avgL : 0;
-    const pf = grossLoss > 0 ? grossProfit / grossLoss : (wins.length > 0 ? Infinity : 0);
-    let maeSum = 0, maeCnt = 0;
-    for (const l of trades) {
-      const m = parseFloat(l.mae);
-      const pnl = parseFloat(l.pnlAmount);
-      // 与全局口径一致：MAE 仅统计亏损单（pnl < 0）
-      if (!isNaN(m) && !isNaN(pnl) && pnl < 0) { maeSum += Math.abs(m); maeCnt++; }
-    }
-    const avgMAE = maeCnt > 0 ? maeSum / maeCnt : null;
-    rows.push({ name: group.framework + ' - ' + group.patternName, framework: group.framework, patternName: group.patternName, cnt, wr, tPnl, exp, wlR, pf, avgMAE, lowSample: cnt < 2 });
-  }
-
-  if (rows.length === 0) {
-    card.style.display = 'block';
-    wrap.innerHTML = '<div class="empty-hint">暂无策略数据</div>';
-    return;
-  }
-
-  rows.sort((a, b) => b.tPnl - a.tPnl);
-  card.style.display = 'block';
-
-  let html = '<table><thead><tr>' +
-    '<th>策略框架</th><th>形态</th><th>笔数</th><th>胜率</th><th>总盈亏</th>' +
-    '<th>期望值</th><th>盈亏比</th><th>利润因子</th><th>均MAE</th>' +
-    '</tr></thead><tbody>';
-  for (const r of rows) {
-    const cls = r.lowSample ? ' class="low-sample"' : '';
-    const pnlCls = r.tPnl > 0 ? 'positive' : r.tPnl < 0 ? 'negative' : '';
-    html += '<tr' + cls + '>' +
-      '<td>' + esc(r.framework) + '</td>' +
-      '<td>' + esc(r.patternName) + (r.lowSample ? ' <span style="font-size:10px;">(n<' + r.cnt + ')</span>' : '') + '</td>' +
-      '<td>' + r.cnt + '</td>' +
-      '<td>' + r.wr.toFixed(1) + '%</td>' +
-      '<td class="' + pnlCls + '">' + (r.tPnl >= 0 ? '+' : '') + r.tPnl.toFixed(2) + '</td>' +
-      '<td>' + (r.exp >= 0 ? '+' : '') + r.exp.toFixed(2) + '</td>' +
-      '<td>' + (r.wlR > 0 ? r.wlR.toFixed(2) + ':1' : '—') + '</td>' +
-      '<td>' + (r.pf === Infinity ? '∞' : r.pf.toFixed(2)) + '</td>' +
-      '<td>' + (r.avgMAE !== null ? r.avgMAE.toFixed(2) + '%' : '—') + '</td>' +
-      '</tr>';
-  }
-  html += '</tbody></table>';
-  wrap.innerHTML = html;
-}
-
 // ── 订单类型分布 ──
+// 唯一给日志页 #orderTypeCard / #orderTypeTableWrap 写入内容的函数；
+// 卡片容器在 index.html（journalStatsBlock 内）里常驻，style="display:none"
+// 由本函数在有数据时打开。
 function renderOrderTypeDistribution(closed) {
   const card = document.getElementById('orderTypeCard');
   const wrap = document.getElementById('orderTypeTableWrap');
   if (!card || !wrap) return;
   if (!closed || closed.length === 0) {
-    card.style.display = 'block';
-    wrap.innerHTML = '<div class="empty-hint">暂无平仓数据</div>';
+    card.style.display = 'none';
     return;
   }
 
@@ -449,8 +377,7 @@ function renderOrderTypeDistribution(closed) {
   }
 
   if (rows.length === 0) {
-    card.style.display = 'block';
-    wrap.innerHTML = '<div class="empty-hint">暂无订单类型数据</div>';
+    card.style.display = 'none';
     return;
   }
 
@@ -474,75 +401,6 @@ function renderOrderTypeDistribution(closed) {
       '<td>' + r.wlR + '</td>' +
       '<td>' + r.pf + '</td>' +
       '</tr>';
-  }
-  html += '</tbody></table>';
-  wrap.innerHTML = html;
-}
-
-// ── 心态胜率统计 ──
-function renderEmotionStats(closed) {
-  const card = document.getElementById('emotion-breakdown');
-  const wrap = document.getElementById('emotionTableWrap');
-  if (!card || !wrap) return;
-  if (!closed || closed.length === 0) {
-    card.style.display = 'block';
-    wrap.innerHTML = '<div class="empty-hint">暂无平仓数据</div>';
-    return;
-  }
-
-  // 统计：每个情绪独立统计 + 无情绪行
-  const stats = {}; // key: emotion value -> { wins, losses, grossProfit, grossLoss }
-  let noEmotionWins = 0, noEmotionLosses = 0, noEmotionPnl = 0;
-  const EM_VALUES = EMOTION_OPTIONS.map(function(o) { return o.value; });
-  EM_VALUES.forEach(function(v) { stats[v] = { wins:0, losses:0, grossProfit:0, grossLoss:0 }; });
-
-  for (var i = 0; i < closed.length; i++) {
-    var l = closed[i];
-    var pnl = parseFloat(l.pnlAmount) || 0;
-    if (l.emotions && l.emotions.length > 0) {
-      for (var j = 0; j < l.emotions.length; j++) {
-        var e = l.emotions[j];
-        if (!stats[e]) continue;
-        if (pnl > 0) { stats[e].wins++; stats[e].grossProfit += pnl; }
-        else if (pnl < 0) { stats[e].losses++; stats[e].grossLoss += Math.abs(pnl); }
-      }
-    } else {
-      if (pnl > 0) { noEmotionWins++; noEmotionPnl += pnl; }
-      else if (pnl < 0) { noEmotionLosses++; noEmotionPnl += pnl; }
-    }
-  }
-
-  // 构建行
-  var rows = [];
-  EM_VALUES.forEach(function(v) {
-    var s = stats[v];
-    var total = s.wins + s.losses;
-    if (total === 0) return;
-    var wr = total > 0 ? (s.wins / total * 100) : 0;
-    var tPnl = s.grossProfit - s.grossLoss;
-    rows.push({ name:v, cnt:total, wr:wr, tPnl:tPnl });
-  });
-  if (noEmotionWins + noEmotionLosses > 0) {
-    var noTotal = noEmotionWins + noEmotionLosses;
-    var noWr = noTotal > 0 ? (noEmotionWins / noTotal * 100) : 0;
-    rows.push({ name:'无情绪', cnt:noTotal, wr:noWr, tPnl:noEmotionPnl });
-  }
-
-  if (rows.length === 0) {
-    card.style.display = 'block';
-    wrap.innerHTML = '<div class="empty-hint">暂无情绪数据</div>';
-    return;
-  }
-
-  rows.sort(function(a, b) { return b.tPnl - a.tPnl; });
-  card.style.display = 'block';
-
-  var html = '<table><thead><tr><th>情绪</th><th>笔数</th><th>胜率</th><th>盈亏合计 <span style="font-size:11px;color:var(--color-text-muted);font-weight:400;">（含重复计数）</span></th></tr></thead><tbody>';
-  for (var ri = 0; ri < rows.length; ri++) {
-    var r = rows[ri];
-    var cls = r.tPnl > 0 ? 'positive' : r.tPnl < 0 ? 'negative' : '';
-    html += '<tr><td>' + r.name + '</td><td>' + r.cnt + '</td><td>' + r.wr.toFixed(1) + '%</td>' +
-      '<td class="' + cls + '">' + (r.tPnl >= 0 ? '+' : '') + r.tPnl.toFixed(2) + ' U</td></tr>';
   }
   html += '</tbody></table>';
   wrap.innerHTML = html;

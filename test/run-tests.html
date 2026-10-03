@@ -336,6 +336,74 @@
       })());
     }
 
+    // ---- 13. 平仓簿记同步（编辑分批比例 / 改平仓类型） ----
+    h += group('13. syncCloseBookkeeping 簿记同步');
+    if (typeof util.syncCloseBookkeeping !== 'function') {
+      h += loadErr('utils.js syncCloseBookkeeping');
+    } else {
+      // 不变量：sum(closes[].ratio) === closedRatio
+      var _sumR = function(it) {
+        return (Array.isArray(it.closes) ? it.closes : []).reduce(function(s, c) {
+          return s + (parseFloat(c.ratio) || 0);
+        }, 0);
+      };
+      // 首次部分平仓：无簿记 → 建立第一条事件
+      var e1 = { closeType: 'partialTP', positionSize: 100 };
+      util.syncCloseBookkeeping(e1, 'partialTP', 50);
+      h += T('首次部分平仓：closedRatio=50', e1.closedRatio === 50);
+      h += T('首次部分平仓：建立事件且合计一致',
+        Array.isArray(e1.closes) && e1.closes.length === 1 && Math.abs(_sumR(e1) - e1.closedRatio) < 1e-9);
+      h += T('partialTP 50% 仍判持仓中', util.isClosedTrade(Object.assign({ pnlAmount: 3 }, e1)) === false);
+      h += T('partialTP 50% 判部分平仓态', util.isPartialClosed(e1) === true);
+      // 幂等：不改值重存一次，比例不得叠加
+      util.syncCloseBookkeeping(e1, 'partialTP', 50);
+      h += T('重复保存幂等：closedRatio 仍=50', e1.closedRatio === 50);
+      h += T('重复保存幂等：closes 仍 1 条', e1.closes.length === 1);
+      // 已有两次部分平仓后编辑末次比例：历史保留，只换末条
+      e1.closes.push({ type: 'partialTP', ratio: 30 });
+      e1.closedRatio = 80;
+      util.syncCloseBookkeeping(e1, 'partialTP', 25);
+      h += T('编辑末次比例：历史事件不动', e1.closes.length === 2 && e1.closes[0].ratio === 50);
+      h += T('编辑末次比例：closedRatio=75', Math.abs(e1.closedRatio - 75) < 1e-9);
+      h += T('编辑末次比例：合计不变量成立', Math.abs(_sumR(e1) - e1.closedRatio) < 1e-9);
+      // 已彻底平仓的记录改成分批类型：收尾事件必须移除，closedRatio 不能停在 100
+      var e2 = { closeType: 'tp', closedRatio: 100, pnlAmount: 10,
+        closes: [{ type: 'partialTP', ratio: 30 }, { type: 'tp', ratio: 70 }] };
+      util.syncCloseBookkeeping(e2, 'partialTP', 40);
+      h += T('收尾事件被移除：closes 1 条', e2.closes.length === 1);
+      h += T('改成分批：closedRatio=40（不是 100）', Math.abs(e2.closedRatio - 40) < 1e-9);
+      // saveEditLog 先写 item.closeType 再调同步，这里同样对齐
+      e2.closeType = 'partialTP';
+      h += T('改成分批：回到持仓中', util.isClosedTrade(e2) === false);
+      // 旧数据：有 closedRatio 但无 closes，不得与旧值叠加
+      var e3 = { closeType: 'partialTP', closedRatio: 50, pnlAmount: 2 };
+      util.syncCloseBookkeeping(e3, 'partialTP', 45);
+      h += T('旧数据不叠加：closedRatio=45（不是 95）', Math.abs(e3.closedRatio - 45) < 1e-9);
+      // 分批类型改成全额平仓类型：closedRatio=100、簿记清空、partialRatio 删除
+      var e4 = { closeType: 'partialTP', closedRatio: 50, pnlAmount: 4,
+        closes: [{ type: 'partialTP', ratio: 50 }], partialRatio: 50 };
+      util.syncCloseBookkeeping(e4, 'manualWin', null);
+      h += T('改全额平仓：closedRatio=100（不是 0）', e4.closedRatio === 100);
+      h += T('改全额平仓：closes 清空', Array.isArray(e4.closes) && e4.closes.length === 0);
+      h += T('改全额平仓：partialRatio 已删除', e4.partialRatio === undefined);
+      h += T('改全额平仓：判定为已平仓', util.isClosedTrade(e4) === true);
+      // 原本就彻底平仓的记录换成另一种全额类型：保留事件链
+      var e5 = { closeType: 'partialTP', closedRatio: 100, pnlAmount: 9,
+        closes: [{ type: 'partialTP', ratio: 40 }, { type: 'tp', ratio: 60 }] };
+      util.syncCloseBookkeeping(e5, 'manualWin', null);
+      h += T('已彻底平仓的记录保留事件链', e5.closes.length === 2 && e5.closedRatio === 100);
+      // 比例越界：不写簿记，原值原样保留
+      var e6 = { closeType: 'partialTP', closedRatio: 30, pnlAmount: 1,
+        closes: [{ type: 'partialTP', ratio: 30 }] };
+      util.syncCloseBookkeeping(e6, 'partialTP', 150);
+      h += T('比例越界不写簿记：closedRatio 保持 30', e6.closedRatio === 30);
+      h += T('比例越界不写簿记：closes 保持 1 条', e6.closes.length === 1);
+      h += T('比例越界不写簿记：partialRatio 已删除', e6.partialRatio === undefined);
+      // 单一事实来源：isClosedTrade 只有 utils.js 头部一份实现（历史重复定义已删）
+      var e7 = { closeType: 'reducePosition', closes: [{}], closedRatio: 100, pnlAmount: 8 };
+      h += T('去重后 reducePosition 100% 仍判已平仓', util.isClosedTrade(e7) === true);
+    }
+
     document.getElementById('out').innerHTML = h;
     var sum = document.getElementById('summary');
     sum.innerHTML = '<span class="' + (fail === 0 ? 'pass' : 'fail') + '">PASS=' + pass + ' FAIL=' + fail + '</span>';

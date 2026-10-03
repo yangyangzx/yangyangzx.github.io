@@ -45,6 +45,63 @@
   };
 
   /**
+   * 平仓簿记同步（单一事实来源，P1 修复 2026-10-03）。
+   * 编辑平仓类型 / 分批比例后，让 item.closedRatio 与 item.closes 自洽：
+   *   sum(closes[].ratio) === closedRatio。
+   * 下游读的是这两个字段，**不是 partialRatio**：
+   *   - isClosedTrade / isPartialClosed 用 closedRatio 判持仓状态（并看 closes 是否为数组）
+   *   - confirmClose（logs.js）用 closedRatio 算 ratioFinal = 100 - closedRatio
+   *   - CSV 导出原样 JSON.stringify(closes)，closes 是逐次平仓的审计链
+   * 所以比例被编辑后必须同步，否则下一次部分平仓会在新旧比例之间错误叠加，
+   * 最终平仓的 ratioFinal 也会套在错误的剩余比例上。
+   * @param {Object} item 日志条目（就地修改）
+   * @param {string} closeType 保存后的平仓类型
+   * @param {number|null} partialRatio 分批比例（0<r<100）；非分批类型或无比例时传 null
+   * @returns {Object} item
+   */
+  util.syncCloseBookkeeping = function(item, closeType, partialRatio) {
+    if (!item) return item;
+    var PARTIAL_TYPES = ['partialTP', 'reducePosition'];
+    var clamp4 = function(x) { return parseFloat(Math.max(0, Math.min(100, x)).toFixed(4)); };
+    var evts = Array.isArray(item.closes) ? item.closes.slice() : [];
+
+    if (PARTIAL_TYPES.indexOf(closeType) >= 0) {
+      var r = parseFloat(partialRatio);
+      if (!(r > 0 && r < 100)) {
+        // 无有效比例：本次不产生部分平仓簿记，保持原有 closedRatio/closes 不变
+        delete item.partialRatio;
+        return item;
+      }
+      // closes 里 type 非分批的"收尾"事件（confirmClose 的最终平仓）在改成分批类型后
+      // 不再成立，一并移除——否则 closedRatio 仍会算到 100，与剩余仓位自相矛盾。
+      var partials = evts.filter(function(e) { return PARTIAL_TYPES.indexOf(e.type) >= 0; });
+      if (partials.length > 0) {
+        // 有事件簿记：只换最后一次部分平仓事件的 ratio，其余历史不动
+        partials[partials.length - 1].ratio = r;
+      } else {
+        // 无部分平仓事件簿记（首次 / 旧数据 / CSV 导入）：本次即第一条。
+        // 带 type，保证下次编辑仍被识别为分批事件，且 CSV 往返后可重建。
+        partials.push({ type: closeType, ratio: r });
+      }
+      item.closes = partials;
+      item.closedRatio = clamp4(partials.reduce(function(s, c) {
+        return s + (parseFloat(c.ratio) || 0);
+      }, 0));
+      item.partialRatio = r;
+      return item;
+    }
+
+    // 非分批类型 = 断言整笔已退出：closedRatio 必须是 100（对齐 logs.js 收尾口径）。
+    // 此前清成 0，会让"已平仓"记录的 CSV 导出显示 0% 已平，口径与 pnlAmount 脱节。
+    delete item.partialRatio;
+    var wasFullyClosed = (parseFloat(item.closedRatio) || 0) >= 99.999;
+    item.closedRatio = 100;
+    // 此前未彻底平仓的记录：其部分平仓事件链已不描述现实，清空避免孤立簿记
+    if (!wasFullyClosed) item.closes = [];
+    return item;
+  };
+
+  /**
    * 获取按平仓时间排序的"最终平仓"日志（整笔交易已全部退出，pnlAmount 为整笔累计已实现盈亏）
    * @returns {Array} 已平仓日志数组（按 closeTime 升序）
    */
@@ -230,23 +287,9 @@
   };
 
   // ======== 已平仓交易判断（统一过滤条件） ========
-  /**
-   * P0-1 FIX：判断一条日志是否为"最终平仓"交易（与文件头部定义一致，此处为历史重复定义，统一语义）
-   * @param {Object} item - 日志条目
-   * @returns {boolean}
-   */
-  util.isClosedTrade = function(item) {
-    if (!item || !item.closeType || item.closeType === '') return false;
-    if (item.pnlAmount == null || isNaN(parseFloat(item.pnlAmount))) return false;
-    if (item.closeType === 'partialTP' || item.closeType === 'reducePosition') {
-      if (Array.isArray(item.closes)) {
-        var cr = parseFloat(item.closedRatio);
-        return !isNaN(cr) && cr >= 99.999;
-      }
-      return false;
-    }
-    return true;
-  };
+  // isClosedTrade 的权威定义在文件头部（第 16 行附近）。此处曾有一份逐字相同的重复定义，
+  // 靠"后赋值覆盖"保持语义一致——历史上已实际漂移过一次，且掩盖了"该改哪一份"的歧义。
+  // 已删除，保留单一实现。
 
   /**
    * 计算权益曲线数据 — 供 stats.js / dashboard.js 统一调用
