@@ -5,12 +5,19 @@
 @media (prefers-color-scheme: light) {
   :root:not([data-theme]) {
     --color-bg:             oklch(97% 0.008 250);
-    --color-surface:        rgba(255, 255, 255, 0.9);
+    --color-surface:        oklch(100% 0.003 250 / 0.92);
+    --color-surface-raised: oklch(100% 0.003 250);
+    --color-border:         oklch(70% 0.012 250 / 0.20);
     --color-text:           oklch(22% 0.012 250);
-    --color-text-secondary: oklch(42% 0.015 250);
-    --color-text-muted:     oklch(38% 0.014 250);
+    --color-text-secondary: oklch(38% 0.014 250);
+    --color-text-muted:     oklch(43% 0.013 250);
     --color-text-subtle:    oklch(48% 0.012 250);
+    --color-text-placeholder: oklch(58% 0.012 250);
     --color-text-inverse:   oklch(97% 0.008 250);
+    /* 玻璃层同步到浅色，否则无 JS 时出现「浅底 + 深色玻璃卡片」的半截主题 */
+    --glass-bg:             oklch(100% 0.003 250 / 0.88);
+    --glass-border:         oklch(70% 0.012 250 / 0.35);
+    --nav-bg:               oklch(98% 0.006 250 / 0.95);
   }
 }
 
@@ -134,7 +141,9 @@ html {
      ═══════════════════════════════════════ */
   --ease-out:      cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in:       cubic-bezier(0.55, 0.06, 0.68, 0.19);
-  --ease-in-out:   cubic-bezier(0.55, 0.06, 0.68, 0.19);
+  /* 原与 --ease-in 同值（0.55,0.06,0.68,0.19 是 ease-in 曲线），名不副实。
+     当前两者均零引用，改值不产生任何视觉变化，仅修正语义。 */
+  --ease-in-out:   cubic-bezier(0.65, 0, 0.35, 1);
 
   /* 过渡 — 指定属性，不 animating visibility 等 */
   --transition-fast:   background-color var(--dur-fast) var(--ease-out),
@@ -157,10 +166,14 @@ html {
      ═══════════════════════════════════════ */
   --z-dropdown:   200;
   --z-modal:      300;
-  --z-toast:      400;
   --z-overlay:    500;
   --z-popover:    600;
   --z-tooltip:    700;
+  /* toast 必须压在所有浮层之上（含 --z-overlay）。
+     编辑弹窗内的 13 处校验提示全部走 showToast，而弹窗在失败路径上保持打开：
+     原先 toast=400 < overlay=500，提示被遮罩的 blur(8px) 模糊掉、且点不到
+     （点下去事件落到遮罩，反而把弹窗关掉）。 */
+  --z-toast:      800;
 
   /* ═══════════════════════════════════════
      圆角系统（4pt 倍数）
@@ -316,7 +329,9 @@ html {
 
   --color-text:           oklch(22% 0.012 250);
   --color-text-secondary: oklch(38% 0.014 250);
-  --color-text-muted:     oklch(38% 0.014 250);
+  /* 原与 secondary 同为 38%，浅色下二级/三级文字合并成一级（深色下是 85% vs 72% 两级）。
+     取 43%，落在 secondary(38) 与 subtle(48) 之间，对 --color-bg 约 5.4:1，稳过 AA。 */
+  --color-text-muted:     oklch(43% 0.013 250);
   /* 次级说明文字：浅色下介于 muted 与 placeholder 之间，实测 ≥4.9:1 */
   --color-text-subtle:    oklch(48% 0.012 250);
   --color-text-placeholder: oklch(58% 0.012 250);
@@ -372,6 +387,28 @@ html {
   --chart-accent-warning:  oklch(50% 0.16 80);
   --chart-scatter-win:     oklch(48% 0.14 158 / 0.80);
   --chart-scatter-loss:    oklch(52% 0.18 25 / 0.80);
+
+  /* ═══════════════════════════════════════
+     状态发光 / 按钮 / 卡片 — 浅色覆写
+     此前这 11 个 token 只在深色块定义，浅色模式直接继承深色值：
+     高饱和辉光（0.50 alpha）落在浅底上显得脏而重，与浅色阴影体系不匹配。
+     浅色下统一降 alpha、改用浅色色板的语义色，并复用浅色阴影的浓度。
+     ═══════════════════════════════════════ */
+  --glow-success:  0 0 12px oklch(48% 0.14 158 / 0.22);
+  --glow-danger:   0 0 12px oklch(52% 0.18 25 / 0.22);
+  --glow-warning:  0 0 12px oklch(50% 0.16 80 / 0.22);
+  --text-glow-positive:  0 0 16px oklch(48% 0.14 158 / 0.10);
+  --text-glow-negative:  0 0 16px oklch(52% 0.18 25 / 0.08);
+  --table-gradient-overlay: linear-gradient(to bottom, oklch(0% 0 0 / 0.03), transparent);
+  --btn-success-shadow:    0 1px 4px oklch(48% 0.14 158 / 0.20);
+  --btn-success-hover-bg:  linear-gradient(135deg, var(--color-success-dark), oklch(38% 0.12 158 / 0.9));
+  --btn-success-hover-shadow: 0 2px 10px oklch(48% 0.14 158 / 0.26);
+  --btn-warning-shadow:    0 1px 4px oklch(50% 0.16 80 / 0.20);
+  --btn-warning-hover-bg:  linear-gradient(135deg, var(--color-warning-dark), oklch(40% 0.14 80 / 0.9));
+  --btn-warning-hover-shadow: 0 2px 10px oklch(50% 0.16 80 / 0.26);
+  --review-rank-1-border:  1px solid oklch(50% 0.16 78 / 0.25);
+  --review-card-hover-shadow: 0 12px 40px oklch(0% 0 0 / 0.12);
+  --switch-bg:         oklch(70% 0.012 250 / 0.35);
 }
 
 /* Overlay bg for light theme */

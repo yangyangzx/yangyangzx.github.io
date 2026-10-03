@@ -101,6 +101,8 @@
   color: var(--color-text);
   line-height: 1.15;
   letter-spacing: -0.5px;
+  /* 等宽数字：盈亏/胜率刷新时数字宽度不跳，避免整块卡片抖动 */
+  font-variant-numeric: tabular-nums;
 }
 
 .dash-card-value.pnl-positive {
@@ -162,6 +164,7 @@
   font-size: var(--font-md);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text);
+  font-variant-numeric: tabular-nums;
 }
 
 .dash-risk-value.warn {
@@ -238,6 +241,7 @@
 .liq-item-distance {
   font-size: 11px;
   color: var(--color-danger);
+  font-variant-numeric: tabular-nums;
 }
 
 .liq-safe {

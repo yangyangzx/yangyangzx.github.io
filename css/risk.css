@@ -53,6 +53,7 @@
   font-size: 15px;
   font-weight: var(--font-weight-bold);
   color: var(--color-text);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ——— 进度条 ——— */
@@ -92,6 +93,7 @@
 .risk-alert-row .risk-value {
   font-weight: var(--font-weight-semibold);
   font-size: 16px;
+  font-variant-numeric: tabular-nums;
 }
 
 .risk-alert-row .risk-sub {
@@ -123,6 +125,8 @@
   border-bottom: 1px solid var(--glass-border);
   color: var(--color-text);
   font-weight: var(--font-weight-bold);
+  /* 强平价 / 距离% 数值列对齐（font-variant-numeric 只作用于数字，文字列不受影响） */
+  font-variant-numeric: tabular-nums;
 }
 
 .risk-liq-table tr:last-child td {

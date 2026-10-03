@@ -507,9 +507,9 @@ function bindTbodyEvents() {
 function handleDeleteClick(idx) {
   var item = logs[idx];
   if (!item) return;
-  // 下方 showUndoToast 提供 5 秒撤销，故不做二次确认，也不声称不可恢复
-  var msg = '确定删除 ' + (item.symbol || '') + ' ' + (item.direction === 'long' ? '做多' : '做空') + ' 这笔日志？（5 秒内可撤销）';
-  if (!confirm(msg)) return;
+  // 不做二次确认：下方 showUndoToast 提供 5 秒撤销，撤销即为本操作的确认机制。
+  // 此前注释如此声明、代码却仍调 confirm()，形成「原生确认框 + 撤销」双重摩擦，
+  // 且原生 confirm 不跟随主题、会被部分嵌入式环境屏蔽。现按注释所述语义执行。
 
   // P0: 立即从 DOM 移除该行（含相邻详情行/面板行），待撤销窗口内不再出现幽灵行
   // 必须先于 _commitPendingDelete() 执行——后者会重绘表格导致 data-idx 变化

@@ -104,10 +104,12 @@
 
     // ---- 4. calcKellyStatsFromLogs 保本分母 ----
     h += group('4. 凯利统计：胜率分母含保本');
+    // 时间窗口测试用动态日期（lookbackDays 以真实今天为基准，固定日期会随时间过期失效）
+    var _d = function(daysAgo) { var t = new Date(); t.setDate(t.getDate() - daysAgo); return t.toISOString(); };
     window.logs = [
-      { closeType: 'tp', pnlAmount: 10, closeTime: '2026-09-01T08:00:00Z' },
-      { closeType: 'sl', pnlAmount: -6, closeTime: '2026-09-02T08:00:00Z' },
-      { closeType: 'tp', pnlAmount: 0, closeTime: '2026-09-03T08:00:00Z' }
+      { closeType: 'tp', pnlAmount: 10, closeTime: _d(3) },
+      { closeType: 'sl', pnlAmount: -6, closeTime: _d(2) },
+      { closeType: 'tp', pnlAmount: 0, closeTime: _d(1) }
     ];
     var ks = calcKellyStatsFromLogs(3);
     h += T('winRate=1/3（保本计入分母）', ks && Math.abs(ks.winRate - 1/3) < 1e-9);

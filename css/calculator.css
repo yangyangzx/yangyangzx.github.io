@@ -579,9 +579,12 @@
 
 /* ==================== 分批建仓 ==================== */
 .split-toggle {
+  /* margin-bottom 由 index.html 的内联 style 移入（该元素全站唯一）；
+     字号原为硬编码 12px，阶梯中不存在该档，归到 --font-xs */
   margin-top: 2px;
-  padding: 6px 12px;
-  font-size: 12px;
+  margin-bottom: 2px;
+  padding: var(--space-xs) var(--space-md);
+  font-size: var(--font-xs);
   border-radius: var(--radius-xs);
   background: var(--color-surface-raised);
   color: var(--color-primary-strong);

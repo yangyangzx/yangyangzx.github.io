@@ -134,7 +134,9 @@ button:disabled {
   color: var(--color-text);
 }
 
-.card-header h2 {
+/* 日志卡片的标题是 h3（视图级标题由 .view-title 承担），与 h2 共用同一套样式 */
+.card-header h2,
+.card-header h3 {
   font-weight: var(--font-weight-title);
   font-size: var(--font-xl);
   letter-spacing: var(--letter-tight);
@@ -144,7 +146,8 @@ button:disabled {
   color: var(--color-text);
 }
 
-.card-header h2 i {
+.card-header h2 i,
+.card-header h3 i {
   color: var(--color-primary-strong);
   font-size: var(--font-xl);
 }
@@ -239,6 +242,8 @@ button:disabled {
 /* 输入框 — gate 39 状态纪律 */
 .form-group input,
 .form-group select {
+  /* 价格/数量/比例一律等宽数字，便于逐位核对与上下对比 */
+  font-variant-numeric: tabular-nums;
   background: var(--glass-bg-light);
   backdrop-filter: var(--glass-blur-light);
   -webkit-backdrop-filter: var(--glass-blur-light);
@@ -373,8 +378,10 @@ button:disabled {
    星级评分
    ═══════════════════════════════════════ */
 .star-rating {
+  /* padding-top 由 index.html 的内联 style 移入 */
   display: flex;
-  gap: 5px;
+  gap: var(--space-xs);
+  padding-top: var(--space-xs);
   align-items: center;
 }
 
@@ -547,6 +554,15 @@ button:disabled {
   white-space: nowrap;
   /* 44px 最小触摸目标 */
   min-height: 44px;
+}
+
+/* 紧凑按钮：卡片工具栏（日志页导入/导出/清空/批量、立即备份）用，比 .btn 更矮。
+   用 .btn.btn-compact 双类提高特异性，才能在 responsive.css 的
+   @media (max-width: 48rem) .btn{padding:9px 16px} 之后仍然生效
+   ——这部分原先靠内联 style 才压得住，改成类名后不能只写单个类。 */
+.btn.btn-compact {
+  padding: 6px var(--space-lg);
+  font-size: var(--font-sm);
 }
 
 .btn:active {

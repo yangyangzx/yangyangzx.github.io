@@ -11,6 +11,8 @@ var ThemeManager = (function() {
   }
 
   // 从 localStorage 加载主题：手动 > 系统偏好 > 时间自动 > 暗色兜底
+  // ⚠ 同一套判定逻辑在 index.html <head> 的内联脚本里也有一份（首屏防闪烁，
+  //   必须在 app.js 加载前就写好 data-theme）。改这里务必同步改那一份。
   function loadPreferredTheme() {
     var isManual = localStorage.getItem(MANUAL_FLAG_KEY) === 'true';
     if (isManual) {
@@ -111,6 +113,36 @@ document.addEventListener('DOMContentLoaded', function() {
   if (typeof updateChecklistSummary === 'function') updateChecklistSummary(null);
   var checklistToggleEl = document.getElementById('checklistToggle');
   if (checklistToggleEl) checklistToggleEl.addEventListener('click', toggleChecklistDetail);
+
+  // 日志页「统计概览」折叠开关（与上方 checklistToggle 同一模式）。
+  // 默认收起：统计面板 + 权益概览 + 订单类型表常驻展开时，筛选栏和日志表格
+  // 会被整个推到首屏之外，而「看/找某一笔」才是日志页最高频的操作。
+  // 展开状态存 localStorage：属于本机界面偏好，不进 trade_settings_v1（那是风控参数，
+  // 会随导出/导入流转，界面偏好混进去会污染配置）。
+  var JOURNAL_STATS_KEY = 'trade_journal_stats_open_v1';
+  var journalStatsToggleEl = document.getElementById('journalStatsToggle');
+  var journalStatsBlockEl = document.getElementById('journalStatsBlock');
+  if (journalStatsToggleEl && journalStatsBlockEl) {
+    var _journalStatsOpen = false;
+    try { _journalStatsOpen = localStorage.getItem(JOURNAL_STATS_KEY) === '1'; } catch (e) { /* 隐私模式：保持默认收起 */ }
+    var _applyJournalStats = function(open) {
+      journalStatsBlockEl.hidden = !open;
+      journalStatsToggleEl.setAttribute('aria-expanded', open ? 'true' : 'false');
+    };
+    _applyJournalStats(_journalStatsOpen);
+    journalStatsToggleEl.addEventListener('click', function() {
+      _journalStatsOpen = !_journalStatsOpen;
+      _applyJournalStats(_journalStatsOpen);
+      try { localStorage.setItem(JOURNAL_STATS_KEY, _journalStatsOpen ? '1' : '0'); } catch (e) { /* 写入失败不影响本次展开 */ }
+    });
+  }
+
+  // 侧边栏版本号改为从 APP_VERSION 派生：此前是写死在 HTML 里的 "v5.4-beta"，
+  // 而 version.js 早已是 5.5，界面上显示的版本一直落后于实际版本。
+  // version.js 是最后一个 script，DOMContentLoaded 时已就绪。
+  var _verEl = document.querySelector('.nav-version');
+  if (_verEl && typeof APP_VERSION !== 'undefined') _verEl.textContent = 'v' + APP_VERSION;
+
   updateLastUpdate();
   populateFilterOptions();
   updateBackupTime();

@@ -460,6 +460,10 @@ function _renderEquityChart() {
   }
   
   const ctx = canvas.getContext('2d');
+  // getContext 在极端情况下会返回 null（上下文数量超限 / 上下文创建失败）。
+  // 此处不守卫的话，下面的 ctx.scale 会抛出并冒泡到 switchView，
+  // 导致整个仪表盘渲染中断（不只是这张图不出来）。
+  if (!ctx) { console.warn('资金曲线图表无法获取 2D 上下文，跳过绘制'); return; }
   // 处理 DPR 保证 Retina 屏幕清晰度
   const dpr = window.devicePixelRatio || 1;
   

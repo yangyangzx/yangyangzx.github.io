@@ -284,11 +284,26 @@ function loadLogs() {
         var remoteLogs = JSON.parse(e.newValue);
         if (!Array.isArray(remoteLogs)) return;
         var needsSync = JSON.stringify(remoteLogs) !== JSON.stringify(logs);
-        if (needsSync && confirm('检测到另一标签页修改了日志数据。\n\n点击「确定」刷新为最新数据，点击「取消」保留当前数据。')) {
+        if (!needsSync) return;
+        // 原生 confirm 会阻塞 storage 事件回调（进而卡住本标签页渲染）；
+        // 改用应用内对话框，保持非阻塞。
+        if (typeof window.confirmDialog !== 'function') {
           logs = remoteLogs;
           _safeRenderAfterStorageChange();
           if (typeof showToast === 'function') showToast('已同步为最新数据', 'info');
+          return;
         }
+        window.confirmDialog({
+          title: '检测到另一标签页修改了日志数据',
+          message: '刷新会载入另一标签页的最新数据，当前标签页未保存的界面状态会丢失。',
+          confirmText: '刷新为最新数据',
+          cancelText: '保留当前数据'
+        }).then(function(ok) {
+          if (!ok) return;
+          logs = remoteLogs;
+          _safeRenderAfterStorageChange();
+          if (typeof showToast === 'function') showToast('已同步为最新数据', 'info');
+        });
       } catch (e2) { console.error('多标签页日志同步失败:', e2); }
     });
   }

@@ -308,7 +308,11 @@ function updateStats() {
   try { renderEmotionStats(closed); } catch(e) { console.error('[updateStats] renderEmotionStats error:', e); }
 }
 
-// ==================== 权益曲线 ====================
+// ==================== 权益概览（峰值 / 最大回撤） ====================
+// 只负责把 calcEquityCurve 的结果写成日志页的两个数字。
+// 曲线绘制已移除：日志页曾与统计分析页各画一张同源同名的权益曲线，
+// 现统一由统计分析页的 renderEquityChart（analytics.js）绘制。
+// 两处数值口径仍是同一个 utils.calcEquityCurve，不会分叉。
 function drawEquityCurve(closed) {
   const card = document.getElementById('equity-card');
   if (!card) return;
@@ -317,139 +321,18 @@ function drawEquityCurve(closed) {
   if (!curve || curve.data.length < 2) { card.style.display = 'none'; return; }
   card.style.display = 'block';
 
-  // 保留排序后的原始日志用于 tooltip 展示
-  var sortedClosed = [].concat(closed).sort(function(a, b) {
-    return new Date(a.closeTime || a.time) - new Date(b.closeTime || b.time);
-  });
-
-  const canvas = document.getElementById('equityCanvas');
-  const tooltip = document.getElementById('equity-tooltip');
-  if (!canvas || !tooltip) return;
-
-  const dpr = window.devicePixelRatio || 1;
-  const rect = canvas.parentElement.getBoundingClientRect();
-  const W = rect.width;
-  const H = 200;
-  canvas.style.width = W + 'px';
-  canvas.style.height = H + 'px';
-  canvas.width = W * dpr;
-  canvas.height = H * dpr;
-  const ctx = canvas.getContext('2d');
-  ctx.scale(dpr, dpr);
-
-  const data = curve.data;
   const peakVal = curve.peakVal;
   const maxDD = curve.maxDDPercent;
 
-  document.getElementById('equityPeak').textContent = peakVal.toFixed(2) + ' USDT';
+  const peakEl = document.getElementById('equityPeak');
   const ddEl = document.getElementById('equityDrawdown');
+  if (!peakEl || !ddEl) return;
+
+  peakEl.textContent = peakVal.toFixed(2) + ' USDT';
   ddEl.textContent = (maxDD > 0 ? '-' : '') + maxDD.toFixed(1) + '%';
   ddEl.classList.remove('dd-danger', 'dd-warn', 'dd-safe');
   ddEl.classList.add(maxDD >= 20 ? 'dd-danger' : maxDD >= 10 ? 'dd-warn' : 'dd-safe');
-
-  // 自适应 Y 轴
-  const allVals = data.map(d => d.eq);
-  let yMin = Math.min.apply(null, allVals);
-  let yMax = Math.max.apply(null, allVals);
-  const yPad = Math.max((yMax - yMin) * 0.1, 5);
-  yMin -= yPad; yMax += yPad;
-
-  const pad = { top: 16, right: 16, bottom: 28, left: 48 };
-  const plotW = W - pad.left - pad.right;
-  const plotH = H - pad.top - pad.bottom;
-  const xScale = d => pad.left + (d / (data.length - 1)) * plotW;
-  const yScale = v => pad.top + plotH - ((v - yMin) / (yMax - yMin)) * plotH;
-
-  // 背景
-  ctx.clearRect(0, 0, W, H);
-  var c = utils.getCanvasColors();
-  ctx.fillStyle = c.bg;
-  ctx.fillRect(pad.left, pad.top, plotW, plotH);
-
-  // 网格
-  ctx.strokeStyle = c.grid; ctx.lineWidth = 1;
-  const ySteps = 4;
-  for (let i = 0; i <= ySteps; i++) {
-    const v = yMin + (yMax - yMin) * (i / ySteps);
-    const y = yScale(v);
-    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + plotW, y); ctx.stroke();
-    ctx.fillStyle = c.text; ctx.font = '11px -apple-system, sans-serif'; ctx.textAlign = 'right';
-    ctx.fillText(v.toFixed(0), pad.left - 6, y + 4);
-  }
-
-  // 零线
-  if (yMin < 0 && yMax > 0) {
-    const y0 = yScale(0);
-    ctx.strokeStyle = c.zero; ctx.lineWidth = 1.5;
-    ctx.setLineDash([6, 4]);
-    ctx.beginPath(); ctx.moveTo(pad.left, y0); ctx.lineTo(pad.left + plotW, y0); ctx.stroke();
-    ctx.setLineDash([]);
-  }
-
-  // X 轴标签
-  ctx.fillStyle = c.text; ctx.font = '11px -apple-system, sans-serif'; ctx.textAlign = 'center';
-  const xSteps = Math.min(data.length, 8);
-  const step = Math.max(Math.floor(data.length / xSteps), 1);
-  for (let i = 0; i < data.length; i += step) {
-    ctx.fillText(_getTradeDate(sortedClosed[i]).slice(5), xScale(i), H - 4);
-  }
-
-  // 曲线：分段着色
-  for (let i = 1; i < data.length; i++) {
-    const up = data[i].eq >= data[i - 1].eq;
-    ctx.strokeStyle = up ? c.up : c.down;
-    ctx.lineWidth = 3;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.beginPath();
-    ctx.moveTo(xScale(i - 1), yScale(data[i - 1].eq));
-    ctx.lineTo(xScale(i), yScale(data[i].eq));
-    ctx.stroke();
-  }
-
-  // 数据点
-  for (let i = 0; i < data.length; i++) {
-    const d = data[i];
-    const up = i > 0 ? d.eq >= data[i - 1].eq : (d.pnl >= 0);
-    ctx.fillStyle = up ? c.up : c.down;
-    ctx.beginPath(); ctx.arc(xScale(i), yScale(d.eq), 5, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = c.ptCenter;
-    ctx.beginPath(); ctx.arc(xScale(i), yScale(d.eq), 2, 0, Math.PI * 2); ctx.fill();
-  }
-
-  // 悬停
-  canvas.onmousemove = function(e) {
-    const mx = e.offsetX;
-    let closest = null, closestDist = Infinity;
-    for (let i = 0; i < data.length; i++) {
-      const dist = Math.abs(mx - xScale(i));
-      if (dist < closestDist) { closestDist = dist; closest = i; }
-    }
-    if (closest === null || closestDist > 30) { tooltip.style.display = 'none'; return; }
-    const d = data[closest];
-    var sc = sortedClosed[closest];
-    tooltip.innerHTML = '<b>#' + (closest + 1) + ' ' + (sc.symbol ? esc(sc.symbol) : '') + '</b><br>' +
-      _getTradeDate(sc) + '<br>' +
-      '盈亏: ' + (d.pnl >= 0 ? '+' : '') + d.pnl.toFixed(2) + ' USDT<br>' +
-      '累计权益: ' + d.eq.toFixed(2) + ' USDT';
-    tooltip.style.display = 'block';
-    // UI 修复（2026-09-07）：tooltip 边界 clamp，防止靠近右/下边缘时溢出卡片
-    const tx = Math.min(xScale(closest) + 12, W - 140);
-    const ty = yScale(d.eq) - 10;
-    const tyClamped = Math.max(0, Math.min(ty, H - 70));
-    tooltip.style.left = tx + 'px';
-    tooltip.style.top = tyClamped + 'px';
-  };
-  canvas.onmouseleave = function() { tooltip.style.display = 'none'; };
-
-  // UI 修复（2026-09-07）：窗口 resize 时重绘，避免 canvas 拉伸失真
-  window.removeEventListener('resize', _equityResizeHandler);
-  _equityResizeHandler = function() { drawEquityCurve(closed); };
-  window.addEventListener('resize', _equityResizeHandler);
 }
-
-// 权益曲线 resize 重绘句柄（drawEquityCurve 内绑定/解绑）
-var _equityResizeHandler = null;
 
 // ==================== 策略绩效拆解 ====================
 function renderStrategyBreakdown(closed) {

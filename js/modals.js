@@ -9,6 +9,164 @@ window.closeModalOverlay = function(overlay) {
   overlay.id = '';
   overlay.classList.add('closing');
   setTimeout(function() { overlay.remove(); }, 200);
+  // 焦点归还：关闭后交回触发弹窗的元素，键盘用户不会掉回 <body> 重新 Tab 一遍。
+  // 用栈而非单变量——确认框会叠在编辑弹窗之上，单变量会让下层弹窗丢失来源焦点。
+  // 与退出动画同时长，避免焦点落在正在淡出的节点上。
+  if (!window._modalFocusStack) window._modalFocusStack = [];
+  var back = window._modalFocusStack.pop();
+  if (back && document.contains(back) && typeof back.focus === 'function') {
+    setTimeout(function() { back.focus({ preventScroll: true }); }, 200);
+  }
+};
+
+// ==================== 模态框可访问性层 ====================
+// 原先弹窗无 Esc 关闭、无焦点环锁、关闭不归还焦点，键盘用户 Tab 会跑到弹窗背后的页面上。
+// 这里用「单一 document 级 keydown + closeModalOverlay 收口」实现，不为每个弹窗各绑一套，
+// 后续新增弹窗只要调用 modalA11yOnOpen 即可自动获得全部行为。
+
+var _MODAL_FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), ' +
+  'select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+// 取当前最上层、且未在退场动画中的弹窗
+function _activeModalOverlay() {
+  var list = document.querySelectorAll('.modal-overlay:not(.closing)');
+  return list.length ? list[list.length - 1] : null;
+}
+
+// 可见性过滤：排除 display:none / hidden 的控件，否则 Tab 会锁进不可见元素
+function _modalFocusables(root) {
+  return Array.prototype.filter.call(root.querySelectorAll(_MODAL_FOCUSABLE), function(el) {
+    return !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+  });
+}
+
+/**
+ * 弹窗打开时调用（appendChild 之后）。
+ * @param {HTMLElement} overlay 弹窗遮罩根节点
+ * @param {HTMLElement} [preferred] 首选落焦元素；缺省聚焦容器本身
+ */
+window.modalA11yOnOpen = function(overlay, preferred) {
+  if (!overlay) return;
+  if (!window._modalFocusStack) window._modalFocusStack = [];
+  window._modalFocusStack.push(document.activeElement);
+  // 补 dialog 语义：读屏据此播报「对话框」并把后续内容隔离在弹窗内
+  if (!overlay.hasAttribute('role')) overlay.setAttribute('role', 'dialog');
+  overlay.setAttribute('aria-modal', 'true');
+  if (!overlay.hasAttribute('aria-label') && !overlay.hasAttribute('aria-labelledby')) {
+    var titleEl = overlay.querySelector('.modal-header h3');
+    if (titleEl && titleEl.textContent.trim()) {
+      overlay.setAttribute('aria-label', titleEl.textContent.trim());
+    }
+  }
+  // 容器可聚焦，作为无子控件时的兜底落点与初始焦点
+  overlay.setAttribute('tabindex', '-1');
+  var target = (preferred && overlay.contains(preferred)) ? preferred : overlay;
+  target.focus({ preventScroll: true });
+};
+
+// Esc 关闭 + Tab 焦点环锁
+document.addEventListener('keydown', function(e) {
+  var overlay = _activeModalOverlay();
+  if (!overlay) return;
+
+  if (e.key === 'Escape' || e.key === 'Esc') {
+    e.preventDefault();
+    e.stopPropagation();
+    // 触发 ✕ 而不是直接调 closeModalOverlay：
+    // 这样「未保存修改」确认弹窗等各弹窗自有语义被完整保留，
+    // 用户在确认框里选「取消」时弹窗正确地不关闭。
+    var closeBtn = overlay.querySelector('.modal-close');
+    if (closeBtn) closeBtn.click();
+    else window.closeModalOverlay(overlay);
+    return;
+  }
+
+  if (e.key !== 'Tab') return;
+
+  var f = _modalFocusables(overlay);
+  if (!f.length) { e.preventDefault(); overlay.focus({ preventScroll: true }); return; }
+
+  var first = f[0], last = f[f.length - 1];
+  var active = document.activeElement;
+
+  if (e.shiftKey) {
+    // 反向：在首元素（或焦点已跑到弹窗外）时绕回末尾
+    if (active === first || !overlay.contains(active)) {
+      e.preventDefault();
+      last.focus();
+    }
+  } else {
+    if (active === last || !overlay.contains(active)) {
+      e.preventDefault();
+      first.focus();
+    }
+  }
+}, true);
+
+// ==================== 自研确认对话框 ====================
+// 替代原生 confirm()/alert()：原生弹窗不跟随主题与语言、样式与应用割裂，
+// 部分嵌入式环境还会被直接屏蔽。复用 .modal-overlay/.modal-content 现有样式，
+// 因此自动获得上面的 Esc / 焦点环锁 / 焦点归还。
+//
+// ⚠ 返回 Promise<boolean>，是异步的。原生 confirm 同步返回布尔值，
+//    调用点必须改写控制流（把确认后的逻辑放进 then），不能直接替换。
+//
+// @param {Object} opts
+// @param {string} [opts.title]        标题
+// @param {string} [opts.message]      正文纯文本，\n 换行（内部做转义，不解析 HTML）
+// @param {string} [opts.confirmText]  确认按钮文案
+// @param {string} [opts.cancelText]   取消按钮文案
+// @param {boolean} [opts.danger]      破坏性操作：确认按钮红色 + 默认焦点落在「取消」
+// @param {boolean} [opts.alertOnly]   仅告知（等同于 alert），无取消按钮
+// @returns {Promise<boolean>}
+window.confirmDialog = function(opts) {
+  opts = opts || {};
+  return new Promise(function(resolve) {
+    var overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+
+    var confirmText = opts.confirmText || '确定';
+    var cancelText = opts.cancelText || '取消';
+    var confirmCls = opts.danger ? 'btn btn-danger' : 'btn btn-primary';
+
+    // 按行转义后拼 <div>：不解析 HTML，避免 message 里的数据被当作标记执行
+    var msgHtml = String(opts.message == null ? '' : opts.message)
+      .split('\n')
+      .map(function(line) { return '<div>' + esc(line) + '</div>'; })
+      .join('');
+
+    overlay.innerHTML =
+      '<div class="modal-content" style="max-width:440px;">' +
+        '<div class="modal-header"><h3>' + esc(opts.title || '请确认') + '</h3>' +
+          '<button type="button" class="modal-close" aria-label="关闭">✕</button></div>' +
+        '<div class="modal-body"><div class="confirm-dialog-msg">' + msgHtml + '</div></div>' +
+        '<div class="modal-footer">' +
+          (opts.alertOnly ? '' : '<button type="button" class="btn btn-outline" data-act="cancel">' + esc(cancelText) + '</button>') +
+          '<button type="button" class="' + confirmCls + '" data-act="confirm">' + esc(confirmText) + '</button>' +
+        '</div>' +
+      '</div>';
+
+    var settled = false;
+    function finish(result) {
+      if (settled) return;   // 防重复：Esc + 点击可能在同一帧内各触发一次
+      settled = true;
+      window.closeModalOverlay(overlay);
+      resolve(result);
+    }
+
+    var cancelBtn = overlay.querySelector('[data-act="cancel"]');
+    // alertOnly 无「取消」语义，✕ 与点击遮罩都等同于「知道了」
+    var dismissResult = !!opts.alertOnly;
+    overlay.querySelector('.modal-close').addEventListener('click', function() { finish(dismissResult); });
+    if (cancelBtn) cancelBtn.addEventListener('click', function() { finish(false); });
+    overlay.querySelector('[data-act="confirm"]').addEventListener('click', function() { finish(true); });
+    overlay.addEventListener('click', function(e) { if (e.target === overlay) finish(dismissResult); });
+
+    document.body.appendChild(overlay);
+    window.modalA11yOnOpen(overlay, overlay.querySelector('[data-act="confirm"]'));
+    // 破坏性操作默认聚焦「取消」，避免习惯性连按回车直接确认删除
+    if (opts.danger && cancelBtn) cancelBtn.focus({ preventScroll: true });
+  });
 };
 
 function openEditModal(idx) {
@@ -167,6 +325,7 @@ function openEditModal(idx) {
 
   document.body.appendChild(modal);
   modal.addEventListener('click', function(e) { if (e.target === modal) closeEditModal(); });
+  window.modalA11yOnOpen(modal);   // 记录来源焦点 + dialog 语义 + 焦点环锁
 
   // ===== 未保存修改标志 & 字段联动重算 =====
   window._editDirty = false;
@@ -277,18 +436,29 @@ function openEditModal(idx) {
   updateCheckboxStyle();
 }
 
-function closeEditModal(force) {
-  // force=true 仅在「保存成功」路径使用，跳过脏检查直接关闭；
-  // 其余调用点（✕ / 取消 / 点击遮罩）不传参，保留未保存确认语义。
-  if (!force && window.emCheckDirty) window.emCheckDirty();
-  if (!force && window._editDirty) {
-    if (!confirm('有未保存的修改，确定关闭？')) return;
-  }
+function _doCloseEditModal() {
   const modal = document.getElementById('editModal');
   if (modal) window.closeModalOverlay(modal);
   window._editDirty = false;
   // 清理事件监听器，防止重复绑定
   if (window._emRecalcCleanup) { window._emRecalcCleanup(); window._emRecalcCleanup = null; }
+}
+
+function closeEditModal(force) {
+  // force=true 仅在「保存成功」路径使用，跳过脏检查直接关闭（保持同步，行为不变）；
+  // 其余调用点（✕ / 取消 / 点击遮罩 / Esc）不传参，保留未保存确认语义。
+  if (!force && window.emCheckDirty) window.emCheckDirty();
+  if (!force && window._editDirty) {
+    // 自研对话框为异步：确认后才继续关闭。放弃修改属破坏性操作，用红色确认钮。
+    window.confirmDialog({
+      title: '放弃未保存的修改？',
+      message: '本笔日志有未保存的改动，关闭后这些改动会丢失。',
+      confirmText: '放弃并关闭',
+      danger: true
+    }).then(function(ok) { if (ok) _doCloseEditModal(); });
+    return;
+  }
+  _doCloseEditModal();
 }
 window.closeEditModal = closeEditModal;
 
@@ -566,7 +736,9 @@ function rebuildTickSlippageSnapshot(item) {
   return true;
 }
 
-function saveEditLog(idx) {
+// _raceConfirmed：仅由下面的竞态确认对话框回调用 true 重入，
+// 用于绕过自身守卫。这样无需把整个函数体包进 Promise.then，函数体保持同步。
+function saveEditLog(idx, _raceConfirmed) {
   const item = logs[idx];
   if (!item) return;
   const beforeEdit = JSON.parse(JSON.stringify(item));
@@ -576,9 +748,17 @@ function saveEditLog(idx) {
 
   window._emMindsetScore = window._emMindsetScore ?? item.mindsetScore ?? 3;
 
-  // 多标签页竞态检测：若日志引用在打开后已被替换，弹窗确认
-  if (window._emSnapshotItem && logs[idx] !== window._emSnapshotItem) {
-    if (!confirm('该日志已被外部修改，确定用当前编辑内容覆盖？')) return;
+  // 多标签页竞态检测：若日志引用在打开后已被替换，弹窗确认。
+  // 用重入而非 async 包裹：确认后以 _raceConfirmed=true 再调一次本函数，
+  // 守卫被绕过，其余同步逻辑原样执行。
+  if (!_raceConfirmed && window._emSnapshotItem && logs[idx] !== window._emSnapshotItem) {
+    window.confirmDialog({
+      title: '该日志已被外部修改',
+      message: '这条日志在编辑期间被其他标签页改动过。\n继续保存会用当前弹窗里的内容覆盖外部改动。',
+      confirmText: '覆盖保存',
+      danger: true
+    }).then(function(ok) { if (ok) saveEditLog(idx, true); });
+    return;
   }
 
   let v;
@@ -856,6 +1036,8 @@ function saveSplit() {
 
   document.body.appendChild(overlay);
   overlay.addEventListener('click', function(e) { if (e.target === overlay) window.closeModalOverlay(overlay); });
+  // 落焦到数量输入框（本弹窗唯一输入项），而不是默认的容器
+  window.modalA11yOnOpen(overlay, document.getElementById('splitCountInput'));
   setTimeout(() => { const inp = document.getElementById('splitCountInput'); if (inp) inp.focus(); }, 50);
 
   document.getElementById('splitConfirmBtn').addEventListener('click', function() {

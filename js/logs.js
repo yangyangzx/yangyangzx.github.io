@@ -420,9 +420,10 @@ function batchDelete() {
   }
   if (_selectedIndices.size === 0) { showToast('请先勾选要删除的日志','warn'); return; }
   const count = _selectedIndices.size;
-  // 下方 showUndoToast 提供 5 秒撤销，故不做二次确认，也不声称不可恢复
-  if (!confirm('确认删除已选的 ' + count + ' 条日志？（5 秒内可撤销）')) return;
-  
+  // 不做二次确认：下方 showUndoToast 提供 5 秒撤销，撤销即为本操作的确认机制。
+  // 此前注释如此声明、代码却仍调 confirm()，形成「原生确认框 + 撤销」双重摩擦，
+  // 且原生 confirm 不跟随主题。现按注释所述语义执行，只保留撤销。
+
   const sorted = Array.from(_selectedIndices).sort(function(a, b) { return b - a; });
   const deletedLogs = [];
   for (var i = 0; i < sorted.length; i++) {
@@ -503,7 +504,19 @@ function updateBackupTime() {
 }
 
 function clearLogs() {
-  if (confirm('确认清空所有日志？')) {
+  if (!logs.length) { showToast('当前没有日志可清空', 'info'); return; }
+  var clearedCount = logs.length;
+  // 这是全站破坏性最强的操作，原先只有原生 confirm、清空后无法找回。
+  // 现改为自研对话框（说明影响范围 + 红色确认钮）+ 5 秒撤销，
+  // 与单条/批量删除共用 showUndoToast 基建（js/toast.js）。
+  window.confirmDialog({
+    title: '清空所有日志',
+    message: '将删除全部 ' + clearedCount + ' 条交易日志。\n统计、风控、复盘的所有指标都会随之归零。\n\n清空后 5 秒内可撤销。',
+    confirmText: '清空',
+    danger: true
+  }).then(function(ok) {
+    if (!ok) return;
+    var backup = JSON.parse(JSON.stringify(logs));   // 深拷贝，供撤销还原
     logs = [];
     openClosePanelIdx = -1;
     actionPanelIdx = -1;
@@ -518,7 +531,14 @@ function clearLogs() {
     if (typeof saveLogs === 'function') saveLogs();
     if (typeof renderLogs === 'function') renderLogs();
     if (typeof renderDashboard === 'function') renderDashboard();
-  }
+
+    showUndoToast('已清空 ' + clearedCount + ' 条日志，点击撤销（5秒）', function() {
+      logs = backup;
+      if (typeof saveLogs === 'function') saveLogs(true);
+      if (typeof renderLogs === 'function') renderLogs();
+      if (typeof renderDashboard === 'function') renderDashboard();
+    });
+  });
 }
 
 // ==================== 日志列表过滤 ====================

@@ -300,14 +300,7 @@ function importLogs() {
             if (typeof migrateLogsToCurrentSchema === 'function') migrateLogsToCurrentSchema(data, 0);
             else if (typeof _migrateTimes === 'function') _migrateTimes(data);
             // 导入为全量覆盖，先明确提示数量差异（现有日志为空时无数据可丢，跳过确认）
-            if (logs.length > 0 && !confirm('将用文件中的 ' + data.length + ' 条记录【覆盖】现有 ' + logs.length + ' 条日志，原有数据不可恢复。确定继续？')) return;
-            logs = data;
-            saveLogs();
-            showToast('已导入 ' + data.length + ' 条日志', 'success');
-            renderLogs();
-            renderSettings();
-            // P0-6: 导入后刷新仪表盘
-            if (typeof renderDashboard === 'function') renderDashboard();
+            _confirmOverwriteThenCommit(data);
           } else {
             showToast('JSON 格式不正确（应为数组）', 'error');
           }
@@ -407,14 +400,7 @@ function parseCSVImport(csvText) {
   if (typeof migrateLogsToCurrentSchema === 'function') migrateLogsToCurrentSchema(imported, 0);
   else if (typeof _migrateTimes === 'function') _migrateTimes(imported);
   // 导入为全量覆盖，先明确提示数量差异（现有日志为空时无数据可丢，跳过确认）
-  if (logs.length > 0 && !confirm('将用文件中的 ' + imported.length + ' 条记录【覆盖】现有 ' + logs.length + ' 条日志，原有数据不可恢复。确定继续？')) return;
-  logs = imported;
-  saveLogs();
-  showToast('已导入 ' + imported.length + ' 条日志', 'success');
-  if (typeof renderLogs === 'function') renderLogs();
-  renderSettings();
-  // P0-6: 导入后刷新仪表盘
-  if (typeof renderDashboard === 'function') renderDashboard();
+  _confirmOverwriteThenCommit(imported);
 }
 
 function parseCSVLine(line) {
@@ -441,13 +427,49 @@ function parseCSVLine(line) {
   return result;
 }
 
-function resetSettings() {
-  if (!confirm('确定要将所有设置恢复为默认值吗？交易日志不受影响。')) return;
-
-  localStorage.removeItem(SETTINGS_KEY);
-  _clearSettingsCache();
+/**
+ * 导入落库 —— importLogs（JSON 文件）与 parseCSVImport（CSV）共用。
+ * 导入是全量覆盖，属破坏性操作，故写入前用自研对话框确认。
+ * @param {Array} newLogs 待写入的日志数组
+ */
+function _commitImportedLogs(newLogs) {
+  logs = newLogs;
+  saveLogs();
+  showToast('已导入 ' + newLogs.length + ' 条日志', 'success');
+  if (typeof renderLogs === 'function') renderLogs();
   renderSettings();
-  showToast('设置已重置为默认值', 'success');
+  // P0-6: 导入后刷新仪表盘
+  if (typeof renderDashboard === 'function') renderDashboard();
+}
+
+/**
+ * 覆盖导入确认：现有日志为空时无数据可丢，直接执行不做确认。
+ * @param {Array} newLogs 待写入的日志数组
+ */
+function _confirmOverwriteThenCommit(newLogs) {
+  if (logs.length === 0) { _commitImportedLogs(newLogs); return; }
+  window.confirmDialog({
+    title: '导入将覆盖现有日志',
+    message: '将用文件中的 ' + newLogs.length + ' 条记录覆盖现有 ' + logs.length + ' 条日志。\n原有数据不可恢复。',
+    confirmText: '覆盖导入',
+    danger: true
+  }).then(function(ok) { if (ok) _commitImportedLogs(newLogs); });
+}
+
+function resetSettings() {
+  // 破坏性操作：自研对话框说明影响范围（只重置设置，不动日志数据）
+  window.confirmDialog({
+    title: '重置设置为默认值',
+    message: '所有风控参数、交易参数与 Skills 融合参数将恢复默认值。\n交易日志不受影响。',
+    confirmText: '重置',
+    danger: true
+  }).then(function(ok) {
+    if (!ok) return;
+    localStorage.removeItem(SETTINGS_KEY);
+    _clearSettingsCache();
+    renderSettings();
+    showToast('设置已重置为默认值', 'success');
+  });
 }
 
 // ==================== Settings 导入导出 ====================

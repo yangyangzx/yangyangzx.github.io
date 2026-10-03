@@ -184,6 +184,8 @@
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-sm);
   font-size: 13px;
+  /* 编辑弹窗内多为价格/数量字段，等宽数字便于比对与核对 */
+  font-variant-numeric: tabular-nums;
   background: var(--glass-bg-light);
   outline: 1px solid transparent;
   outline-offset: 2px;
@@ -238,9 +240,34 @@
   background: var(--glass-bg-light);
 }
 
+/* 确认对话框正文（js/modals.js confirmDialog）— 保留逐行结构、限制可读行宽 */
+.confirm-dialog-msg {
+  font-size: var(--font-sm);
+  line-height: 1.65;
+  color: var(--color-text-secondary);
+  word-break: break-word;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
 /* ═══════════════════════════════════════
    Toast 通知 — z-index 命名
    ═══════════════════════════════════════ */
+/* 容器定位（原为 index.html 内联，z-index 硬编码 400）。
+   改挂 --z-toast(800) 高于 .modal-overlay(500)：弹窗校验失败的提示
+   必须浮在遮罩之上，否则被 blur(8px) 糊掉且点击落到遮罩上会关掉弹窗。
+   pointer-events:none 只关容器，.toast 自身仍为 auto，撤销按钮可点。 */
+#toastContainer {
+  position: fixed;
+  top: var(--space-xl);
+  right: var(--space-xl);
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  pointer-events: none;
+}
+
 .toast {
   padding: var(--space-md) 20px;
   border-radius: var(--radius-md);

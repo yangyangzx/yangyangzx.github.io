@@ -222,9 +222,15 @@ function importJSON(file) {
       const validationReport = importValidator.validateAndSanitize(d);
       
       if (validationReport.errors.length > 0) {
-        let errorMsg = `导入验证失败：为保证日志完整性，本次未导入任何记录。\n${validationReport.errors.slice(0, 5).join('\n')}`;
+        let errorMsg = `为保证日志完整性，本次未导入任何记录。\n\n${validationReport.errors.slice(0, 5).join('\n')}`;
         if (validationReport.errors.length > 5) errorMsg += `\n... 还有${validationReport.errors.length - 5}个错误`;
-        alert(errorMsg);
+        // 原生 alert 不跟随主题、不可滚动、内容多了会被截断
+        window.confirmDialog({
+          title: '导入验证失败',
+          message: errorMsg,
+          alertOnly: true,
+          confirmText: '知道了'
+        });
         return;
       }
       
@@ -245,7 +251,12 @@ function importJSON(file) {
       if (!candidates.length) { showToast('所有记录均已存在，未重复导入。', 'info'); return; }
       let msg = `导入验证完成：\n有效新记录: ${candidates.length}条\n重复跳过: ${validationReport.valid.length - candidates.length}条`;
       if (validationReport.warnings.length > 0) msg += `\n警告: ${validationReport.warnings.join(', ')}`;
-      if (confirm(msg + '\n\n是否继续导入？')) {
+      window.confirmDialog({
+        title: '确认导入',
+        message: msg + '\n\n是否继续导入？',
+        confirmText: '继续导入'
+      }).then(function(ok) {
+        if (!ok) return;
         var originalLength = logs.length;
         logs.push(...candidates);
         if (!saveLogs()) {
@@ -261,7 +272,7 @@ function importJSON(file) {
         if (typeof renderLogs === 'function') renderLogs();
         // P0-6: 导入后刷新仪表盘
         if (typeof renderDashboard === 'function') renderDashboard();
-      }
+      });
     } catch(err) { 
       showToast('解析失败: '+err.message,'error'); 
     }

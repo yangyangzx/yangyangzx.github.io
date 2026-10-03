@@ -535,6 +535,60 @@ tbody tr:hover > td {
 }
 
 
+/* 统计概览折叠开关 — 见 index.html #journalStatsToggle 处的注释 */
+.collapse-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin-bottom: var(--space-md);
+  padding: 10px 16px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: var(--glass-bg);
+  color: var(--color-text-secondary);
+  font-size: var(--font-sm);
+  font-weight: var(--font-weight-medium);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--dur-short) var(--ease-out),
+              color var(--dur-short) var(--ease-out);
+}
+
+.collapse-toggle:hover {
+  color: var(--color-text);
+  border-color: var(--color-primary-border);
+}
+
+.collapse-toggle:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.collapse-toggle i {
+  transition: transform var(--dur-short) var(--ease-out);
+}
+
+.collapse-toggle[aria-expanded='true'] i {
+  transform: rotate(90deg);
+}
+
+.collapse-toggle-hint {
+  margin-left: auto;
+  font-size: var(--font-xs);
+  font-weight: var(--font-weight-normal);
+  color: var(--color-text-muted);
+}
+
+/* 折叠内容块：用 [hidden] 控制，子元素自己的 display 逻辑不受影响 */
+#journalStatsBlock[hidden] {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .collapse-toggle i { transition: none; }
+}
+
 /* 统计面板 */
 .stats-panel {
   display: flex;
@@ -562,10 +616,77 @@ tbody tr:hover > td {
 }
 
 .stat-value {
-  font-size: 13px;
+  font-size: var(--font-sm);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text);
   min-width: 48px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 指标说明按钮（ⓘ）
+   统计指标的「计算公式 / 参考价值」原先只写在 title= 属性里：
+   title 在触屏上永不显示、键盘也不可达 —— 写得最好的那批文案恰好没人读得到。
+   现改为真正的 button：可点（触屏）、可 Tab 聚焦（键盘）、有 aria-label（读屏）。
+   命中区用 ::after 扩到 26px：面板行间距只有 8px，再大就会与相邻指标重叠抢点击，
+   所以这里不套用全站 44px 触控目标标准，属于密度与可达性的取舍。 */
+.stat-info {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-placeholder);
+  font-size: var(--font-xs);
+  line-height: 1;
+  cursor: pointer;
+  transition: color var(--dur-short) var(--ease-out),
+              background var(--dur-short) var(--ease-out);
+}
+
+.stat-info::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+}
+
+.stat-info:hover {
+  color: var(--color-primary-strong);
+  background: var(--color-primary-bg);
+}
+
+.stat-info:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+  color: var(--color-primary-strong);
+}
+
+/* 指标说明弹出层 — 挂到 body，不受卡片 overflow 裁剪 */
+.stat-tip-popover {
+  position: fixed;
+  z-index: var(--z-tooltip);
+  max-width: min(360px, calc(100vw - 32px));
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-lg);
+  color: var(--color-text-secondary);
+  font-size: var(--font-sm);
+  line-height: 1.65;
+  backdrop-filter: var(--glass-blur-heavy);
+  -webkit-backdrop-filter: var(--glass-blur-heavy);
+}
+
+.stat-tip-popover p + p {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--color-border);
 }
 
 .stat-value.positive { color: var(--color-success); }
@@ -930,7 +1051,9 @@ tbody tr:hover > td {
 }
 
 
-/* ====== 权益曲线卡片 ====== */
+/* ====== 权益概览卡片 ======
+   卡片内已无 canvas（曲线统一由统计分析页绘制），保留容器样式，
+   供峰值/回撤两个数字与「看完整曲线」的跳转提示使用。 */
 #equity-card {
   background: var(--glass-bg);
   backdrop-filter: var(--glass-blur);
@@ -944,31 +1067,23 @@ tbody tr:hover > td {
 
 #equity-card .card-header { margin-bottom: var(--space-md); }
 
-#equity-card canvas { width: 100%; height: 200px; display: block; border-radius: var(--radius-sm); }
-
-#equity-tooltip {
-  display: none; 
-  position: absolute; 
-  background: var(--glass-bg-heavy);
-  border: 1px solid var(--glass-border); 
-  border-radius: var(--radius-sm);
-  padding: 8px 12px; 
-  font-size: var(--font-sm); 
-  color: var(--color-text);
-  box-shadow: var(--shadow-lg); 
-  pointer-events: none; 
-  z-index: 200;
-  white-space: nowrap; 
-  line-height: 1.5;
-  backdrop-filter: var(--glass-blur-heavy);
-  -webkit-backdrop-filter: var(--glass-blur-heavy);
+#equity-card .equity-link-hint {
+  margin-top: var(--space-sm);
+  font-size: var(--font-xs);
+  color: var(--color-text-muted);
 }
 
-#equity-card .equity-stats { 
+#equity-card .equity-link-hint a {
+  color: var(--color-primary-strong);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+#equity-card .equity-stats {
   display: flex; 
   gap: 24px; 
   flex-wrap: wrap; 
-  margin-top: 12px; 
+  margin-top: var(--space-md); 
   font-size: var(--font-sm); 
   color: var(--color-text-secondary); 
 }

@@ -11,6 +11,36 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="description" content="专业期货交易风控与复盘工具，覆盖开仓前计算、持仓监控、平仓记录、统计分析、复盘优化五大环节">
   <title>TradingDiscipline · 交易风险管理终端</title>
+
+  <!-- 主题预置：必须在首屏绘制前写入 data-theme。
+       否则浅色系统偏好的用户会先看到「浅底 + 深色玻璃卡片」的半截主题——
+       data-theme 原先只由 js/app.js 设置，而 app.js 是第 23 个 script，
+       等它执行时首屏早已绘制完成。
+       判定顺序与 js/app.js ThemeManager.loadPreferredTheme 保持一致
+       （手动标记 → 系统偏好 → 时段 6:00-18:00 浅色 → 深色兜底），改动需同步两处。 -->
+  <script>
+    (function() {
+      try {
+        var theme = null;
+        if (localStorage.getItem('user_theme_manual_v1') === 'true') {
+          var saved = localStorage.getItem('user_theme_v1');
+          if (saved === 'light' || saved === 'dark') theme = saved;
+        }
+        if (!theme) {
+          if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+            theme = 'light';
+          } else {
+            var hour = new Date().getHours();
+            theme = (hour >= 6 && hour < 18) ? 'light' : 'dark';
+          }
+        }
+        document.documentElement.setAttribute('data-theme', theme);
+      } catch (e) {
+        /* 隐私模式下访问 localStorage 可能抛错；不阻断解析，交给 app.js 兜底 */
+      }
+    })();
+  </script>
+
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -19,20 +49,20 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <link rel="stylesheet" href="css/variables.css?v=5.5">
-  <link rel="stylesheet" href="css/base.css?v=5.5">
-  <link rel="stylesheet" href="css/calculator.css?v=5.5">
-  <link rel="stylesheet" href="css/table.css?v=5.5">
-  <link rel="stylesheet" href="css/modals.css?v=5.5">
-  <link rel="stylesheet" href="css/responsive.css?v=5.5">
-  <link rel="stylesheet" href="css/layout.css?v=5.5">
-  <link rel="stylesheet" href="css/dashboard.css?v=5.5">
-  <link rel="stylesheet" href="css/planner.css?v=5.5">
-  <link rel="stylesheet" href="css/discipline-led.css?v=5.5">
-  <link rel="stylesheet" href="css/risk.css?v=5.5">
-  <link rel="stylesheet" href="css/analytics.css?v=5.5">
-  <link rel="stylesheet" href="css/review.css?v=5.5">
-  <link rel="stylesheet" href="css/settings.css?v=5.5">
+  <link rel="stylesheet" href="css/variables.css?v=5.6">
+  <link rel="stylesheet" href="css/base.css?v=5.6">
+  <link rel="stylesheet" href="css/calculator.css?v=5.6">
+  <link rel="stylesheet" href="css/table.css?v=5.6">
+  <link rel="stylesheet" href="css/modals.css?v=5.6">
+  <link rel="stylesheet" href="css/responsive.css?v=5.6">
+  <link rel="stylesheet" href="css/layout.css?v=5.6">
+  <link rel="stylesheet" href="css/dashboard.css?v=5.6">
+  <link rel="stylesheet" href="css/planner.css?v=5.6">
+  <link rel="stylesheet" href="css/discipline-led.css?v=5.6">
+  <link rel="stylesheet" href="css/risk.css?v=5.6">
+  <link rel="stylesheet" href="css/analytics.css?v=5.6">
+  <link rel="stylesheet" href="css/review.css?v=5.6">
+  <link rel="stylesheet" href="css/settings.css?v=5.6">
 </head>
 <body>
 <nav id="mainNav" role="navigation" aria-label="主导航">
@@ -45,23 +75,26 @@
       </div>
     </div>
   </div>
+  <!-- 导航按实际工作流排序：开仓计划（主入口）→ 仪表盘（概览）→ 日志 → 风控 → 复盘 → 设置。
+       active/aria-current 的初始值必须与 navigation.js 的默认视图（switchView('planner')）一致，
+       否则脚本执行前会先闪一下仪表盘。 -->
   <div class="nav-menu">
-    <a class="nav-item active" href="#dashboard" tabindex="0" role="link" data-view="dashboard" aria-current="page">
-      <i class="fas fa-tachometer-alt"></i> <span>仪表盘</span>
-    </a>
-    <a class="nav-item" href="#planner" tabindex="0" role="link" data-view="planner">
+    <a class="nav-item active" href="#planner" tabindex="0" role="link" data-view="planner" aria-current="page">
       <i class="fas fa-calculator"></i> <span>开仓计划</span>
+    </a>
+    <a class="nav-item" href="#dashboard" tabindex="0" role="link" data-view="dashboard">
+      <i class="fas fa-tachometer-alt"></i> <span>仪表盘</span>
     </a>
     <a class="nav-item" href="#journal" tabindex="0" role="link" data-view="journal">
       <i class="fas fa-history"></i> <span>交易日志</span>
     </a>
-    <a class="nav-item" href="#risk" tabindex="0" role="link" data-view="risk" style="--nav-hue: 25">
+    <a class="nav-item" href="#risk" tabindex="0" role="link" data-view="risk">
       <i class="fas fa-shield-alt"></i> <span>风控中心</span>
     </a>
-    <a class="nav-item" href="#analytics" tabindex="0" role="link" data-view="analytics" style="--nav-hue: 80">
+    <a class="nav-item" href="#analytics" tabindex="0" role="link" data-view="analytics">
       <i class="fas fa-chart-line"></i> <span>统计分析</span>
     </a>
-    <a class="nav-item" href="#review" tabindex="0" role="link" data-view="review" style="--nav-hue: 158">
+    <a class="nav-item" href="#review" tabindex="0" role="link" data-view="review">
       <i class="fas fa-clipboard-check"></i> <span>复盘中心</span>
     </a>
     <a class="nav-item" href="#settings" tabindex="0" role="link" data-view="settings">
@@ -69,7 +102,7 @@
     </a>
   </div>
   <div class="nav-footer">
-    <div class="nav-version">v5.4-beta</div>
+    <div class="nav-version">v5.6</div>
     <!-- 主题切换开关（Uiverse swift_9148 spark-switch） -->
     <label class="spark-switch" title="切换主题">
       <!-- aria-label 加在 input 上才产生可访问名（加在 label 上不生效）；
@@ -114,7 +147,14 @@
 <main id="mainContent" role="main" aria-label="主要内容区域">
 
   <!-- ====== 仪表盘 ====== -->
-  <section id="view-dashboard" class="view active" role="region" aria-label="仪表盘">
+  <section id="view-dashboard" class="view" role="region" aria-label="仪表盘">
+    <h2 class="view-title">仪表盘</h2>
+    <!-- 与「风控中心」的分工说明：两页都呈现在仓风险与强平信息，
+         本页是「现在怎么样」的三秒速览，深入的风控度量在风控中心。 -->
+    <div class="view-note">
+      <i class="fas fa-tachometer-alt"></i> 今日与本周<b>速览</b>：现在怎么样。
+      完整的强平距离、风险集中度与日亏损阈值见 <a href="#risk">风控中心</a>。
+    </div>
     <div class="dashboard-grid">
       <!-- 卡片 1：今日 PnL -->
       <div class="dash-card" id="dashTodayPnl">
@@ -130,7 +170,7 @@
       </div>
       <!-- 卡片 3：在仓风险 -->
       <div class="dash-card" id="dashRiskExposure">
-        <div class="dash-card-title">在仓风险</div>
+        <div class="dash-card-title">在仓风险速览</div>
         <div class="dash-risk-rows" id="dashRiskRows">—</div>
       </div>
       <!-- 卡片 4：连亏计数 -->
@@ -141,7 +181,7 @@
       </div>
       <!-- 卡片 5：强平预警 -->
       <div class="dash-card" id="dashLiqWarn">
-        <div class="dash-card-title">强平预警</div>
+        <div class="dash-card-title">强平预警速览</div>
         <div class="dash-liq-list" id="dashLiqList">—</div>
       </div>
       <!-- 卡片 6：资金曲线（占 2 列） -->
@@ -153,7 +193,7 @@
   </section>
 
   <!-- ====== 开仓计划 ====== -->
-  <section id="view-planner" class="view" role="region" aria-label="开仓计划">
+  <section id="view-planner" class="view active" role="region" aria-label="开仓计划">
     <h2 class="view-title">开仓计划</h2>
 
     <!-- 纪律 LED 滚动屏：上轨 A 组 14 条向左 / 下轨 B 组 20 条向右，反向横滚。
@@ -202,7 +242,7 @@
               <span class="field-tip">用于计算止损距离与仓位大小</span>
             </div>
             <div class="form-group row-2">
-              <button type="button" class="split-toggle" id="splitToggleBtn" style="margin-bottom:2px;">
+              <button type="button" class="split-toggle" id="splitToggleBtn">
                 <i class="fas fa-layer-group"></i> + 分批建仓
               </button>
               <div class="split-area" id="splitArea">
@@ -285,18 +325,18 @@
             </div>
             <div class="form-group">
               <label><i class="fas fa-ruler"></i> ATR 止损辅助<span class="optional-tag">（选填）</span></label>
-              <div class="flex-row" style="gap:8px;">
+              <div class="flex-row" style="gap:var(--space-sm);">
                 <input type="number" id="atrValue" value="" step="0.00001" placeholder="ATR值" style="flex:1 1 80px;" />
-                <span style="color:var(--color-text-muted);font-size:13px;">×</span>
+                <span style="color:var(--color-text-muted);font-size:var(--font-sm);">×</span>
                 <input type="number" id="atrMultiplier" value="2" step="0.1" min="0.5" placeholder="倍数" style="flex:1 1 60px;" />
-                <label style="display:inline-flex;align-items:center;gap:4px;font-size:13px;color:var(--color-text-secondary);cursor:pointer;white-space:nowrap;">
+                <label style="display:inline-flex;align-items:center;gap:var(--space-xs);font-size:var(--font-sm);color:var(--color-text-secondary);cursor:pointer;white-space:nowrap;">
                   <input type="checkbox" id="formAtrStopEnabled" onchange="toggleAutoATR()" /> ATR
                 </label>
-                <button class="btn btn-ghost btn-sm" id="applyAtrBtn" style="flex:0 0 auto;padding:8px 14px;">应用</button>
+                <button class="btn btn-ghost btn-sm" id="applyAtrBtn" style="flex:0 0 auto;padding:var(--space-sm) var(--space-md);">应用</button>
               </div>
             </div>
             <div class="form-group">
-              <label><i class="fas fa-chart-line"></i> 连续亏损笔数<span style="margin-left:12px;font-weight:var(--font-weight-normal);font-size:var(--font-sm);display:inline-flex;align-items:center;gap:4px;cursor:pointer;">
+              <label><i class="fas fa-chart-line"></i> 连续亏损笔数<span style="margin-left:var(--space-md);font-weight:var(--font-weight-normal);font-size:var(--font-sm);display:inline-flex;align-items:center;gap:var(--space-xs);cursor:pointer;">
                 <input type="checkbox" id="autoStreakCheck" checked onchange="toggleAutoStreak()" /> 自动检测
               </span></label>
               <input type="number" id="lossStreak" value="0" min="0" step="1" placeholder="0" />
@@ -347,12 +387,12 @@
                   </div>
                 </div>
                 <span class="field-tip kelly-tip">基于历史数据计算凯利最优仓位，半凯利建议更保守安全</span>
-                <div class="kelly-drive-row" style="margin-top:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                  <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;">
+                <div class="kelly-drive-row" style="margin-top:var(--space-sm);display:flex;align-items:center;gap:var(--space-sm);flex-wrap:wrap;">
+                  <label style="display:flex;align-items:center;gap:var(--space-xs);cursor:pointer;font-size:var(--font-sm);">
                     <input type="checkbox" id="kellyEnableCalc" onchange="calculate()" />
                     <b>凯利驱动仓位</b>
                   </label>
-                  <span class="field-tip" style="font-size:12px;color:var(--color-text-muted);">勾选后单笔风险直接采用半凯利比例（期望为负将阻断开仓），仍受系统单笔风险上限约束</span>
+                  <span class="field-tip" style="font-size:var(--font-xs);color:var(--color-text-muted);">勾选后单笔风险直接采用半凯利比例（期望为负将阻断开仓），仍受系统单笔风险上限约束</span>
                 </div>
               </div>
             </div>
@@ -370,7 +410,7 @@
           <div class="form-section-content grid-2">
             <div class="form-group" style="grid-column: 1 / -1;">
               <label><i class="fas fa-brain"></i> 入场心态</label>
-              <div class="star-rating" id="mindsetStars" style="padding-top:4px;">
+              <div class="star-rating" id="mindsetStars">
                 <span class="star active" data-val="1">★</span>
                 <span class="star active" data-val="2">★</span>
                 <span class="star active" data-val="3">★</span>
@@ -628,7 +668,7 @@
               <span class="check-note"></span>
             </div>
           </div>
-          <div id="checklistAtrNote" style="font-size:11px;color:var(--color-text-muted);padding:4px 8px;line-height:1.5;"></div>
+          <div id="checklistAtrNote" style="font-size:var(--font-xs);color:var(--color-text-muted);padding:var(--space-xs) var(--space-sm);line-height:1.5;"></div>
         </div>
 
         <!-- 凯利公式参考卡片 -->
@@ -652,7 +692,7 @@
               <span class="kelly-card-value kelly-highlight" id="kellyRiskAmount">—</span>
             </div>
             <div class="kelly-card-row">
-              <span class="kelly-card-label" id="kellySampleCount" style="display:none;font-size:11px;color:var(--color-text-muted);"></span>
+              <span class="kelly-card-label" id="kellySampleCount" style="display:none;font-size:var(--font-xs);color:var(--color-text-muted);"></span>
             </div>
             <div id="kellyWarning" style="display:none;" class="kelly-card-warning"></div>
             <button type="button" class="kelly-card-btn" id="kellyApplyBtn" onclick="applyKellyRisk()">
@@ -676,10 +716,10 @@
             <label>推算止损价</label>
             <input type="text" id="reverseSL" readonly placeholder="输入目标价后反向推算">
           </div>
-          <div style="font-size:11px;color:var(--color-text-muted);line-height:1.5;">
+          <div style="font-size:var(--font-xs);color:var(--color-text-muted);line-height:1.5;">
             按含往返手续费的净盈亏比求解，回填后与「盈亏比」卡片口径一致。
           </div>
-          <div style="display:flex;gap:8px;">
+          <div style="display:flex;gap:var(--space-sm);">
             <button class="btn btn-sm" onclick="calcReverseTP()">反推目标价</button>
             <button class="btn btn-sm btn-outline" onclick="calcReverseSL()">反推止损价</button>
           </div>
@@ -707,12 +747,12 @@
               <input type="number" id="tp3Ratio" step="5" min="0" max="100" value="20" placeholder="减仓%">
               <span class="tp-rr" id="tp3RR">—</span>
             </div>
-            <div style="margin-top:8px;font-size:12px;color:var(--color-text-muted);">
+            <div style="margin-top:var(--space-sm);font-size:var(--font-xs);color:var(--color-text-muted);">
               剩余仓位 <span id="tpRemain">100</span>%（TP1+TP2+TP3 合计不能超过 100%）
             </div>
-            <div style="margin-top:6px;font-size:12px;color:var(--color-text-muted);">
+            <div style="margin-top:var(--space-xs);font-size:var(--font-xs);color:var(--color-text-muted);">
               多止盈组合 <span id="tpWeightedRR" class="tp-rr">—</span>
-              <span style="font-size:11px;">（按减仓比例加权的含费净 RR；剩余仓位按止损计）</span>
+              <span style="font-size:var(--font-xs);">（按减仓比例加权的含费净 RR；剩余仓位按止损计）</span>
             </div>
           </div>
         </div>
@@ -724,65 +764,84 @@
 
   <!-- ====== 交易日志 ====== -->
   <section id="view-journal" class="view" role="region" aria-label="交易日志">
+    <h2 class="view-title">交易日志</h2>
 
   <!-- ====== 日志卡片 ====== -->
   <div class="card">
     <div class="card-header">
-      <h2><i class="fas fa-history"></i> 交易日志</h2>
-      <div class="flex-between" style="gap:12px;">
+      <!-- 卡片标题降为 h3：视图级标题已由上方 .view-title 承担，避免同页出现两个 h2 -->
+      <h3 class="card-header-title"><i class="fas fa-history"></i> 日志明细</h3>
+      <div class="flex-between" style="gap:var(--space-md);">
         <span class="log-stats" id="logCount">共 0 条</span>
-        <button class="btn btn-ghost" id="importJsonBtn" style="padding:6px 16px; font-size:13px;"><i class="fas fa-upload"></i> 导入 JSON</button>
-        <button class="btn btn-ghost" id="exportBtn" style="padding:6px 16px; font-size:13px;"><i class="fas fa-file-csv"></i> 导出 CSV</button>
-        <button class="btn btn-danger-outline btn-sm" id="clearBtn" style="padding:6px 16px; font-size:13px;"><i class="fas fa-trash-alt"></i> 清空日志</button>
-        <button class="btn btn-ghost" id="batchBtn" style="padding:6px 16px; font-size:13px;"><i class="fas fa-tasks"></i> 批量操作</button>
+        <button class="btn btn-ghost btn-compact" id="importJsonBtn"><i class="fas fa-upload"></i> 导入 JSON</button>
+        <button class="btn btn-ghost btn-compact" id="exportBtn"><i class="fas fa-file-csv"></i> 导出 CSV</button>
+        <button class="btn btn-danger-outline btn-compact" id="clearBtn"><i class="fas fa-trash-alt"></i> 清空日志</button>
+        <button class="btn btn-ghost btn-compact" id="batchBtn"><i class="fas fa-tasks"></i> 批量操作</button>
         <input type="file" id="fileInput" accept=".json" style="display:none;" />
       </div>
     </div>
+    <!-- 统计概览折叠区
+         此前统计面板 + 权益概览 + 订单类型表常驻展开，把筛选栏和日志表格整个推到首屏之外
+         —— 日志页最高频的操作是「看/找某一笔」，却要滚动才能看到表格。
+         现收进一个可折叠区块，默认收起：表格紧跟筛选栏进入首屏，需要看统计时一键展开。
+         折叠用 wrapper 上的 [hidden] 实现，子元素各自的 display 逻辑
+         （stats.js / rendering.js 会按有无数据切换）完全不受影响。 -->
+    <button type="button" class="collapse-toggle" id="journalStatsToggle"
+            aria-expanded="false" aria-controls="journalStatsBlock">
+      <i class="fas fa-chevron-right" aria-hidden="true"></i> 统计概览
+      <span class="collapse-toggle-hint">16 项指标 · 权益峰值回撤 · 订单类型明细</span>
+    </button>
+    <div id="journalStatsBlock" hidden>
     <div class="stats-panel" id="statsPanel" style="display:none;">
       <!-- 综合表现 -->
-      <div class="stat-item" title="计算公式：已平仓交易总数。参考价值：样本量基准，少于20笔时所有统计数据置信度低。"><span class="stat-label">已平仓</span><span class="stat-value" id="statClosed">0</span></div>
-      <div class="stat-item" title="计算公式：盈利笔数÷已平仓总数×100%。参考价值：单独看意义有限，需结合盈亏比判断。高胜率+低盈亏比=亏损策略。"><span class="stat-label">胜率</span><span class="stat-value" id="statWinRate">—</span></div>
-      <div class="stat-item key" title="计算公式：Σ netPnl（所有已平仓盈亏之和）。参考价值：策略最终成绩单。正值不代表策略稳定，需结合最大回撤综合评估。"><span class="stat-label">总盈亏</span><span class="stat-value" id="statTotalPnl">—</span></div>
-      <div class="stat-item" title="计算公式：总盈亏÷已平仓数。参考价值：每笔交易的期望收益。负值说明整体策略亏损，需检查入场逻辑或止损设置。"><span class="stat-label">平均盈亏</span><span class="stat-value" id="statAvgPnl">—</span></div>
+      <div class="stat-item"><span class="stat-label">已平仓</span><span class="stat-value" id="statClosed">0</span><button type="button" class="stat-info" data-tip="计算公式：已平仓交易总数。参考价值：样本量基准，少于20笔时所有统计数据置信度低。" aria-label="查看该指标的计算公式与参考价值" aria-expanded="false" aria-haspopup="true"><i class="fas fa-circle-info" aria-hidden="true"></i></button></div>
+      <div class="stat-item"><span class="stat-label">胜率</span><span class="stat-value" id="statWinRate">—</span><button type="button" class="stat-info" data-tip="计算公式：盈利笔数÷已平仓总数×100%。参考价值：单独看意义有限，需结合盈亏比判断。高胜率+低盈亏比=亏损策略。" aria-label="查看该指标的计算公式与参考价值" aria-expanded="false" aria-haspopup="true"><i class="fas fa-circle-info" aria-hidden="true"></i></button></div>
+      <div class="stat-item key"><span class="stat-label">总盈亏</span><span class="stat-value" id="statTotalPnl">—</span><button type="button" class="stat-info" data-tip="计算公式：Σ netPnl（所有已平仓盈亏之和）。参考价值：策略最终成绩单。正值不代表策略稳定，需结合最大回撤综合评估。" aria-label="查看该指标的计算公式与参考价值" aria-expanded="false" aria-haspopup="true"><i class="fas fa-circle-info" aria-hidden="true"></i></button></div>
+      <div class="stat-item"><span class="stat-label">平均盈亏</span><span class="stat-value" id="statAvgPnl">—</span><button type="button" class="stat-info" data-tip="计算公式：总盈亏÷已平仓数。参考价值：每笔交易的期望收益。负值说明整体策略亏损，需检查入场逻辑或止损设置。" aria-label="查看该指标的计算公式与参考价值" aria-expanded="false" aria-haspopup="true"><i class="fas fa-circle-info" aria-hidden="true"></i></button></div>
       <div class="stat-group-divider"></div>
       <!-- 风险指标 -->
-      <div class="stat-item" title="计算公式：平均盈利÷平均亏损的绝对值。参考价值：核心质量指标。≥1.5才能用40%胜率盈利，<1则必须胜率>50%才可能盈利。"><span class="stat-label">盈亏比</span><span class="stat-value" id="statWLRatio">—</span></div>
-      <div class="stat-item" title="计算公式：胜率×平均盈利−败率×平均亏损。参考价值：每笔交易的数学期望。正值才值得持续执行，负值需立即调整策略。"><span class="stat-label">期望值</span><span class="stat-value" id="statExpectancy">—</span></div>
-      <div class="stat-item" title="计算公式：总盈利÷总亏损的绝对值。参考价值：每亏1元能赚多少。>1.5合格，>2优秀，<1策略无效。"><span class="stat-label">利润因子</span><span class="stat-value" id="statProfitFactor">—</span></div>
-      <div class="stat-item" title="计算公式：权益从峰值到谷底的最大跌幅百分比。参考价值：决定仓位大小和心态承受力。>30%需要降低仓位或暂停交易。"><span class="stat-label">最大回撤</span><span class="stat-value" id="statMaxDD">—</span></div>
-      <div class="stat-item" title="计算公式：总盈亏按首末平仓时间跨度年化（不足 1 天按 1 天计）。参考价值：评估策略年化回报能力，样本跨度过短时参考性有限。"><span class="stat-label">年化收益</span><span class="stat-value" id="statAnnReturn">—</span></div>
-      <div class="stat-item" title="计算公式：按平仓日聚合日盈亏，夏普=日均盈亏÷日盈亏标准差×√252（无风险利率取 0）。参考价值：衡量每承担一单位波动获得的超额回报，>1 合格。"><span class="stat-label">夏普比率(日)</span><span class="stat-value" id="statSharpe">—</span></div>
-      <div class="stat-item" title="计算公式：Σ手续费÷Σ(盈利+亏损绝对值)×100%。参考价值：成本侵蚀越高，策略对滑点/手续费越敏感，应降低频率或提高单笔目标。"><span class="stat-label">成本侵蚀</span><span class="stat-value" id="statCostDrag">—</span></div>
+      <div class="stat-item"><span class="stat-label">盈亏比</span><span class="stat-value" id="statWLRatio">—</span><button type="button" class="stat-info" data-tip="计算公式：平均盈利÷平均亏损的绝对值。参考价值：核心质量指标。≥1.5才能用40%胜率盈利，<1则必须胜率>50%才可能盈利。" aria-label="查看该指标的计算公式与参考价值" aria-expanded="false" aria-haspopup="true"><i class="fas fa-circle-info" aria-hidden="true"></i></button></div>
+      <div class="stat-item"><span class="stat-label">期望值</span><span class="stat-value" id="statExpectancy">—</span><button type="button" class="stat-info" data-tip="计算公式：胜率×平均盈利−败率×平均亏损。参考价值：每笔交易的数学期望。正值才值得持续执行，负值需立即调整策略。" aria-label="查看该指标的计算公式与参考价值" aria-expanded="false" aria-haspopup="true"><i class="fas fa-circle-info" aria-hidden="true"></i></button></div>
+      <div class="stat-item"><span class="stat-label">利润因子</span><span class="stat-value" id="statProfitFactor">—</span><button type="button" class="stat-info" data-tip="计算公式：总盈利÷总亏损的绝对值。参考价值：每亏1元能赚多少。>1.5合格，>2优秀，<1策略无效。" aria-label="查看该指标的计算公式与参考价值" aria-expanded="false" aria-haspopup="true"><i class="fas fa-circle-info" aria-hidden="true"></i></button></div>
+      <div class="stat-item"><span class="stat-label">最大回撤</span><span class="stat-value" id="statMaxDD">—</span><button type="button" class="stat-info" data-tip="计算公式：权益从峰值到谷底的最大跌幅百分比。参考价值：决定仓位大小和心态承受力。>30%需要降低仓位或暂停交易。" aria-label="查看该指标的计算公式与参考价值" aria-expanded="false" aria-haspopup="true"><i class="fas fa-circle-info" aria-hidden="true"></i></button></div>
+      <div class="stat-item"><span class="stat-label">年化收益</span><span class="stat-value" id="statAnnReturn">—</span><button type="button" class="stat-info" data-tip="计算公式：总盈亏按首末平仓时间跨度年化（不足 1 天按 1 天计）。参考价值：评估策略年化回报能力，样本跨度过短时参考性有限。" aria-label="查看该指标的计算公式与参考价值" aria-expanded="false" aria-haspopup="true"><i class="fas fa-circle-info" aria-hidden="true"></i></button></div>
+      <div class="stat-item"><span class="stat-label">夏普比率(日)</span><span class="stat-value" id="statSharpe">—</span><button type="button" class="stat-info" data-tip="计算公式：按平仓日聚合日盈亏，夏普=日均盈亏÷日盈亏标准差×√252（无风险利率取 0）。参考价值：衡量每承担一单位波动获得的超额回报，>1 合格。" aria-label="查看该指标的计算公式与参考价值" aria-expanded="false" aria-haspopup="true"><i class="fas fa-circle-info" aria-hidden="true"></i></button></div>
+      <div class="stat-item"><span class="stat-label">成本侵蚀</span><span class="stat-value" id="statCostDrag">—</span><button type="button" class="stat-info" data-tip="计算公式：Σ手续费÷Σ(盈利+亏损绝对值)×100%。参考价值：成本侵蚀越高，策略对滑点/手续费越敏感，应降低频率或提高单笔目标。" aria-label="查看该指标的计算公式与参考价值" aria-expanded="false" aria-haspopup="true"><i class="fas fa-circle-info" aria-hidden="true"></i></button></div>
       <div class="stat-group-divider"></div>
       <!-- 质量指标 -->
-      <div class="stat-item" title="计算公式：达成目标收益的笔数÷已平仓数×100%。参考价值：反映纪律执行而非盈利能力。偏低说明止盈目标设置不切实际。"><span class="stat-label">目标达成率</span><span class="stat-value" id="statTargetRate">—</span></div>
-      <div class="stat-item" title="计算公式：Σ(已实现 R 倍数)÷有 R 记录的已平仓数，包含盈利、亏损与保本交易。参考价值：衡量每笔交易实际兑现的平均风险回报。"><span class="stat-label">平均实现 R</span><span class="stat-value" id="statAvgRR">—</span></div>
-      <div class="stat-item" title="计算公式：平均值[(实际实现 R÷计划目标 R)−1]×100%，仅统计有有效目标 R 的已平仓交易。0%表示平均达到目标，负值表示未达到目标，正值表示超额完成。"><span class="stat-label">目标 R 偏差</span><span class="stat-value" id="statRRBias">—</span></div>
-      <div class="stat-item" title="计算公式：所有已平仓持仓时长的平均值。参考价值：验证策略节奏。分钟级=短线，2小时以上=中长线，需与策略设计匹配。"><span class="stat-label">均持仓时长</span><span class="stat-value" id="statAvgHold">—</span></div>
+      <div class="stat-item"><span class="stat-label">目标达成率</span><span class="stat-value" id="statTargetRate">—</span><button type="button" class="stat-info" data-tip="计算公式：达成目标收益的笔数÷已平仓数×100%。参考价值：反映纪律执行而非盈利能力。偏低说明止盈目标设置不切实际。" aria-label="查看该指标的计算公式与参考价值" aria-expanded="false" aria-haspopup="true"><i class="fas fa-circle-info" aria-hidden="true"></i></button></div>
+      <div class="stat-item"><span class="stat-label">平均实现 R</span><span class="stat-value" id="statAvgRR">—</span><button type="button" class="stat-info" data-tip="计算公式：Σ(已实现 R 倍数)÷有 R 记录的已平仓数，包含盈利、亏损与保本交易。参考价值：衡量每笔交易实际兑现的平均风险回报。" aria-label="查看该指标的计算公式与参考价值" aria-expanded="false" aria-haspopup="true"><i class="fas fa-circle-info" aria-hidden="true"></i></button></div>
+      <div class="stat-item"><span class="stat-label">目标 R 偏差</span><span class="stat-value" id="statRRBias">—</span><button type="button" class="stat-info" data-tip="计算公式：平均值[(实际实现 R÷计划目标 R)−1]×100%，仅统计有有效目标 R 的已平仓交易。0%表示平均达到目标，负值表示未达到目标，正值表示超额完成。" aria-label="查看该指标的计算公式与参考价值" aria-expanded="false" aria-haspopup="true"><i class="fas fa-circle-info" aria-hidden="true"></i></button></div>
+      <div class="stat-item"><span class="stat-label">均持仓时长</span><span class="stat-value" id="statAvgHold">—</span><button type="button" class="stat-info" data-tip="计算公式：所有已平仓持仓时长的平均值。参考价值：验证策略节奏。分钟级=短线，2小时以上=中长线，需与策略设计匹配。" aria-label="查看该指标的计算公式与参考价值" aria-expanded="false" aria-haspopup="true"><i class="fas fa-circle-info" aria-hidden="true"></i></button></div>
       <div class="stat-group-divider"></div>
-      <div class="stat-item" title="计算公式：仅亏损单的MAE平均值。参考价值：亏损单最大浮亏均值。过大说明不止损或止损过宽，需收紧风控参数。"><span class="stat-label">均 MAE（亏损单）</span><span class="stat-value" id="statAvgMAE">—</span></div>
-      <div class="stat-item" title="计算公式：所有已平仓单的MFE平均值。参考价值：持仓期间最大浮盈均值。若远大于平均盈亏，说明止盈太慢、利润回吐严重。"><span class="stat-label">均 MFE</span><span class="stat-value" id="statAvgMFE">—</span></div>
-      <div class="stat-item" title="计算公式：平均MFE÷平均MAE（亏损单）。参考价值：持仓管理效率。>2说明趋势看对但拿不住，<1说明风险管控差需优化。"><span class="stat-label">MFE/MAE</span><span class="stat-value" id="statMAEMFE">—</span></div>
+      <div class="stat-item"><span class="stat-label">均 MAE（亏损单）</span><span class="stat-value" id="statAvgMAE">—</span><button type="button" class="stat-info" data-tip="计算公式：仅亏损单的MAE平均值。参考价值：亏损单最大浮亏均值。过大说明不止损或止损过宽，需收紧风控参数。" aria-label="查看该指标的计算公式与参考价值" aria-expanded="false" aria-haspopup="true"><i class="fas fa-circle-info" aria-hidden="true"></i></button></div>
+      <div class="stat-item"><span class="stat-label">均 MFE</span><span class="stat-value" id="statAvgMFE">—</span><button type="button" class="stat-info" data-tip="计算公式：所有已平仓单的MFE平均值。参考价值：持仓期间最大浮盈均值。若远大于平均盈亏，说明止盈太慢、利润回吐严重。" aria-label="查看该指标的计算公式与参考价值" aria-expanded="false" aria-haspopup="true"><i class="fas fa-circle-info" aria-hidden="true"></i></button></div>
+      <div class="stat-item"><span class="stat-label">MFE/MAE</span><span class="stat-value" id="statMAEMFE">—</span><button type="button" class="stat-info" data-tip="计算公式：平均MFE÷平均MAE（亏损单）。参考价值：持仓管理效率。>2说明趋势看对但拿不住，<1说明风险管控差需优化。" aria-label="查看该指标的计算公式与参考价值" aria-expanded="false" aria-haspopup="true"><i class="fas fa-circle-info" aria-hidden="true"></i></button></div>
     </div>
 
-    <!-- 权益曲线 -->
+    <!-- 权益概览（数字）
+         此前这里还有一张 canvas 权益曲线，与统计分析页的「账户权益曲线」是同一份数据
+         （同用 utils.calcEquityCurve）、同一个标题，两张 canvas 两套绘制代码。
+         现改为：曲线图只留在统计分析页（图表的归属页），日志页保留峰值/回撤两个数字
+         ——它们是每天都要扫一眼的风险信息，但不值得再画一遍图。
+         数字与曲线仍同源，口径不会分叉。 -->
     <div id="equity-card" style="display:none;">
-      <div class="card-header"><i class="fas fa-chart-line"></i> 账户权益曲线（含初始本金）</div>
-      <div style="position:relative;">
-        <canvas id="equityCanvas"></canvas>
-        <div id="equity-tooltip"></div>
-      </div>
+      <div class="card-header"><i class="fas fa-chart-line"></i> 账户权益概览</div>
       <div class="equity-stats">
         <span>权益峰值: <b id="equityPeak">—</b></span>
         <span>最大回撤: <b id="equityDrawdown">—</b></span>
+      </div>
+      <div class="equity-link-hint">
+        完整权益曲线见 <a href="#analytics">统计分析 → 账户权益曲线</a>
       </div>
     </div>
 
     <!-- 订单类型分布 -->
     <div id="orderTypeCard" style="display:none;">
-      <div class="card-header">订单类型分布</div>
+      <div class="card-header">订单类型绩效明细<span class="card-header-hint">表格 · 与复盘中心「订单类型胜率对比」同源</span></div>
       <div id="orderTypeTableWrap"></div>
     </div>
+    </div><!-- /#journalStatsBlock -->
 
     <!-- 日志过滤栏 -->
     <div class="log-filter-bar" id="logFilterBar">
@@ -856,18 +915,18 @@
       <button class="batch-btn batch-btn-danger" id="batchDeleteBtn"><i class="fas fa-trash"></i> 批量删除</button>
       <button class="batch-btn batch-btn-ghost" id="batchCancelBtn">取消</button>
     </div>
-    <div style="margin-top:16px; display:flex; gap:12px; flex-wrap:wrap; align-items:center; justify-content:space-between;">
-      <span style="font-size:12px; color:var(--color-text-muted); display:flex; align-items:center; gap:6px;">
+    <div style="margin-top:var(--space-lg); display:flex; gap:var(--space-md); flex-wrap:wrap; align-items:center; justify-content:space-between;">
+      <span style="font-size:var(--font-xs); color:var(--color-text-muted); display:flex; align-items:center; gap:var(--space-xs);">
         <i class="fas fa-database"></i> 数据存储在浏览器本地
       </span>
       <div class="backup-tools">
-        <label style="color:var(--color-text-secondary);font-size:var(--font-base);font-weight:var(--font-weight-semibold);display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
+        <label style="color:var(--color-text-secondary);font-size:var(--font-base);font-weight:var(--font-weight-semibold);display:inline-flex;align-items:center;gap:var(--space-xs);cursor:pointer;">
           <input type="checkbox" id="autoBackupCheck" checked /> 自动保存备份副本
         </label>
-        <button class="btn btn-primary btn-sm" id="backupBtn" style="padding:5px 16px;"><i class="fas fa-download"></i> 立即备份</button>
-        <span style="font-size:11px; color:var(--color-text-muted); white-space:nowrap;" id="lastBackupTime">尚未备份</span>
+        <button class="btn btn-primary btn-compact" id="backupBtn"><i class="fas fa-download"></i> 立即备份</button>
+        <span style="font-size:var(--font-xs); color:var(--color-text-muted); white-space:nowrap;" id="lastBackupTime">尚未备份</span>
       </div>
-      <span style="font-size:12px; color:var(--color-text-muted);" id="lastUpdate"></span>
+      <span style="font-size:var(--font-xs); color:var(--color-text-muted);" id="lastUpdate"></span>
     </div>
   </div>
 
@@ -876,6 +935,10 @@
   <!-- ====== 风控中心 ====== -->
   <section id="view-risk" class="view" role="region" aria-label="风控中心">
     <h2 class="view-title">风控中心</h2>
+    <div class="view-note">
+      <i class="fas fa-shield-alt"></i> 风控<b>全量度量</b>：离危险还有多远、风险集中在哪里。
+      今日/本周速览见 <a href="#dashboard">仪表盘</a>。
+    </div>
     <div class="risk-dashboard">
       <!-- 卡片 1：账户概览 -->
       <div class="card">
@@ -918,13 +981,19 @@
   <!-- ====== 统计分析 ====== -->
   <section id="view-analytics" class="view" role="region" aria-label="统计分析">
     <h2 class="view-title">统计分析</h2>
+    <!-- 与「复盘中心」的分工说明：两页都会按维度拆解绩效，标题必须让用户一眼看出
+         哪页有自己要的图。本页 = 量化度量（赚了多少、在什么条件下赚的）。 -->
+    <div class="view-note">
+      <i class="fas fa-chart-bar"></i> 量化绩效度量：这套策略<b>赚了多少</b>、在哪些条件下赚的。
+      行为与执行诊断（为什么赚/亏、哪里能改）见 <a href="#review">复盘中心</a>。
+    </div>
     <div class="analytics-grid">
       <div class="card chart-card">
         <div class="card-header">账户权益曲线（含初始本金）</div>
         <div class="chart-wrap"><canvas id="chartEquity"></canvas></div>
       </div>
       <div class="card chart-card">
-        <div class="card-header">策略绩效</div>
+        <div class="card-header">策略绩效 · 平均盈亏</div>
         <div class="chart-wrap"><canvas id="chartStrategy"></canvas></div>
       </div>
       <div class="card chart-card">
@@ -945,7 +1014,7 @@
       </div>
       <!-- 新增：日盈亏时序分布 -->
       <div class="card chart-card" id="dailyPnlCard">
-        <div class="card-header">日盈亏时序分布 <span style="font-size:11px;font-weight:400;color:var(--color-text-muted);margin-left:8px;">（按平仓日期聚合）</span></div>
+        <div class="card-header">日盈亏时序分布 <span style="font-size:var(--font-xs);font-weight:var(--font-weight-normal);color:var(--color-text-muted);margin-left:var(--space-sm);">（按平仓日期聚合）</span></div>
         <div class="chart-wrap"><canvas id="chartDailyPnl"></canvas></div>
       </div>
       <!-- 新增：周几绩效分布 -->
@@ -964,30 +1033,30 @@
         <div class="chart-wrap"><canvas id="chartMonthlyPnl"></canvas></div>
       </div>
     </div>
-    <div class="card" style="margin-top:16px;" id="strategyTableCard">
-      <div class="card-header">策略绩效明细</div>
+    <div class="card" style="margin-top:var(--space-lg);" id="strategyTableCard">
+      <div class="card-header">策略绩效明细表<span class="card-header-hint">全量 · 与复盘中心「策略框架排行」同源</span></div>
       <div id="strategyTableWrap"></div>
     </div>
-    <div class="card" style="margin-top:16px;" id="patternTableCard">
+    <div class="card" style="margin-top:var(--space-lg);" id="patternTableCard">
       <div class="card-header">策略形态绩效明细</div>
       <div id="patternTableWrap"></div>
     </div>
     <!-- 新增：品种/方向/时段独立统计 -->
-    <div class="card" style="margin-top:16px;" id="dimensionTableCard">
+    <div class="card" style="margin-top:var(--space-lg);" id="dimensionTableCard">
       <div class="card-header">多维绩效拆解</div>
       <div id="dimensionTableWrap"></div>
     </div>
     <!-- P0: 心态-绩效关联分析 -->
-    <div class="card" style="margin-top:16px;" id="mindsetAnalysisCard">
-      <div class="card-header"><i class="fas fa-brain"></i> 心态-绩效关联分析</div>
+    <div class="card" style="margin-top:var(--space-lg);" id="mindsetAnalysisCard">
+      <div class="card-header"><i class="fas fa-brain"></i> 心态评分 × 绩效<span class="card-header-hint">按 1–5 星心态评分分组</span></div>
       <div class="chart-wrap"><canvas id="chartMindsetPnl"></canvas></div>
-      <div id="mindsetTableWrap" style="margin-top:12px;"></div>
+      <div id="mindsetTableWrap" style="margin-top:var(--space-md);"></div>
     </div>
     <!-- P0: 市场环境交叉分析 -->
-    <div class="card" style="margin-top:16px;" id="marketConditionCard">
+    <div class="card" style="margin-top:var(--space-lg);" id="marketConditionCard">
       <div class="card-header"><i class="fas fa-cloud-sun"></i> 市场环境×时段×方向 交叉分析</div>
       <div class="chart-wrap"><canvas id="chartMarketCondition"></canvas></div>
-      <div id="marketConditionTableWrap" style="margin-top:12px;"></div>
+      <div id="marketConditionTableWrap" style="margin-top:var(--space-md);"></div>
     </div>
 
   </section>
@@ -995,9 +1064,12 @@
   <!-- ====== 复盘中心 ====== -->
   <section id="view-review" class="view" role="region" aria-label="复盘中心">
     <h2 class="view-title">复盘中心</h2>
-    
-    <div class="review-header-note">
-      <i class="fas fa-chart-line"></i> 基于本地交易日志的自动数据分析与可视化
+
+    <!-- 与「统计分析」的分工说明（原文案「基于本地交易日志的自动数据分析与可视化」
+         与本页实际职责不符，且两个页面都这么说，等于没说） -->
+    <div class="view-note review-header-note">
+      <i class="fas fa-clipboard-check"></i> 行为与执行诊断：<b>为什么</b>赚/亏、哪里可以改。
+      量化指标与绩效度量见 <a href="#analytics">统计分析</a>。
     </div>
     
     <div class="review-section">
@@ -1016,7 +1088,7 @@
       <div class="review-card">
         <div class="review-card-header">
           <span class="review-card-icon"><i class="fas fa-trophy"></i></span>
-          <span class="review-card-title">策略框架排名</span>
+          <span class="review-card-title">策略框架排行 · 总盈亏</span>
         </div>
         <div class="review-card-body">
           <div class="review-chart-container">
@@ -1029,7 +1101,7 @@
       <div class="review-card">
         <div class="review-card-header">
           <span class="review-card-icon"><i class="fas fa-tags"></i></span>
-          <span class="review-card-title">订单类型胜率分析</span>
+          <span class="review-card-title">订单类型胜率对比</span>
         </div>
         <div class="review-card-body">
           <div class="review-chart-container">
@@ -1041,7 +1113,7 @@
       <div class="review-card">
         <div class="review-card-header">
           <span class="review-card-icon"><i class="fas fa-heart"></i></span>
-          <span class="review-card-title">交易情绪关联</span>
+          <span class="review-card-title">情绪标签 × 绩效</span>
         </div>
         <div class="review-card-body">
           <div class="review-chart-container">
@@ -1249,7 +1321,7 @@
             <span>导入设置</span>
             <button class="btn btn-outline btn-sm" onclick="importSettings()"><i class="fas fa-upload"></i> 导入 JSON</button>
           </div>
-          <p style="font-size:11px;color:var(--color-text-muted);margin-top:8px;">导入时保留现有值，仅补充缺失字段。品种列表会合并而非覆盖。</p>
+          <p style="font-size:var(--font-xs);color:var(--color-text-muted);margin-top:var(--space-sm);">导入时保留现有值，仅补充缺失字段。品种列表会合并而非覆盖。</p>
         </div>
       </div>
     </div>
@@ -1261,32 +1333,33 @@
 
 </main>
 
-  <script src="js/constants.js?v=5.5"></script>
-  <script src="js/utils.js?v=5.5"></script>
-  <script src="js/toast.js?v=5.5"></script>
-  <script src="js/slippage.js?v=5.5"></script>
-  <script src="js/storage.js?v=5.5"></script>
-  <script src="js/skills-integration.js?v=5.5"></script>
-  <script src="js/calculation-ui.js?v=5.5"></script>
-  <script src="js/calculator.js?v=5.5"></script>
-  <script src="js/logs.js?v=5.5"></script>
-  <script src="js/rendering.js?v=5.5"></script>
-  <script src="js/stats.js?v=5.5"></script>
-  <script src="js/modals.js?v=5.5"></script>
-  <script src="js/navigation.js?v=5.5"></script>
-  <script src="js/dashboard.js?v=5.5"></script>
-  <script src="js/planner.js?v=5.5"></script>
-  <script src="js/discipline-led.js?v=5.5"></script>
-  <script src="js/settings.js?v=5.5"></script>
-  <script src="js/risk.js?v=5.5"></script>
-  <script src="js/chart-factory.js?v=5.5"></script>
-  <script src="js/analytics.js?v=5.5"></script>
-  <script src="js/review.js?v=5.5"></script>
-  <script src="js/io.js?v=5.5"></script>
-  <script src="js/dom-cache.js?v=5.5"></script>
-  <script src="js/app.js?v=5.5"></script>
-<script src="js/version.js?v=5.5"></script>
+  <script src="js/constants.js?v=5.6"></script>
+  <script src="js/utils.js?v=5.6"></script>
+  <script src="js/toast.js?v=5.6"></script>
+  <script src="js/slippage.js?v=5.6"></script>
+  <script src="js/storage.js?v=5.6"></script>
+  <script src="js/skills-integration.js?v=5.6"></script>
+  <script src="js/calculation-ui.js?v=5.6"></script>
+  <script src="js/calculator.js?v=5.6"></script>
+  <script src="js/logs.js?v=5.6"></script>
+  <script src="js/rendering.js?v=5.6"></script>
+  <script src="js/stats.js?v=5.6"></script>
+  <script src="js/modals.js?v=5.6"></script>
+  <script src="js/navigation.js?v=5.6"></script>
+  <script src="js/dashboard.js?v=5.6"></script>
+  <script src="js/planner.js?v=5.6"></script>
+  <script src="js/discipline-led.js?v=5.6"></script>
+  <script src="js/settings.js?v=5.6"></script>
+  <script src="js/risk.js?v=5.6"></script>
+  <script src="js/chart-factory.js?v=5.6"></script>
+  <script src="js/analytics.js?v=5.6"></script>
+  <script src="js/review.js?v=5.6"></script>
+  <script src="js/io.js?v=5.6"></script>
+  <script src="js/dom-cache.js?v=5.6"></script>
+  <script src="js/app.js?v=5.6"></script>
+<script src="js/version.js?v=5.6"></script>
 
-  <div id="toastContainer" role="status" aria-live="polite" style="position:fixed;top:24px;right:24px;z-index:400;display:flex;flex-direction:column;gap:8px;pointer-events:none;"></div>
+  <!-- 样式见 css/modals.css #toastContainer（原为内联，z-index 硬编码 400 低于弹窗遮罩 500 导致提示被盖住） -->
+  <div id="toastContainer" role="status" aria-live="polite"></div>
 
 </html>

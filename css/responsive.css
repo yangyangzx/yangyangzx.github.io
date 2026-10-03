@@ -23,7 +23,8 @@
     padding: 9px 16px;
     font-size: var(--font-sm);
   }
-  .card-header h2 {
+  .card-header h2,
+  .card-header h3 {
     font-size: var(--font-lg);
   }
 
@@ -103,19 +104,18 @@
   }
 
   /* ——— 筛选器 → 可横向滚动行 ——— */
+  /* 原为 overflow-x:auto + scrollbar-width:none 的单行横滑：
+     6 个筛选器里屏外的那些既看不到滚动条、也没有任何渐隐提示，
+     用户根本不知道还有更多筛选条件。改为两列网格全部铺开（3 行 × 2 列），
+     不产生横向滚动，也不再有"藏起来"的控件。 */
   .filter-row {
-    overflow-x: auto;
-    white-space: nowrap;
-    padding-bottom: var(--space-xs);
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-  }
-  .filter-row::-webkit-scrollbar {
-    display: none;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-sm);
   }
   .filter-row select {
-    flex-shrink: 0;
-    min-width: 100px;
+    width: 100%;
+    min-width: 0;
   }
 
   /* ——— 统计面板 → 2 列网格 ——— */

@@ -349,9 +349,29 @@ body {
   transition: color var(--dur-short) var(--ease-out);
 }
 
-/* 每模块自定义色相：如风控红 / 复盘绿
-   <a class="nav-item" data-view="risk"   style="--nav-hue: 25">
-   <a class="nav-item" data-view="review" style="--nav-hue: 158"> */
+/* ═══════════════════════════════════════
+   每模块色相映射（--nav-hue）
+   ═══════════════════════════════════════
+   色相是模块锚点：让用户在侧边栏形成稳定的「颜色 → 模块」记忆。
+   7 个模块必须全部显式指定，否则回落到 .nav-item 的默认 248（蓝），
+   色相映射只覆盖一部分反而比不设更混乱。
+
+     开仓计划 planner    248  主色蓝  — 主入口 / 核心计算
+     仪表盘   dashboard  275  蓝紫    — 全局概览
+     交易日志 journal    205  青      — 记录
+     风控中心 risk        25  红      — 危险（语义色，与 --color-danger 同域）
+     统计分析 analytics   80  黄      — 数据 / 指标
+     复盘中心 review     158  绿      — 成长（语义色，与 --color-success 同域）
+     系统设置 settings   320  品红    — 工具（刻意与内容模块拉开距离）
+
+   用属性选择器而非内联 style：内联样式绕开 token 体系，且改一处要翻 HTML。 */
+.nav-item[data-view='planner']   { --nav-hue: 248; }
+.nav-item[data-view='dashboard'] { --nav-hue: 275; }
+.nav-item[data-view='journal']   { --nav-hue: 205; }
+.nav-item[data-view='risk']      { --nav-hue: 25;  }
+.nav-item[data-view='analytics'] { --nav-hue: 80;  }
+.nav-item[data-view='review']    { --nav-hue: 158; }
+.nav-item[data-view='settings']  { --nav-hue: 320; }
 
 /* ═══════════════════════════════════════
    主题切换 — Spark 开关（Uiverse swift_9148 适配版，保持原样）
@@ -682,6 +702,48 @@ body {
   border-radius: var(--radius-full);
   background: linear-gradient(180deg, var(--color-primary), var(--color-primary-light));
   flex-shrink: 0;
+}
+
+/* 视图分工说明条 — 用于说明本页与相邻页面的职责边界。
+   此前「复盘中心」用的是 .review-header-note，全项目没有任何样式定义，
+   那段文案以裸文本形式贴在标题下，与卡片标题混淆。 */
+.view-note {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: calc(-1 * var(--space-md)) 0 var(--space-lg);
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-primary-border);
+  background: var(--color-primary-bg);
+  color: var(--color-text-secondary);
+  font-size: var(--font-sm);
+  line-height: 1.6;
+}
+
+.view-note i {
+  color: var(--color-primary-strong);
+}
+
+.view-note b {
+  color: var(--color-text);
+  font-weight: var(--font-weight-title);
+}
+
+.view-note a {
+  color: var(--color-primary-strong);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* 卡片标题后的口径补充说明 — 用于区分同名卡片的统计维度 */
+.card-header-hint {
+  margin-left: 8px;
+  font-size: var(--font-xs);
+  font-weight: var(--font-weight-normal);
+  color: var(--color-text-muted);
+  letter-spacing: 0;
 }
 
 /* ═══════════════════════════════════════

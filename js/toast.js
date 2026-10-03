@@ -154,4 +154,109 @@
     });
   };
 
+  // ==================== 指标说明弹出层 ====================
+  // 统计指标的解释文案原先只写在 title= 属性里：触屏永不显示、键盘不可达。
+  // 现由 .stat-info 按钮（index.html 内的 ⓘ）触发应用内弹出层，鼠标/键盘/触屏三条路径都能读。
+  //
+  // 文案来源有两处，合并展示：
+  //   1) .stat-item[data-tip]      —— 静态写在 index.html 的「计算公式 / 参考价值」
+  //   2) 后代元素的 title          —— stats.js 每次渲染按当前数据补的（如「跨度 12.3 天」）
+  // 动态部分不缓存，每次打开都重新读，避免显示上一轮渲染的过期数字。
+  //
+  // 事件全部委托到 document：stats.js 会整块重写 .stats-panel 的 innerHTML，
+  // 逐元素绑定会在重渲染后失效。
+
+  var _tipEl = null;
+  var _tipOwner = null;
+  var _tipOpenedAt = 0;
+
+  // 自带转义，不依赖全局 esc —— 跨模块裸标识符是本项目踩过的坑（见 CLAUDE.md）
+  function _escTip(s) {
+    return String(s).replace(/[&<>"']/g, function(c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function closeStatTip() {
+    if (_tipEl && _tipEl.parentNode) _tipEl.parentNode.removeChild(_tipEl);
+    _tipEl = null;
+    if (_tipOwner) {
+      var prev = _tipOwner.querySelector('.stat-info');
+      if (prev) prev.setAttribute('aria-expanded', 'false');
+    }
+    _tipOwner = null;
+  }
+
+  function openStatTip(btn) {
+    var item = btn.closest ? btn.closest('.stat-item') : null;
+    if (!item) return;
+    closeStatTip();
+
+    var parts = [];
+    var base = item.getAttribute('data-tip');
+    if (base) parts.push(base);
+    var titled = item.querySelectorAll('[title]');
+    for (var i = 0; i < titled.length; i++) {
+      var t = titled[i].getAttribute('title');
+      if (t) parts.push(t);
+    }
+    if (!parts.length) return;
+
+    var el = document.createElement('div');
+    el.className = 'stat-tip-popover';
+    el.setAttribute('role', 'tooltip');
+    var html = '';
+    for (var p = 0; p < parts.length; p++) html += '<p>' + _escTip(parts[p]) + '</p>';
+    el.innerHTML = html;
+    document.body.appendChild(el);
+
+    // 默认贴在按钮下方；下方放不下就翻到上方。水平居中后 clamp 进视口。
+    var r = btn.getBoundingClientRect();
+    var w = el.offsetWidth, h = el.offsetHeight;
+    var left = Math.max(8, Math.min(r.left + r.width / 2 - w / 2, window.innerWidth - w - 8));
+    var top = r.bottom + 8;
+    if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 8);
+    el.style.left = left + 'px';
+    el.style.top = top + 'px';
+
+    _tipEl = el;
+    _tipOwner = item;
+    _tipOpenedAt = Date.now();
+    btn.setAttribute('aria-expanded', 'true');
+  }
+
+  document.addEventListener('click', function(e) {
+    var btn = e.target.closest ? e.target.closest('.stat-info') : null;
+    if (btn) {
+      e.preventDefault();
+      var sameOwner = !!( _tipOwner && _tipOwner.contains(btn) );
+      // 指针点击会先派发 focusin（已把浮层展开），紧接着才轮到 click。
+      // 若不区分「刚被这次交互打开」和「本来就开着」，单击会立刻把自己的浮层关掉。
+      if (sameOwner && Date.now() - _tipOpenedAt < 400) return;
+      if (sameOwner) { closeStatTip(); return; }   // 再点一次 = 收起
+      openStatTip(btn);
+      return;
+    }
+    if (_tipEl && !_tipEl.contains(e.target)) closeStatTip();
+  }, true);
+
+  // 键盘：聚焦即展开（与 title 的 hover 行为对齐），失焦收起
+  document.addEventListener('focusin', function(e) {
+    var btn = e.target.closest ? e.target.closest('.stat-info') : null;
+    if (btn) openStatTip(btn);
+  });
+
+  document.addEventListener('focusout', function(e) {
+    var btn = e.target.closest ? e.target.closest('.stat-info') : null;
+    if (btn && _tipOwner && _tipOwner.contains(btn)) closeStatTip();
+  });
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && _tipEl) { closeStatTip(); }
+  });
+
+  // 滚动/缩放后锚点位置失效，直接收起，避免浮层停在错误的位置
+  window.addEventListener('scroll', closeStatTip, true);
+  window.addEventListener('resize', closeStatTip);
+
 })();

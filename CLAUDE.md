@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目性质
 
-TradingDiscipline：纯前端交易风控/复盘终端（v5.4），无任何构建工具。原生 JS（IIFE + 全局函数）+ CSS（OKLCH 变量），数据全部存 localStorage，完全离线。`index.html` 直接可运行，但推荐用本地 HTTP 服务器打开（file:// 下 PWA manifest / 部分浏览器行为受限）：
+TradingDiscipline：纯前端交易风控/复盘终端（v5.6），无任何构建工具。原生 JS（IIFE + 全局函数）+ CSS（OKLCH 变量），数据全部存 localStorage，完全离线。`index.html` 直接可运行，但推荐用本地 HTTP 服务器打开（file:// 下 PWA manifest / 部分浏览器行为受限）：
 
 ```bash
 python3 -m http.server 8000   # 然后开 http://localhost:8000
@@ -17,7 +17,7 @@ node --check js/<file>.js          # 改完 JS 先语法检查
 npx jest                           # 测试（若 node_modules 已安装；配置在 package.json）
 npx eslint js/**/*.js              # Lint
 # 浏览器内回归：打开 test/run-tests.html 自动跑全部断言（打开即跑）
-# 改完前端后强刷：URL 追加 ?cb=<时间戳> 避开缓存（index.html 里 script 已带 ?v=5.4，改 CSS 时同样需要）
+# 改完前端后强刷：URL 追加 ?cb=<时间戳> 避开缓存（index.html 里 script 已带 ?v=5.6，改 CSS 时同样需要）
 ```
 
 ## 架构要点（跨文件才能看懂的部分）
