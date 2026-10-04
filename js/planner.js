@@ -612,6 +612,21 @@ function renderChecklistBlocked(blocker) {
 }
 
 /**
+ * 入场理由是否已明确选择。
+ * 「没选」在字段层面就是空串——下拉第一项是「— 不选择 —」空选项；编辑弹窗的多选是数组。
+ * 清单与保存闸门共用这一份判定：清单说通过但保存被拦、或清单说失败却放行，
+ * 都是同一个原因在两个权威下给出相反结论。
+ */
+function isEntryReasonChosen(reason) {
+  if (Array.isArray(reason)) {
+    return reason.some(function(r) { return String(r).trim() !== ''; });
+  }
+  if (reason === null || reason === undefined) return false;
+  var s = String(reason).trim();
+  return s !== '' && s !== '— 不选择 —';
+}
+
+/**
  * 更新开仓前检查清单（读取 _lastCalc）
  * v5.6.9：只保留 5 个真闸门项（计划风险截断 / 盈亏比 / 保证金 / 入场理由 / 心态评分），
  * 检查结果持久化至日志供保存闸门使用。
@@ -742,11 +757,18 @@ function updateChecklist() {
   });
 
   // 4. 入场理由已明确选择
+  // 硬闸门（没有 level:'warn'）：用户不选理由就不能保存。下拉第一项曾直接是
+  // 「趋势突破」——浏览器会把 reasonSelect.value 静默设成它，getReason() 永远非空，
+  // 这一项因此恒为 PASS，而字段标签却写着「选填」：一个是永不失败的闸门，一个是
+  // 声明可选，两者互相矛盾且都不可见。v5.6.12 加了显式空选项后每笔新计划先挂真实
+  // FAIL，index.html 的标签同步改成「保存前必填」。失败消息不能复用「入场理由已明确」，
+  // 否则红字里写的是通过话术。
   updateCheckItemWithResult('checkReason', function() {
     if (!calc) return null;
     if (calc.reason == null) return null;
-    var passed = calc.reason !== '' && calc.reason !== '— 不选择 —';
-    return { result: passed, message: '入场理由已明确' };
+    return isEntryReasonChosen(calc.reason)
+      ? { result: true, message: '入场理由已明确' }
+      : { result: false, message: '未选择入场理由——「— 不选择 —」不算，保存前必须明确' };
   });
 
   // 5. 心态评分检查

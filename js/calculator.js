@@ -1853,7 +1853,9 @@ if (_splitMode) toggleSplitMode();
   document.getElementById('strategyPattern').innerHTML = '<option value="">— 不选择 —</option>';
   document.querySelectorAll('#signalCheckboxes input[type="checkbox"]').forEach(cb => { cb.checked = false; });
   updateCheckboxStyle();
-  document.getElementById('reasonSelect').value = '趋势突破';
+  // 必须回到「— 不选择 —」空选项：写死 '趋势突破' 会让 resetForm 重新替用户选一个
+  // 入场理由，把 v5.6.12 加的空选项绕过，checkReason 又变回恒 PASS。
+  document.getElementById('reasonSelect').value = '';
   document.getElementById('reasonCustom').value = '';
   document.getElementById('positionDisplay').textContent = '—';
   document.getElementById('detailDisplay') && (document.getElementById('detailDisplay').textContent = '输入参数后点击「计算仓位」');
