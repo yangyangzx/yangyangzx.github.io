@@ -8,7 +8,7 @@ function exportCSV() {
   if (window.__exportingCSV) { showToast('正在导出中，请稍候', 'info'); return; }
   window.__exportingCSV = true;
   try {
-  const headers = ['时间','品种','方向','订单类型','入场价','有效入场价','止损价','目标价','仓位(USDT)','杠杆','风险额','本金','心态评分','形态/策略','信号K','交易时段','市场环境','平仓类型','平仓价','平仓时间','持仓时长(分钟)','R倍数','盈亏金额','盈亏百分比','MAE%','MFE%','执行评分','出场理由','亏损原因','交易情绪','平仓备注','入场原因','手续费','滑点成本','计算版本','滑点Schema','入场Ticks','退出Ticks','TickSize','计划有效退出价','GroupId','已实现盈亏','累计手续费','已平仓比例%','初始风险','初始仓位','平仓明细','部分平仓'];
+  const headers = ['ID','时间','品种','方向','订单类型','入场价','有效入场价','止损价','目标价','仓位(USDT)','杠杆','风险额','本金','心态评分','形态/策略','信号K','交易时段','市场环境','平仓类型','平仓价','平仓时间','持仓时长(分钟)','R倍数','盈亏金额','盈亏百分比','MAE%','MFE%','执行评分','出场理由','亏损原因','交易情绪','平仓备注','入场原因','手续费','滑点成本','计算版本','滑点Schema','入场Ticks','退出Ticks','TickSize','计划有效退出价','GroupId','已实现盈亏','累计手续费','已平仓比例%','初始风险','初始仓位','平仓明细','部分平仓'];
   // P2: 导出当前过滤结果（复用 logs.js 的 _filterMatch），无过滤时导出全部
   var hasActiveFilter = !!( _activeFilters.direction || _activeFilters.symbol || _activeFilters.strategy ||
                             _activeFilters.status || _activeFilters.pnl || _activeFilters.time );
@@ -30,7 +30,7 @@ function exportCSV() {
     const ctl = row.closeType ? (CLOSE_TYPE_LABELS[row.closeType]||row.closeType) : '';
     const closeTimeFormatted = fmtTime(row.closeTime);
     const planSlip = row.slippage && row.slippage.planning ? row.slippage.planning : {};
-    const line = [fmtTime(row.time),row.symbol,row.direction,row.orderType||'market',row.entryPrice,row.effectiveEntryPrice??planSlip.effectiveEntryPrice??'',row.stopLoss,row.targetPrice??'',row.positionSize,row.leverage,row.riskAmount,row.capital??'',ms,sf,ss,row.session||'',row.marketCondition||'',ctl,row.closePrice??'',closeTimeFormatted,row.holdDuration??'',String(row.rMultiple??'').replace(/R$/,''),row.pnlAmount??'',String(row.pnlPercent??'').replace(/%/g,''),row.mae??'',row.mfe??'',row.executionScore??'',row.exitReason??'',Array.isArray(row.lossReason)?row.lossReason.join(';'):(row.lossReason||''),Array.isArray(row.emotions)?row.emotions.join(';'):(row.emotions||''),row.closeNote??'',Array.isArray(row.reason)?row.reason.join(';'):(row.reason||''),row.fee??'',row.slippageCost??'',row.calculationVersion??'',planSlip.schema??'',planSlip.entryTicks??'',planSlip.exitTicks??'',planSlip.tickSize??'',planSlip.effectiveExitPrice??'',row.groupId??'',row.realizedPnl??'',row.realizedFee??'',row.closedRatio??'',row.initialRiskAmount??'',row.initialPositionSize??'',Array.isArray(row.closes)?JSON.stringify(row.closes):'',row.isPartial??''].map(v=>'"'+(v==null?'':String(v).replace(/"/g,'""'))+'"').join(',');
+    const line = [row.id ?? '',fmtTime(row.time),row.symbol,row.direction,row.orderType||'market',row.entryPrice,row.effectiveEntryPrice??planSlip.effectiveEntryPrice??'',row.stopLoss,row.targetPrice??'',row.positionSize,row.leverage,row.riskAmount,row.capital??'',ms,sf,ss,row.session||'',row.marketCondition||'',ctl,row.closePrice??'',closeTimeFormatted,row.holdDuration??'',String(row.rMultiple??'').replace(/R$/,''),row.pnlAmount??'',String(row.pnlPercent??'').replace(/%/g,''),row.mae??'',row.mfe??'',row.executionScore??'',row.exitReason??'',Array.isArray(row.lossReason)?row.lossReason.join(';'):(row.lossReason||''),Array.isArray(row.emotions)?row.emotions.join(';'):(row.emotions||''),row.closeNote??'',Array.isArray(row.reason)?row.reason.join(';'):(row.reason||''),row.fee??'',row.slippageCost??'',row.calculationVersion??'',planSlip.schema??'',planSlip.entryTicks??'',planSlip.exitTicks??'',planSlip.tickSize??'',planSlip.effectiveExitPrice??'',row.groupId??'',row.realizedPnl??'',row.realizedFee??'',row.closedRatio??'',row.initialRiskAmount??'',row.initialPositionSize??'',Array.isArray(row.closes)?JSON.stringify(row.closes):'',row.isPartial??''].map(v=>'"'+(v==null?'':String(v).replace(/"/g,'""'))+'"').join(',');
     csv += line + '\n';
   }
   const b = new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'});
@@ -242,12 +242,19 @@ function importJSON(file) {
       // 新旧导入记录统一进入 Schema 迁移，历史现金滑点仅做明确标记。
       if (typeof migrateLogsToCurrentSchema === 'function') migrateLogsToCurrentSchema(validationReport.valid, 0);
       var existing = new Set(logs.map(function(item) { return typeof _logFingerprint === 'function' ? _logFingerprint(item) : JSON.stringify(item); }));
-      var candidates = validationReport.valid.filter(function(item) {
-        var key = typeof _logFingerprint === 'function' ? _logFingerprint(item) : JSON.stringify(item);
-        if (existing.has(key)) return false;
-        existing.add(key);
-        return true;
-      });
+      // P1 FIX（2026-10-04）：导入记录补稳定 id。缺 id 时 _logFingerprint 退化为
+      // time+symbol+entryPrice+positionSize 拼接，同一笔交易经 CSV 与 JSON 各导入一次
+      // （或导出后原样再导入）会被当成两条不同的日志。
+      var candidates = [];
+      var _importValid = validationReport.valid;
+      for (var _vi = 0; _vi < _importValid.length; _vi++) {
+        var _v = _importValid[_vi];
+        if (!_v.id) _v.id = window.utils.genLogId(logs.concat(candidates));
+        var _vk = typeof _logFingerprint === 'function' ? _logFingerprint(_v) : JSON.stringify(_v);
+        if (existing.has(_vk)) continue;
+        existing.add(_vk);
+        candidates.push(_v);
+      }
       if (!candidates.length) { showToast('所有记录均已存在，未重复导入。', 'info'); return; }
       let msg = `导入验证完成：\n有效新记录: ${candidates.length}条\n重复跳过: ${validationReport.valid.length - candidates.length}条`;
       if (validationReport.warnings.length > 0) msg += `\n警告: ${validationReport.warnings.join(', ')}`;

@@ -1120,6 +1120,7 @@ function doSaveSplit(calc, count) {
   });
 
   const makeEntry = (pos, costs, risk, groupLabel, batchIdx) => ({
+    id: window.utils.genLogId(logs),  // 稳定唯一标识；循环内调用，logs 已含本批前几笔，故批次内也不重复
     time: now.toISOString(),
     symbol: calc.symbol,
     direction: calc.direction,

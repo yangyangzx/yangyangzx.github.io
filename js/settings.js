@@ -57,6 +57,36 @@ var SETTINGS_VALIDATORS = {
   // 原因各不相同，见 saveSettings() 内各段注释
 };
 
+// customStopLimit 的边界（唯一权威）；saveSettings 用它校验，getStopLimitPct 读时也用它兜底。
+// 下限 0.5% 避免把止损门收窄到「几乎不拦截」，上限 50% 避免形同虚设。
+var CUSTOM_STOP_LIMIT_RANGE = { min: 0.5, max: 50 };
+// 键必须是纯品种名：字母数字加连字符（BTC / ETHUSDT / XRP-USDC-PERP），
+// 拒绝空白、引号、括号，以及 constructor/toString/__proto__ 之类能命中原型链的键。
+var CUSTOM_STOP_LIMIT_KEY_RE = /^[A-Za-z][A-Za-z0-9-]{0,15}$/;
+
+/**
+ * 校验 customStopLimit 配置对象，返回可直接入库的净化副本；非法时返回 null。
+ * 拒绝：非纯对象（数组/字符串/null）、非有限数字的值、越界值、可疑键。
+ * 逐键丢弃而不是整段报错时也可用，但保存路径选择整段拒绝以给出明确反馈。
+ * @returns {Object|null}
+ */
+function validateCustomStopLimit(parsed) {
+  if (parsed == null || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  var out = {};
+  var keys = Object.keys(parsed);
+  if (keys.length === 0) return out;
+  if (keys.length > 200) return null;
+  for (var i = 0; i < keys.length; i++) {
+    var k = keys[i];
+    var v = parsed[k];
+    if (!CUSTOM_STOP_LIMIT_KEY_RE.test(k)) return null;
+    if (typeof v !== 'number' || !isFinite(v)) return null;
+    if (v < CUSTOM_STOP_LIMIT_RANGE.min || v > CUSTOM_STOP_LIMIT_RANGE.max) return null;
+    out[k.toUpperCase()] = v;
+  }
+  return out;
+}
+
 /**
  * 加载设置（返回对象）
  */
@@ -255,23 +285,27 @@ function saveSettings() {
   if (atrEnableEl) settings.atrStopEnabled = atrEnableEl.checked;
 
   // ✅ 新增：保存 customStopLimit（JSON 格式字符串解析）
+  // P1 修复：原实现只做 JSON.parse + typeof==='object'，于是
+  //   - {"ETH":"abc"} / {"ETH":-1} / {"ETH":999} 全部静默入库，闸门读到非数字后比较恒为 false；
+  //   - [] 也是 object，会被当成有效配置；
+  //   - {"constructor":1} 会让 getStopLimitPct 的 custom[s] 命中 Object.prototype.constructor
+  //     （返回一个函数，!= null 判定通过），下游拿到的「止损上限」是个函数。
+  // 现按白名单键 + 有限数字 + 区间三重校验，任何一项不合格整段拒绝并保持原值。
   var stopLimitEl = document.getElementById('setCustomStopLimit');
   if (stopLimitEl) {
-    try {
-      var customRaw = stopLimitEl.value.trim();
-      if (customRaw && customRaw !== '{}') {
-        var customParsed = JSON.parse(customRaw);
-        if (typeof customParsed === 'object' && customParsed !== null) {
-          settings.customStopLimit = customParsed;
-        } else {
-          settings.customStopLimit = {};
-        }
-      } else {
-        settings.customStopLimit = {};
+    var customRaw = stopLimitEl.value.trim();
+    if (!customRaw || customRaw === '{}') {
+      settings.customStopLimit = {};
+    } else {
+      var customParsed = null;
+      try { customParsed = JSON.parse(customRaw); } catch (e) { customParsed = null; }
+      var clean = validateCustomStopLimit(customParsed);
+      if (!clean) {
+        showToast('自定义止损比例无效：需为对象，如 {"ETH":2,"BTC":3}；'
+          + '键为品种名（不含括号引号等），值需在 0.5 ~ 50 之间的数字', 'error');
+        return;
       }
-    } catch(e) {
-      showToast('自定义止损比例格式无效（请输入有效的 JSON 对象，如 {"ETH":2,"BTC":3}）', 'warn');
-      settings.customStopLimit = {}; // 保持原状或清空
+      settings.customStopLimit = clean;
     }
   }
 
@@ -318,7 +352,8 @@ function importLogs() {
       var ext = file.name.split('.').pop().toLowerCase();
       if (ext === 'json') {
         try {
-          var data = JSON.parse(ev.target.result);
+          // stripBOM：JSON.parse 遇到 BOM 直接抛 SyntaxError，提示会变成笼统的「解析失败」
+          var data = JSON.parse(stripBOM(ev.target.result));
           if (Array.isArray(data) && (data.length === 0 || (data[0] && typeof data[0] === 'object' && (data[0].symbol != null || data[0].direction != null || data[0].entryPrice != null)))) {
             // 导入前归一化所有数值字段（JSON 中可能为字符串或 NaN/Infinity）
             var numFields = ['entryPrice','stopLoss','targetPrice','positionSize','leverage','riskAmount','capital','fee','slippageCost','closePrice','pnlAmount','mae','mfe','lowPrice','highPrice','rMultiple','pnlPercent','holdDuration','effectiveEntryPrice','stopType','atrStopMode','calculationVersion','grossPnlAmount','actualCloseFee','actualExitLegacySlippageCost','realizedPnl','realizedFee','closedRatio','initialRiskAmount','initialPositionSize'];
@@ -357,15 +392,27 @@ function importLogs() {
   input.click();
 }
 
+/**
+ * 去掉文本首部的 UTF-8 BOM（U+FEFF）。
+ *
+ * 本站导出（io.js）会写 '﻿' 前缀以便 Excel 正确识别编码；导入侧若不去掉，
+ * 首列 header 变成 "﻿时间" 而匹配不到字段映射表里的 '时间'，
+ * 「时间 / 品种」这两列最关键的定位字段会整体丢失。JSON 导入同用。
+ * @returns {string}
+ */
+function stripBOM(text) {
+  return String(text == null ? '' : text).replace(/^﻿/, '');
+}
+
 function parseCSVImport(csvText) {
-  var lines = csvText.split(/\r?\n/).filter(function(l) { return l.trim().length > 0; });
+  var lines = parseCSVRecords(stripBOM(csvText));   // 引号内换行的安全解析，见 parseCSVRecords 注释
   if (lines.length < 2) { showToast('CSV 文件为空', 'error'); return; }
 
   // CSV 列映射：导出中文 header → 内部字段名
   // 修复（2026-09-07）：原先按英文 key 匹配，导出 header 是中文导致全部落入 else 分支，
   // 导入后字段存为中文 key，页面/统计全部读不到（CSV 导入实际长期失效）。
   var CSV_FIELD_MAP = {
-    '时间':'time','品种':'symbol','方向':'direction','订单类型':'orderType','入场价':'entryPrice','有效入场价':'effectiveEntryPrice',
+    'ID':'id','时间':'time','品种':'symbol','方向':'direction','订单类型':'orderType','入场价':'entryPrice','有效入场价':'effectiveEntryPrice',
     '止损价':'stopLoss','目标价':'targetPrice','仓位(USDT)':'positionSize','杠杆':'leverage','风险额':'riskAmount','本金':'capital',
     '心态评分':'mindsetScore','形态/策略':'strategyFramework','信号K':'signals','交易时段':'session','市场环境':'marketCondition',
     '平仓类型':'closeType','平仓价':'closePrice','平仓时间':'closeTime','持仓时长(分钟)':'holdDuration','R倍数':'rMultiple',
@@ -381,10 +428,17 @@ function parseCSVImport(csvText) {
   var CSV_NUM_FIELDS = ['entryPrice','stopLoss','targetPrice','positionSize','leverage','riskAmount','capital','fee','slippageCost','closePrice','pnlAmount','mae','mfe','lowPrice','highPrice','rMultiple','pnlPercent','holdDuration','realizedPnl','realizedFee','closedRatio','initialRiskAmount','initialPositionSize'];
   var CSV_INT_FIELDS = ['mindsetScore','executionScore'];
 
-  var headers = parseCSVLine(lines[0]);
+  var headers = lines[0];
   var imported = [];
+  var importWarnings = [];
   for (var i = 1; i < lines.length; i++) {
-    var values = parseCSVLine(lines[i]);
+    var values = lines[i];
+    // P1 修复：字段数与 header 不一致说明该行已损坏（换行/引号未闭合/列数变化）。
+    // 静默跳过会让一条记录悄悄少列、且用户无从察觉；改为记录并提示。
+    if (values.length !== headers.length) {
+      importWarnings.push('第 ' + (i + 1) + ' 行字段数 ' + values.length + ' ≠ 表头 ' + headers.length);
+      continue;
+    }
     var obj = {};
     for (var j = 0; j < headers.length; j++) {
       var h = headers[j];
@@ -434,32 +488,84 @@ function parseCSVImport(csvText) {
 
   if (typeof migrateLogsToCurrentSchema === 'function') migrateLogsToCurrentSchema(imported, 0);
   else if (typeof _migrateTimes === 'function') _migrateTimes(imported);
+  // P1 FIX（2026-10-04）：补稳定 id（旧版导出没有 ID 列）。缺 id 时 storage.js 的
+  // _logFingerprint 退化为 time+symbol+entryPrice+positionSize 拼接，同一笔交易经 CSV 与
+  // JSON 各导入一次（或导出后原样再导入）会被当成两条不同的日志。
+  var _idPool = logs.concat(imported);
+  for (var _idi = 0; _idi < imported.length; _idi++) {
+    if (!imported[_idi].id) imported[_idi].id = window.utils.genLogId(_idPool);
+  }
+  // 列数不匹配的行已跳过：必须让用户知道，否则「少了 N 条」无从追查。
+  // 前 5 条明细 + 总数，避免对话框被一屏报错淹没。
+  var warnMsg = null;
+  if (importWarnings.length > 0) {
+    warnMsg = '⚠ ' + importWarnings.length + ' 行列数与表头不一致，已跳过：\n'
+      + importWarnings.slice(0, 5).join('\n')
+      + (importWarnings.length > 5 ? '\n…（另有 ' + (importWarnings.length - 5) + ' 行）' : '');
+    if (logs.length === 0) showToast(warnMsg, 'warn');
+  }
   // 导入为全量覆盖，先明确提示数量差异（现有日志为空时无数据可丢，跳过确认）
-  _confirmOverwriteThenCommit(imported);
+  _confirmOverwriteThenCommit(imported, warnMsg);
 }
 
-function parseCSVLine(line) {
-  var result = [];
-  var current = '';
+/**
+ * 解析整段 CSV 为二维数组（记录 × 字段）。
+ *
+ * P1 修复：原实现先 `text.split(/\r?\n/)` 再逐行 parseCSVLine，等价于假设「字段内
+ * 不会有换行」。而本站导出（io.js）只把 `"` 转义成 `""`，用户文本字段（出场理由/平仓备注/
+ * 入场原因/亏损原因/情绪/策略形态）里只要有一个换行，就会被拆成两条记录：
+ * 该行后续所有列整体右移、其后的每一行也全部错位，一次导出→导入即静默损毁全表，
+ * 且不报任何错（每行都能被 parseCSVLine 成功解析，只是内容已错）。
+ * 引号内的换行是 RFC 4180 明确允许的合法 CSV，Excel 也照此导出，所以这里按
+ * 完整状态机解析，而不靠 split 换行。
+ * @returns {Array<Array<string>>}
+ */
+function parseCSVRecords(text) {
+  var records = [];
+  var field = '';
+  var row = [];
   var inQuotes = false;
-  for (var i = 0; i < line.length; i++) {
-    var c = line[i];
-    if (c === '"') {
-      if (inQuotes && i + 1 < line.length && line[i + 1] === '"') {
-        current += '"';
-        i++;
+  for (var i = 0; i < text.length; i++) {
+    var c = text.charAt(i);
+    if (inQuotes) {
+      if (c === '"') {
+        if (text.charAt(i + 1) === '"') { field += '"'; i++; }
+        else { inQuotes = false; }
       } else {
-        inQuotes = !inQuotes;
+        field += c;   // 含 \n / \r —— 引号内原样保留
       }
-    } else if (c === ',' && !inQuotes) {
-      result.push(current);
-      current = '';
+    } else if (c === '"') {
+      inQuotes = true;
+    } else if (c === ',') {
+      row.push(field); field = '';
+    } else if (c === '\n' || c === '\r') {
+      if (c === '\r' && text.charAt(i + 1) === '\n') i++;   // \r\n 视为一个换行
+      row.push(field); records.push(row); row = []; field = '';
     } else {
-      current += c;
+      field += c;
     }
   }
-  result.push(current);
-  return result;
+  // 文件末尾无换行时，最后的字段/行还没落盘
+  if (field.length > 0 || row.length > 0) { row.push(field); records.push(row); }
+  // 丢弃全空行（含尾部空行）
+  var out = [];
+  for (var j = 0; j < records.length; j++) {
+    var r = records[j];
+    var empty = true;
+    for (var k = 0; k < r.length; k++) { if (r[k].trim() !== '') { empty = false; break; } }
+    if (!empty) out.push(r);
+  }
+  return out;
+}
+
+/**
+ * 解析单行 CSV 为字段数组。保留供既有调用/测试使用；内部委托 parseCSVRecords，
+ * 使行内解析与整表解析口径一致（此前是两份独立实现）。
+ * @returns {Array<string>}
+ */
+function parseCSVLine(line) {
+  var recs = parseCSVRecords(line == null ? '' : line);
+  return (recs.length > 0) ? recs[0] : [];
 }
 
 /**
@@ -481,11 +587,11 @@ function _commitImportedLogs(newLogs) {
  * 覆盖导入确认：现有日志为空时无数据可丢，直接执行不做确认。
  * @param {Array} newLogs 待写入的日志数组
  */
-function _confirmOverwriteThenCommit(newLogs) {
+function _confirmOverwriteThenCommit(newLogs, extraMessage) {
   if (logs.length === 0) { _commitImportedLogs(newLogs); return; }
   window.confirmDialog({
     title: '导入将覆盖现有日志',
-    message: '将用文件中的 ' + newLogs.length + ' 条记录覆盖现有 ' + logs.length + ' 条日志。\n原有数据不可恢复。',
+    message: '将用文件中的 ' + newLogs.length + ' 条记录覆盖现有 ' + logs.length + ' 条日志。\n原有数据不可恢复。' + (extraMessage ? '\n\n' + extraMessage : ''),
     confirmText: '覆盖导入',
     danger: true
   }).then(function(ok) { if (ok) _commitImportedLogs(newLogs); });
@@ -614,9 +720,11 @@ function renderCustomSymbols() {
   container.innerHTML = html;
 }
 
-function esc(str) {
-  return String(str || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
+// esc() 不在此重复定义：constants.js 已提供全站唯一实现（含 ' → &#39;）。
+// 此前这里另有一份更弱的版本（缺单引号转义），而 settings.js 在加载顺序里靠后，
+// 把强版本全局覆盖掉了——于是所有 esc() 调用点都退化成弱转义。
+// 另外 ?? 与 || 的差别：数字 0 应显示为 "0" 而非空串。
+
 
 function addCustomSymbol() {
   var settings = loadSettings();

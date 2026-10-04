@@ -29,16 +29,17 @@
 </div>
 <div id="out">加载中…</div>
 
-<script src="../js/constants.js"></script>
-<script src="../js/utils.js"></script>
-<script src="../js/storage.js"></script>
-<script src="../js/slippage.js"></script>
-<script src="../js/skills-integration.js"></script>
-<script src="../js/calculator.js"></script>
-<script src="../js/risk.js"></script>
-<script src="../js/planner.js"></script>
-<script src="../js/discipline-led.js"></script>
-<script src="../js/settings.js"></script>
+<script src="../js/chart-guard.js?v=5.6.8"></script>
+<script src="../js/constants.js?v=5.6.8"></script>
+<script src="../js/utils.js?v=5.6.8"></script>
+<script src="../js/storage.js?v=5.6.8"></script>
+<script src="../js/slippage.js?v=5.6.8"></script>
+<script src="../js/skills-integration.js?v=5.6.8"></script>
+<script src="../js/calculator.js?v=5.6.8"></script>
+<script src="../js/risk.js?v=5.6.8"></script>
+<script src="../js/planner.js?v=5.6.8"></script>
+<script src="../js/discipline-led.js?v=5.6.8"></script>
+<script src="../js/settings.js?v=5.6.8"></script>
 <script>
 (function() {
   // ---- 环境 mock（与生产隔离） ----
@@ -47,10 +48,29 @@
   window.renderDashboard = function() {};
   window._activeFilters = null;
   var store = {};
+  // 自洽内存存储：getItem/setItem/removeItem/key/length 全部读同一份 store，
+  // 避免 preCheckStorageCapacity 里 localStorage.length 读到宿主真实存储而让结果随环境漂移。
+  // __FAIL_KEYS：按键名注入 QuotaExceededError，用于验证 saveLogs 的「先写数据、后推索引」顺序。
+  window.__FAIL_KEYS = null;
   localStorage.getItem = function(k) { return (k in store) ? store[k] : null; };
-  localStorage.setItem = function(k, v) { store[k] = String(v); };
+  localStorage.setItem = function(k, v) {
+    if (window.__FAIL_KEYS && window.__FAIL_KEYS.some(function(p) { return String(k).indexOf(p) !== -1; })) {
+      throw new DOMException('QuotaExceededError', 'QuotaExceededError');
+    }
+    store[k] = String(v);
+  };
   localStorage.removeItem = function(k) { delete store[k]; };
+  localStorage.key = function(i) { return Object.keys(store)[i] || null; };
+  Object.defineProperty(localStorage, 'length', {
+    configurable: true,
+    get: function() { return Object.keys(store).length; }
+  });
+  localStorage.clear = function() { for (var k in store) delete store[k]; };
   window.logs = [];
+
+  // settings.js 的 _commitImportedLogs 直接调用 renderSettings()（没有 typeof 守卫），
+  // 测试页不加载 settings 渲染模块，这里补一个空实现，避免第 23 组的 CSV 导入用例抛错。
+  window.renderSettings = function() { };
 
   var pass = 0, fail = 0;
   function T(name, cond) {
@@ -96,12 +116,34 @@
     h += T('kellyPct=(WR*W-LR*L)/W=0.0298', k0 && Math.abs(k0.kellyPct - 0.0298) < 1e-9);
     h += T('halfKellyPct=0.0149', k0 && Math.abs(k0.halfKellyPct - 0.0149) < 1e-9);
     h += T('期望=WR*W-LR*L=0.298', k0 && Math.abs(k0.expectancy - 0.298) < 1e-9);
-    var k1 = calcKelly(0.6, 20, 10, 10000, true, 10); // 原始 0.4 → 杠杆上限 5%/10
-    h += T('杠杆截断：kellyPct=0.005（=5%/10）', k1 && Math.abs(k1.kellyPct - 0.005) < 1e-9);
-    h += T('杠杆截断：halfKellyPct=0.005', k1 && Math.abs(k1.halfKellyPct - 0.005) < 1e-9);
-    h += T('截断标记 kellyCapped=true', k1 && k1.kellyCapped === true);
+    // P1-5 修复：Kelly% 本身就是「单笔风险占本金比例」，不能再 ÷杠杆（那会把风险比例
+    // 与名义敞口混为一谈，同一策略随杠杆把建议风险缩 20 倍）。上限固定 5%。
+    var k1a = calcKelly(0.6, 20, 10, 10000, true, 1);  // 原始 0.4，半凯利 0.2
+    var k1b = calcKelly(0.6, 20, 10, 10000, true, 10); // 同策略、杠杆 ×10
+    var k1c = calcKelly(0.6, 20, 10, 10000, true, 20); // 同策略、杠杆 ×20
+    h += T('杠杆截断：原始 0.4 截断到 0.05', k1a && Math.abs(k1a.kellyPct - 0.05) < 1e-9);
+    h += T('半凯利 0.2 截断到 0.05', k1a && Math.abs(k1a.halfKellyPct - 0.05) < 1e-9);
+    h += T('截断标记 kellyCapped=true', k1a && k1a.kellyCapped === true);
+    // 关键回归：建议风险与杠杆无关（杠杆敞口由保证金/热量/单品种占比独立约束）
+    h += T('lev=1 与 lev=10 建议风险一致', k1a && k1b && Math.abs(k1a.halfKellyPct - k1b.halfKellyPct) < 1e-9);
+    h += T('lev=10 仍为 0.05（不再被折叠成 0.005）', k1b && Math.abs(k1b.halfKellyPct - 0.05) < 1e-9);
+    h += T('lev=20 仍为 0.05（卡片与实际不再 2 倍错位）', k1c && Math.abs(k1c.halfKellyPct - 0.05) < 1e-9);
     var k2 = calcKelly(0.3, 10, 20, 10000, true, 10); // 期望为负
     h += T('期望为负时 kellyPct<=0', k2 && k2.kellyPct <= 0);
+
+    // P0-1 修复：三结果凯利。保本单不再是「完整亏损」，亏损率 = 1 - 胜率 - 保本率。
+    // 口径：3 胜 +100 / 3 亏 -90 / 4 保本 → 胜率 30%，保本率 40%，亏损率 30%
+    // （选 avgLoss=90 使 kelly=0.03 < 5% 上限，避开截断，专测公式本身）
+    var k3 = calcKelly(0.3, 100, 90, 10000, true, 1, 0.4);
+    h += T('三结果：亏损率取 0.3 而非 0.7（期望=3）', k3 && Math.abs(k3.expectancy - 3) < 1e-9);
+    h += T('三结果：kellyPct=0.03', k3 && Math.abs(k3.kellyPct - 0.03) < 1e-9);
+    h += T('三结果：halfKellyPct=0.015', k3 && Math.abs(k3.halfKellyPct - 0.015) < 1e-9);
+    // 不传保本率保持旧行为（默认 0），兼容其它调用方
+    var k3old = calcKelly(0.3, 100, 90, 10000, true, 1);
+    h += T('未传保本率：期望=30-63=-33（保本单被算作亏损）', k3old && Math.abs(k3old.expectancy - (-33)) < 1e-9);
+    h += T('同一批数据两口径结论相反：旧判负期望 / 三结果为正', k3old && k3old.kellyPct <= 0 && k3 && k3.kellyPct > 0);
+    // 与统计页口径对账：期望 = (总盈 - 总亏)/笔数，对保本中性
+    h += T('与统计页一致：期望=(GP-GL)/N=3', k3 && Math.abs(k3.expectancy - (300 - 270) / 10) < 1e-9);
 
     // ---- 4. calcKellyStatsFromLogs 保本分母 ----
     h += group('4. 凯利统计：胜率分母含保本');
@@ -590,7 +632,368 @@
         g3.ok === false && /禁止交易/.test(g3.message) && /计算仓位/.test(g3.message) === false);
       setCalc(null); setCalcDirty(false); setCalcBlocker(null);
 
+      // 15g. 清单结果缺失必须 fail-closed：「无法验证」不能当作「通过」
+      setCalc({ positionSize: 100 }); setCalcDirty(false); setCalcBlocker(null);
+      h += T('清单结果缺失 → 拒绝保存（fail-closed）',
+        (function() { var g = assertSavableCalculation(); return g.ok === false && /检查清单结果缺失/.test(g.message); })());
+      setCalc({ positionSize: 100, checklistResults: {} });
+      h += T('清单结果为空对象 → 拒绝保存',
+        (function() { var g = assertSavableCalculation(); return g.ok === false && /检查清单结果缺失/.test(g.message); })());
+      setCalc({ positionSize: 100, checklistResults: null });
+      h += T('清单结果为 null → 拒绝保存', assertSavableCalculation().ok === false);
+      // 原 `totalExecutables >= 2` 下限守卫：只剩 1 个可执行项且 fail 时曾被静默放行
+      setFakeCalc({ checkRiskPct: 'fail' });
+      h += T('仅 1 个可执行项且 fail → 同样拒绝（原下限守卫会放行）',
+        (function() { var g = assertSavableCalculation(); return g.ok === false && /1 项/.test(g.message); })());
+      setFakeCalc({ checkLossStreak: 'pass', checkRiskPct: 'pass' });
+      h += T('清单齐全且可执行项全 pass → 可保存', assertSavableCalculation().ok === true);
+      setCalc(null); setCalcDirty(false); setCalcBlocker(null);
+
     }
+
+    // ---- 16. 配置校验与热量阈值单一来源 ----
+    h += group('16. customStopLimit 校验 / 热量上限单一来源');
+    var CSLR = (typeof CUSTOM_STOP_LIMIT_RANGE !== 'undefined') ? CUSTOM_STOP_LIMIT_RANGE : null;
+    h += T('CUSTOM_STOP_LIMIT_RANGE 已定义（0.5~50）', !!CSLR && CSLR.min === 0.5 && CSLR.max === 50);
+    h += T('合法配置原样通过', JSON.stringify(validateCustomStopLimit({ ETH: 2, BTC: 3 })) === JSON.stringify({ ETH: 2, BTC: 3 }));
+    h += T('小写键被规范化为大写', JSON.stringify(validateCustomStopLimit({ btc: 3 })) === JSON.stringify({ BTC: 3 }));
+    h += T('空对象 → 合法空配置', JSON.stringify(validateCustomStopLimit({})) === '{}');
+    h += T('数组被拒绝', validateCustomStopLimit([1, 2]) === null);
+    h += T('null/undefined/字符串被拒绝',
+      validateCustomStopLimit(null) === null && validateCustomStopLimit(undefined) === null && validateCustomStopLimit('{"ETH":2}') === null);
+    h += T('非数字值被拒绝', validateCustomStopLimit({ ETH: '2' }) === null && validateCustomStopLimit({ ETH: null }) === null && validateCustomStopLimit({ ETH: NaN }) === null);
+    h += T('越界值被拒绝', validateCustomStopLimit({ ETH: 0.1 }) === null && validateCustomStopLimit({ ETH: 999 }) === null);
+    // 原型链注入：`__proto__` 等保留键必须拒绝。constructor/toString 通过正则校验（是合法
+    // 标识符形），但校验器统一把键转大写存盘，而读取端 getStopLimitPct 也按大写查表，
+    // Object.prototype 的同名成员全为小写，故不可能命中——用下面的读取端断言验证这一点。
+    h += T('__proto__ 保留键被拒绝', validateCustomStopLimit(JSON.parse('{"__proto__":1}')) === null);
+    h += T('constructor/toString 键经大写化后不与原型链冲突',
+      JSON.stringify(validateCustomStopLimit(JSON.parse('{"constructor":1}'))) === '{"CONSTRUCTOR":1}'
+      && JSON.stringify(validateCustomStopLimit(JSON.parse('{"toString":1}'))) === '{"TOSTRING":1}');
+    h += T('含引号/空白的键被拒绝', validateCustomStopLimit({ 'ETH"': 1 }) === null && validateCustomStopLimit({ ' ': 1 }) === null);
+
+    // 读侧兜底：localStorage 里被手改的配置也必须回退到内置默认
+    h += T('getStopLimitPct 已定义', typeof getStopLimitPct === 'function');
+    h += T('getHeatHardMax 已定义', typeof getHeatHardMax === 'function');
+    h += T('heat 硬上限默认取两值较严者（min(6,8)=6）', getHeatHardMax() === 6);
+    localStorage.setItem('trade_settings_v1', JSON.stringify(Object.assign(loadSettings(), { portfolioHeatMax: 3, riskHeatMax: 6 })));
+    _clearSettingsCache();
+    h += T('portfolioHeatMax 参与判定（3% 生效，不再是死配置）', getHeatHardMax() === 3);
+    localStorage.setItem('trade_settings_v1', JSON.stringify(Object.assign(loadSettings(), { portfolioHeatMax: 20, riskHeatMax: 6 })));
+    _clearSettingsCache();
+    h += T('较宽的上限不放宽硬上限（仍 6%）', getHeatHardMax() === 6);
+    localStorage.setItem('trade_settings_v1', JSON.stringify(Object.assign(loadSettings(), { customStopLimit: { ETH: 4 } })));
+    _clearSettingsCache();
+    h += T('合法 customStopLimit 生效（ETH=4）', getStopLimitPct('ETH') === 4);
+    localStorage.setItem('trade_settings_v1', JSON.stringify(Object.assign(loadSettings(), { customStopLimit: { ETH: '4' } })));
+    _clearSettingsCache();
+    h += T('字符串值回退内置默认（ETH=2）', getStopLimitPct('ETH') === 2);
+    localStorage.setItem('trade_settings_v1', JSON.stringify(Object.assign(loadSettings(), { customStopLimit: { ETH: 999 } })));
+    _clearSettingsCache();
+    h += T('越界值回退内置默认（ETH=2）', getStopLimitPct('ETH') === 2);
+    localStorage.setItem('trade_settings_v1', JSON.stringify(Object.assign(loadSettings(), { customStopLimit: { constructor: 1 } })));
+    _clearSettingsCache();
+    h += T('constructor 键不污染（走内置默认）', typeof getStopLimitPct('constructor') !== 'function' && getStopLimitPct('ETH') === 2);
+    localStorage.removeItem('trade_settings_v1');
+    _clearSettingsCache();
+
+    // ---- 17. CSV 解析器（引号内换行 / BOM / 列数校验） ----
+    h += group('17. parseCSVRecords 引号内换行安全');
+    h += T('parseCSVRecords 已定义', typeof parseCSVRecords === 'function');
+    var _r1 = parseCSVRecords('a,b,c\n1,2,3\n4,5,6');
+    h += T('常规三行解析', _r1.length === 3 && _r1[1][1] === '2' && _r1[2][2] === '6');
+    // BOM 必须在解析前剥掉：首列 header 会变成 "﻿时间"，映射不到 '时间'
+    h += T('stripBOM 已定义', typeof stripBOM === 'function');
+    h += T('stripBOM 去掉首部 BOM', stripBOM('﻿'+'时间,品种\nBTC,x') === '时间,品种\nBTC,x');
+    h += T('stripBOM 不破坏无 BOM 文本', stripBOM('时间,品种') === '时间,品种');
+    h += T('stripBOM 只去首部一个', stripBOM('ab') === 'ab');
+    h += T('stripBOM 容忍 null/undefined', stripBOM(null) === '' && stripBOM(undefined) === '');
+    h += T('BOM 剥除后首列可命中字段映射',
+      parseCSVRecords(stripBOM('﻿'+'时间,品种\nBTC,x'))[0][0] === '时间');
+    h += T('JSON 导入路径同样剥 BOM', importLogs.toString().indexOf('stripBOM') !== -1);
+    // 核心回归：导出只转义 "，不转义换行；引号内换行是合法 CSV，必须落在同一字段里
+    var _r2 = parseCSVRecords('reason,note\n"第一行\n第二行",ok');
+    h += T('引号内换行归入同一字段', _r2.length === 2 && _r2[1][0] === '第一行\n第二行');
+    h += T('引号内换行后同记录其余列不错位', _r2[1][1] === 'ok');
+    var _r3 = parseCSVRecords('a,b\n"1\n2",3\n4,5');
+    h += T('多记录混合：第一条含换行、第二条正常',
+      _r3.length === 3 && _r3[1][0] === '1\n2' && _r3[1][1] === '3' && _r3[2][0] === '4' && _r3[2][1] === '5');
+    h += T('双引号转义还原为单引号',
+      parseCSVRecords('a\n"he said ""hi"""')[1][0] === 'he said "hi"');
+    h += T('\\r\\n 视为一个换行', parseCSVRecords('a,b\r\n1,2').length === 2);
+    h += T('裸 \\r 换行也支持', parseCSVRecords('a,b\r1,2').length === 2);
+    h += T('尾部空行被丢弃', parseCSVRecords('a,b\n1,2\n\n').length === 2);
+    h += T('末尾无换行也能落盘', parseCSVRecords('a,b\n1,2').length === 2);
+    // 未闭合引号：按 RFC 4180 当作到文件尾的引号字段处理（产出一条记录），
+    // 靠下文的列数校验拦下，不崩、不静默吞数据
+    h += T('未闭合引号不崩溃', parseCSVRecords('a\n"oops').length === 2);
+    h += T('parseCSVLine 与整表解析口径一致', JSON.stringify(parseCSVLine('1,"a,b"')) === JSON.stringify(parseCSVRecords('1,"a,b"')[0]));
+
+    // 导出→导入往返：用户文本带换行时不得丢列或错位
+    var _txt = '品种,入场原因,出场理由\nBTC,"a;\nb",win\nETH,x,loss';
+    var _r4 = parseCSVRecords(_txt);
+    h += T('往返：多行文本保留且列数不变',
+      _r4.length === 3 && _r4[1].length === 3 && _r4[1][1] === 'a;\nb' && _r4[1][2] === 'win');
+    h += T('往返：后续行不受影响', _r4[2][0] === 'ETH' && _r4[2][2] === 'loss');
+
+    // ---- 18. 部分平仓基数换算（占剩余仓位 → 占原始仓位） ----
+    h += group('18. closedRatioDelta 基数换算');
+    h += T('closedRatioDelta 已定义', typeof window.utils.closedRatioDelta === 'function');
+    var CD = window.utils.closedRatioDelta;
+    h += T('首次部分平仓：frac=1，delta=输入值', CD(50, 1000, 1000) === 50);
+    h += T('第二次部分平仓：剩余 500/原始 1000，输入 50 → delta 25', CD(50, 500, 1000) === 25);
+    h += T('第三次：剩余 250/原始 1000，输入 50 → delta 12.5', CD(50, 250, 1000) === 12.5);
+    // 累计不变量：连续三次「各平剩余的 50%」后 closedRatio = 50+25+12.5 = 87.5
+    var _cr = 0, _ps = 1000, _ini = 1000;
+    for (var _n = 0; _n < 3; _n++) {
+      _cr += CD(50, _ps, _ini);
+      _ps = _ps * (1 - 50 / 100);
+    }
+    h += T('三次半平累计 closedRatio=87.5（不再是 150 或 100）', Math.abs(_cr - 87.5) < 1e-9);
+    h += T('累计值不超过 100', _cr <= 100);
+    // 与 positionSize 交叉验证：剩余额度 = 原始 ×(1 - closedRatio/100)
+    h += T('closedRatio 与 positionSize 自洽', Math.abs(_ini * (1 - _cr / 100) - _ps) < 1e-6);
+    h += T('无原始仓位基准时按 1:1', CD(50, 500, 0) === 50 && CD(50, 500, NaN) === 50);
+    h += T('剩余仓位为 0/NaN 返回 0', CD(50, 0, 1000) === 0 && CD(50, NaN, 1000) === 0);
+    h += T('非法比例返回 0', CD(NaN, 500, 1000) === 0 && CD('x', 500, 1000) === 0);
+    h += T('剩余超过原始时夹取到 1（不产生负 delta）', CD(80, 1200, 1000) === 80);
+    h += T('小数比例精度（4 位）', CD(33.33333, 100, 1000) === 3.3333);
+
+    // ---- 19. 转义单一实现 / 容量预检查 / 备份写入顺序 ----
+    h += group('19. esc 去重 / 容量预检查 / 备份顺序');
+    h += T('esc 已定义', typeof esc === 'function');
+    // settings.js 曾另有一份更弱 esc（缺单引号转义）且在加载顺序里靠后、全局覆盖
+    h += T('esc 转义单引号（弱实现没有这条）', esc("a'b") === 'a&#39;b');
+    h += T('esc 仍转义 & < > "',
+      esc('<img src=x onerror="alert(1)">&') === '&lt;img src=x onerror=&quot;alert(1)&quot;&gt;&amp;');
+    h += T('esc(0) 显示为 "0" 而非空串', esc(0) === '0' && esc(null) === '' && esc(undefined) === '');
+    h += T('生效的 esc 是含单引号转义的强实现',
+      esc.toString().indexOf('&#39;') !== -1);
+
+    h += T('preCheckStorageCapacity 已定义', typeof preCheckStorageCapacity === 'function');
+    h += T('_storageQuotaBytes 为正数（同步决策，不再恒 -1）',
+      typeof _storageQuotaBytes === 'number' && _storageQuotaBytes > 0 && isFinite(_storageQuotaBytes));
+    h += T('容量预检查：正常数据通过', preCheckStorageCapacity(1024) === true);
+    h += T('容量预检查：超大需求被拒绝', preCheckStorageCapacity(_storageQuotaBytes * 64) === false);
+    h += T('容量预检查：非法字节数被拒绝', preCheckStorageCapacity(-1) === false && preCheckStorageCapacity(NaN) === false);
+    h += T('配额可由 estimate() 异步刷新（字段可写）', (function() {
+      var before = _storageQuotaBytes; _storageQuotaBytes = 8 * 1024 * 1024;
+      var ok = (_storageQuotaBytes === 8 * 1024 * 1024); _storageQuotaBytes = before; return ok; })());
+
+    // 备份顺序：数据写不上时不得推进索引
+    (function() {
+      window.logs = [{ id: 'bk1', symbol: 'BTC', direction: 'long', entryPrice: 1, time: new Date().toISOString() }];
+      localStorage.removeItem('trade_backup_auto_index');
+      var idxBefore = localStorage.getItem('trade_backup_auto_index');
+      window.__FAIL_KEYS = ['trade_backup_auto_1'];   // 只让目标槽位写入失败
+      saveLogs();
+      window.__FAIL_KEYS = null;
+      var idxAfter = localStorage.getItem('trade_backup_auto_index');
+      h += T('备份数据写入失败时索引不推进', idxAfter === idxBefore);
+      h += T('主日志写入成功不受备份失败影响（saveLogs 仍返回 true）',
+        saveLogs(true) === true);
+    })();
+
+    // ---- 20. 日频夏普（空闲日铺满 + 365 天年化） ----
+    h += group('20. dailySharpe 空闲日铺满 / 年化系数');
+    h += T('dailySharpe 已定义', typeof window.utils.dailySharpe === 'function');
+    var _clday = (function() {
+      var d = new Date(2026, 0, 1, 12, 0, 0, 0);
+      return function(offset) {
+        var x = new Date(d.getTime() + offset * 86400000);
+        return x.toISOString();
+      };
+    })();
+    // 20a. 跨 20 天但只在首末两天平仓：20 个持仓日中 18 天应为 0
+    (function() {
+      var r = window.utils.dailySharpe([
+        { closeTime: _clday(0), pnlAmount: 100 },
+        { closeTime: _clday(19), pnlAmount: 100 }
+      ]);
+      h += T('跨 20 天含 18 个无平仓日', r.days === 20 && r.zeroDays === 18);
+      h += T('空闲日记 0 后均值被摊薄（200/20）', Math.abs(r.mean - 10) < 1e-9);
+      h += T('铺满后 sd>0（原实现会因 sd=0 而报无法计算）', r.sd > 0);
+      h += T('sd 精确值（2×90² + 18×10² 开方 /20 = 30）', Math.abs(r.sd - 30) < 1e-9);
+      h += T('年化用 365 天口径', Math.abs(r.sharpe - r.mean / r.sd * Math.sqrt(365)) < 1e-9);
+    })();
+    // 20b. 同一天的多笔合并为一个交易日
+    (function() {
+      var r = window.utils.dailySharpe([
+        { closeTime: _clday(0), pnlAmount: 60 },
+        { closeTime: _clday(0), pnlAmount: 40 },
+        { closeTime: _clday(1), pnlAmount: -100 }
+      ]);
+      h += T('同日多笔合并为 1 个持仓日', r.days === 2 && r.zeroDays === 0);
+      h += T('合并后日盈亏为 +100 与 -100（mean 0 / sd 100）',
+        Math.abs(r.mean) < 1e-9 && Math.abs(r.sd - 100) < 1e-9);
+    })();
+    // 20c. 边界：有效日不足 2、波动率为 0、空输入
+    h += T('空数组返回 null', window.utils.dailySharpe([]) === null);
+    h += T('只有 1 个有效日返回 null', window.utils.dailySharpe([{ closeTime: _clday(0), pnlAmount: 10 }]) === null);
+    h += T('全为 0 盈亏（sd=0）返回 null',
+      window.utils.dailySharpe([{ closeTime: _clday(0), pnlAmount: 0 }, { closeTime: _clday(1), pnlAmount: 0 }]) === null);
+    h += T('缺失/非法 closeTime 与 pnlAmount 被跳过',
+      window.utils.dailySharpe([{ pnlAmount: 10 }, { closeTime: 'bad', pnlAmount: 10 },
+        { closeTime: _clday(0) }]) === null);
+    // 20d. 年化系数可配置（回测 252 天口径）
+    (function() {
+      var base = [{ closeTime: _clday(0), pnlAmount: 100 }, { closeTime: _clday(5), pnlAmount: -50 }];
+      var r365 = window.utils.dailySharpe(base, { annualDays: 365 });
+      var r252 = window.utils.dailySharpe(base, { annualDays: 252 });
+      h += T('annualDays 生效且 365 高于 252',
+        r365.sharpe > r252.sharpe &&
+        Math.abs(r365.sharpe / r252.sharpe - Math.sqrt(365 / 252)) < 1e-9);
+    })();
+
+    // ---- 21. 强平价 / 杠杆维护保证金极限 ----
+    // LP = E×(1−IMR+MMR)/(1−MMR)，令 LP = E 解得 IMR = 2×MMR，
+    // 所以零缓冲边界在「杠杆 = 1/(2×MMR)」——MMR 0.5% 时是 100x，不是 200x。
+    h += group('21. calcLiquidationPrice 与杠杆上限');
+    h += T('calcLiquidationPrice 已定义', typeof window.utils.calcLiquidationPrice === 'function');
+    var _LP = window.utils.calcLiquidationPrice;
+    var _E = 100000, _MMR = 0.005;
+    h += T('BTC 100k / 10x / MMR 0.5% → 强平 90954.77',
+      Math.abs(_LP(_E, 'long', 10, _MMR) - 90954.7738693) < 1e-5);
+    h += T('空头 10x 强平价 108955.22（镜像）',
+      Math.abs(_LP(_E, 'short', 10, _MMR) - 108955.2238806) < 1e-5);
+    h += T('杠杆 100x（= 1/(2×MMR)）强平价恰等于入场价（零缓冲边界）',
+      Math.abs(_LP(_E, 'long', 100, _MMR) - _E) < 1e-6);
+    h += T('杠杆 101x 已被推到入场价之上（开仓即被强平）', _LP(_E, 'long', 101, _MMR) > _E);
+    h += T('杠杆 250x 多头强平 100603.01 > 入场价',
+      _LP(_E, 'long', 250, _MMR) > _E && Math.abs(_LP(_E, 'long', 250, _MMR) - 100603.015) < 1e-3);
+    h += T('空头 250x 对称地被推到入场价之下', _LP(_E, 'short', 250, _MMR) < _E);
+    h += T('参数非法返回 NaN',
+      isNaN(_LP(0, 'long', 10, _MMR)) && isNaN(_LP(_E, 'long', 0, _MMR)) &&
+      isNaN(_LP(_E, 'x', 10, _MMR)));
+    h += T('MMR=0 时仍给出有效强平价（90000）', _LP(_E, 'long', 10, 0) === 90000);
+    // 与 calculator.js 的硬阻断阈值一致：最高可用杠杆 = floor(1/(2×MMR))
+    h += T('阈值口径一致：floor(1/(2×MMR))=100 放行、101 拦截',
+      Math.floor(1 / (2 * _MMR)) === 100 && 100 <= 100 && 101 > 100);
+
+    // ---- 22. Chart.js 离线兜底守卫 ----
+    // index.html 从 CDN 加载 Chart.js。断网时该脚本静默失败，typeof Chart === 'undefined'，
+    // 此后 analytics/dashboard/review 里约 20 处 new Chart(...) 全部抛 ReferenceError——
+    // 图表区整片空白且无任何解释，而风控/日志/复盘其实都可用（数据全在 localStorage）。
+    // 守卫必须把它变成「明确的占位 + 说明文字」，而不是静默失败。
+    h += group('22. Chart.js 离线兜底守卫');
+    h += T('installChartGuard 已暴露', typeof window.installChartGuard === 'function');
+    h += T('CDN 缺失时已安装占位桩（__CHART_MISSING=true）', window.__CHART_MISSING === true);
+    h += T('Chart 为可调用构造器', typeof window.Chart === 'function');
+    h += T('Chart.getChart 恒返回 null（调用方都写成 if(existing) 形式，避免抛错）',
+      window.Chart.getChart(document.body) === null);
+    // 三种「拿不到 ctx」的传参形态都必须落到惰性实例上，而不是抛错
+    (function () {
+      var c = new window.Chart(null, { type: 'line', data: {} });
+      h += T('new Chart 返回惰性实例（__stub 标记）', !!c && c.__stub === true);
+      h += T('实例带 destroy/update/resize',
+        typeof c.destroy === 'function' && typeof c.update === 'function' && typeof c.resize === 'function');
+      var threw = false;
+      try { c.destroy(); c.update(); c.resize(); } catch (e) { threw = true; }
+      h += T('实例方法调用全部安全（no-op 不抛错）', !threw);
+    })();
+    (function () {
+      var cv = document.createElement('canvas');
+      var a = new window.Chart(cv, {});
+      h += T('直接传 canvas 元素也能挂上', a.canvas === cv);
+      var fakeCtx = { canvas: cv };
+      var b = new window.Chart(fakeCtx, { type: 'bar' });
+      h += T('传 2d context 也能取回 canvas', b.canvas === cv);
+    })();
+    // 离线说明必须真的画出去，不能静默失败成一张白 canvas
+    (function () {
+      var cv = document.createElement('canvas');
+      cv.width = 400; cv.height = 200;
+      var before = window.Chart.__drawCalls || 0;
+      var c = new window.Chart(cv, {});
+      h += T('离线说明绘制路径被执行且记录结果（__noteDrawn 为布尔，不抛错）',
+        typeof c.__noteDrawn === 'boolean');
+      h += T('每次构造都会尝试绘制（计数器递增）',
+        (window.Chart.__drawCalls || 0) === before + 1);
+    })();
+    // Chart 已存在时守卫必须不动它（幂等；否则异步加载的真实实现会被占位桩覆盖）
+    (function () {
+      var real = function () { return { real: true }; };
+      window.Chart = real;
+      h += T('Chart 已存在时返回 false', window.installChartGuard() === false);
+      h += T('Chart 已存在时不改动 window.Chart', window.Chart === real);
+      h += T('Chart 已存在时 __CHART_MISSING 归 false', window.__CHART_MISSING === false);
+      delete window.Chart;
+      h += T('恢复缺失后重装成功',
+        window.installChartGuard() === true && window.__CHART_MISSING === true);
+      h += T('重装后仍是占位桩', typeof window.Chart.getChart === 'function');
+    })();
+
+    // ---- 23. 日志稳定 id 与 CSV ID 列往返 ----
+    // 日志原先完全靠数组索引寻址，记录本身没有任何唯一标识：
+    //   ① storage.js 的 _logFingerprint 里 item.id 分量恒为空，去重指纹退化；
+    //   ② 同一笔交易经 CSV 与 JSON 各导入一次会被当成两条不同的日志。
+    // id 只做身份用途——不参与计算、排序、风控校验，因此对既有逻辑零影响。
+    h += group('23. 日志稳定 id 与 CSV ID 列往返');
+    h += T('genLogId 已定义', typeof window.utils.genLogId === 'function');
+    (function () {
+      var a = window.utils.genLogId();
+      var b = window.utils.genLogId();
+      h += T('格式 lg_YYYYMMDDTHHMMSS_随机6位', /^lg_\d{8}T\d{6}_[a-z0-9]{6}$/.test(a));
+      h += T('连续两次生成不重复', a !== b);
+    })();
+    (function () {
+      var existing = [];
+      for (var i = 0; i < 500; i++) existing.push({ id: window.utils.genLogId(existing) });
+      var seen = {};
+      var dup = false;
+      for (var j = 0; j < existing.length; j++) {
+        if (seen[existing[j].id]) { dup = true; break; }
+        seen[existing[j].id] = true;
+      }
+      h += T('500 条同秒批量生成仍无重复', !dup && existing.length === 500);
+    })();
+    h += T('_logFingerprint 已定义', typeof _logFingerprint === 'function');
+    (function () {
+      // 修复点：id 分量不再恒为空
+      var fp = _logFingerprint({ time: 't1', symbol: 'BTC', direction: 'long', entryPrice: 1, positionSize: 1 });
+      h += T('缺 id 时指纹以空分量开头（历史退化态）', fp.charAt(0) === '|');
+      var fp2 = _logFingerprint({ id: 'lg_x', time: 't1', symbol: 'BTC', direction: 'long', entryPrice: 1, positionSize: 1 });
+      h += T('有 id 时指纹以 id 开头（不再退化）', fp2.indexOf('lg_x|') === 0);
+      h += T('id 相同但其余字段不同 → 指纹仍不同（不跨字段合并）', fp !== fp2);
+      // 关键回归：两条指纹其余分量全同、仅 id 不同，必须判为两条记录
+      var e1 = _logFingerprint({ id: 'lg_a', time: 't', symbol: 'S', direction: 'long', entryPrice: 1, positionSize: 2 });
+      var e2 = _logFingerprint({ id: 'lg_b', time: 't', symbol: 'S', direction: 'long', entryPrice: 1, positionSize: 2 });
+      h += T('仅 id 不同即判为不同记录（历史会误判为重复）', e1 !== e2);
+    })();
+    // CSV 往返：导出侧新增 ID 列，导入侧必须把它映射回 id
+    h += T('parseCSVImport 已定义', typeof parseCSVImport === 'function');
+    (function () {
+      var _oldLogs = logs;
+      var _oldMarker = localStorage.getItem('trade_ids_backfilled_v1');
+      localStorage.setItem('trade_ids_backfilled_v1', '1');
+      try {
+        // 与 io.js 导出的列序一致（v5.6.8 起 ID 为第 1 列）
+        var csv = ['ID,时间,品种,方向,入场价,止损价,仓位(USDT),杠杆,风险额,心态评分,本金',
+          'lg_imported_001,2026-10-04T08:00:00.000Z,BTC,long,60000,58000,2.5,20,500,4,10000']
+          .join('\n');
+        logs = [];
+        parseCSVImport(csv);
+        h += T('导入 1 条记录', logs.length === 1);
+        h += T('已有 ID 被保留（不再重新生成）', logs[0] && logs[0].id === 'lg_imported_001');
+        h += T('ID 未落到未知字段名上', !logs[0] || logs[0].ID === undefined);
+        h += T('原有字段映射不受影响', logs[0] && logs[0].symbol === 'BTC' && logs[0].entryPrice === 60000);
+        // 旧版导出没有 ID 列 → 必须自动生成 id，不能让 _logFingerprint 回到退化态
+        var csv2 = ['时间,品种,方向,入场价,止损价,仓位(USDT),杠杆,风险额,心态评分,本金',
+          '2026-10-04T09:00:00.000Z,ETH,short,3500,3600,1,10,250,3,10000']
+          .join('\n');
+        logs = [];
+        parseCSVImport(csv2);
+        h += T('无 ID 列时自动生成 id', !!logs[0] && typeof logs[0].id === 'string' && logs[0].id.length > 0);
+        h += T('自动生成的 id 符合格式', /^lg_\d{8}T\d{6}_[a-z0-9]{6}$/.test(logs[0].id));
+        var _fpOld = _logFingerprint(logs[0]);
+        h += T('旧版导出导入后指纹不再退化', _fpOld.charAt(0) !== '|');
+        h += T('旧数据字段仍正常', logs[0].symbol === 'ETH' && logs[0].direction === 'short');
+      } finally {
+        logs = _oldLogs;
+        if (_oldMarker === null) localStorage.removeItem('trade_ids_backfilled_v1');
+        else localStorage.setItem('trade_ids_backfilled_v1', _oldMarker);
+      }
+    })();
 
     document.getElementById('out').innerHTML = h;
     var sum = document.getElementById('summary');

@@ -782,7 +782,7 @@ function updateChecklist() {
     if (!calc || !calc.capital || calc.capital <= 0) return null;
     var heatCheck = calcPortfolioHeat(calc.riskAmount, calc.symbol, calc.capital);
     if (!heatCheck || heatCheck.heat === undefined) return null;
-    var maxHeat = settings.riskHeatMax || 6;
+    var maxHeat = getHeatHardMax();  // 与闸门同一口径
     var passed = heatCheck.heat < maxHeat;
     return {
       result: passed,
@@ -980,9 +980,9 @@ function refreshChecklistLabels() {
   // checkRiskPct 不再是「≤ 账户风险比例」的重复表述（那是 :353 硬阻断的事），
   // 现在比较的是计划风险 vs 实际风险，与设置项无关，故不在此处动态改写标签。
   var rules = [
-    { id: 'checkRR',           key: 'minRRRatio',         format: function(v) { return '盈亏比 ≥ ' + v + ':1'; } },
-    { id: 'checkMindset',      key: 'mindsetMinScore',    format: function(v) { return '心态评分达标（≥ ' + v + '，2 分减半仓）'; } },
-    { id: 'checkPortfolioHeat', key: 'riskHeatMax',       format: function(v) { return '组合总风险含本仓（≤ ' + v + '%）'; } }
+    { id: 'checkRR',           get: function() { return settings.minRRRatio; },        format: function(v) { return '盈亏比 ≥ ' + v + ':1'; } },
+    { id: 'checkMindset',      get: function() { return settings.mindsetMinScore; },   format: function(v) { return '心态评分达标（≥ ' + v + '，2 分减半仓）'; } },
+    { id: 'checkPortfolioHeat', get: getHeatHardMax,                                  format: function(v) { return '组合总风险含本仓（≤ ' + v + '%）'; } }
   ];
   for (var i = 0; i < rules.length; i++) {
     var r = rules[i];
@@ -992,7 +992,7 @@ function refreshChecklistLabels() {
     // 动态标签写进原因槽，标签消失、原因槽显示规则文字——静默错行。
     var span = el.querySelector('.check-label');
     if (!span) continue;
-    var rawVal = settings[r.key];
+    var rawVal = r.get();
     if (rawVal != null && rawVal !== '') {
       span.textContent = r.format(rawVal);
     } else {
@@ -1012,7 +1012,7 @@ function refreshChecklistLabels() {
       (atrOn ? 'ATR 动态止损 ×' + atrMult.toFixed(1) + ' · ' : '') +
       '盈亏比 ≥ ' + (settings.minRRRatio || 2) + ':1 · ' +
       '心态评分 ≥ ' + (settings.mindsetMinScore || 3) + '（2 分自动降仓 50%）' +
-      ' · 组合总风险含本仓 ≤ ' + (settings.riskHeatMax || 6) + '%';
+      ' · 组合总风险含本仓 ≤ ' + getHeatHardMax() + '%';
     atrNote.style.display = 'block';
   } catch(e) { console.error('[planner] refreshChecklistLabels atrNote error:', e); }
 }

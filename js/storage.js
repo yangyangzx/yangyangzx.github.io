@@ -15,6 +15,9 @@ const STORAGE_CONFIG = {
 // 直接用 .length 与 maxSizeBytes 比较会让安全上限与警告阈值整体推迟（实测含中文日志
 // 样本低估 24.8%），使备份建议来得比实际需要晚。数据形状越中文越严重。
 var _utf8Encoder = (typeof TextEncoder !== 'undefined') ? new TextEncoder() : null;
+// 注意：_autoBackupIndex 的声明与初始化在 constants.js:21（从 localStorage 恢复游标）。
+// 这里绝不能重复 `var` 声明——storage.js 加载顺序在 constants.js 之后，
+// 重复声明会把已从磁盘恢复的游标重置为 0，每次刷新页面都从槽位 1 开始覆盖旧备份。
 function utf8ByteLength(str) {
   if (!str) return 0;
   if (_utf8Encoder) {
@@ -276,6 +279,28 @@ function loadLogs() {
     }
   }
 
+  // P1 FIX（2026-10-04）：为存量记录回填稳定 id。
+  // 日志一直靠数组索引寻址，记录本身没有任何唯一标识——结果是 _logFingerprint 的 item.id
+  // 分量恒为空，JSON 导入与 CSV 导入之间无法判定「同一笔交易」，跨导出副本也无法比对。
+  // id 只做身份用途（不参与计算/排序/风控校验），回填对既有逻辑零影响。
+  // 新记录在 saveLog / 分批保存 / CSV 导入 / JSON 导入处生成 id，因此用一次性标记即可，
+  // 不必每次加载重跑。
+  if (!localStorage.getItem('trade_ids_backfilled_v1')) {
+    try {
+      var _backfilled = 0;
+      for (var _bi = 0; _bi < logs.length; _bi++) {
+        if (logs[_bi] && !logs[_bi].id) {
+          logs[_bi].id = window.utils.genLogId(logs);
+          _backfilled++;
+        }
+      }
+      if (_backfilled > 0 && !saveLogs(true)) throw new Error('id 回填写入失败');
+      localStorage.setItem('trade_ids_backfilled_v1', '1');
+    } catch (e) {
+      console.error('日志 id 回填未完成，将在下次加载时重试:', e);
+    }
+  }
+
   if (!window.__tradeStorageListenerBound) {
     window.__tradeStorageListenerBound = true;
     window.addEventListener('storage', function(e) {
@@ -344,8 +369,13 @@ function saveLogs(skipBackup) {
 
   _safeRenderAfterStorageChange();
   if (capacityCheck.recommendation.indexOf('较高') >= 0) {
-    StorageSecurity.createEmergencyBackup();
-    if (typeof showToast === 'function') showToast('存储使用率较高，已创建紧急备份。', 'warn');
+    // P1 修复：原先忽略返回值却无条件 toast「已创建紧急备份」。配额已满时
+    // createEmergencyBackup 内部 setItem 抛错并返回 false，此时提示是假的。
+    var _emergencyOk = StorageSecurity.createEmergencyBackup();
+    if (typeof showToast === 'function') {
+      showToast(_emergencyOk ? '存储使用率较高，已创建紧急备份。'
+        : '存储使用率较高，但紧急备份创建失败（配额已满），请立即导出日志。', _emergencyOk ? 'warn' : 'error');
+    }
   }
   if (skipBackup) return true;
 
@@ -358,13 +388,18 @@ function saveLogs(skipBackup) {
     if (autoBackupEnabled) {
       _autoBackupIndex = (_autoBackupIndex + 1) % backupCount;
       // ADR-3 FIX: 使用明确前缀 trade_backup_auto，避免与 emergency_backup_ 混淆
-      localStorage.setItem('trade_backup_auto_index', String(_autoBackupIndex));
+      // P1 修复：必须先写数据、再写索引。原顺序反了——数据 setItem 因配额抛错时
+      // 索引已前进，下一次轮转又跳过这个槽位，最新备份既没存上、索引又指向别处，
+      // 轮转表与真实槽位从此错位。数据写成功才推进索引。
       localStorage.setItem('trade_backup_auto_' + _autoBackupIndex, JSON.stringify({ time: new Date().toISOString(), data: logs }));
+      localStorage.setItem('trade_backup_auto_index', String(_autoBackupIndex));
       if (typeof updateBackupTime === 'function') updateBackupTime();
     }
   } catch (backupError) {
-    // 主日志已经确认写入，备份轮转失败不应把主事务标记为失败。
+    // 主日志已经确认写入，备份轮转失败不应把主事务标记为失败；
+    // 但用户需要知道备份没成——「以为有备份」比没有备份更危险。
     console.warn('自动备份轮转失败:', backupError);
+    if (typeof showToast === 'function') showToast('主日志已保存，但自动备份写入失败（存储配额不足）。请尽快导出日志。', 'error');
   }
   return true;
 }
@@ -469,6 +504,20 @@ function formatHoldDuration(closeTime, openTime) {
 }
 
 // ==================== 存储容量预检查 ====================
+// navigator.storage.estimate() 返回 Promise，同步读 .quota 恒为 undefined。
+// 原实现 `Number.isFinite(est.quota)` 因此永远为 false，estRemaining 恒为 -1，
+// 容量预检查这一整段从未触发过——真正的保护只剩下方那次真实 setItem + 读回校验。
+// 这里改成同步决策：用实测已用量对保守默认配额（5MB）比较，estimate() 的 Promise
+// 解析后再异步刷新 _storageQuotaBytes，后续调用即用真实配额。
+var _storageQuotaBytes = 5 * 1024 * 1024;
+try {
+  if (typeof navigator !== 'undefined' && navigator.storage && navigator.storage.estimate) {
+    navigator.storage.estimate().then(function(est) {
+      if (est && Number.isFinite(est.quota) && est.quota > 0) _storageQuotaBytes = est.quota;
+    }).catch(function() {});
+  }
+} catch (e) { /* 配额探测失败时沿用保守默认值 */ }
+
 /**
  * 预检查localStorage容量是否足够
  * @param {number} requiredBytes - 需要的字节数
@@ -476,6 +525,13 @@ function formatHoldDuration(closeTime, openTime) {
  */
 function preCheckStorageCapacity(requiredBytes) {
   try {
+    // 非法字节数说明调用方算错了（见 StorageSecurity.checkCapacity 的同一约定）；
+    // 放行负数/NaN 会让下面的 `> estRemaining * 0.5` 比较变成恒假，预检查被静默跳过。
+    var req = Number(requiredBytes);
+    if (!Number.isFinite(req) || req < 0) {
+      console.warn('存储容量预检查失败：需要字节数非法', requiredBytes);
+      return false;
+    }
     // 实际写入时 localStorage.setItem 会替换旧值，因此剩余容量 = quota - 当前所有键值总大小
     var totalUsed = 0;
     for (var i = 0; i < localStorage.length; i++) {
@@ -485,21 +541,13 @@ function preCheckStorageCapacity(requiredBytes) {
     }
     // 尝试写入一个小测试键来验证写权限
     const testKey = '__storage_test_capacity__';
-    const testData = 'x'.repeat(Math.min(requiredBytes, 1024));
+    const testData = 'x'.repeat(Math.min(req, 1024));
     localStorage.setItem(testKey, testData);
     localStorage.removeItem(testKey);
-    // 估算剩余空间（使用 navigator.storage API 或安全默认值）
-    var estRemaining = -1;
-    if (navigator.storage && navigator.storage.estimate) {
-      try {
-        var est = navigator.storage.estimate();
-        if (est && Number.isFinite(est.quota) && est.quota > 0) {
-          estRemaining = Math.max(0, est.quota - totalUsed);
-        }
-      } catch(e) {}
-    }
-    if (estRemaining > 0 && requiredBytes > estRemaining * 0.5) {
-      console.warn(`存储容量不足：需要${requiredBytes}字节，估计剩余${estRemaining}字节`);
+    // 留 50% 余量：写入过程中旧值尚未释放，且部分浏览器对「同键替换」的峰值占用更高
+    var estRemaining = Math.max(0, _storageQuotaBytes - totalUsed);
+    if (estRemaining > 0 && req > estRemaining * 0.5) {
+      console.warn('存储容量不足：需要' + req + '字节，估计剩余' + estRemaining + '字节');
       return false;
     }
     return true;

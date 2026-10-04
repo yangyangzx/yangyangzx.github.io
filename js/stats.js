@@ -138,31 +138,22 @@ function updateStats() {
         annEl.style.color = '';
       }
     }
-    // 夏普（日频）：按平仓日聚合日盈亏
+    // 夏普（日频）：权威实现在 utils.dailySharpe（铺满空闲日 + 365 天年化）。
+    // 原先这里内联一份，只取「有平仓的交易日」——持有中无平仓的空闲日整段被丢弃，
+    // 持有 20 天只在其中 3 天平仓的账户会按 3 天算，波动率被低估、夏普被系统性抬高；
+    // 且年化系数用 252（A股/美股口径），对 7×24 永续合约低估约 31%。现统一委托。
     var shEl = document.getElementById('statSharpe');
     if (shEl) {
-      var dayMap = {};
-      for (var _j = 0; _j < closed.length; _j++) {
-        var _ct2 = closed[_j].closeTime ? new Date(closed[_j].closeTime) : null;
-        if (!_ct2 || isNaN(_ct2.getTime())) continue;
-        var _dk = _ct2.getFullYear() + '-' + (_ct2.getMonth() + 1) + '-' + _ct2.getDate();
-        var _pnl = parseFloat(closed[_j].pnlAmount);
-        if (isNaN(_pnl)) continue;
-        dayMap[_dk] = (dayMap[_dk] || 0) + _pnl;
+      var _sh = window.utils.dailySharpe(closed);
+      if (_sh) {
+        shEl.textContent = _sh.sharpe.toFixed(2);
+        shEl.style.color = _sh.sharpe >= 1 ? 'var(--color-success)' : (_sh.sharpe >= 0 ? 'var(--color-warning)' : 'var(--color-danger)');
+        shEl.title = '基于 ' + _sh.days + ' 个持仓日（含 ' + _sh.zeroDays + ' 个无平仓日）· 365 天年化';
+      } else {
+        shEl.textContent = '—';
+        shEl.style.color = '';
+        shEl.title = '有效交易日不足 2 天或日盈亏标准差为 0，无法计算';
       }
-      var _dayVals = Object.keys(dayMap).map(function(k) { return dayMap[k]; });
-      if (_dayVals.length >= 2) {
-        var _m = 0; for (var _a = 0; _a < _dayVals.length; _a++) _m += _dayVals[_a];
-        _m /= _dayVals.length;
-        var _sd = 0; for (var _b = 0; _b < _dayVals.length; _b++) _sd += Math.pow(_dayVals[_b] - _m, 2);
-        _sd = Math.sqrt(_sd / _dayVals.length);
-        if (_sd > 0) {
-          var _sharpe = _m / _sd * Math.sqrt(252);
-          shEl.textContent = _sharpe.toFixed(2);
-          shEl.style.color = _sharpe >= 1 ? 'var(--color-success)' : (_sharpe >= 0 ? 'var(--color-warning)' : 'var(--color-danger)');
-          shEl.title = '基于 ' + _dayVals.length + ' 个交易日';
-        } else { shEl.textContent = '—'; shEl.style.color = ''; }
-      } else { shEl.textContent = '—'; shEl.style.color = ''; }
     }
     // 成本侵蚀：Σ手续费 ÷ Σ(盈利+亏损绝对值)
     // P0 修复：部分平仓链的 item.fee 只是"剩余仓位"round-trip 费（中间态按比例缩减过），

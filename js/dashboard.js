@@ -242,8 +242,7 @@ function _renderRiskExposure() {
   var riskPctDisplay = (totalRisk > 0 && capital > 0) ? riskNum.toFixed(1) : '—';
   var heatMax = 6;
   try {
-    var _riskS = loadSettings();
-    if (_riskS && _riskS.riskHeatMax) heatMax = _riskS.riskHeatMax;
+    if (typeof getHeatHardMax === 'function') heatMax = getHeatHardMax();
   } catch(e) {}
   var riskCls = riskNum >= heatMax ? 'danger' : (riskNum >= heatMax * 0.8 ? 'warn' : '');
 

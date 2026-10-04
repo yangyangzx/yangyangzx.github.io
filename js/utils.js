@@ -102,6 +102,33 @@
   };
 
   /**
+   * 把「占当前剩余仓位」的平仓比例换算成「占开仓原始仓位」的比例增量。
+   *
+   * 唯一权威换算。两个基数在本系统里并存：
+   *   - 金额口径（盈亏/费用/保证金）按当前剩余仓位计价，用户输入的比例也是相对剩余仓位；
+   *   - 簿记口径（closedRatio、closes[].ratio）按开仓原始仓位计，
+   *     满足不变量 sum(closes[].ratio) === closedRatio，且 fully closed 时为 100。
+   * 直接相加会把「剩余的 50%」当成「原始的 50%」，两次及以上部分平仓时 closedRatio
+   * 虚高到 100、被判为已全额平仓，而 positionSize 仍有余额——那部分敞口既不进持仓
+   * 统计也不产生已实现盈亏。首次部分平仓时 frac=1，返回输入值，历史行为不变。
+   *
+   * @param {number} partialRatioOfRemaining 用户输入的比例（% of 当前剩余仓位），0<r<100
+   * @param {number} remainingSize 本次操作前的剩余仓位数量
+   * @param {number} initialSize   开仓原始仓位数量
+   * @returns {number} 应累加进 closedRatio 的 % 增量（占原始仓位）
+   */
+  util.closedRatioDelta = function(partialRatioOfRemaining, remainingSize, initialSize) {
+    var r = parseFloat(partialRatioOfRemaining);
+    var rem = parseFloat(remainingSize);
+    var ini = parseFloat(initialSize);
+    if (!Number.isFinite(r)) return 0;
+    if (!Number.isFinite(rem) || rem <= 0) return 0;
+    if (!Number.isFinite(ini) || ini <= 0) return r;   // 无原始仓位基准时按 1:1 处理
+    var frac = Math.min(1, Math.max(0, rem / ini));
+    return parseFloat((r * frac).toFixed(4));
+  };
+
+  /**
    * 获取按平仓时间排序的"最终平仓"日志（整笔交易已全部退出，pnlAmount 为整笔累计已实现盈亏）
    * @returns {Array} 已平仓日志数组（按 closeTime 升序）
    */
@@ -263,6 +290,71 @@
     return liquidationPrice;
   };
 
+  // ======== 日频夏普比率（单一权威实现，可单测） ========
+  /**
+   * 按平仓日聚合日盈亏，并按「首笔平仓 → 末笔平仓」逐日铺满后计算夏普。
+   *
+   * 两处口径要点（历史上都让夏普被系统性高估，故收敛为唯一实现）：
+   * ① 空闲日必须计入。只取「有平仓的交易日」会把持有中无平仓的日子整段丢弃，
+   *    持有 20 天只在其中 3 天平仓的账户会按 3 天算，波动率被低估、夏普被抬高。
+   *    本实现从首日铺到末日，无平仓日记 0。
+   * ② 年化系数默认 365：本站交易的是 7×24 永续合约，不是 A 股/美股，
+   *    按 252 折算会把年化低估约 31%。
+   *
+   * 标准差用总体口径（样本即全部观测日，不做 n-1 无偏修正）。
+   *
+   * @param {Array} closed  已平仓日志数组（需含 closeTime、pnlAmount）
+   * @param {Object} [opt]  { annualDays: number } 年化天数，默认 365
+   * @returns {{sharpe:number,days:number,zeroDays:number,mean:number,sd:number}|null}
+   *          有效日数 < 2 或标准差为 0 时返回 null（调用方显示「—」）
+   */
+  util.dailySharpe = function(closed, opt) {
+    opt = opt || {};
+    var annualDays = Number.isFinite(opt.annualDays) && opt.annualDays > 0 ? opt.annualDays : 365;
+    var arr = Array.isArray(closed) ? closed : [];
+    var dayMap = {}, minT = null, maxT = null;
+    for (var i = 0; i < arr.length; i++) {
+      var t = new Date(arr[i] && arr[i].closeTime).getTime();
+      if (isNaN(t)) continue;
+      var pnl = parseFloat(arr[i].pnlAmount);
+      if (!isFinite(pnl)) continue;
+      var dk = util.toLocalDateStr(arr[i].closeTime);
+      if (!dk) continue;
+      dayMap[dk] = (dayMap[dk] || 0) + pnl;
+      if (minT === null || t < minT) minT = t;
+      if (maxT === null || t > maxT) maxT = t;
+    }
+    // 铺满空闲日：按本地日界线逐日推进，避免 86400000ms 步进在 DST 边界重复或漏日
+    var zeroDays = 0;
+    if (minT !== null && maxT > minT) {
+      var cursor = new Date(minT);
+      cursor.setHours(0, 0, 0, 0);
+      var end = new Date(maxT);
+      end.setHours(0, 0, 0, 0);
+      while (cursor.getTime() <= end.getTime()) {
+        var ck = util.toLocalDateStr(cursor.toISOString());
+        if (dayMap[ck] === undefined) { dayMap[ck] = 0; zeroDays++; }
+        cursor.setDate(cursor.getDate() + 1);
+      }
+    }
+    var vals = Object.keys(dayMap).map(function(k) { return dayMap[k]; });
+    if (vals.length < 2) return null;
+    var mean = 0;
+    for (var a = 0; a < vals.length; a++) mean += vals[a];
+    mean /= vals.length;
+    var sumSq = 0;
+    for (var b = 0; b < vals.length; b++) sumSq += Math.pow(vals[b] - mean, 2);
+    var sd = Math.sqrt(sumSq / vals.length);
+    if (sd <= 0) return null;
+    return {
+      sharpe: mean / sd * Math.sqrt(annualDays),
+      days: vals.length,
+      zeroDays: zeroDays,
+      mean: mean,
+      sd: sd
+    };
+  };
+
   // ======== 本地日期字符串（统一口径） ========
   /**
    * ISO 字符串 → YYYY-MM-DD（本地时区）
@@ -284,6 +376,45 @@
       return m[1] + '-' + m[2].padStart(2, '0') + '-' + m[3].padStart(2, '0');
     }
     return '';
+  };
+
+  // ======== 日志唯一标识 ========
+  /**
+   * 生成日志记录的唯一 id（时间戳前缀 + 随机尾巴）。
+   *
+   * 历史背景：日志一直靠「数组索引」寻址（data-idx、_pendingDeleteIndices、
+   * openClosePanelIdx 等），记录本身没有任何稳定标识。两个后果：
+   *   1. storage.js 的 _logFingerprint 读 item.id 永远得到 undefined，v3→v4 去重指纹退化；
+   *   2. 导入/导出/合并后无法判断两条记录是不是同一笔交易。
+   *
+   * id 只做「身份」用途——不参与计算、排序、风控校验，也不能当作寻址手段
+   * （删除记录后索引仍会变）。因此为存量记录回填 id 对既有逻辑零影响。
+   *
+   * @param {Array} [logs] 当前日志数组；给定时保证返回值在数组内唯一
+   * @returns {string} 形如 'lg_20261004T074503_8k3n2a'
+   */
+  util.genLogId = function(logs) {
+    var taken = Object.create(null);
+    if (Array.isArray(logs)) {
+      for (var i = 0; i < logs.length; i++) {
+        var eid = logs[i] && logs[i].id;
+        if (typeof eid === 'string' && eid) taken[eid] = true;
+      }
+    }
+    var d = new Date();
+    var stamp = d.getFullYear() +
+      String(d.getMonth() + 1).padStart(2, '0') +
+      String(d.getDate()).padStart(2, '0') +
+      'T' +
+      String(d.getHours()).padStart(2, '0') +
+      String(d.getMinutes()).padStart(2, '0') +
+      String(d.getSeconds()).padStart(2, '0');
+    var id = '';
+    for (var g = 0; g < 50; g++) {
+      id = 'lg_' + stamp + '_' + Math.random().toString(36).slice(2, 8);
+      if (!taken[id]) break;
+    }
+    return id;
   };
 
   // ======== 已平仓交易判断（统一过滤条件） ========

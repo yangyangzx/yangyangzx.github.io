@@ -67,8 +67,7 @@ function calcPortfolioHeat(pendingRiskAmount, pendingSymbol, capitalOverride) {
 
   var existingHeat = totalRisk / capital * 100;
   var heat = existingHeat + planPct;
-  var settings = loadSettings();
-  var maxHeat = settings.riskHeatMax || 6;
+  var maxHeat = getHeatHardMax();
   var warning = null;
   var blocked = false;
 
@@ -76,7 +75,7 @@ function calcPortfolioHeat(pendingRiskAmount, pendingSymbol, capitalOverride) {
     blocked = true;
     warning = '组合总风险已达 ' + heat.toFixed(1) + '%（已持仓 ' + existingHeat.toFixed(1)
       + '% + 本仓 ' + planPct.toFixed(1) + '%），超过上限 ' + maxHeat + '%。建议减仓后再开新仓。';
-  } else if (heat >= settings.portfolioHeatMax || heat >= maxHeat * 0.8) {
+  } else if (heat >= maxHeat * 0.8) {
     warning = '组合总风险 ' + heat.toFixed(1) + '% 接近上限 (' + maxHeat + '%)，注意控制新开仓风险。';
   }
 
@@ -93,6 +92,24 @@ function calcPortfolioHeat(pendingRiskAmount, pendingSymbol, capitalOverride) {
 }
 
 /**
+ * 组合热量硬上限（%）——唯一权威实现。
+ *
+ * P1 修复：原先只有 skills-integration.js 的
+ *   `heat >= settings.portfolioHeatMax || heat >= riskHeatMax * 0.8`
+ * 一处会读 portfolioHeatMax，而第二个子句（默认 6%×0.8=4.8%）总先命中，
+ * 于是用户在设置页把「组合热量上限」从 8% 改成任何值都不影响任何判定——死配置项。
+ * 现在两个上限取较严者作为硬上限，闸门/清单/风险面板全部经此读取，
+ * 且默认 riskHeatMax=6 < portfolioHeatMax=8 时结果仍为 6%，历史行为不变。
+ */
+function getHeatHardMax() {
+  var settings = loadSettings();
+  var a = parseFloat(settings.riskHeatMax);
+  var b = parseFloat(settings.portfolioHeatMax);
+  if (Number.isFinite(a) && a > 0) return b > 0 ? Math.min(a, b) : a;
+  return (b > 0) ? b : 6;
+}
+
+/**
  * 品种止损距离上限（%）——唯一权威实现。
  * 自定义设置优先，未配置时回退 ETH 2% / 其余 3%。
  * calculator.js 的色标与硬阻断、planner.js 的检查清单都必须读这里；
@@ -102,7 +119,16 @@ function getStopLimitPct(symbol) {
   var settings = loadSettings();
   var custom = settings.customStopLimit || {};
   var s = String(symbol || '').toUpperCase();
-  return custom[s] != null ? custom[s] : (s === 'ETH' ? 2 : 3);
+  // 读侧兜底（P1）：customStopLimit 只在校存表单时校验，localStorage 里被手改或
+  // 由 importSettings 导入的旧数据会绕过；而且原实现直接 custom[s] != null，
+  // {"constructor":1} 会命中 Object.prototype.constructor 返回一个函数。
+  // 这里只认「有限数字且在合法区间」，其余一律走内置默认（ETH 2% / 其余 3%）。
+  var _v = custom[s];
+  if (typeof _v === 'number' && isFinite(_v) && _v > 0) {
+    var _r = (typeof CUSTOM_STOP_LIMIT_RANGE !== 'undefined') ? CUSTOM_STOP_LIMIT_RANGE : null;
+    if (!_r || (_v >= _r.min && _v <= _r.max)) return _v;
+  }
+  return (s === 'ETH') ? 2 : 3;
 }
 
 /**
@@ -129,7 +155,12 @@ function getStopLimitPct(symbol) {
  * @property {boolean} kellyCapped - 完整凯利是否被截断
  * @property {boolean} halfKellyCapped - 半凯利是否被截断
  */
-function calcKelly(winRate, avgWin, avgLoss, accountSize, halfKelly, leverage) {
+// P0-1 修复：三结果凯利。原实现 lossRate = 1 - winRate 把「保本单」当完整亏损，
+// 而本站胜率口径是「保本计入分母」（统计页期望值 = (GP-GL)/N 对保本中性）。
+// 同一批数据会出现「统计页 +15（正期望）/ 凯利 -5（判策略无价值）」的相反结论，
+// 且凯利直接驱动仓位大小。现由调用方传入 breakEvenRate，亏损率按实际笔数比例取。
+// 默认 0 保持旧调用行为不变（winRate + lossRate + breakEvenRate = 1）。
+function calcKelly(winRate, avgWin, avgLoss, accountSize, halfKelly, leverage, breakEvenRate) {
   if (halfKelly === undefined) halfKelly = true;
   if (leverage === undefined) leverage = 1;
   // P2 边界：avgWin/avgLoss 为 NaN 或 undefined 时无效。
@@ -141,7 +172,9 @@ function calcKelly(winRate, avgWin, avgLoss, accountSize, halfKelly, leverage) {
   if (winRate < 0 || winRate > 1) return null;
 
   // Kelly 公式：Kelly% = (WR × AvgWin - LR × AvgLoss) / AvgWin
-  var lossRate = 1 - winRate;
+  // P0-1：亏损率 = 亏损笔数占比，不再用 1-WR 把保本单算作亏损。
+  var _beRate = (breakEvenRate != null && Number.isFinite(breakEvenRate) && breakEvenRate > 0) ? breakEvenRate : 0;
+  var lossRate = Math.max(0, 1 - winRate - _beRate);
   var kellyPct = (winRate * avgWin - lossRate * avgLoss) / avgWin;
 
   // 半凯利（实践标准）
@@ -151,16 +184,19 @@ function calcKelly(winRate, avgWin, avgLoss, accountSize, halfKelly, leverage) {
   if (kellyPct < 0) kellyPct = 0;
   if (halfKellyPct < 0) halfKellyPct = 0;
 
-  // 杠杆感知：固定有效风险上限为 5%
-  // 有效风险 = Kelly% × 杠杆 ≤ 5%
-  // 因此 Kelly% ≤ 5% / 杠杆
-  var maxEffectiveRisk = 0.05;
-  var leverageAdjustedLimit = maxEffectiveRisk / Math.max(leverage, 1);
-  
-  var kellyCapped = kellyPct > leverageAdjustedLimit;
-  var halfKellyCapped = halfKellyPct > leverageAdjustedLimit;
-  kellyPct = Math.min(kellyPct, leverageAdjustedLimit);
-  halfKellyPct = Math.min(halfKellyPct, leverageAdjustedLimit);
+  // 杠杆感知上限（P1-5 修复）：Kelly% 本身就是「单笔风险占本金比例」，
+  // 原实现再 ÷杠杆 会把「风险比例」和「名义敞口」混为一谈——同一策略
+  // （wr=0.6/aw=100/al=30，原始半凯利 24%）在 lev=1 建议 5%、lev=10 建议 0.5%、
+  // lev=20 建议 0.25%，边际未变而建议风险缩 20 倍；且 lev≥20 时被下拉的
+  // Math.max(0.5,...) 抬到 0.5% 而实际执行 0.25%，卡片显示是实际的 2 倍。
+  // 现改为：风险比例上限固定 5%；杠杆敞口由下游的保证金/组合热量/单品种占比
+  // 三道硬上限独立约束，不再在这里被折叠进风险比例。
+  var riskLimit = 0.05;
+
+  var kellyCapped = kellyPct > riskLimit;
+  var halfKellyCapped = halfKellyPct > riskLimit;
+  kellyPct = Math.min(kellyPct, riskLimit);
+  halfKellyPct = Math.min(halfKellyPct, riskLimit);
 
   // P2-9 FIX：删除无金融含义的 kellyShares（账户×比例÷平均亏损没有推导依据），
   // 改为有明确语义的"凯利建议风险金额"（账户×比例），与 UI 使用的 halfKellyPct×capital 同源
@@ -462,6 +498,9 @@ function autoFillKellyFromLogs() {
     // 设计优化：样本量元信息挂到 winRate 元素，供 calculate() 组装 kellyData 时读取
     // （小样本凯利是噪音放大器，applyKellyRisk 依据它决定是否驱动仓位）
     winRateEl.dataset.kellySamples = stats.samples;
+    // P0-1：同步挂保本率，供 calculate() 传入 calcKelly 的三结果公式；
+    // 与 kellySamples 同生命周期（用户手改凯利三字段时一并清除，见 calculator.js dirtyFields 处理）
+    winRateEl.dataset.kellyBreakEven = String(stats.breakEvenRate || 0);
 
     // K3 修复：增加平盘率和样本质量提示
     var tipText = '已从 ' + stats.samples + ' 笔' + (curFramework ? '「' + curFramework + '」策略' : '历史') + '交易自动计算';

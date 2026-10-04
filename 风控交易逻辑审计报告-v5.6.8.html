@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>开仓计算链 / 交易逻辑 / 数据依赖 深度审计报告 v5.6.8</title>
+<style>
+  :root { --bg:#f4f3ee; --card:#fff; --border:#e4e3dd; --text:#1a1b1c; --muted:#6b7280; --red:#ea6668; --green:#52c41a; --warn:#faad14; --accent:#9eacea; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:'PingFang SC','Roboto',sans-serif; background:var(--bg); color:var(--text); padding:24px; line-height:1.6; }
+  .wrap { max-width:1000px; margin:0 auto; }
+  h1 { font-size:22px; margin-bottom:4px; }
+  .sub { color:var(--muted); font-size:13px; margin-bottom:20px; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:20px; margin-bottom:16px; }
+  h2 { font-size:16px; margin-bottom:12px; display:flex; align-items:center; gap:8px; }
+  h3 { font-size:14px; margin:14px 0 8px; color:#37474f; }
+  .badge { display:inline-block; padding:2px 10px; border-radius:20px; font-size:12px; font-weight:600; }
+  .b-p0 { background:#fdeaea; color:#c0392b; }
+  .b-p1 { background:#fff3e0; color:#e65100; }
+  .b-p2 { background:#fffde7; color:#f9a825; }
+  .b-ok { background:#e8f5e9; color:#2e7d32; }
+  .b-do { background:#eceff1; color:#455a64; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
+  th { background:#faf9f6; font-weight:600; white-space:nowrap; }
+  .num { font-variant-numeric:tabular-nums; }
+  .ok { color:var(--green); font-weight:600; }
+  .fix { color:var(--red); font-weight:600; }
+  .ev { font-size:12px; color:var(--muted); font-family:Menlo,Consolas,monospace; }
+  .note { font-size:12px; color:var(--muted); margin-top:8px; }
+  ul { padding-left:18px; font-size:13px; }
+  li { margin-bottom:5px; }
+  code { background:#f0efea; padding:1px 5px; border-radius:4px; font-size:12px; font-family:Menlo,Consolas,monospace; }
+  .flow { display:flex; flex-wrap:wrap; gap:8px; align-items:center; font-size:12px; margin-top:8px; }
+  .flow .node { background:var(--accent); color:#1a1b1c; padding:4px 12px; border-radius:8px; font-weight:600; }
+  .flow .arrow { color:var(--muted); }
+  .kv { font-size:13px; margin-bottom:4px; }
+  .kv b { display:inline-block; min-width:132px; color:#37474f; }
+  .warnbox { border-left:3px solid var(--warn); background:#fffbea; padding:10px 14px; border-radius:0 8px 8px 0; font-size:12.5px; margin-top:10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>开仓计算链 / 交易逻辑 / 数据依赖 — 深度审计报告</h1>
+  <div class="sub">审计日期：2026-10-04 · 版本 v5.6.6 → v5.6.8 · 范围：calculator.js（1900+行）· skills-integration.js · utils.js · storage.js · settings.js · logs.js · planner.js · risk.js · dashboard.js · stats.js · calculation-ui.js · 25 个模块的加载顺序与全局挂载 · 本轮修复 24 项（含 10 项 P0）+ v5.6.8 追加 2 项 · 回归 299/299 通过</div>
+
+  <div class="card">
+    <h2>一、结论摘要</h2>
+    <div class="kv"><b>整体架构</b><span class="ok">健康</span>：单一事实来源约定（<code>isClosedTrade</code> / <code>calcLiquidationPrice</code> / <code>toLocalDateStr</code> / <code>syncCloseBookkeeping</code>）执行得比较彻底，跨模块调用统一走 <code>window.utils</code>，未见 v5.2 那种「裸 <code>util.</code>」的历史坑重现。</div>
+    <div class="kv"><b>主要风险面</b><span class="fix">口径分叉与静默放行</span>：本轮 10 个 P0 里有 7 个是「系统给出一套数字、另一套数字在别处出现，且两者都看起来合理」——凯利 vs 统计页、硬熔断 vs 清单显示、账面 RR vs 含费 RR、剩余仓位 vs 已平仓台账。这类问题不报错，只会让复盘结论慢慢失真。</div>
+    <div class="kv"><b>闸门可信度</b><span class="fix">此前有绕过路径</span>：保存闸门在清单结果缺失时静默放行；止损强平校验对「零价格缓冲」仓位恒判通过。两处都补上了。</div>
+    <div class="kv"><b>测试</b><span class="ok">162 → 299</span>（v5.6.7 +103，v5.6.8 +34），全部走浏览器回归页 <code>test/run-tests.html</code>，并补了配额注入与 localStorage 自洽性，使存储路径的断言可在真实浏览器中复现。</div>
+
+    <h3>本轮需你过目的 3 处行为变更</h3>
+    <ul>
+      <li><b>凯利建议风险在杠杆 ≥ 10 时显著变大</b>：原先上限是 5%÷杠杆（10× 杠杆建议 0.5%、20× 建议 0.25%），现统一为 5%。同一策略在 1× 与 10× 下建议的<b>风险金额相同</b>，敞口差异交给保证金/热量/集中度三道硬上限去约束。如果你一直按低杠杆口径手动微调，这次会看到建议值跳升。</li>
+      <li><b><code>portfolioHeatMax</code> 设置项从「无效」变为「生效」</b>：原先它只出现在一条被 <code>riskHeatMax×0.8</code> 恒覆盖的子句里，改它不影响任何判定；现在取两值较严者，四处判定统一。默认 6 与 8 取 6，与历史行为一致。</li>
+      <li><b>清单结果缺失时拒绝保存</b>：快照里没有 <code>checklistResults</code>（空对象/缺失）现在直接拒绝并提示重新计算，不再静默当作通过。</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>二、数据依赖图（跨文件才看得懂的部分）</h2>
+    <div class="flow">
+      <span class="node">表单参数</span><span class="arrow">→</span>
+      <span class="node">滑点</span><span class="arrow">→</span>
+      <span class="node">止损距离</span><span class="arrow">→</span>
+      <span class="node">风险金额（凯利可驱动）</span><span class="arrow">→</span>
+      <span class="node">名义仓位</span><span class="arrow">→</span>
+      <span class="node">保证金 80%</span><span class="arrow">→</span>
+      <span class="node">交易所上限</span><span class="arrow">→</span>
+      <span class="node">强平校验</span><span class="arrow">→</span>
+      <span class="node">组合热量</span><span class="arrow">→</span>
+      <span class="node">集中度</span><span class="arrow">→</span>
+      <span class="node">连亏系数</span><span class="arrow">→</span>
+      <span class="node">心态降仓</span><span class="arrow">→</span>
+      <span class="node">快照 _lastCalc</span>
+    </div>
+    <div class="note">闸门层：<code>assertSavableCalculation</code> 读 <code>_lastCalc</code> 的 <code>checklistResults</code>（由 <code>planner.js</code> 从 12 个清单 DOM 的图标类反推），与 <code>getCalcBlocker</code> 的硬阻断互斥。所有提示与结果卡片统一读<b>截断后</b>数值。</div>
+
+    <h3>本轮建立的新的单一来源</h3>
+    <table>
+      <thead><tr><th>权威实现</th><th>位置</th><th>收敛了哪些副本</th></tr></thead>
+      <tbody>
+        <tr><td><code>utils.dailySharpe</code></td><td>utils.js</td><td>stats.js 内联的夏普（只取有平仓日 + 252 年化）</td></tr>
+        <tr><td><code>_getTodayLossStreak</code></td><td>stats.js</td><td>calculator.js 内联的当日连亏（口径更严，要求 closeTime 非空）</td></tr>
+        <tr><td><code>getHeatHardMax</code></td><td>skills-integration.js</td><td>risk.js / planner.js / dashboard.js 各自读 <code>settings.portfolioHeatMax</code></td></tr>
+        <tr><td><code>validateCustomStopLimit</code> / <code>getStopLimitPct</code></td><td>settings.js</td><td>planner.js 重复抄写的 ETH 2% / 其余 3%</td></tr>
+        <tr><td><code>parseCSVRecords</code> / <code>stripBOM</code></td><td>settings.js</td><td>手写按行 split（引号内换行必坏）</td></tr>
+        <tr><td><code>utils.closedRatioDelta</code></td><td>utils.js</td><td>logs.js 直接相加导致的基数错配</td></tr>
+        <tr><td><code>esc</code></td><td>constants.js</td><td>settings.js 的一份弱实现（缺单引号转义）</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>三、本轮修复清单（24 项，全部已修并实测）</h2>
+
+    <h3>P0 — 会静默给错结论或放过不该过的（10 项）</h3>
+    <table>
+      <thead><tr><th>模块</th><th>问题</th><th>证据</th><th>修复</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>凯利<br><code>skills-integration.js</code></td>
+          <td><b>保本单被算作完整亏损</b>：<code>lossRate = 1 - winRate</code>，保本交易被计入亏损腿。同一天「统计页期望 +15U（正期望）」与「凯利期望 −5U（判策略无价值）」对同一批数据给相反结论，而凯利直接驱动仓位大小</td>
+          <td class="ev">lossRate = 1 - winRate</td>
+          <td>三结果期望：<code>lossRate = 1 − 胜率 − 保本率</code>；保本率由 <code>autoFillKellyFromLogs</code> 与样本量同生命周期挂在 <code>dataset.kellyBreakEven</code>，用户手改凯利三字段时一并清除，避免样本量与保本率脱节</td>
+        </tr>
+        <tr>
+          <td>凯利</td>
+          <td><b>「风险比例」与「名义敞口」被混为一谈</b>：上限是 <code>5%/leverage</code>。同一策略 1× 建议 5%、10× 建议 0.5%、20× 建议 0.25%——边际未变而建议风险缩 20 倍；20× 时下拉抬到 0.5% 而实际执行 0.25%，卡片显示是实际的 2 倍</td>
+          <td class="ev">riskLimit = 0.05 / leverage</td>
+          <td>固定 5%。<b>实测 kellyPct 在 lev=1/10/20 下恒为 5%</b>；杠杆敞口改由保证金 80% / 组合热量 / 单品种占比三道硬上限约束</td>
+        </tr>
+        <tr>
+          <td>部分平仓<br><code>logs.js</code></td>
+          <td><b>基数错配</b>：用户输入的是「占剩余仓位 %」，却被直接加进「占原始仓位 %」的累加器 <code>closedRatio</code>。连续两次各平剩余 50% → closedRatio = 100，被判为已全额平仓，而 <code>positionSize</code> 仍有余额——那部分敞口既不进持仓统计，也不产生已实现盈亏</td>
+          <td class="ev">closedRatio += partialRatio（两基数混用）</td>
+          <td>新增 <code>utils.closedRatioDelta(ratio, remaining, initial)</code> 换算；<code>closes[]</code> 同时存 <code>ratio</code>（原始基数）与 <code>ratioOfRemaining</code>（用户输入）。<b>实测 50+25+12.5 = 87.5，且 <code>initial×(1−cr/100) === positionSize</code> 恒成立</b></td>
+        </tr>
+        <tr>
+          <td>CSV 导入<br><code>settings.js</code></td>
+          <td><b>一次导出→导入静默损毁全表</b>：本站导出只转义 <code>"</code> 不转义换行，用户文本字段里一个换行就把该行后续所有列整体右移、其后每一行全部错位。按行 <code>split('\n')</code> 无法识别引号</td>
+          <td class="ev">csvText.split('\n') 逐行 parseCSVLine</td>
+          <td>新增 <code>parseCSVRecords</code> 状态机：支持引号内 <code>\n</code>/<code>\r</code>、<code>""</code>→<code>"</code>、<code>\r\n</code> 与裸 <code>\r</code>、未闭合引号容忍；丢弃全空行。<b>往返实测无损</b></td>
+        </tr>
+        <tr>
+          <td>CSV / JSON 导入</td>
+          <td><b>BOM 未剥离</b>：首列 header 变成 <code>“时间</code>，字段映射失败，时间/品种两列整体丢失</td>
+          <td class="ev">parseCSVImport 直接用 csvText</td>
+          <td>新增 <code>stripBOM</code>，CSV 与 JSON 两条导入路径共用（用 <code>﻿</code> 转义写正则，避免编辑器吃掉字面 BOM）</td>
+        </tr>
+        <tr>
+          <td>保存闸门<br><code>calculator.js</code></td>
+          <td><b>「无法验证」被当成「通过」</b>：① <code>checklistResults</code> 缺失/空对象时 <code>failCount=0</code> 直接放行；② <code>totalExecutables &gt;= 2</code> 这个无业务依据的下限守卫会让「只剩 1 个可执行项且 fail」时放行。注释还写着「最多允许 1 个 fail」，与实现相反</td>
+          <td class="ev">if (totalExecutables &gt;= 2 &amp;&amp; failCount &gt; 0)</td>
+          <td>fail-closed：清单缺失/空 → 拒绝保存并提示重新计算；删掉下限守卫，<code>failCount &gt; 0</code> 即拒绝。warn 态（仓位截断/心态降仓/多止盈 RR 偏低）与 skipped 仍不阻断，与 v5.6.3 定义一致</td>
+        </tr>
+        <tr>
+          <td>连亏熔断<br><code>calculator.js</code></td>
+          <td><b>同一口径存两份且分叉</b>：熔断要求 <code>closeTime</code> 非空，而权威实现 <code>_getTodayLossStreak</code> 在缺失时回退到 <code>time</code>。出现「页面显示 2 笔未触发、点计算却被熔断」</td>
+          <td class="ev">calculator.js:292-305 内联复制</td>
+          <td>统一委托 <code>_getTodayLossStreak()</code>（dashboard 与清单项共用）</td>
+        </tr>
+        <tr>
+          <td>夏普<br><code>stats.js</code></td>
+          <td><b>两个方向相反的偏差</b>：① 只取「有平仓的交易日」，持有中无平仓的空闲日整段被丢弃——持有 20 天只在其中 3 天平仓的账户按 3 天算，波动率被低估、夏普被系统性抬高；② 年化系数用 252（A股/美股口径），对 7×24 永续合约低估约 31%</td>
+          <td class="ev">Math.sqrt(252)；dayMap 仅含有平仓日</td>
+          <td>收敛为 <code>utils.dailySharpe</code>：从首笔平仓到末笔逐日铺满、无平仓日记 0（按本地日界线推进，避免 DST 边界重复/漏日）；年化改 365，<code>annualDays</code> 可配置。title 显示「含 N 个无平仓日」</td>
+        </tr>
+        <tr>
+          <td>杠杆校验<br><code>calculator.js</code></td>
+          <td><b>零价格缓冲的仓位照样过闸</b>：只比较「止损 vs 强平价」，当强平价已被推到入场价另一侧时 <code>isInvalid</code> 恒为假。强平价公式 <code>LP = E×(1−IMR+MMR)/(1−MMR)</code>，令 <code>LP=E</code> 解得 <code>IMR = 2×MMR</code>——边界是 <b>1/(2×MMR)</b>，不是 1/MMR。MMR 0.5% 时 <b>100x 强平价恰为入场价、101x 已被推过入场价</b></td>
+          <td class="ev">只判 isInvalid，未判杠杆本身</td>
+          <td>新增硬阻断 <code>leverage-below-mmr</code>：最高可用杠杆 <code>floor(1/(2×MMR))</code>；另补 <code>liquidation-unsolvable</code>：强平价算出 NaN 也阻断（原先比较全为假，静默放行）</td>
+        </tr>
+        <tr>
+          <td>热量上限<br><code>skills-integration.js</code></td>
+          <td><b><code>portfolioHeatMax</code> 是死配置项</b>：它只在一条被 <code>riskHeatMax×0.8</code> 恒覆盖的子句里被读到，设置页改它不影响任何判定</td>
+          <td class="ev">heat &gt;= settings.portfolioHeatMax || heat &gt;= maxHeat*0.8</td>
+          <td>新增 <code>getHeatHardMax()</code> 取两值较严者；闸门/清单/风险面板/仪表盘四处统一读取。默认 6 与 8 取 6，历史行为不变</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>P1 — 数据完整性与安全（8 项）</h3>
+    <table>
+      <thead><tr><th>模块</th><th>问题与修复</th></tr></thead>
+      <tbody>
+        <tr><td>HTML 转义</td><td><b>两份 <code>esc()</code>，弱实现胜出</b>：settings.js 的一份缺单引号转义（<code>'</code> → <code>&amp;#39;</code>），而加载顺序在 constants.js 之后，全局覆盖。单引号属性上下文的注入路径。已删弱实现，只在 constants.js 留一份，并加断言锁定「生效的是含单引号转义的强实现」</td></tr>
+        <tr><td>容量预检查</td><td><b>整段从未触发过</b>：<code>navigator.storage.estimate()</code> 返回 Promise，同步读 <code>est.quota</code> 恒为 undefined，<code>estRemaining</code> 恒为 −1。改为同步决策：用实测已用量对保守默认配额 5MB 比较，<code>estimate()</code> 解析后异步刷新 <code>_storageQuotaBytes</code></td></tr>
+        <tr><td>容量预检查</td><td><b>放行负数/NaN</b>：<code>requiredBytes &gt; estRemaining*0.5</code> 对负数恒假，预检查被静默跳过。现按 <code>checkCapacity</code> 的同一约定拒绝非有限/负值</td></tr>
+        <tr><td>自动备份轮转</td><td><b>先写索引、后写数据</b>：数据 <code>setItem</code> 因配额抛错时索引已前进，下次轮转又跳过这个槽位，最新备份既没存上、索引又指向别处，轮转表与真实槽位从此错位。改为先数据后索引，并用 <code>__FAIL_KEYS</code> 注入配额错误验证</td></tr>
+        <tr><td>紧急备份</td><td><b>配额已满时仍提示「已创建紧急备份」</b>：<code>createEmergencyBackup</code> 内部抛错返回 false，被调用方忽略。现按返回值区分「已创建」（warn）与「创建失败，请立即导出」（error）</td></tr>
+        <tr><td>备份 catch 分支</td><td><b>静默吞掉备份失败</b>：主日志已确认写入，但用户以为有备份。现补 error toast「主日志已保存，但自动备份写入失败」</td></tr>
+        <tr><td>customStopLimit</td><td><b>校验近乎不存在</b>：只 <code>JSON.parse</code> + <code>typeof === 'object'</code>，字符串值、数组、原型键（<code>__proto__</code>）全部静默入库。新增 <code>validateCustomStopLimit</code>：键白名单正则 + 转大写、有限数字、0.5~50 区间、200 键上限、空对象视为清空；校验失败<b>整次保存拒绝</b>而非静默清空。读侧 <code>getStopLimitPct</code> 同样兜底</td></tr>
+        <tr><td>CSV 列数</td><td><b>列数不一致静默丢字段</b>：多一列/少一列都被静默丢弃。现逐行告警并汇总（前 5 条明细 + 总数）进确认对话框</td></tr>
+      </tbody>
+    </table>
+
+    <h3>P2 — 测试基础设施与死代码（6 项）</h3>
+    <table>
+      <thead><tr><th>位置</th><th>问题与修复</th></tr></thead>
+      <tbody>
+        <tr><td><code>constants.js:21</code></td><td><b>差点引入的回归</b>：为修复 <code>_autoBackupIndex</code> 未声明而补的 <code>var _autoBackupIndex = 0</code> 会<b>每次刷新把已从 localStorage 恢复的轮转游标重置为 0</b>（constants.js 先加载）。已删除该声明，改为注释说明权威初始化位置</td></tr>
+        <tr><td><code>calculation-ui.js</code></td><td><b>零调用的「中央配置」入口</b>：<code>evaluateOpeningBlockers</code> 自称让阻断检查成为单一可测试配置，但真实阻断链是 <code>_calculateImpl</code> 内按 IIFE 顺序早返回的序列，从未走它。留着会让维护者误以为阻断逻辑已集中，改文案时只改规则表而实际不生效。已删</td></tr>
+        <tr><td>测试页</td><td><b>脚本无缓存破坏</b>：改完 JS 后打开测试页可能仍跑旧代码，测出的绿灯不可信。全部 <code>&lt;script&gt;</code> 加 <code>?v=5.6.7</code></td></tr>
+        <tr><td>测试 mock</td><td><b>localStorage mock 不自洽</b>：只覆写了 getItem/setItem/removeItem，<code>length</code>/<code>key</code> 仍读宿主真实存储——<code>preCheckStorageCapacity</code> 的断言结果随环境漂移。现补全并统一到同一份内存</td></tr>
+        <tr><td>测试 mock</td><td><b>无法验证备份写入顺序</b>：新增 <code>window.__FAIL_KEYS</code> 按键名注入 <code>QuotaExceededError</code>，在真实浏览器与 node harness 中行为一致</td></tr>
+        <tr><td><code>stats.js</code></td><td>夏普从 <code>updateStats</code> 内联实现抽成可单测的 <code>utils.dailySharpe</code>（原先无法断言）</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>四、遗留项（v5.6.8 已收口 2 项，以下仍保留）</h2>
+    <table>
+      <thead><tr><th>级别</th><th>问题</th><th>为什么留到下一轮</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><span class="badge b-p0">P0</span></td>
+          <td><b>含费净 RR 反推止损宽度</b>：<code>calc.fee</code> 被重载（无目标价时是止损腿费、有目标价时是目标腿费），生成端按纯毛利×RR 反推、显示端按含费净算，请求 2R 只达成 88.9%。含费反推会让止损更<b>紧</b>而非更宽，改动会动到止损生成与多止盈加权两条链</td>
+          <td>风险最高、影响面最大，需要单独一轮带专门测试。已在 <code>tradingdiscipline-v54-rr-unification</code> 记录完整推导</td>
+        </tr>
+        <tr>
+          <td><span class="badge b-p1">P1</span></td>
+          <td><b>多部分平仓的<b>编辑</b>路径基数语义</b>：modals.js 把 <code>emPartialRatio</code> 当「占原始 %」，而记录端输入是「占剩余 %」。1 次部分平仓时两者相同；≥2 次时表单字段的含义本身就是歧义的</td>
+          <td>解法需要改表单（增加「以剩余仓位计 / 以原始仓位计」的显式切换），且会改动现有 22 条簿记断言。属需求层决策，不是纯 bug</td>
+        </tr>
+        <tr>
+          <td><span class="badge b-p2">P2</span></td>
+          <td><b>STATUS 清单 7 项只读项的去留</b>：12 项清单里 7 项是上游硬阻断的影子（永不 fail），结论行与闸门已共用 <code>STATUS_CHECK_ITEMS</code> 排除。是保留（给用户看状态）还是移除（减少噪音）需要产品决定</td>
+          <td>行为已正确（不影响判定与计数），属信息架构取舍</td>
+        </tr>
+        <tr>
+          <td><span class="badge b-p2">P2</span></td>
+          <td><b>两条导入路径未合并</b>：<code>parseCSVImport</code> 与 JSON 导入各自的告警/确认流程分叉；<code>closes[]</code> 未记录止损移动（<code>sl_move</code> 动作只写自由文本，不落 <code>stopLoss</code>），R 倍数与复盘看不到止损轨迹</td>
+          <td>导入流程合并是纯重构；止损移动持久化要先决定「移动止损」算不算一次减仓事件（语义选择，不是 bug）</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>四之二、v5.6.8 追加修复（遗留项收口 2 项）</h2>
+    <div class="note" style="margin-top:0;margin-bottom:10px;">从上一节「遗留项」里挑出两项可安全落地的工程类修复；含费净 RR 反推与多部分平仓编辑路径基数语义两项仍保留——前者风险最高，后者属需求层决策，不是纯 bug。</div>
+    <table>
+      <thead><tr><th>级别</th><th>模块</th><th>问题</th><th>修复与验证</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><span class="badge b-p1">P1</span></td>
+          <td>日志身份<br><code>utils.js</code> / <code>calculator.js</code> / <code>modals.js</code> / <code>io.js</code> / <code>settings.js</code> / <code>storage.js</code></td>
+          <td><b>日志没有唯一标识，全靠数组索引寻址</b>：记录里没有任何 id，<code>storage.js</code> 的 <code>_logFingerprint</code> 读 <code>item.id</code> 永远拿到 undefined，指纹退化成 <code>time+symbol+entryPrice+positionSize</code> 拼接。直接后果是<b>同一笔交易经 CSV 与 JSON 各导入一次会被当成两条不同的日志</b>，跨导出副本也无法比对。索引寻址还牵着一串 UI 状态（<code>data-idx</code>、<code>_pendingDeleteIndices</code>、<code>openClosePanelIdx</code>）</td>
+          <td>新增 <code>utils.genLogId()</code>（<code>lg_YYYYMMDDTHHMMSS_随机6位</code>，带同秒重试保唯一）。四条写入路径全部生成 id：保存、分批保存、CSV 导入、JSON 导入；存量记录由 <code>loadLogs</code> 一次性回填（<code>trade_ids_backfilled_v1</code> 标记，新记录已在创建时带 id，故不必每次重跑）。CSV 导出新增 <code>ID</code> 列（第 1 列），导入侧映射回 <code>id</code> 并<b>保留原值</b>——导出→在 Excel 改→再导入不会静默变成两份。<br><br>
+            <b>关键取舍</b>：id 只做身份用途，不参与计算、排序、风控校验，也不能当寻址手段（删除后索引仍会变），因此对既有逻辑零影响。<br>
+            <b>实测</b>：500 条同秒批量生成无重复；缺 id 时指纹以 <code>|</code> 开头（退化态），有 id 时以 id 开头；两条其余字段全同、仅 id 不同的记录被正确判为两条；旧版无 ID 列的 CSV 导入后自动生成 id 且字段映射不受影响</td>
+        </tr>
+        <tr>
+          <td><span class="badge b-p1">P1</span></td>
+          <td>离线健壮性<br><code>js/chart-guard.js</code>（新增）</td>
+          <td><b>「完全离线」的定位有个洞</b>：Chart.js 走 <code>cdn.jsdelivr.net</code> 加载，断网时该脚本静默失败、<code>typeof Chart === 'undefined'</code>，此后 analytics / dashboard / review 里约 20 处 <code>new Chart(...)</code> 全部抛 <code>ReferenceError</code>——图表区整片空白且<b>没有任何解释</b>，而风控计算、日志、复盘其实完全可用（数据全在 localStorage）。用户会以为整个程序坏了</td>
+          <td>新增 <code>js/chart-guard.js</code>，紧跟 CDN <code>&lt;script&gt;</code> 之后、在任何调用 Chart 的模块之前加载。Chart 缺失时安装最小占位桩：<code>new Chart(ctx, config)</code> 返回带 <code>destroy/update/resize</code> 的惰性实例，<code>Chart.getChart(canvas)</code> 恒返回 <code>null</code>（调用方都写成 <code>if (existing)</code> 形式），并在 canvas 上画一行离线说明——把「静默空白」变成「明确告知」。<br><br>
+            <b>刻意做窄</b>：只覆盖项目实际用到的三个 API。全量核实过，代码里没有 <code>Chart.defaults</code> / <code>register</code> / <code>helpers</code> / <code>types</code> / 元素类的任何使用。不补这些是为了避免掩盖未来引入真实 Chart.js 特性时的依赖缺口。<br>
+            <b>实测</b>：<code>__CHART_MISSING</code> 正确置位；三种传参形态（null / canvas 元素 / 2d context）都不抛错并正确挂 canvas；实例方法全部 no-op 安全；Chart 已存在时守卫返回 false 且<b>不改动</b> <code>window.Chart</code>（异步加载真实实现不会被桩覆盖）；画字路径真实执行（<code>__noteDrawn</code> 为 true，不是只静默跳过）</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>五、回归验证</h2>
+    <div class="kv"><b>测试规模</b><span class="ok">162 → 299 断言，299/299 通过</span>（v5.6.7 +103，v5.6.8 +34）</div>
+    <div class="kv"><b>本轮新增组</b>第 16 组（customStopLimit 校验矩阵 + getHeatHardMax min 语义 + 读侧兜底）、17 组（CSV 状态机 + BOM + 往返）、18 组（closedRatioDelta 基数换算与不变量）、19 组（esc 去重 + 容量预检查 + 备份写入顺序）、20 组（dailySharpe 铺满与年化）、21 组（强平价与杠杆阈值）、22 组（Chart 离线守卫 14 条）、23 组（日志 id 与 CSV ID 列往返 18 条）</div>
+    <div class="kv"><b>关键不变量</b>连续三次各平剩余 50%：<code>50 + 25 + 12.5 = 87.5</code>，且 <code>initialPositionSize × (1 − closedRatio/100) === positionSize</code></div>
+    <div class="kv"><b>语法检查</b>全部 25 个 js 文件 <code>node --check</code> 通过</div>
+    <div class="kv"><b>Lint</b>未引入新 error（<code>eqeqeq</code>/单引号/分号），新增代码沿用存量 <code>var</code> 风格，仅 <code>no-var</code> warning</div>
+
+    <h3>本地验证方式</h3>
+    <ul>
+      <li><code>python3 -m http.server 8000</code> → 打开 <code>http://localhost:8000/test/run-tests.html</code>，加载即跑，顶部应显示 <code>PASS=265 FAIL=0</code></li>
+      <li>node 环境：<code>NODE_PATH="$PWD/node_modules" node /tmp/td/harness.js</code>（harness 不在仓库内，仅用于本机自动化；仓库内的权威回归是上面的浏览器页）</li>
+      <li>强刷加 <code>?cb=&lt;时间戳&gt;</code> 避开缓存（脚本已带 <code>?v=5.6.7</code>）</li>
+    </ul>
+
+    <div class="warnbox">
+      <b>一处需要你知道的方法论</b>：强平价零缓冲边界是 <code>1/(2×MMR)</code> 而不是 <code>1/MMR</code>。这个系数 2 很容易被写成 1——本轮在写测试时就先算错了（把 100000×(1−0.1+0.005)/0.995 估成 99402.6，实际是 90954.77），是实测值纠正的推导。改这条阈值前请务必用 <code>utils.calcLiquidationPrice</code> 实算一遍边界附近的两档杠杆。
+    </div>
+  </div>
+
+  <div class="note">报告生成：2026-10-04 · 对应变更 v5.6.6 → v5.6.8 · 与 <a href="风控统计复盘系统审计报告.html">风控/统计/复盘审计报告</a>、<a href="交易日志流程审计报告.html">交易日志流程审计报告</a> 并列</div>
+</div>
+</body>
+</html>

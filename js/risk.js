@@ -615,8 +615,7 @@ function renderPortfolioHeat(closedOverride) {
 
   var heatCheck = calcPortfolioHeat();
   var capital = getAccountCapital();
-  var settings = loadSettings();
-  var maxHeat = settings.riskHeatMax || 6;
+  var maxHeat = getHeatHardMax();  // 与闸门同一口径，避免显示阈值与阻断阈值脱节
 
   if (!capital || capital <= 0) {
     container.innerHTML = '<div class="risk-empty">请先在「系统设置」中填写账户余额以启用组合热量监控</div>';

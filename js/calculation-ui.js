@@ -152,26 +152,11 @@
     setButtonState(ui.splitSaveBtn, { blocked: false, disabled: true, iconClass: 'fas fa-layer-group', label: '确认止损后拆分保存' });
   }
 
-  /**
-   * 返回第一个硬阻断。任何 check 函数都可返回 { blocked, ... }；
-   * 本函数使“检查顺序”和“阻断文案”成为单一可测试配置。
-   */
-  function evaluateOpeningBlockers(checks) {
-    checks = checks || [];
-    for (var i = 0; i < checks.length; i++) {
-      var rule = checks[i];
-      var result = rule.evaluate();
-      if (result && result.blocked) {
-        return {
-          code: rule.code,
-          title: rule.title,
-          detail: rule.toDetail(result),
-          raw: result
-        };
-      }
-    }
-    return null;
-  }
+  // 注：这里曾有 evaluateOpeningBlockers(checks)——一个把「检查顺序 + 阻断文案」
+  // 收敛成单一可测试配置的规则表入口，但生产代码零调用：真实阻断链是 _calculateImpl
+  // 内部按 IIFE 顺序执行的早返回序列（capital/leverage/heat/mindset/…），从未走它。
+  // 留着一个从不被调用的「中央配置」入口会让维护者误以为阻断逻辑已经集中，
+  // 于是改文案时只改规则表而实际不生效。已删（v5.6.7，grep 全库确认零调用点）。
 
   return {
     getResultUI: getResultUI,
@@ -180,7 +165,6 @@
     resetForCalculation: resetForCalculation,
     renderCalculated: renderCalculated,
     renderDirty: renderDirty,
-    renderProvisionalStop: renderProvisionalStop,
-    evaluateOpeningBlockers: evaluateOpeningBlockers
+    renderProvisionalStop: renderProvisionalStop
   };
 });

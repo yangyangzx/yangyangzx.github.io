@@ -250,8 +250,18 @@ function confirmClose(idx) {
 
   if (partialValid) {
     // —— 部分平仓 / 减仓：按比例缩减剩余仓位、剩余风险、剩余保证金、剩余费用 ——
-    var feeThis = settlement.fee * (partialRatio2 / 100);
     var posBefore = parseFloat(logs[idx].positionSize) || 0;
+    // P0 修复（基数错位）：partialRatio2 是「占当前剩余仓位」的比例（输入框与 settlement
+    // 都是按剩余仓位计价），而 closedRatio / closes[].ratio 的口径是「占开仓原始仓位」
+    // ——modals.js 正是用 sum(closes[].ratio) 反推剩余仓位（fracNow = 1 - cumClosed/100）。
+    // 两者混用导致第二次部分平仓时把「剩余的 50%」当成「原始的 50%」累加：
+    // 原始 1000 → 第一次平 50%（closedRatio=50，剩 500）→ 第二次输入 50%（实际只平 250），
+    // closedRatio 却被加成 100，被判为「已全额平仓」，而 positionSize 还剩 250。
+    // 于是这 250 单位的敞口既不出现在持仓统计里，也不产生任何已实现盈亏。
+    // 换算走 utils.closedRatioDelta（唯一权威实现），首次部分平仓时返回输入值，行为不变。
+    var _closedDelta = window.utils.closedRatioDelta(partialRatio2, posBefore,
+      parseFloat(logs[idx].initialPositionSize) || posBefore || 0);
+    var feeThis = settlement.fee * (partialRatio2 / 100);
     logs[idx].partialRatio = partialRatio2;
     logs[idx].positionSize = parseFloat((posBefore * (1 - partialRatio2 / 100)).toFixed(2));
     if (logs[idx].riskAmount != null && !isNaN(parseFloat(logs[idx].riskAmount))) {
@@ -266,8 +276,9 @@ function confirmClose(idx) {
     }
     logs[idx].realizedPnl = parseFloat((parseFloat(logs[idx].realizedPnl) + netPnlThis).toFixed(2));
     logs[idx].realizedFee = parseFloat((parseFloat(logs[idx].realizedFee) + feeThis).toFixed(8));
-    logs[idx].closedRatio = parseFloat((parseFloat(logs[idx].closedRatio) + partialRatio2).toFixed(4));
-    logs[idx].closes.push({ type: closeType.value, price: closePrice, ratio: partialRatio2, fee: parseFloat(feeThis.toFixed(8)), pnl: parseFloat(netPnlThis.toFixed(2)), time: _nowISO });
+    logs[idx].closedRatio = parseFloat((parseFloat(logs[idx].closedRatio) + _closedDelta).toFixed(4));
+    // ratio 与 closedRatio 同口径（占原始仓位），保证 sum(closes[].ratio) === closedRatio
+    logs[idx].closes.push({ type: closeType.value, price: closePrice, ratio: _closedDelta, fee: parseFloat(feeThis.toFixed(8)), pnl: parseFloat(netPnlThis.toFixed(2)), time: _nowISO, ratioOfRemaining: partialRatio2 });
     logs[idx].grossPnlAmount = parseFloat(settlement.grossPnl.toFixed(2));
     logs[idx].pnlAmount = parseFloat(netPnlThis.toFixed(2));
     // P0-1 FIX：中间态记录的收益率/R 用"本次已实现"口径（本次平仓保证金、初始风险为基准）

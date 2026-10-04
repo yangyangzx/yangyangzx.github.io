@@ -286,24 +286,17 @@ function _calculateImpl() {
     return null;
   }
 
-  // ===== P0-01：当日连亏熔断（口径与 checkDailyLossLimit 统一：仅统计已平仓且有有效 pnlAmount 的记录） =====
+  // ===== P0-01：当日连亏熔断 =====
+  // 权威实现在 stats.js 的 _getTodayLossStreak()（dashboard 与清单项共用）。
+  // 此处原先复制了一份，且口径更严：要求 closeTime 非空，而权威版在 closeTime 缺失时
+  // 回退到 time。同一批数据下「硬熔断计数」与「清单/仪表盘显示的连亏笔数」会不一致，
+  // 出现「页面显示 2 笔未触发、点计算却被熔断」的矛盾。现统一委托权威实现。
+  // （calculator.js 在 stats.js 之前加载，但 _calculateImpl 是运行时调用，届时已定义。）
   (function() {
-    var todayStr = window.utils.toLocalDateStr(new Date().toISOString());
-    var todayClosed = [];
-    for (var _i = 0; _i < logs.length; _i++) {
-      var _l = logs[_i];
-      if (!window.utils.isClosedTrade(_l)) continue;
-      var _ct = _l.closeTime;
-      if (!_ct) continue;
-      if (window.utils.toLocalDateStr(_ct) === todayStr) todayClosed.push(_l);
+    var currentStreak = 0;
+    if (typeof _getTodayLossStreak === 'function') {
+      try { currentStreak = _getTodayLossStreak().streak || 0; } catch (e) { console.error('[calculate] 连亏熔断计数失败:', e); }
     }
-    todayClosed.sort(function(a, b) { return (a.closeTime || '').localeCompare(b.closeTime || ''); });
-    var _streak = 0;
-    for (var _j = todayClosed.length - 1; _j >= 0; _j--) {
-      var _v = parseFloat(todayClosed[_j].pnlAmount);
-      if (!isNaN(_v) && _v < 0) { _streak++; } else { break; }
-    }
-    const currentStreak = _streak;
     if (currentStreak >= 3) {
       _calcCleanup();
       return renderHardBlock(
@@ -385,11 +378,15 @@ function _calculateImpl() {
     var kellyAvgLoss = parseFloat(document.getElementById('kellyAvgLoss')?.value);
     if (!isNaN(kellyWinRate) && !isNaN(kellyAvgWin) && !isNaN(kellyAvgLoss) && kellyAvgLoss > 0) {
       var kellyLev = parseInt(document.getElementById('leverage').value, 10) || 1;
-      var kellyResult = calcKelly(kellyWinRate, kellyAvgWin, kellyAvgLoss, capital, true, kellyLev);
+      // P0-1：样本量与保本率同源，都来自 autoFillKellyFromLogs 写入的 dataset；
+      // 保本率用于 calcKelly 的三结果亏损率（1 - winRate - breakEvenRate），
+      // 缺它时保本单会被当成完整亏损，统计页正期望而凯利判负。
+      var kellyWinEl = document.getElementById('kellyWinRate') || {};
+      var kellySampleCount = parseInt(kellyWinEl.dataset?.kellySamples, 10) || 0;
+      var kellyBreakEvenRate = parseFloat(kellyWinEl.dataset?.kellyBreakEven) || 0;
+      var kellyResult = calcKelly(kellyWinRate, kellyAvgWin, kellyAvgLoss, capital, true, kellyLev, kellyBreakEvenRate);
       if (kellyResult && kellyResult.halfKellyPct > 0) {
         var kellyRisk = capital * kellyResult.halfKellyPct;
-        // 样本量元信息：autoFillKellyFromLogs 填充时写入 dataset.kellySamples
-        var kellySampleCount = parseInt((document.getElementById('kellyWinRate') || {}).dataset?.kellySamples, 10) || 0;
         kellyData = {
           halfKellyPct: kellyResult.halfKellyPct,
           halfKellyRisk: kellyRisk,
@@ -667,6 +664,27 @@ function _calculateImpl() {
       if (_w != null && _w > 0) _liqEntryPrice = _w;
     }
     liquidationPrice = window.utils.calcLiquidationPrice(_liqEntryPrice, direction, leverage, mmr);
+    // P0 修复：杠杆高过维护保证金极限时仓位开仓即被强平。
+    // 强平价公式 LP = E×(1−IMR+MMR)/(1−MMR)（IMR = 1/杠杆），令 LP = E 解得 IMR = 2×MMR，
+    // 即零缓冲边界在「杠杆 = 1/(2×MMR)」——注意是 2 倍 MMR，不是 MMR 本身。
+    // 原实现只比较「止损 vs 强平价」：这种零缓冲仓位下止损必然落在强平价的另一侧之外，
+    // isInvalid 恒为假，于是照样通过闸门。这里对杠杆本身设下限。
+    // （实测 MMR 0.5%：100x 强平价恰为入场价，101x 已被推到入场价之上。）
+    if (!Number.isFinite(liquidationPrice) || liquidationPrice <= 0) {
+      _calcCleanup();
+      return renderHardBlock('liquidation-unsolvable', '无法计算强平价',
+        '当前杠杆 ' + leverage + 'x 与维护保证金率 ' + (mmr * 100).toFixed(2) + '% 组合下强平价无解，请降低杠杆后重新计算。',
+        { leverage: leverage, mmr: mmr });
+    }
+    var maxViableLev = (mmr > 0) ? Math.floor(1 / (2 * mmr)) : 0;
+    if (maxViableLev > 0 && leverage > maxViableLev) {
+      _calcCleanup();
+      return renderHardBlock('leverage-below-mmr', '杠杆超过维护保证金极限',
+        '杠杆 ' + leverage + 'x 的初始保证金率 ' + (100 / leverage).toFixed(2) + '% 已低于 2×MMR（' +
+        (2 * mmr * 100).toFixed(2) + '%），开仓即被强平，不存在任何价格缓冲。该 MMR 下最高可用杠杆为 ' +
+        maxViableLev + 'x。',
+        { leverage: leverage, mmr: mmr, maxViableLeverage: maxViableLev });
+    }
     // BUG#1 修复：止损价严格越过强平价时才阻断；等于时允许（用户仍可在强平前手动止损）
     const isInvalid = (direction === 'long' && stopLoss < liquidationPrice) ||
                       (direction === 'short' && stopLoss > liquidationPrice);
@@ -1238,22 +1256,28 @@ function assertSavableCalculation() {
   if (getCalcBlocker()) {
     return { ok: false, message: '当前计划存在硬风控阻断，不能保存。' };
   }
-  // 软检查：零容忍——任何非状态项 fail 都拒绝保存（原注释写「最多允许 1 个 fail」，与实现相反）。
-  // 状态项排除：checkLossStreak/checkDailyLoss/checkSymbolConc 已被上游硬阻断覆盖（永不 fail），
-  // checkTPWeighted 是提示性指标（默认 50/30/20+1.5/2/3R 配置下加权期望天然低于单档 2R 门槛）。
-  // 原先这里只硬编码跳过一个 checkTPWeighted，而结论行没做同样的排除，
-  // 于是同一秒出现「2 项未通过」和「1 项未通过」两个数。名单统一在 planner.js 的
-  // isStatusCheckItem()，两侧共用。
-  var failCount = 0, totalExecutables = 0;
-  if (calc.checklistResults) {
-    for (var k in calc.checklistResults) {
-      if (typeof isStatusCheckItem === 'function' && isStatusCheckItem(k)) continue;
-      if (calc.checklistResults[k] === 'skipped') continue;
-      totalExecutables++;
-      if (calc.checklistResults[k] === 'fail') failCount++;
-    }
+  // 软闸门：非状态项出现 fail 即拒绝保存（零容忍，与实现一致）。
+  // 状态项 checkLossStreak/checkDailyLoss/checkSymbolConc 已被上游硬阻断覆盖（永不 fail），
+  // checkTPWeighted 是提示性指标（默认 50/30/20 + 1.5/2/3R 配置下加权期望天然低于单档 2R 门槛）；
+  // 名单统一在 planner.js 的 isStatusCheckItem()，结论行与本闸门共用，两处计数不会差 1。
+  // warn 是 v5.6.3 明确定义的「不阻断但可见」提示态（仓位截断、心态降仓、多止盈加权 RR 偏低），
+  // 不参与阻断判断；skipped 是清单项 DOM 缺失或本轮不适用，同样不阻断。
+  // 原先的 `totalExecutables >= 2` 下限没有业务依据：清单结果缺失、或只剩 1 个
+  // 可执行项时闸门静默放行——把「无法验证」当成「通过」。现在 fail-closed：
+  // 快照里没有清单结果直接拒绝保存，并要求用户重新计算。
+  var checklistResults = calc.checklistResults;
+  var checklistMissing = !checklistResults || typeof checklistResults !== 'object'
+    || Object.keys(checklistResults).length === 0;
+  if (checklistMissing) {
+    return { ok: false, message: '检查清单结果缺失，无法确认风控状态，请重新点击「计算仓位」后再保存。' };
   }
-  if (totalExecutables >= 2 && failCount > 0) {
+  var failCount = 0;
+  for (var k in checklistResults) {
+    if (typeof isStatusCheckItem === 'function' && isStatusCheckItem(k)) continue;
+    if (checklistResults[k] === 'skipped') continue;
+    if (checklistResults[k] === 'fail') failCount++;
+  }
+  if (failCount > 0) {
     // 在闸门内调用而非在调用方：saveLog 与拆分保存两处共用这一个断言，
     // 只改这里两处都会把失败项滚到眼前（原先只弹 toast，不指路）。
     try { if (typeof focusChecklistFailures === 'function') focusChecklistFailures(); } catch(e) { }
@@ -1275,6 +1299,7 @@ function saveLog() {
 
   const now = new Date();
   const entry = {
+    id: window.utils.genLogId(logs),   // 稳定唯一标识：供去重/跨副本比对；不参与计算与排序
     time: now.toISOString(),
     symbol: calc.symbol,
     direction: calc.direction,
@@ -1742,7 +1767,12 @@ function toggleFormSection(sectionId) {
         // 设计优化：用户手动修改凯利字段时清除样本背书
         // （dataset.kellySamples 只在 autoFillKellyFromLogs 自动填充时写入；
         //  若残留，用户手填的凯利会被历史样本门槛误拦）
-        if (id === 'kellyWinRate' || id === 'kellyAvgWin' || id === 'kellyAvgLoss') delete el.dataset.kellySamples;
+        if (id === 'kellyWinRate' || id === 'kellyAvgWin' || id === 'kellyAvgLoss') {
+          delete el.dataset.kellySamples;
+          // 保本率挂在 kellyWinRate 上（三字段任一被改，历史统计背书整体失效）
+          var _kellyWinEl = document.getElementById('kellyWinRate');
+          if (_kellyWinEl) delete _kellyWinEl.dataset.kellyBreakEven;
+        }
         markCalculationDirty();
       };
       el.addEventListener('input', markFieldDirty);
