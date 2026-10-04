@@ -8,7 +8,7 @@ function exportCSV() {
   if (window.__exportingCSV) { showToast('正在导出中，请稍候', 'info'); return; }
   window.__exportingCSV = true;
   try {
-  const headers = ['ID','时间','品种','方向','订单类型','入场价','有效入场价','止损价','目标价','仓位(USDT)','杠杆','风险额','本金','心态评分','形态/策略','信号K','交易时段','市场环境','平仓类型','平仓价','平仓时间','持仓时长(分钟)','R倍数','盈亏金额','盈亏百分比','MAE%','MFE%','执行评分','出场理由','亏损原因','交易情绪','平仓备注','入场原因','手续费','滑点成本','计算版本','滑点Schema','入场Ticks','退出Ticks','TickSize','计划有效退出价','GroupId','已实现盈亏','累计手续费','已平仓比例%','初始风险','初始仓位','平仓明细','部分平仓','盘中动作','止损轨迹'];
+  const headers = ['ID','时间','品种','方向','订单类型','入场价','有效入场价','止损价','目标价','仓位(USDT)','杠杆','风险额','本金','心态评分','形态/策略','信号K','交易时段','市场环境','平仓类型','平仓价','平仓时间','持仓时长(分钟)','R倍数','盈亏金额','盈亏百分比','MAE%','MFE%','执行评分','出场理由','亏损原因','交易情绪','平仓备注','入场原因','手续费','滑点成本','计算版本','滑点Schema','入场Ticks','退出Ticks','TickSize','计划有效退出价','GroupId','已实现盈亏','累计手续费','已平仓比例%','初始风险','初始仓位','平仓明细','部分平仓','盘中动作','止损轨迹','目标盈亏比','计划净盈利'];
   // P2: 导出当前过滤结果（复用 logs.js 的 _filterMatch），无过滤时导出全部
   var hasActiveFilter = !!( _activeFilters.direction || _activeFilters.symbol || _activeFilters.strategy ||
                             _activeFilters.status || _activeFilters.pnl || _activeFilters.time );
@@ -28,9 +28,15 @@ function exportCSV() {
     }
     const ss = (row.signals&&row.signals.length) ? row.signals.map(s=>SIGNAL_LABELS[s]||s).join(' / ') : '';
     const ctl = row.closeType ? (CLOSE_TYPE_LABELS[row.closeType]||row.closeType) : '';
-    const closeTimeFormatted = fmtTime(row.closeTime);
+    // 时间列走 ISO 8601（带秒与时区），不能走 fmtTime：fmtTime 是本地时区的「yyyy-MM-dd HH:mm」，
+    // 既丢秒又丢时区。同机往返无感，换一台不同时区的机器导入就整体偏移（UTC+8 导出 → UTC 机器
+    // 读回偏移 8 小时），而下游按日分桶的熔断/连亏/夏普/权益曲线全部跟着错。
+    // 秒丢失还会破坏无 ID 列的旧导出：同一分钟内两笔时间串完全相同，重新导入会被判重复丢掉。
+    // 导入侧用 new Date() 解析，ISO 与旧的本地格式都能读，向后兼容。
+    const timeISO = row.time ? new Date(row.time).toISOString() : '';
+    const closeTimeFormatted = row.closeTime ? new Date(row.closeTime).toISOString() : '';
     const planSlip = row.slippage && row.slippage.planning ? row.slippage.planning : {};
-    const line = [row.id ?? '',fmtTime(row.time),row.symbol,row.direction,row.orderType||'market',row.entryPrice,row.effectiveEntryPrice??planSlip.effectiveEntryPrice??'',row.stopLoss,row.targetPrice??'',row.positionSize,row.leverage,row.riskAmount,row.capital??'',ms,sf,ss,row.session||'',row.marketCondition||'',ctl,row.closePrice??'',closeTimeFormatted,row.holdDuration??'',String(row.rMultiple??'').replace(/R$/,''),row.pnlAmount??'',String(row.pnlPercent??'').replace(/%/g,''),row.mae??'',row.mfe??'',row.executionScore??'',row.exitReason??'',Array.isArray(row.lossReason)?row.lossReason.join(';'):(row.lossReason||''),Array.isArray(row.emotions)?row.emotions.join(';'):(row.emotions||''),row.closeNote??'',Array.isArray(row.reason)?row.reason.join(';'):(row.reason||''),row.fee??'',row.slippageCost??'',row.calculationVersion??'',planSlip.schema??'',planSlip.entryTicks??'',planSlip.exitTicks??'',planSlip.tickSize??'',planSlip.effectiveExitPrice??'',row.groupId??'',row.realizedPnl??'',row.realizedFee??'',row.closedRatio??'',row.initialRiskAmount??'',row.initialPositionSize??'',Array.isArray(row.closes)?JSON.stringify(row.closes):'',row.isPartial??'',Array.isArray(row.actions)?JSON.stringify(row.actions):'',Array.isArray(row.stopHistory)?JSON.stringify(row.stopHistory):''].map(v=>'"'+(v==null?'':String(v).replace(/"/g,'""'))+'"').join(',');
+    const line = [row.id ?? '',timeISO,row.symbol,row.direction,row.orderType||'market',row.entryPrice,row.effectiveEntryPrice??planSlip.effectiveEntryPrice??'',row.stopLoss,row.targetPrice??'',row.positionSize,row.leverage,row.riskAmount,row.capital??'',ms,sf,ss,row.session||'',row.marketCondition||'',ctl,row.closePrice??'',closeTimeFormatted,row.holdDuration??'',String(row.rMultiple??'').replace(/R$/,''),row.pnlAmount??'',String(row.pnlPercent??'').replace(/%/g,''),row.mae??'',row.mfe??'',row.executionScore??'',row.exitReason??'',Array.isArray(row.lossReason)?row.lossReason.join(';'):(row.lossReason||''),Array.isArray(row.emotions)?row.emotions.join(';'):(row.emotions||''),row.closeNote??'',Array.isArray(row.reason)?row.reason.join(';'):(row.reason||''),row.fee??'',row.slippageCost??'',row.calculationVersion??'',planSlip.schema??'',planSlip.entryTicks??'',planSlip.exitTicks??'',planSlip.tickSize??'',planSlip.effectiveExitPrice??'',row.groupId??'',row.realizedPnl??'',row.realizedFee??'',row.closedRatio??'',row.initialRiskAmount??'',row.initialPositionSize??'',Array.isArray(row.closes)?JSON.stringify(row.closes):'',row.isPartial??'',Array.isArray(row.actions)?JSON.stringify(row.actions):'',Array.isArray(row.stopHistory)?JSON.stringify(row.stopHistory):'',row.targetRR??'',row.plannedNetProfit??''].map(v=>'"'+(v==null?'':String(v).replace(/"/g,'""'))+'"').join(',');
     csv += line + '\n';
   }
   const b = new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'});
@@ -118,6 +124,25 @@ class ImportValidator {
     if (item.leverage != null) {
       var leverage = Number(item.leverage);
       if (!Number.isFinite(leverage) || leverage < 0 || leverage > 125) errors.push(`第${index}条记录杠杆超出合理范围：0-125倍`);
+    }
+    // 已平仓记录必须有平仓价与盈亏金额。两者任一缺失时 utils.isClosedTrade 判「未平仓」，
+    // 该记录会从胜率/期望值/资金曲线/凯利样本里整笔消失，同时反向进入持仓统计虚增
+    // 保证金、抬高组合热量，而 CSV 里仍标着已平仓。与编辑弹窗（modals.js saveEditLog）同守。
+    // 注意 Number('') === 0：CSV 里的空单元格必须先按空处理，否则「平仓价已校验、
+    // 盈亏金额漏检」——正好漏掉本次要拦的那一半。
+    if (item.closeType != null && String(item.closeType).trim() !== '') {
+      var _cpRaw = item.closePrice;
+      var _cp = (_cpRaw === null || _cpRaw === undefined || String(_cpRaw).trim() === '')
+        ? NaN : Number(_cpRaw);
+      if (!Number.isFinite(_cp) || _cp <= 0) {
+        errors.push(`第${index}条记录已标记平仓但平仓价无效：${item.closePrice}`);
+      }
+      var _paRaw = item.pnlAmount;
+      var _pa = (_paRaw === null || _paRaw === undefined || String(_paRaw).trim() === '')
+        ? NaN : Number(_paRaw);
+      if (!Number.isFinite(_pa)) {
+        errors.push(`第${index}条记录已标记平仓但盈亏金额不能为空：${item.pnlAmount}`);
+      }
     }
     return errors;
   }

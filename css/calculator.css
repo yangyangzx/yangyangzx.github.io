@@ -756,3 +756,269 @@
 .split-breakdown tr:nth-child(even) td {
   background: var(--color-surface-hover);
 }
+
+/* ==================== 结果可视化：盈亏比对照 + 保证金占用（v5.6.11） ==================== */
+/* 由 js/calc-visuals.js 按 _calculateImpl 已算好的数值填充。三行共用同一套
+   grid-template-columns（由 JS 内联写入，按价格距离真实比例分配 fr），
+   所以「止损价标签 / 比例条 / 金额标签」三者上下严格对齐。 */
+
+.result-visuals {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: opacity var(--dur-normal) var(--ease-out);
+}
+
+/* 参数已变更（未重算）时整块降透明度：结果框其余内容同样是旧值，
+   视觉上明确「这两张图已经过期」，不靠读者自己记 */
+.result-box.is-dirty .result-visuals { opacity: 0.5; }
+
+.vv-card {
+  background: var(--glass-bg-light);
+  backdrop-filter: var(--glass-blur-light);
+  -webkit-backdrop-filter: var(--glass-blur-light);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  border: 1px solid var(--glass-border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vv-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.vv-title {
+  font-size: var(--font-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+  letter-spacing: 0.3px;
+}
+
+/* 档位徽章：颜色语义与上方三张结果卡片的 rr-green/amber/red 完全一致 */
+.vv-badge {
+  font-size: 13px;
+  font-weight: var(--font-weight-bold);
+  padding: 2px 9px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--glass-border);
+  letter-spacing: 0.2px;
+}
+
+.vv-badge-green  { color: var(--color-success-dark); background: var(--color-success-bg); border-color: var(--color-success-border); }
+.vv-badge-amber  { color: var(--color-warning-dark); background: var(--color-warning-bg); border-color: var(--color-warning-border); }
+.vv-badge-red    { color: var(--color-danger);        background: var(--color-danger-bg);  border-color: var(--color-danger-border); }
+.vv-badge-neutral,
+.vv-badge-ok     { color: var(--color-success-dark);  background: var(--color-success-bg); border-color: var(--color-success-border); }
+.vv-badge-primary{ color: var(--color-primary);       background: var(--color-primary-bg); border-color: var(--color-primary); }
+.vv-badge-warn   { color: var(--color-warning-dark);  background: var(--color-warning-bg); border-color: var(--color-warning-border); }
+.vv-badge-danger { color: var(--color-danger);        background: var(--color-danger-bg);  border-color: var(--color-danger-border); }
+.vv-badge-invalid{ color: var(--color-text-muted);    background: var(--color-surface-hover); }
+
+/* ---------- 盈亏比比例条 ---------- */
+
+.vv-ladder { display: flex; flex-direction: column; gap: 6px; }
+
+.vv-row { display: grid; align-items: center; }
+
+/* 三行的单元格都是 2px 轴列的左/右两块。标签允许溢出：条很窄时文字向外侧溢出，
+   而不是被压窄或换行——左右两侧永远向外溢出，因此不会互相碰撞 */
+.vv-cell { min-width: 0; overflow: visible; white-space: nowrap; }
+
+.vv-row-scale {
+  font-size: var(--font-xs);
+  color: var(--color-text-secondary);
+}
+
+.vv-row-scale .vv-price-stop,
+.vv-row-meta  .vv-price-stop {
+  color: var(--color-danger);
+  text-align: center;
+}
+
+.vv-row-scale .vv-price-target,
+.vv-row-meta  .vv-price-target {
+  color: var(--color-success-dark);
+  text-align: center;
+}
+
+.vv-row-meta {
+  font-size: var(--font-xs);
+  color: var(--color-text-muted);
+}
+
+.vv-row-meta b {
+  display: block;
+  font-size: 13px;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+  line-height: 1.2;
+}
+
+.vv-row-meta em {
+  font-style: normal;
+  font-weight: var(--font-weight-medium);
+}
+
+.vv-row-bar { padding: 4px 0; }
+
+/* 条：从入场轴向外侧渐隐，视觉上强调「从入场价出发」的方向感。
+   color-mix 不支持时丢弃渐变声明、回落到纯色实底（不依赖相对颜色语法） */
+.vv-bar {
+  height: 20px;
+  border-radius: var(--radius-sm);
+  position: relative;
+  display: flex;
+  align-items: center;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+
+.vv-bar-loss {
+  background: var(--color-danger);
+  background: linear-gradient(to left, var(--color-danger), color-mix(in oklch, var(--color-danger) 58%, transparent));
+  justify-content: flex-start;
+}
+
+.vv-bar-gain {
+  background: var(--color-success);
+  background: linear-gradient(to right, var(--color-success), color-mix(in oklch, var(--color-success) 58%, transparent));
+  justify-content: flex-end;
+}
+
+/* 目标价方向无效时不用红色误导成「又一次亏损」，改用中性灰 */
+.vv-bar.is-neutral {
+  background: var(--color-text-muted);
+  opacity: 0.55;
+}
+
+.vv-bar-in {
+  font-size: 11px;
+  font-weight: var(--font-weight-bold);
+  color: #fff;
+  padding: 0 7px;
+  letter-spacing: 0.3px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+/* 入场价轴：比条更高一截，视觉上把两侧条子连成一条价格线 */
+.vv-axis-line {
+  width: 2px;
+  height: 28px;
+  background: var(--color-text-muted);
+  border-radius: 2px;
+}
+
+/* ---------- 保证金占用刻度条 ---------- */
+
+.vv-gauge {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 2px 0;
+}
+
+.vv-g-markers { position: relative; height: 14px; }
+
+.vv-g-mark {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  font-size: 10px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-warning-dark);
+  white-space: nowrap;
+  letter-spacing: 0.2px;
+}
+
+.vv-g-mark-agg { color: var(--color-danger); }
+
+.vv-g-track {
+  position: relative;
+  height: 12px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-hover);
+  box-shadow: inset 0 0 0 1px var(--color-border-light);
+}
+
+.vv-g-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  display: flex;
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  transition: width var(--dur-short) var(--ease-out),
+              background-color var(--dur-short) var(--ease-out);
+}
+
+/* 已有持仓段：斜纹中性色，与本仓段的实色区分开 */
+.vv-g-fill-used {
+  flex: 0 0 0%;
+  background-color: var(--color-text-muted);
+  background-image: repeating-linear-gradient(45deg, transparent 0 4px, rgba(255, 255, 255, 0.22) 4px 8px);
+}
+
+.vv-g-fill-this {
+  flex: 1 1 auto;
+  background: var(--color-primary);
+}
+
+.vv-g-fill-ok      .vv-g-fill-this { background: var(--color-success); }
+.vv-g-fill-primary .vv-g-fill-this { background: var(--color-primary); }
+.vv-g-fill-warn    .vv-g-fill-this { background: var(--color-warning); }
+.vv-g-fill-danger  .vv-g-fill-this { background: var(--color-danger); }
+
+.vv-g-tick {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 2px;
+  transform: translateX(-1px);
+  background: var(--color-warning);
+  border-radius: 2px;
+}
+
+.vv-g-tick-agg { background: var(--color-danger); }
+
+.vv-g-scale {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 10px;
+  color: var(--color-text-muted);
+}
+
+/* ---------- 说明行 ---------- */
+
+.vv-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  font-size: var(--font-xs);
+  color: var(--color-text-muted);
+  line-height: 1.6;
+}
+
+.vv-note-item { display: inline-flex; align-items: center; gap: 4px; }
+
+.vv-note-key { color: var(--color-text-muted); }
+
+.vv-note-item b {
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.vv-note-item.warn { color: var(--color-danger); font-weight: var(--font-weight-medium); }
+
+@media (prefers-reduced-motion: reduce) {
+  .vv-g-fill,
+  .result-visuals { transition: none; }
+}

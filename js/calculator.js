@@ -599,15 +599,17 @@ function _calculateImpl() {
   const maxPos = availableCapital * Math.max(leverage, 1);
   var cappedByMargin = false, capMsg = '';
 
-  // 保证金 80% 硬上限（仅杠杆合约）：margin = positionSize / leverage ≤ capital * 0.8
-  // 设计依据：单笔保证金不超过可用本金 80%，在相同风险下最大化保证金以获取高收益
+  // 保证金 80% 硬上限（仅杠杆合约）：margin = positionSize / leverage ≤ availableCapital * 0.8
+  // 设计依据：单笔保证金不超过可用本金 80%，在相同风险下最大化保证金以获取高收益。
+  // 注意分母是 availableCapital（本金扣掉已有持仓保证金 + 滑点 + 手续费），不是 capital：
+  // 文案必须写「可用本金 80%」并附带「占本金 X%」，写「80% 本金」会让同一行两个百分比分母不同。
   if (leverage > 0) {
     const marginLimitPos = availableCapital * leverage * 0.8;
     if (positionSize > marginLimitPos) {
       const origMargin = positionSize / leverage;
       riskAmount = marginLimitPos * stopDistance / effectiveEntryPrice;
       riskPercent = riskAmount / capital;
-      capMsg = '<span class="warning-tag alert"><i class="fas fa-shield-alt"></i> 保证金触及 80% 上限：原需 ' + origMargin.toFixed(2) + ' USDT（' + (origMargin / capital * 100).toFixed(1) + '% 本金），已截断至 ' + (marginLimitPos / leverage).toFixed(2) + ' USDT（80% 本金）。实际风险额 ' + riskAmount.toFixed(2) + ' USDT。建议放宽止损距离或降低风险比例。</span>';
+      capMsg = '<span class="warning-tag alert"><i class="fas fa-shield-alt"></i> 保证金触及 80% 上限：原需 ' + origMargin.toFixed(2) + ' USDT（' + (origMargin / capital * 100).toFixed(1) + '% 本金），已截断至 ' + (marginLimitPos / leverage).toFixed(2) + ' USDT（可用本金 80%，占本金 ' + (marginLimitPos / leverage / capital * 100).toFixed(1) + '%）。实际风险额 ' + riskAmount.toFixed(2) + ' USDT。建议放宽止损距离或降低风险比例。</span>';
       positionSize = marginLimitPos;
       cappedByMargin = true;
     }
@@ -657,11 +659,11 @@ function _calculateImpl() {
   // ===== 止损 vs 强平价校验（仅杠杆合约，现货跳过） =====
   let cappedByLiquidation = false, liquidationPrice = null, liqMsg = '';
   if (leverage > 0) {
-    // MMR 从全局 settings 统一读取（百分比值需除以 100 转为小数）
-    let mmr = 0.005; // 默认回退值
-    var _settings = loadSettings();
-    // P2-14 修复：mmr 为 0/负值/缺失时回退默认 0.5%，避免 0 值导致强平价失去 MMR 缓冲（偏乐观）
-    if (_settings && Number.isFinite(_settings.mmr) && _settings.mmr > 0) mmr = _settings.mmr / 100;
+    // MMR 统一走 loadMmr()（settings.js 单一实现，返回小数）。
+    // P2-14 修复：mmr 为 0/负值/缺失/NaN 时回退默认 0.5%，避免 0 值让强平价失去
+    // MMR 缓冲（偏乐观）。原先只有本处判了 > 0，risk 中心与仪表盘只判 != null，
+    // 三面板会给出不同强平价。
+    var mmr = loadMmr();
 
     // P0-3 FIX: 分批建仓模式下，使用加权入场价计算强平价
     var _liqEntryPrice = effectiveEntryPrice;
@@ -770,6 +772,26 @@ function _calculateImpl() {
   const effectiveRiskPercent = effectiveRiskAmount / capital;
   const effectiveMargin = effectivePositionSize / effLev;
 
+  // ===== 组合热量复核（用截断后的真实计划风险）=====
+  // 上方「组合热量检查」只能用表单风险输入预估本仓——那时 riskAmount 尚未产出，而凯利
+  // 驱动与保证金 80% / 聚合 90% / 单品种集中度 / 心态降仓四道截断都在其后改变真实风险额。
+  // 于是双向都不对：表单 1% 但半凯利 5% 时闸门按 1% 放行、真实 5% 超上限；表单 10% 但
+  // 半凯利 1% 时闸门拒掉一笔实际只占 1% 的计划。全文件仅此一处调用 calcPortfolioHeat，
+  // 截断后再复核一次，闸门与显示同源（含本仓、同一 maxHeat）。方向上复核只会更严——
+  // 只有截断把风险压到表单值之下时才会放行，而那正是真实敞口确实更小的情形。
+  var _heatRecheck = calcPortfolioHeat(effectiveRiskAmount, symbol, capital);
+  if (_heatRecheck.blocked) {
+    _calcCleanup();
+    return renderHardBlock(
+      'portfolio-heat-limit',
+      '组合热量超限',
+      '截断后实际计划风险 ' + effectiveRiskAmount.toFixed(2) + ' USDT（占本金 '
+        + (capital > 0 ? (effectiveRiskAmount / capital * 100).toFixed(2) : '—') + '%），'
+        + '组合热量 ' + _heatRecheck.heat.toFixed(1) + '%，' + (_heatRecheck.warning || '已超过风险上限。'),
+      _heatRecheck
+    );
+  }
+
   let adjMsg = '';
   if (lossStreak >= 3) {
     // 显示实际调整后的仓位（可能同时受连亏和心态双重调整）
@@ -841,7 +863,10 @@ function _calculateImpl() {
   let totalCost = totalFee + slippageCost;
 
   // 以有效成交价计算目标 R；滑点已进入成交价，严禁再次从 PnL 扣除。
+  // rrAmounts 提升到块外：盈亏比对照图与结果卡片必须读同一次算出的同一份金额，
+  // 否则会出现「卡片一个 RR、图上一个 RR」的口径分叉。
   let targetRR = null, targetPct = null;
+  let rrAmounts = null;
   if (!isNaN(targetPrice) && targetPrice > 0) {
     const targetSlippageModel = Slippage.calculate({
       direction: direction,
@@ -867,9 +892,14 @@ function _calculateImpl() {
       totalFee = targetFee;
       slippageCost = targetSlippage.totalCost;
       totalCost = totalFee + slippageCost;
-      const netProfit = grossProfit - targetFee;
-      const netLoss = Math.abs(grossStopLoss - stopFee);
-      if (netLoss > 0) targetRR = netProfit / netLoss;
+      rrAmounts = {
+        grossProfit: grossProfit,
+        grossStopLoss: grossStopLoss,
+        // 含费净：费用同时压缩分子（净毛利）与膨胀分母（净止损）
+        netProfit: grossProfit - targetFee,
+        netLoss: Math.abs(grossStopLoss - stopFee)
+      };
+      if (rrAmounts.netLoss > 0) targetRR = rrAmounts.netProfit / rrAmounts.netLoss;
     }
   }
 
@@ -913,7 +943,10 @@ function _calculateImpl() {
   if (targetPct !== null) {
     const distSign = direction === 'long' ? '+' : '';
     const distPct = targetPct; // long: 正数, short: 已是正绝对值
-    const distClass = targetRR >= 3 ? 'green' : (targetRR < 2 ? 'red' : 'neutral');
+    // 必须走 rrMeetsMin 的显示取整口径：卡片显示的是 toFixed(2)，含费反推自带 ~4e-9 的
+    // 浮点残差。裸比较下 1.9999999962 会判 'red'，而同一数字的卡片判黄、checkRR 判达标——
+    // 同一屏上「黄卡 + 红子块 + 红色不足 2:1 警示」四个信号互相矛盾。
+    const distClass = rrMeetsMin(targetRR, 3) ? 'green' : (rrMeetsMin(targetRR, 2) ? 'neutral' : 'red');
     targetDistD.textContent = '距目标 ' + distSign + distPct.toFixed(1) + '%';
     targetDistD.className = 'result-card-sub target-dist ' + distClass;
     targetDistD.style.display = 'block';
@@ -1005,6 +1038,35 @@ function _calculateImpl() {
     splitArea.style.display = 'none';
   }
 
+  // ===== 盈亏比对照图 + 保证金占用刻度（v5.6.11 新增，纯展示，不参与任何风控） =====
+  // 所有数值都取上面已算好的变量，本模块内部不重新推导仓位或风控口径。
+  // 异常兜底与 renderPortfolioRisk 一致：图挂了不能阻断计算主流程。
+  try {
+    renderCalcVisuals({
+      direction: direction,
+      entryPrice: effectiveEntryPrice,
+      stopPrice: stopSlippage.effectiveExitPrice,
+      targetPrice: targetSlippage ? targetSlippage.effectiveExitPrice : null,
+      stopDistance: stopDistance,
+      stopPct: stopPct,
+      grossProfit: rrAmounts ? rrAmounts.grossProfit : null,
+      netProfit: rrAmounts ? rrAmounts.netProfit : null,
+      netLoss: rrAmounts ? rrAmounts.netLoss : null,
+      targetRR: targetRR,
+      fee: totalFee,
+      feeRate: feeRate,
+      capital: capital,
+      thisMargin: effectiveMargin,
+      usedMargin: usedMargin,
+      consumedCapital: consumedCapital,
+      availableCapital: availableCapital,
+      leverage: leverage,
+      nominal: effectivePositionSize,
+      riskAmount: effectiveRiskAmount,
+      cappedByMargin: cappedByMargin
+    });
+  } catch (e) { console.error('[calculate] renderCalcVisuals error:', e); }
+
   // ===== 警告区 =====
   let wh = rw;
   if (cappedByLiquidation) wh = liqMsg + (wh ? '<br>' + wh : '');
@@ -1048,6 +1110,11 @@ function _calculateImpl() {
     // 任一截断都只写进了 capMsg 提示，清单想报告「计划风险 2% 实际只落到 0.5%」也拿不到标志
     cappedByMargin: cappedByMargin,
     targetRR: targetRR,
+    // 含费净目标盈利 = targetRR × 含费净止损。stats 的「盈亏比偏差」要和 realizedPnl
+    // 比，两者必须同口径：realizedPnl 是含费净额，targetRR 的分母又是含费净止损，
+    // 拿 realizedPnl/initialRiskAmount 去比 targetRR 会让完美执行恒显 +7.9%（口径差，
+    // 非执行差）。这里把净目标盈利一并暴露，落库为 plannedNetProfit。
+    targetNetProfit: (rrAmounts && targetRR != null) ? rrAmounts.netProfit : null,
     targetPct: targetPct,
     reason: getReason(),
     signals: getSignals(),
@@ -1097,6 +1164,19 @@ function _calculateImpl() {
 }
 
 /**
+ * 盈亏比对照图 + 保证金占用刻度（v5.6.11）。
+ * 薄封装 CalcVisuals.render：调用点只出现在 _calculateImpl 成功路径末尾一处，
+ * 传参集中在此便于日后调整。CalcVisuals 缺失（模块未加载/加载失败）时静默跳过，
+ * 图形属于增强展示，不能反过来阻断计算。
+ */
+function renderCalcVisuals(data) {
+  if (window.CalcVisuals && typeof window.CalcVisuals.render === 'function') {
+    window.CalcVisuals.render(data);
+  }
+}
+window.renderCalcVisuals = renderCalcVisuals;
+
+/**
  * 组合级风险预算视图（设计优化）：单笔计算时展示账户维度总览
  * 现有持仓风险/保证金 + 本仓后总风险 + ATR 参考止损对比。纯展示，不阻断保存。
  */
@@ -1110,10 +1190,11 @@ function renderPortfolioRisk(calc) {
   var portRisk = 0, portMargin = 0;
   for (var i = 0; i < openLogs.length; i++) {
     var p = openLogs[i];
+    // 与闸门同源：positionCurrentRisk 按当前止损价实时重算，且优先用含滑点的
+    // effectiveEntryPrice。原实现在这里用未加滑点的 entryPrice，与 calcPortfolioHeat
+    // 差一截；移动止损后 riskAmount 又已冻结，三个表面各说各话。
+    portRisk += (typeof positionCurrentRisk === 'function') ? positionCurrentRisk(p) : 0;
     var pos = parseFloat(p.positionSize) || 0;
-    var entry = parseFloat(p.entryPrice);
-    var sl = parseFloat(p.stopLoss);
-    if (pos > 0 && entry > 0 && sl > 0) portRisk += pos * Math.abs(entry - sl) / entry;
     var lev = parseFloat(p.leverage) || 0;
     portMargin += lev > 0 ? pos / lev : pos;
   }
@@ -1382,6 +1463,8 @@ function saveLog() {
     slippageCost: calc.slippage && calc.slippage.planning ? calc.slippage.planning.totalCost : 0,
     calculationVersion: calc.calculationVersion || 2,
     targetRR: calc.targetRR != null ? calc.targetRR : null,
+    // 与 targetRR 同源（rrAmounts.netProfit），供「盈亏比偏差」做同口径比对。
+    plannedNetProfit: calc.targetNetProfit != null ? calc.targetNetProfit : null,
     stopPct: calc.stopPct,                                          // ✅ 新增：持久化止损距离百分比
     // 多止盈组合计划（价格/减仓比例/加权期望R），用于复盘"计划分批 vs 实际分批"
     tpPlan: (function() {
@@ -1489,6 +1572,9 @@ function toggleSplitMode() {
     document.getElementById('warningDisplay').innerHTML = '';
     document.getElementById('triggerRow').style.display = 'none';
     document.getElementById('resultSplitArea').style.display = 'none';
+    // 结果区已整体清空，盈亏比对照图与保证金占用图一起收起（此处不走
+    // resetForCalculation，需单独收一次，否则会残留上一轮的比例条）
+    if (window.CalcVisuals && typeof window.CalcVisuals.hide === 'function') window.CalcVisuals.hide();
     var _rb = document.getElementById('resultBox');
     if (_rb) _rb.classList.remove('warn');
   }

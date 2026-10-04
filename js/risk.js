@@ -327,13 +327,10 @@ function renderLiqTable() {
     return;
   }
 
-  // 从设置读取 MMR，默认 0.5%（0.005）
-  // 使用 loadSettings() 统一通道，与 calculator.js 口径一致
-  var mmr = 0.005;
-  try {
-    var _rs = loadSettings();
-    if (_rs && _rs.mmr != null) mmr = _rs.mmr / 100;
-  } catch(e) { console.error('[risk]', e); }
+  // 维护保证金率：统一走 loadMmr()（settings.js 单一实现）。
+  // 原先只判 != null，mmr = 0 会得到「零缓冲」强平价、mmr = NaN 会让整列变 NaN，
+  // 而 calculator 侧判了 > 0——同一份设置在风控中心与计算器给出不同强平价。
+  var mmr = loadMmr();
 
   // 计算每笔强平价和安全距离（按聚合持仓）
   var rows = [];

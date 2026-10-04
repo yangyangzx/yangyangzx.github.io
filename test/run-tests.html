@@ -29,20 +29,22 @@
 </div>
 <div id="out">加载中…</div>
 
-<script src="../js/chart-guard.js?v=5.6.10"></script>
-<script src="../js/constants.js?v=5.6.10"></script>
-<script src="../js/utils.js?v=5.6.10"></script>
-<script src="../js/storage.js?v=5.6.10"></script>
-<script src="../js/slippage.js?v=5.6.10"></script>
-<script src="../js/skills-integration.js?v=5.6.10"></script>
-<script src="../js/calculator.js?v=5.6.10"></script>
-<script src="../js/risk.js?v=5.6.10"></script>
-<script src="../js/planner.js?v=5.6.10"></script>
-<script src="../js/discipline-led.js?v=5.6.10"></script>
-<script src="../js/settings.js?v=5.6.10"></script>
-<script src="../js/io.js?v=5.6.10"></script>
-<script src="../js/logs.js?v=5.6.10"></script>
-<script src="../js/modals.js?v=5.6.10"></script>
+<script src="../js/chart-guard.js?v=5.6.12"></script>
+<script src="../js/constants.js?v=5.6.12"></script>
+<script src="../js/utils.js?v=5.6.12"></script>
+<script src="../js/storage.js?v=5.6.12"></script>
+<script src="../js/slippage.js?v=5.6.12"></script>
+<script src="../js/skills-integration.js?v=5.6.12"></script>
+<script src="../js/calc-visuals.js?v=5.6.12"></script>
+<script src="../js/calculation-ui.js?v=5.6.12"></script>
+<script src="../js/calculator.js?v=5.6.12"></script>
+<script src="../js/risk.js?v=5.6.12"></script>
+<script src="../js/planner.js?v=5.6.12"></script>
+<script src="../js/discipline-led.js?v=5.6.12"></script>
+<script src="../js/settings.js?v=5.6.12"></script>
+<script src="../js/io.js?v=5.6.12"></script>
+<script src="../js/logs.js?v=5.6.12"></script>
+<script src="../js/modals.js?v=5.6.12"></script>
 <script>
 (function() {
   // ---- 环境 mock（与生产隔离） ----
@@ -425,12 +427,17 @@
       var e3 = { closeType: 'partialTP', closedRatio: 50, pnlAmount: 2 };
       util.syncCloseBookkeeping(e3, 'partialTP', 45);
       h += T('旧数据不叠加：closedRatio=45（不是 95）', Math.abs(e3.closedRatio - 45) < 1e-9);
-      // 分批类型改成全额平仓类型：closedRatio=100、簿记清空、partialRatio 删除
+      // 分批类型改成全额平仓类型：closedRatio=100、收尾事件作为最后一条【追加】而非清空
+      // 整链（清空会同时打破 sum(ratio)===closedRatio 不变量，并让 modals.js 判定
+      // 「曾分批」失效、收尾编辑把已实现盈亏整段覆盖），partialRatio 删除
       var e4 = { closeType: 'partialTP', closedRatio: 50, pnlAmount: 4,
         closes: [{ type: 'partialTP', ratio: 50 }], partialRatio: 50 };
       util.syncCloseBookkeeping(e4, 'manualWin', null);
       h += T('改全额平仓：closedRatio=100（不是 0）', e4.closedRatio === 100);
-      h += T('改全额平仓：closes 清空', Array.isArray(e4.closes) && e4.closes.length === 0);
+      h += T('改全额平仓：分批历史保留并追加收尾事件',
+        e4.closes.length === 2 && e4.closes[0].ratio === 50 && e4.closes[1].type === 'manualWin');
+      h += T('改全额平仓：收尾事件比例 = 100 − 已平之和', Math.abs(e4.closes[1].ratio - 50) < 1e-9);
+      h += T('改全额平仓：合计不变量成立', Math.abs(_sumR(e4) - e4.closedRatio) < 1e-9);
       h += T('改全额平仓：partialRatio 已删除', e4.partialRatio === undefined);
       h += T('改全额平仓：判定为已平仓', util.isClosedTrade(e4) === true);
       // 原本就彻底平仓的记录换成另一种全额类型：保留事件链
@@ -1729,6 +1736,589 @@
         });
         setCalc(_savedCalc); setCalcDirty(_savedDirty);
       }
+    })();
+
+    // ---- 29. 盈亏比对照图 + 保证金占用刻度（v5.6.11 新增 js/calc-visuals.js）----
+    h += group('29. 盈亏比对照图 + 保证金占用刻度');
+    if (typeof CalcVisuals === 'undefined') {
+      h += loadErr('calc-visuals.js');
+    } else {
+      var V = CalcVisuals;
+
+      // 29.1 条长基准：与卡片含费净 RR 同源。缺净金额时退回价格距离（回退路径）。
+      // 注意不能一直用价格距离：ep 50000 / sp 49000 / tp 52000 / 费率 0.08% 时
+      // 价格比是 2.00、含费净 RR 是 1.78，条长说 2:1 而徽章说 1.78:1 会直接判反档位。
+      var _vRR = function (o) {
+        return V.layoutRR(Object.assign(
+          { entryPrice: 50000, stopPrice: 49000, targetPrice: 52000, grossProfit: 50 }, o));
+      };
+      var _g1 = _vRR({});
+      h += T('无净金额时退回价格距离：lossPct = 止损距离 / (止损距离 + 目标距离)',
+        Math.abs(_g1.lossPct - 100 / 3) < 1e-9 && _g1.basisNet === false);
+      h += T('gainPct 与 lossPct 严格互补', Math.abs(_g1.lossPct + _g1.gainPct - 100) < 1e-9);
+      h += T('目标价越远左条越短（比例单调）', _vRR({ targetPrice: 54000 }).lossPct < _g1.lossPct);
+      h += T('止损距离越窄左条越短', _vRR({ stopPrice: 49900 }).lossPct < _g1.lossPct);
+      h += T('方向无关：做空同一价格几何得到同一比例',
+        Math.abs(_vRR({ stopPrice: 51000, targetPrice: 48000 }).lossPct - _g1.lossPct) < 1e-9);
+      h += T('未填目标价：hasTargetInput=false 且无盈利条', (function () {
+        var m = V.layoutRR({ entryPrice: 50000, stopPrice: 49000, targetPrice: null });
+        return m.hasTargetInput === false && m.gainValid === false && m.targetDist === 0;
+      })());
+      h += T('未填目标价：tier=neutral（不冒充达标也不冒充不达标）',
+        _vRR({ targetRR: 2.5, targetPrice: undefined }).tier === 'neutral');
+      h += T('目标价与方向相反：不画盈利条',
+        V.layoutRR({ entryPrice: 50000, stopPrice: 49000, targetPrice: 48000, grossProfit: -50 }).gainValid === false);
+      h += T('目标价与方向相反：tier=invalid 且给出原因', (function () {
+        var m = V.layoutRR({ entryPrice: 50000, stopPrice: 49000, targetPrice: 48000, grossProfit: -50 });
+        return m.tier === 'invalid' && /方向相反/.test(m.invalidReason);
+      })());
+      h += T('目标价等于入场价：报告无盈利空间',
+        /相同/.test(V.layoutRR({ entryPrice: 50000, stopPrice: 49000, targetPrice: 50000, grossProfit: 0 }).invalidReason));
+      h += T('止损价等于入场价时回退 stopDistance 字段',
+        Math.abs(V.layoutRR({ entryPrice: 50000, stopPrice: 50000, stopDistance: 800, targetPrice: 52000, grossProfit: 1 }).stopDist - 800) < 1e-9);
+
+      // 29.1b 含费净基准（生产路径）：条长之比必须严格等于卡片 RR。
+      // 具体数字：ep 50000 / sp 49000 / tp 52000 / 数量 0.144 / 费率 0.0008
+      //   grossStopLoss 144 U，stopFee 11.4 U → netLoss 155.4
+      //   grossProfit  288 U，targetFee 11.76 U → netProfit 276.24
+      //   含费净 RR = 1.7776，而价格距离比是 2.00（差 12%，足以把档位判反）
+      var _vNet = function (o) {
+        return V.layoutRR(Object.assign({
+          entryPrice: 50000, stopPrice: 49000, targetPrice: 52000, grossProfit: 288,
+          netProfit: 276.24, netLoss: 155.4, targetRR: 1.777606178
+        }, o));
+      };
+      h += T('生产路径走净金额基准', _vNet({}).basisNet === true);
+      h += T('条长之比 = 卡片 RR（1.7776），不是价格比 2.00',
+        Math.abs(_vNet({}).gainPct / _vNet({}).lossPct - 1.777606178) < 1e-9);
+      h += T('lossPct = 净止损 / (净止损 + 净盈利)',
+        Math.abs(_vNet({}).lossPct - 155.4 / (155.4 + 276.24) * 100) < 1e-9);
+      h += T('含费后左条比纯毛利更长（净口径对亏损侧更不利）',
+        _vNet({}).lossPct > _vRR({}).lossPct);
+      h += T('1R 绝对金额 = 含费净止损，盈利金额 = 含费净盈利',
+        Math.abs(_vNet({}).lossAmt - 155.4) < 1e-12 &&
+        Math.abs(_vNet({}).gainAmt - 276.24) < 1e-12);
+      h += T('手续费吃光盈利：grossProfit>0 但 netProfit<=0 判无效且不画绿条', (function () {
+        var m = V.layoutRR({ entryPrice: 50000, stopPrice: 49000, targetPrice: 50001,
+          grossProfit: 1, netProfit: -0.5, netLoss: 100, targetRR: -0.005 });
+        return m.gainValid === false && m.tier === 'invalid' && /手续费/.test(m.invalidReason);
+      })());
+      h += T('基准退回价格距离且无 RR 时，由条长自身比例得出 RR', (function () {
+        var m = V.layoutRR({ entryPrice: 50000, stopPrice: 49000, targetPrice: 52000, grossProfit: 2000 });
+        return m.gainValid === true && Math.abs(m.rr - 2) < 1e-12;
+      })());
+
+      // 29.2 RR 档位必须与结果卡片共用 rrMeetsMin（含显示精度容差），不另写一套阈值。
+      // 净金额按目标 RR 反推（netLoss 100、netProfit 100x），保证「徽章值 == 条长之比」。
+      var _vTier = function (x) {
+        return V.layoutRR({ entryPrice: 50000, stopPrice: 49000, targetPrice: 52000,
+          grossProfit: 100 * x, netProfit: 100 * x, netLoss: 100, targetRR: x });
+      };
+      h += T('RR 2.5 → amber', _vTier(2.5).tier === 'amber');
+      h += T('RR 3.0 → green', _vTier(3).tier === 'green');
+      h += T('RR 1.5 → red', _vTier(1.5).tier === 'red');
+      h += T('反推浮点残差 1.9993518302 判 amber（与卡片同口径）',
+        _vTier(1.9993518302112037).tier === 'amber');
+      h += T('纯毛利 2R 的 1.7767691738 仍判 red（不因取整被放行）',
+        _vTier(1.7767691737680744).tier === 'red');
+      h += T('徽章 RR 就是条长之比（basisNet 路径不改动调用方数值）',
+        Math.abs(_vTier(2.5).rr - 2.5) < 1e-12);
+      h += T('目标价无效时 tier=invalid 覆盖 RR 数值',
+        V.layoutRR({ entryPrice: 50000, stopPrice: 49000, targetPrice: 48000, grossProfit: -1, targetRR: 5 }).tier === 'invalid');
+
+      // 29.3 保证金刻度：口径 = (已有持仓保证金 + 本仓保证金) / 本金，
+      // 与 80%（单笔上限）、90%（聚合上限）两道真实截断边界同轴比较
+      h += T('刻度常量与 calculator.js 截断边界一致',
+        V.MARGIN_WARN === 0.5 && V.MARGIN_SOFT_CAP === 0.8 && V.MARGIN_AGG_CAP === 0.9);
+      var _vm = function (o) { return V.layoutMargin(Object.assign({ capital: 1000, usedMargin: 0 }, o)); };
+      h += T('72% → primary 档（未到 80% 上限，不算 warn）',
+        _vm({ thisMargin: 720 }).pct === 72 && _vm({ thisMargin: 720 }).tier === 'primary');
+      h += T('40% → ok 档', _vm({ thisMargin: 400 }).tier === 'ok');
+      h += T('恰好 80% 不算 warn（判定是 > 80%）', _vm({ thisMargin: 800 }).tier === 'primary');
+      h += T('85% → warn（越过单笔上限）', _vm({ thisMargin: 850 }).tier === 'warn');
+      h += T('95% → danger（越过聚合上限）', _vm({ thisMargin: 950 }).tier === 'danger');
+      h += T('本仓保证金超过本金：danger + overCapital + free=0', (function () {
+        var x = _vm({ thisMargin: 1200 });
+        return x.tier === 'danger' && x.overCapital === true && x.free === 0;
+      })());
+      h += T('ratio 合计已有持仓 + 本仓（不是只算本仓）',
+        Math.abs(_vm({ thisMargin: 600, usedMargin: 200 }).ratio - 0.8) < 1e-12);
+      h += T('usedShare = 已有 / 合计',
+        Math.abs(_vm({ thisMargin: 600, usedMargin: 200 }).usedShare - 25) < 1e-9);
+      h += T('capital=0 不除零', _vm({ capital: 0, thisMargin: 100 }).ratio === 0);
+      h += T('负数 / NaN 输入被 clamp 为 0',
+        _vm({ thisMargin: -5, usedMargin: NaN }).totalMargin === 0);
+
+      // 29.3b 单笔 80% 上限的位置：它是「可用本金 × 80%」，换算到「占本金」轴上
+      // 随已有持仓左移。固定画在 80% 会系统性偏松。
+      h += T('无已有持仓时单笔刻度在 80% 本金',
+        _vm({ thisMargin: 720, leverage: 10, availableCapital: 1000 }).posCapPct === 80);
+      h += T('已有持仓 3000 时单笔刻度左移到 56%（真实上限，不是固定 80%）',
+        Math.abs(_vm({ thisMargin: 400, leverage: 10, capital: 10000, usedMargin: 3000, availableCapital: 7000 }).posCapPct - 56) < 1e-9);
+      h += T('availableCapital 已扣滑点与手续费，不只扣保证金',
+        Math.abs(_vm({ thisMargin: 100, leverage: 10, capital: 10000, usedMargin: 3000, availableCapital: 6800 }).posCapPct - 54.4) < 1e-9);
+      h += T('未传 availableCapital 时退回 usedMargin 口径（64%）',
+        Math.abs(_vm({ thisMargin: 720, leverage: 10, usedMargin: 200 }).posCapPct - 64) < 1e-9);
+      h += T('posUtilPct = 本仓保证金 / 可用本金',
+        Math.abs(_vm({ thisMargin: 560, leverage: 10, capital: 10000, availableCapital: 7000 }).posUtilPct - 8) < 1e-9);
+      h += T('恰好触到单笔上限时 posUtilPct = 80%',
+        Math.abs(_vm({ thisMargin: 5600, leverage: 10, capital: 10000, availableCapital: 7000 }).posUtilPct - 80) < 1e-9);
+      h += T('spot（leverage=0）没有 80% 上限：softOn=false',
+        _vm({ thisMargin: 720, leverage: 0, availableCapital: 1000 }).softOn === false);
+      h += T('availableCapital 越界被 clamp（负值退回纯保证金口径，大于本金夹到本金）', (function () {
+        var over = _vm({ thisMargin: 100, leverage: 10, capital: 10000, usedMargin: 3000, availableCapital: 12000 });
+        var under = _vm({ thisMargin: 100, leverage: 10, capital: 10000, usedMargin: 3000, availableCapital: -500 });
+        return over.availableCapital === 10000 && under.availableCapital === 7000;
+      })());
+      // 可用本金允许低于 capital − usedMargin：滑点与手续费也是真实占用，
+      // 夹回纯保证金口径会把占用算少、把单笔刻度画到比真实上限更松的位置。
+      h += T('availableCapital 可低于 capital − usedMargin（费用与滑点不被夹掉）',
+        _vm({ thisMargin: 100, leverage: 10, capital: 10000, usedMargin: 3000, availableCapital: 6000 }).availableCapital === 6000);
+
+      // 29.4 展示格式化：不改动任何计算值
+      h += T('价格按量级收敛小数位（BTC 两位 + 千分位）', V.fmtPrice(50000) === '50,000.00');
+      h += T('低价品种保留足够小数位', V.fmtPrice(0.0001234567) === '0.00012346');
+      h += T('金额为零显示破折号', V.fmtPrice(0) === '—');
+      h += T('金额默认两位小数 + 千分位', V.fmtAmt(1234.5) === '1,234.50');
+      h += T('非数字输入不抛错', V.fmtAmt(NaN) === '—' && V.fmtPrice(undefined) === '—');
+
+      // 29.5 DOM 渲染与清空路径
+      var _stubRoot = null;
+      function _buildVStub() {
+        _stubRoot = document.createElement('div');
+        _stubRoot.id = '_vvStub';
+        _stubRoot.innerHTML =
+          '<div class="result-visuals" id="resultVisuals">' +
+            '<div class="vv-card" id="rrVisualCard">' +
+              '<span class="vv-badge" id="rrBadge"></span>' +
+              '<div class="vv-ladder" id="rrLadder"></div>' +
+              '<div class="vv-note" id="rrNote"></div>' +
+            '</div>' +
+            '<div class="vv-card" id="marginVisualCard">' +
+              '<span class="vv-badge" id="marginBadge"></span>' +
+              '<div class="vv-g-track" id="marginTrack">' +
+                '<div class="vv-g-fill" id="marginFill">' +
+                  '<div id="marginFillUsed"></div>' +
+                  '<div id="marginFillThis"></div>' +
+                '</div>' +
+                '<span id="gTickSoft"></span>' +
+                '<span id="gTickAgg"></span>' +
+              '</div>' +
+              '<div class="vv-g-markers">' +
+                '<span id="gMarkSoft"></span>' +
+                '<span id="gMarkAgg"></span>' +
+              '</div>' +
+              '<span id="marginScaleLabel"></span>' +
+              '<div class="vv-note" id="marginNote"></div>' +
+              '<div class="vv-note" id="marginNote2"></div>' +
+            '</div>' +
+          '</div>';
+        document.body.appendChild(_stubRoot);
+      }
+      function _dropVStub() {
+        if (_stubRoot && _stubRoot.parentNode) _stubRoot.parentNode.removeChild(_stubRoot);
+        _stubRoot = null;
+      }
+      var _D = {
+        direction: 'long', entryPrice: 50000, stopPrice: 49000, targetPrice: 52000,
+        stopDistance: 1000, stopPct: 2, grossProfit: 50, netProfit: 52, netLoss: 20.8,
+        targetRR: 2.5, fee: 8, feeRate: 0.08, capital: 1000, thisMargin: 720,
+        usedMargin: 0, leverage: 10, nominal: 7200, riskAmount: 20, cappedByMargin: false
+      };
+
+      _buildVStub();
+      try {
+        V.render(_D);
+        h += T('渲染后外层容器可见',
+          document.getElementById('resultVisuals').style.display !== 'none');
+        h += T('盈亏比卡可见且徽章为 2.50 : 1',
+          document.getElementById('rrVisualCard').style.display !== 'none' &&
+          document.getElementById('rrBadge').textContent === '2.50 : 1');
+        h += T('徽章档位类与卡片三色语义一致（amber）',
+          /vv-badge-amber/.test(document.getElementById('rrBadge').className));
+        h += T('阶梯三行：价格行 / 比例条 / 金额行',
+          document.getElementById('rrLadder').children.length === 3);
+        h += T('三行共用同一套 grid 列（按价格距离分配 fr，上下严格对齐）', (function () {
+          var rows = document.getElementById('rrLadder').children;
+          return rows[0].style.gridTemplateColumns === rows[1].style.gridTemplateColumns &&
+                 rows[1].style.gridTemplateColumns === rows[2].style.gridTemplateColumns &&
+                 /fr/.test(rows[1].style.gridTemplateColumns);
+        })());
+        h += T('止损条与目标条同时存在',
+          !!document.querySelector('#rrLadder .vv-bar-loss') &&
+          !!document.querySelector('#rrLadder .vv-bar-gain'));
+        h += T('入场价轴存在', !!document.querySelector('#rrLadder .vv-axis-line'));
+        h += T('说明行写明入场价与 1R 基准口径',
+          /入场/.test(document.getElementById('rrNote').textContent) &&
+          /1R 基准/.test(document.getElementById('rrNote').textContent));
+
+        // 极端比例：左条宽度低于阈值时不放内嵌标签，否则文字会溢出到条外
+        V.render(Object.assign({}, _D, { targetPrice: 60000, grossProfit: 500, netProfit: 500, targetRR: 10 }));
+        h += T('极端比例下窄条不放内嵌 R 标签（防溢出）',
+          !document.querySelector('#rrLadder .vv-bar-loss .vv-bar-in'));
+        h += T('宽条仍保留内嵌 R 标签', !!document.querySelector('#rrLadder .vv-bar-gain .vv-bar-in'));
+
+        // 目标价方向无效：不画绿色盈利条，损失条转中性色
+        V.render(Object.assign({}, _D, { targetPrice: 48000, grossProfit: -50, netProfit: null, netLoss: null, targetRR: null }));
+        h += T('目标价无效：不画盈利条', !document.querySelector('#rrLadder .vv-bar-gain'));
+        h += T('目标价无效：损失条转中性色（不被红色误导成二次亏损）',
+          /is-neutral/.test(document.querySelector('#rrLadder .vv-bar-loss').className));
+        h += T('目标价无效：说明行给出原因',
+          /方向相反/.test(document.getElementById('rrNote').textContent));
+
+        // 保证金刻度条
+        V.render(_D);
+        h += T('保证金条宽度 = 占用比例',
+          document.getElementById('marginFill').style.width === '72.00%');
+        h += T('档位类随比例切换（72% = primary）',
+          /vv-g-fill-primary/.test(document.getElementById('marginFill').className));
+        h += T('越过 80% 上限后档位转 warn', (function () {
+          V.render(Object.assign({}, _D, { thisMargin: 850 }));
+          return /vv-g-fill-warn/.test(document.getElementById('marginFill').className);
+        })());
+        h += T('徽章显示占用百分比', (function () {
+          V.render(_D);
+          return document.getElementById('marginBadge').textContent === '72.0%';
+        })());
+        h += T('刻度线位置由常量驱动（80% / 90%），HTML 里不写死',
+          document.getElementById('gMarkSoft').style.left === '80%' &&
+          document.getElementById('gMarkAgg').style.left === '90%' &&
+          document.getElementById('gTickSoft').style.left === '80%' &&
+          document.getElementById('gTickAgg').style.left === '90%');
+        h += T('刻度标签与常量同步（单笔 80% / 90%）',
+          document.getElementById('gMarkSoft').textContent === '单笔 80%' &&
+          document.getElementById('gMarkAgg').textContent === '90%');
+        h += T('已有持仓段按占比堆叠（200 / 800 = 25%）', (function () {
+          V.render(Object.assign({}, _D, { thisMargin: 600, usedMargin: 200 }));
+          return document.getElementById('marginFillUsed').style.flexBasis === '25.00%' &&
+                 document.getElementById('marginFill').style.width === '80.00%';
+        })());
+        h += T('已有持仓为 0 时堆叠段为 0 宽', (function () {
+          V.render(_D);
+          return document.getElementById('marginFillUsed').style.flexBasis === '0.00%';
+        })());
+        h += T('超出本金：条宽截断到 100% 但文案给出真实超额', (function () {
+          V.render(Object.assign({}, _D, { thisMargin: 1200 }));
+          return document.getElementById('marginFill').style.width === '100.00%' &&
+                 /vv-g-fill-danger/.test(document.getElementById('marginFill').className) &&
+                 /已超出本金/.test(document.getElementById('marginNote').textContent);
+        })());
+
+        // 未填目标价：盈亏比卡隐藏，保证金卡仍在
+        V.render(Object.assign({}, _D, { targetPrice: null, grossProfit: null, netProfit: null, netLoss: null, targetRR: null, fee: 3 }));
+        h += T('未填目标价：盈亏比卡隐藏',
+          document.getElementById('rrVisualCard').style.display === 'none');
+        h += T('未填目标价：保证金卡仍显示',
+          document.getElementById('marginVisualCard').style.display !== 'none');
+        h += T('未填目标价：外层容器仍可见',
+          document.getElementById('resultVisuals').style.display !== 'none');
+
+        // 清空路径：阻断 / 重置都必须收起图，否则会残留上一轮的 R:R 与保证金比例
+        V.hide();
+        h += T('hide() 收起整块', document.getElementById('resultVisuals').style.display === 'none');
+
+        var _origV = window.CalcVisuals;
+        h += T('硬阻断（renderBlocker）收起可视化', (function () {
+          var _spy = 0;
+          window.CalcVisuals = { hide: function () { _spy++; } };
+          try {
+            CalculationUI.renderBlocker({}, { code: 'x', title: '阻断', detail: 'd' });
+            return _spy === 1;
+          } finally { window.CalcVisuals = _origV; }
+        })());
+        h += T('resetForCalculation 收起可视化（每次重算开头先收上一次）', (function () {
+          var _spy = 0;
+          window.CalcVisuals = { hide: function () { _spy++; } };
+          try { CalculationUI.resetForCalculation({}); return _spy === 1; }
+          finally { window.CalcVisuals = _origV; }
+        })());
+        h += T('renderCalcVisuals 是薄封装（原样透传数据）', (function () {
+          var got = null;
+          window.CalcVisuals = { render: function (d) { got = d; } };
+          try { renderCalcVisuals(_D); return got === _D; }
+          finally { window.CalcVisuals = _origV; }
+        })());
+        h += T('CalcVisuals 缺失时静默跳过（图形缺失不阻断计算与阻断渲染）', (function () {
+          window.CalcVisuals = null;
+          try {
+            return (function () {
+              try { renderCalcVisuals({}); CalculationUI.renderBlocker({}, {}); return true; }
+              catch (e) { return false; }
+            })();
+          } finally { window.CalcVisuals = _origV; }
+        })());
+        h += T('缺元素 / 空数据时不抛错（防御性）', (function () {
+          try {
+            V.render({}); V.layoutRR(null); V.layoutMargin(null); V.hide();
+            return true;
+          } catch (e) { return false; }
+        })());
+      } finally {
+        _dropVStub();
+      }
+    }
+
+    // ---- 30. 口径统一（当前风险 / MMR / 热量 / CSV 目标字段 / 千分位）----
+    h += group('30. 口径统一（当前风险 / MMR / 热量 / CSV / 千分位）');
+
+    // 30.1 positionCurrentRisk：风险额必须按当前止损距离实时重算。
+    // 止损移动只写 stopLoss 与 stopHistory，不更新 riskAmount，读存档值会让仪表盘、
+    // 检查清单、风控中心三个面板继续用开仓时的旧风险额——止损从 1% 放宽到 4% 时
+    // 显示 10 而真实是 400，同时还按真实热量给卡片上色。
+    (function () {
+      h += T('positionCurrentRisk 已导出', typeof window.positionCurrentRisk === 'function');
+      h += T('按当前止损距离重算（忽略存档 riskAmount）',
+        Math.abs(window.positionCurrentRisk({ entryPrice: 100, stopLoss: 90, positionSize: 10, riskAmount: 999 }) - 1) < 1e-9);
+      h += T('止损放宽 1%→4% 后风险同步（100 → 400，不是存档 riskAmount 的 10）',
+        Math.abs(window.positionCurrentRisk({ entryPrice: 1000, stopLoss: 960, positionSize: 10000, riskAmount: 10 }) - 400) < 1e-9);
+      h += T('加权入场价优先于原始入场价',
+        Math.abs(window.positionCurrentRisk({ entryPrice: 100, effectiveEntryPrice: 110, stopLoss: 99, positionSize: 100 }) - 10) < 1e-9);
+      h += T('空头取绝对值（止损在入场价上方）',
+        Math.abs(window.positionCurrentRisk({ entryPrice: 100, stopLoss: 110, positionSize: 10, riskAmount: 999 }) - 1) < 1e-9);
+      h += T('止损价缺失时回退存档 riskAmount',
+        Math.abs(window.positionCurrentRisk({ entryPrice: 100, positionSize: 10, riskAmount: 7 }) - 7) < 1e-9);
+      h += T('仓位为 0 时回退存档 riskAmount',
+        Math.abs(window.positionCurrentRisk({ entryPrice: 100, stopLoss: 90, positionSize: 0, riskAmount: 7 }) - 7) < 1e-9);
+      h += T('全字段缺失返回 0', window.positionCurrentRisk({}) === 0);
+      h += T('null 入参返回 0', window.positionCurrentRisk(null) === 0);
+    })();
+
+    // 30.2 loadMmr：强平价对 MMR 极度敏感。mmr = 0 会让公式退化成「零缓冲」，calculator
+    // 会把 maxViableLev 算成 0 并判定开仓即被强平；mmr = NaN 会让整列变 NaN。
+    // 三处读取点原先各写一份、只有 calculator 判了 > 0，同一份设置在三个面板给出不同强平价。
+    (function () {
+      h += T('loadMmr 已导出', typeof window.loadMmr === 'function');
+      var _saved = localStorage.getItem('trade_settings_v1');
+      try {
+        localStorage.removeItem('trade_settings_v1');
+        window._clearSettingsCache();
+        h += T('未设置时回退默认 0.5%', Math.abs(window.loadMmr() - 0.005) < 1e-12);
+        localStorage.setItem('trade_settings_v1', JSON.stringify({ mmr: 1 }));
+        window._clearSettingsCache();
+        h += T('百分比转小数（1 → 0.01）', Math.abs(window.loadMmr() - 0.01) < 1e-12);
+        localStorage.setItem('trade_settings_v1', JSON.stringify({ mmr: 0 }));
+        window._clearSettingsCache();
+        h += T('mmr=0 回退默认（避免零缓冲强平价）', Math.abs(window.loadMmr() - 0.005) < 1e-12);
+        localStorage.setItem('trade_settings_v1', JSON.stringify({ mmr: -2 }));
+        window._clearSettingsCache();
+        h += T('负值回退默认', Math.abs(window.loadMmr() - 0.005) < 1e-12);
+        localStorage.setItem('trade_settings_v1', JSON.stringify({ mmr: 'abc' }));
+        window._clearSettingsCache();
+        h += T('非数字回退默认', Math.abs(window.loadMmr() - 0.005) < 1e-12);
+        localStorage.setItem('trade_settings_v1', 'not json');
+        window._clearSettingsCache();
+        h += T('损坏的 JSON 回退默认', Math.abs(window.loadMmr() - 0.005) < 1e-12);
+        localStorage.setItem('trade_settings_v1', JSON.stringify({ mmr: '0.8' }));
+        window._clearSettingsCache();
+        h += T('字符串数字也能读（0.8% → 0.008）', Math.abs(window.loadMmr() - 0.008) < 1e-12);
+      } finally {
+        if (_saved === null) localStorage.removeItem('trade_settings_v1');
+        else localStorage.setItem('trade_settings_v1', _saved);
+        window._clearSettingsCache();
+      }
+    })();
+
+    // 30.3 组合热量按当前止损距离重算：三面板同口径，且已持仓 + 本仓才能拦住「加上本仓才超限」
+    (function () {
+      var _oldLogs = logs;
+      var _oldSettings = localStorage.getItem('trade_settings_v1');
+      localStorage.removeItem('trade_settings_v1');
+      window._clearSettingsCache();
+      window.logs = [{
+        symbol: 'BTC', direction: 'long', entryPrice: 1000, stopLoss: 990,
+        positionSize: 10000, riskAmount: 10, leverage: 10, time: '2026-10-04T00:00:00.000Z'
+      }];
+      try {
+        var h1 = calcPortfolioHeat(0, null, 10000);
+        h += T('止损 1% 时热量 1%（不是存档 riskAmount 的 0.1%）',
+          Math.abs(h1.existingHeat - 1) < 1e-9 && Math.abs(h1.existingRisk - 100) < 1e-9);
+        window.logs[0].stopLoss = 960;   // 止损放宽到 4%，riskAmount 不动
+        var h2 = calcPortfolioHeat(0, null, 10000);
+        h += T('止损放宽到 4% 后热量同步到 4%（不是 4 倍偏差）',
+          Math.abs(h2.existingHeat - 4) < 1e-9 && Math.abs(h2.existingRisk - 400) < 1e-9);
+        var h3 = calcPortfolioHeat(500, 'ETH', 10000);
+        h += T('已持仓 4% + 本仓 5% = 9% 超过 6% 硬上限 → blocked',
+          Math.abs(h3.heat - 9) < 1e-9 && h3.blocked === true);
+        var h4 = calcPortfolioHeat(50, 'ETH', 10000);
+        h += T('已持仓 4% + 本仓 0.5% = 4.5% 未超限',
+          Math.abs(h4.heat - 4.5) < 1e-9 && h4.blocked === false);
+      } finally {
+        window.logs = _oldLogs;
+        if (_oldSettings === null) localStorage.removeItem('trade_settings_v1');
+        else localStorage.setItem('trade_settings_v1', _oldSettings);
+        window._clearSettingsCache();
+      }
+    })();
+
+    // 30.4 CSV 往返：目标盈亏比 / 计划净盈利两列必须被还原（「盈亏比偏差」的分母），
+    // 时间列走 ISO（带秒与时区），否则换机导入整体偏移 8 小时、秒级丢失还会让同一分钟
+    // 的两笔记录判成重复而静默丢单。
+    (function () {
+      var _oldLogs = logs;
+      var _oldMarker = localStorage.getItem('trade_ids_backfilled_v1');
+      localStorage.setItem('trade_ids_backfilled_v1', '1');
+      // exportCSV 先读 _activeFilters.direction 判断是否有生效筛选；测试页把它置为 null
+      // 会让这一步抛错并被 try/catch 吞掉，整段导出静默产不出 CSV。
+      var _oldFilters = window._activeFilters;
+      window._activeFilters = { direction: '', symbol: '', strategy: '', status: '', pnl: '', time: '' };
+      var _blobCaptured = null;
+      var _OrigBlob = window.Blob;
+      window.Blob = function (parts) {
+        _blobCaptured = Array.isArray(parts) ? parts.slice() : [parts];
+        return { parts: _blobCaptured };
+      };
+      try {
+        logs = [{
+          id: 'lg_rr_001', time: '2026-10-04T08:30:05.000Z', symbol: 'ETH', direction: 'long',
+          orderType: 'market', entryPrice: 50000, stopLoss: 49000, targetPrice: 52000,
+          positionSize: 0.144, leverage: 10, riskAmount: 144, capital: 10000,
+          closeType: 'tp', closePrice: 52000, closeTime: '2026-10-04T09:05:12.000Z',
+          initialRiskAmount: 144, initialPositionSize: 0.144,
+          pnlAmount: 276.25, targetRR: 1.7776, plannedNetProfit: 276.2496,
+          fee: 23.1552,
+          closes: [{ type: 'tp', ratio: 100 }],
+          stopHistory: [{ price: 49000, time: '2026-10-04T08:30:05.000Z', note: '初始止损' }]
+        }];
+        exportCSV();
+        var text = (_blobCaptured && _blobCaptured[0] ? _blobCaptured[0] : '').replace(/^/, '');
+        h += T('exportCSV 产出 CSV（表头含目标盈亏比/计划净盈利）',
+          !!text && /目标盈亏比,计划净盈利/.test(text));
+        h += T('时间列导出为 ISO（带秒与时区）', /2026-10-04T08:30:05\.000Z/.test(text));
+        h += T('平仓时间列同为 ISO', /2026-10-04T09:05:12\.000Z/.test(text));
+        h += T('目标盈亏比与计划净盈利写入数据行', /1\.7776/.test(text) && /276\.2496/.test(text));
+
+        logs = [];
+        parseCSVImport(text);
+        h += T('导出→导入后仍有 1 条记录', logs.length === 1);
+        h += T('目标盈亏比还原为数字（偏差指标分母不丢）',
+          logs.length === 1 && typeof logs[0].targetRR === 'number' && Math.abs(logs[0].targetRR - 1.7776) < 1e-9);
+        h += T('计划净盈利还原为数字',
+          logs.length === 1 && typeof logs[0].plannedNetProfit === 'number' && Math.abs(logs[0].plannedNetProfit - 276.2496) < 1e-6);
+        h += T('时间往返保留秒级精度',
+          logs.length === 1 && /T08:30:05/.test(String(logs[0].time)));
+      } finally {
+        window.Blob = _OrigBlob;
+        window._activeFilters = _oldFilters;
+        logs = _oldLogs;
+        if (_oldMarker === null) localStorage.removeItem('trade_ids_backfilled_v1');
+        else localStorage.setItem('trade_ids_backfilled_v1', _oldMarker);
+      }
+    })();
+
+    // 30.5 千分位：Excel 把单元格设成千位分隔后导出成 "1,234.56"，parseFloat 只取逗号前
+    // 一位（→ 1），26 个数值列全部静默截断且无告警。
+    (function () {
+      var _oldLogs = logs;
+      var _oldMarker = localStorage.getItem('trade_ids_backfilled_v1');
+      localStorage.setItem('trade_ids_backfilled_v1', '1');
+      var _oldConfirm = window.confirmDialog;
+      window.confirmDialog = function () { return Promise.resolve(false); };
+      try {
+        logs = [];
+        parseCSVImport(
+          'ID,时间,品种,方向,入场价,止损价,目标价,仓位(USDT),杠杆,初始风险,本金,盈亏金额\n' +
+          '"lg_sep_001","2026-10-04T08:00:00.000Z","BTC","long","1,234.56","1,100","1,400","2,500","10","88.88","10,000","1,234.56"\n');
+        h += T('千分位数值列按预期还原成数字（不是截成 1）',
+          logs.length === 1 &&
+          logs[0].entryPrice === 1234.56 &&
+          logs[0].stopLoss === 1100 &&
+          logs[0].targetPrice === 1400 &&
+          logs[0].positionSize === 2500 &&
+          logs[0].initialRiskAmount === 88.88 &&
+          logs[0].capital === 10000 &&
+          logs[0].pnlAmount === 1234.56);
+      } finally {
+        window.confirmDialog = _oldConfirm;
+        logs = _oldLogs;
+        if (_oldMarker === null) localStorage.removeItem('trade_ids_backfilled_v1');
+        else localStorage.setItem('trade_ids_backfilled_v1', _oldMarker);
+      }
+    })();
+
+    // 30.6 已标记平仓却缺平仓价 / 盈亏：这类记录 isClosedTrade 判「未平仓」，既进不了
+    // 胜率/期望值/资金曲线/凯利样本，又会反向进入持仓统计虚增保证金、抬高组合热量，
+    // 而 CSV 里仍标着已平仓。导入侧与编辑弹窗同守。
+    (function () {
+      var _oldLogs = logs;
+      var _oldMarker = localStorage.getItem('trade_ids_backfilled_v1');
+      localStorage.setItem('trade_ids_backfilled_v1', '1');
+      var _oldConfirm = window.confirmDialog;
+      var _msgs = [];
+      window.confirmDialog = function (opts) { _msgs.push(opts); return Promise.resolve(false); };
+      try {
+        logs = [];
+        parseCSVImport(
+          'ID,时间,品种,方向,入场价,止损价,平仓类型,平仓价,盈亏金额\n' +
+          '"lg_bad_001","2026-10-04T08:00:00.000Z","BTC","long",60000,59000,"tp",,900\n' +
+          '"lg_bad_002","2026-10-04T08:00:00.000Z","ETH","long",50000,49000,"tp",52000,\n');
+        h += T('已平仓但平仓价/盈亏缺失整批拒绝（fail-closed）', logs.length === 0);
+        h += T('拒绝原因同时点出平仓价与盈亏金额',
+          _msgs.some(function (m) { return /平仓价无效/.test(m.message) && /盈亏金额不能为空/.test(m.message); }));
+        logs = [];
+        parseCSVImport(
+          'ID,时间,品种,方向,入场价,止损价,平仓类型,平仓价,盈亏金额\n' +
+          '"lg_ok_001","2026-10-04T09:00:00.000Z","SOL","long",200,190,"tp",210,10\n');
+        h += T('字段齐全的已平仓记录正常导入', logs.length === 1);
+        logs = [];
+        parseCSVImport(
+          'ID,时间,品种,方向,入场价,止损价\n' +
+          '"lg_open_001","2026-10-04T09:00:00.000Z","SOL","long",200,190\n');
+        h += T('未标记平仓的记录不因缺平仓价被拦', logs.length === 1);
+      } finally {
+        window.confirmDialog = _oldConfirm;
+        logs = _oldLogs;
+        if (_oldMarker === null) localStorage.removeItem('trade_ids_backfilled_v1');
+        else localStorage.setItem('trade_ids_backfilled_v1', _oldMarker);
+      }
+    })();
+
+    // 30.7 「盈亏比偏差」口径恒等式：分子分母必须同口径。
+    // rMultiple 的分母是 initialRiskAmount（纯毛利开仓风险），targetRR 的分母是含费净止损；
+    // 相除恒等于 netLoss / initialRiskAmount，只要费用 > 0 就恒大于 1——完美执行也永远
+    // 显示「正偏差」并染绿。那测的是口径差，不是执行偏差。
+    // 改成「已实现净额 / 计划净盈利」后完美执行恰好 1.000。这里锁住这两个恒等式，
+    // 它们决定了 plannedNetProfit 落库必须与 targetRR 同源（= targetRR × 含费净止损）。
+    // 数值取自 ep 50000 / sp 49000 / tp 52000 / 费率 0.08% / 数量 0.144 的实测场景。
+    (function () {
+      var grossStopLoss = 144;        // 纯毛利开仓风险 = initialRiskAmount
+      var netLoss = 155.4048;         // 含费净止损
+      var netProfit = 276.2496;       // 含费净目标盈利
+      var targetRR = netProfit / netLoss;
+      h += T('含费净止损严格大于纯毛利开仓风险', netLoss > grossStopLoss);
+      h += T('plannedNetProfit 与 targetRR 同源（= targetRR × 含费净止损）',
+        Math.abs(targetRR * netLoss - netProfit) < 1e-9);
+      h += T('新口径（已实现净额 / 计划净盈利）完美执行为 0%',
+        Math.abs((netProfit / netProfit - 1) * 100) < 1e-12);
+      // 旧口径：rMultiple = 已实现净额 / 纯毛利风险，再除以 targetRR（分母是含费净止损）
+      var rMultiple = netProfit / grossStopLoss;
+      h += T('旧口径偏差恒等于 netLoss / initialRiskAmount（与执行无关）',
+        Math.abs(rMultiple / targetRR - netLoss / grossStopLoss) < 1e-12);
+      h += T('本例旧口径偏差 = +7.92%（口径差，非执行差）',
+        Math.abs((rMultiple / targetRR - 1) * 100 - 7.92) < 0.01);
+      // 费用归零时两种口径重合：偏差与执行差彻底解耦
+      h += T('费用为 0 时旧口径偏差恰好归零',
+        Math.abs(((netProfit / grossStopLoss) / (netProfit / grossStopLoss) - 1) * 100) < 1e-12);
+    })();
+
+    // 30.8 版本号单一来源：APP_VERSION（js/version.js）必须与本页所有 script 的 ?v= 一致。
+    // 升版时要同时改 version.js 与 index.html / run-tests.html 的 ?v=，漏改任何一处都会让
+    // 浏览器继续跑旧缓存模块——新代码里改的公式配旧缓存里的旧实现，正是「同一状态在不同
+    // 权威下结论不一致」的又一形式。这里的字面量是刻意的绊线：升版必须顺手改它，否则会红。
+    (function () {
+      h += T('APP_VERSION 已定义为字符串', typeof APP_VERSION === 'string' && APP_VERSION.length > 0);
+      h += T('APP_VERSION 为本次发布的 5.6.12（升版时同步改这行）', APP_VERSION === '5.6.12');
+      var vs = [];
+      for (var i = 0; i < document.scripts.length; i++) {
+        var s = document.scripts[i].getAttribute('src') || '';
+        if (s) { var m = s.match(/\?v=([^&"']+)/); if (m) vs.push(m[1]); }
+      }
+      h += T('本页所有外链脚本都带 ?v= 缓存戳', vs.length === document.scripts.length - (function () {
+        var n = 0;
+        for (var j = 0; j < document.scripts.length; j++) if (!document.scripts[j].getAttribute('src')) n++;
+        return n;
+      })());
+      var drift = vs.filter(function (v) { return v !== APP_VERSION; });
+      h += T('没有任何脚本的 ?v= 与 APP_VERSION 漂移', drift.length === 0);
     })();
 
     document.getElementById('out').innerHTML = h;

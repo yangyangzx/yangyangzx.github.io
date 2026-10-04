@@ -224,7 +224,11 @@ function _renderRiskExposure() {
   for (var i = 0; i < openLogs.length; i++) {
     var log = openLogs[i];
     totalPosition += parseFloat(log.positionSize) || 0;
-    totalRisk += parseFloat(log.riskAmount) || 0;
+    // 按当前止损价实时重算，不读冻结的 riskAmount：止损可移动（recordStopMove 只改
+    // stopLoss/stopHistory，不动 riskAmount），读 riskAmount 会让本卡与组合热量闸门/
+    // 风控中心对同一笔持仓报出相差数倍的敞口，而下方还用热量阈值给它上色。
+    totalRisk += (typeof positionCurrentRisk === 'function')
+      ? positionCurrentRisk(log) : (parseFloat(log.riskAmount) || 0);
     var lev = parseFloat(log.leverage) || 0;
     // BUG-7 修复：现货(leverage=0)时保证金等于仓位本身
     if (lev > 0) {
@@ -357,13 +361,9 @@ function _renderLiqWarn() {
     }
     var dir = log.direction;
 
-    // 强平价：统一使用 utils.calcLiquidationPrice
-    // 使用 loadSettings() 而非直接读 localStorage，与 calculator.js 口径一致
-    var mmr = DEFAULT_MMR;
-    try {
-      var _ds = loadSettings();
-      if (_ds && _ds.mmr != null) mmr = _ds.mmr / 100;
-    } catch(e) { console.error('[dashboard]', e); }
+    // 强平价：统一使用 utils.calcLiquidationPrice；MMR 走 loadMmr() 统一读取
+    //（mmr = 0 / NaN 会让强平价退化为零缓冲或 NaN，三面板必须同一口径）
+    var mmr = loadMmr();
     var liqPrice = window.utils.calcLiquidationPrice(entry, dir, lev, mmr);
     if (isNaN(liqPrice) || liqPrice <= 0) continue; // 强平价无效跳过
 

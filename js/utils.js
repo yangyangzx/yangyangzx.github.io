@@ -100,10 +100,24 @@
     // 非分批类型 = 断言整笔已退出：closedRatio 必须是 100（对齐 logs.js 收尾口径）。
     // 此前清成 0，会让"已平仓"记录的 CSV 导出显示 0% 已平，口径与 pnlAmount 脱节。
     delete item.partialRatio;
-    var wasFullyClosed = (parseFloat(item.closedRatio) || 0) >= 99.999;
+    // 收尾事件必须写成 closes 的最后一条，而不是清空整链。清空同时坏在两处：
+    //   ① 本函数 JSDoc 声明的不变量 sum(closes[].ratio) === closedRatio 变成 0 === 100，
+    //      且分批历史从 CSV 往返里彻底消失、无法恢复；
+    //   ② modals.js 靠 closes 判断「这条记录曾经分批」——清空后判定失效，收尾编辑就
+    //      走「剩余仓位单腿重算」，把之前已实现的盈亏整段覆盖掉（少记 79%）。
+    // 收尾比例 = 100 − 已平之和；先只保留分批事件再求缺口，避免脏数据里已存在的
+    // 收尾事件被重复追加（PARTIAL_TYPES 分支对收尾事件也是同样处理）。
+    var partialEvts = evts.filter(function(e) {
+      return PARTIAL_TYPES.indexOf(e.type) >= 0;
+    });
+    var closedSum = parseFloat(partialEvts.reduce(function(s, e) {
+      return s + (parseFloat(e.ratio) || 0);
+    }, 0).toFixed(4));
     item.closedRatio = 100;
-    // 此前未彻底平仓的记录：其部分平仓事件链已不描述现实，清空避免孤立簿记
-    if (!wasFullyClosed) item.closes = [];
+    if (closedSum < 99.999) {
+      partialEvts.push({ type: closeType, ratio: clamp4(100 - closedSum) });
+    }
+    item.closes = partialEvts;
     return item;
   };
 

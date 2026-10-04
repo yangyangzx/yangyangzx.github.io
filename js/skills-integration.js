@@ -24,6 +24,35 @@
  * @returns {{heat:number, existingHeat:number, existingRisk:number, planRisk:number,
  *            planPct:number, details:Array, warning:string|null, blocked:boolean}}
  */
+/**
+ * 单笔持仓的「当前」风险额（唯一权威实现）。
+ *
+ * 按当前止损价实时重算，不读存档的 riskAmount：止损可以移动（utils.recordStopMove 只
+ * 更新 stopLoss 与 stopHistory，从不改 riskAmount），所以 riskAmount 冻结在开仓时那一刻。
+ * 移动止损后继续读 riskAmount，仪表盘「总风险」会与组合热量闸门/风控中心相差数倍
+ * （止损从 1% 挪到 4% 时是 4 倍），而那张卡还拿热量阈值上色，等于监控面系统性低估敞口。
+ * 三个消费方共用本函数，账面与闸门同口径：
+ *   - calcPortfolioHeat（硬闸门 + 风控中心）
+ *   - dashboard.js「在仓风险」卡
+ *   - calculator.js 结果区「组合风险」行
+ * 入场价/止损价缺失或非法时退回 riskAmount——那时没有更好的信息，且闸门行为不变。
+ *
+ * @param {Object} pos 持仓记录
+ * @returns {number} 风险额 USDT
+ */
+function positionCurrentRisk(pos) {
+  if (!pos) return 0;
+  var entry = parseFloat(pos.effectiveEntryPrice || pos.entryPrice);
+  var sl = parseFloat(pos.stopLoss);
+  var ps = parseFloat(pos.positionSize) || 0;
+  if (Number.isFinite(entry) && entry > 0 && Number.isFinite(sl) && sl > 0 && ps > 0) {
+    return Math.abs(entry - sl) / entry * ps;
+  }
+  return parseFloat(pos.riskAmount) || 0;
+}
+window.positionCurrentRisk = positionCurrentRisk;
+
+
 function calcPortfolioHeat(pendingRiskAmount, pendingSymbol, capitalOverride) {
   var openPositions = getOpenPositions();
   // 表单本金可用时优先用它：本仓风险就是按表单本金算出来的，两者必须同一分母，
@@ -38,18 +67,8 @@ function calcPortfolioHeat(pendingRiskAmount, pendingSymbol, capitalOverride) {
   var details = [];
   for (var i = 0; i < openPositions.length; i++) {
     var pos = openPositions[i];
-    // 优先使用实际止损距离计算风险：|入场价 - 止损价| / 入场价 × 仓位
-    var actualRisk = 0;
-    var entry = parseFloat(pos.effectiveEntryPrice || pos.entryPrice);
-    var sl = parseFloat(pos.stopLoss);
-    var ps = parseFloat(pos.positionSize) || 0;
-    if (!isNaN(entry) && entry > 0 && !isNaN(sl) && sl > 0 && ps > 0) {
-      var stopDist = Math.abs(entry - sl);
-      actualRisk = stopDist / entry * ps;
-    } else {
-      // 兜底：使用存储的 riskAmount
-      actualRisk = parseFloat(pos.riskAmount) || 0;
-    }
+    // 按当前止损距离实时重算，不读存档 riskAmount —— 见 positionCurrentRisk。
+    var actualRisk = positionCurrentRisk(pos);
     totalRisk += actualRisk;
     details.push({
       symbol: pos.symbol,

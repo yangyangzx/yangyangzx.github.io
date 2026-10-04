@@ -91,7 +91,10 @@ function updateStats() {
   const avgPnlEl = document.getElementById('statAvgPnl');
   avgPnlEl.textContent = (avgPnl >= 0 ? '+' : '') + avgPnl.toFixed(2);
   avgPnlEl.className = 'stat-value ' + (avgPnl > 0 ? 'positive' : avgPnl < 0 ? 'negative' : 'neutral');
-  const wlRatioStr = wlRatio > 0 ? wlRatio.toFixed(2) + ':1' : (grossLoss === 0 && wins.length > 0 ? '∞:1' : '—');
+  // Infinity > 0 为 true，Infinity.toFixed(2) 得到字符串 "Infinity" —— 无亏损单时
+  // 卡片会显示「Infinity:1」，而下方 profitFactor 同页显示「∞」，同一面板两种无穷写法。
+  // 原先那个 '∞:1' 分支（wlRatio === 0 且 wins.length > 0）永远不可达。
+  const wlRatioStr = wlRatio === Infinity ? '∞:1' : (wlRatio > 0 ? wlRatio.toFixed(2) + ':1' : '—');
   document.getElementById('statWLRatio').textContent = wlRatioStr;
   const expEl = document.getElementById('statExpectancy');
   expEl.textContent = (expectancy >= 0 ? '+' : '') + expectancy.toFixed(2);
@@ -166,7 +169,12 @@ function updateStats() {
           ? parseFloat(closed[_k].realizedFee)
           : parseFloat(closed[_k].fee);
         if (!isNaN(_fRaw)) _feeSum += _fRaw;
-        var _gp = Math.abs(parseFloat(closed[_k].pnlAmount));
+        // 分母必须是毛利：pnlAmount 是含费净额，拿净盈亏当分母会系统性高估
+        // fee/|gross|（288 毛利、11.75 费 → 净 276.25，4.25% vs 正确 4.08%）。
+        // 优先用 logs.js 写入的 grossPnlAmount，缺失才退回 |pnlAmount|。
+        var _gpRaw = parseFloat(closed[_k].grossPnlAmount);
+        var _gp = (!isNaN(_gpRaw) && Math.abs(_gpRaw) > 0) ? Math.abs(_gpRaw)
+          : Math.abs(parseFloat(closed[_k].pnlAmount));
         if (!isNaN(_gp)) _grossSum += _gp;
       }
       if (_grossSum > 0 && _feeSum > 0) {
@@ -214,18 +222,27 @@ function updateStats() {
   avgRrEl.textContent = rrCount > 0 ? (rrSum / rrCount).toFixed(2) + 'R' : '—';
 
   // ====== 新增统计：盈亏比偏差 ======
+  // 分子分母必须同口径。realizedPnl/pnlAmount 是含费净额，targetRR 的分母是含费净止损，
+  // 而 rMultiple 的分母是 initialRiskAmount（纯毛利开仓风险）。原先拿 rMultiple /
+  // targetRR 比，比值恒等于 netStopLoss / initialRiskAmount——ep 50000 / sp 49000 /
+  // 费率 0.08% 时恒为 1.0792，**完美执行也永远显示 +7.9% 并染绿**。那测的是口径差，
+  // 不是执行偏差。改用 plannedNetProfit（含费净目标盈利，与 targetRR 同源落库）：
+  //   偏差 = 已实现净额 / 计划净额，完美执行恰好是 1.000，费率>0 时不再先天偏离。
   const avgActualRR = rrCount > 0 ? rrSum / rrCount : null;
-  let biasSum = 0, biasCount = 0, biasExcluded = 0;
+  let biasSum = 0, biasCount = 0, biasExcluded = 0, biasNoPlan = 0;
   for (const l of closed) {
     if (l.direction !== 'long' && l.direction !== 'short') continue;
-    const rawRm = l.rMultiple;
-    const rm = rawRm === null || rawRm === undefined || String(rawRm).trim() === ''
-      ? NaN : parseFloat(String(rawRm).replace(/R/g, ''));
-    const tRR = l.targetRR;
-    if (!isNaN(rm) && tRR != null && !isNaN(tRR) && tRR > 0) {
-      biasSum += rm / tRR;
+    const rp = parseFloat(l.pnlAmount);
+    const planNet = parseFloat(l.plannedNetProfit);
+    if (Number.isFinite(rp) && Number.isFinite(planNet) && planNet > 0) {
+      biasSum += rp / planNet;
       biasCount++;
-    } else if (tRR == null) {
+    } else if (l.plannedNetProfit == null || String(l.plannedNetProfit).trim() === '') {
+      // 无计划净额可比（旧记录、未填目标价、或目标价被手续费吃光）——排除而不是
+      // 退回 rMultiple 口径，否则旧数据会把「+7.9% 口径差」继续当成绩效。
+      biasExcluded++;
+      biasNoPlan++;
+    } else {
       biasExcluded++;
     }
   }
@@ -235,7 +252,11 @@ function updateStats() {
     biasEl.textContent = (bias >= 1 ? '+' : '') + ((bias - 1) * 100).toFixed(1) + '%';
     biasEl.style.color = bias >= 1 ? 'var(--color-success)' : (bias >= 0.8 ? 'var(--color-warning)' : 'var(--color-danger)');
     if (biasExcluded > 0) {
-      biasEl.title = '其中 ' + biasExcluded + ' 笔无预判目标价，已排除';
+      // 口径必须写进 tooltip：这是「已实现净额 / 计划净额」，不是 R 倍数与 targetRR
+      // 相除。后者分母一个含费、一个纯毛利，完美执行也会先天偏 +7.9%。
+      biasEl.title = '已实现净盈亏 ÷ 计划净盈亏（含费口径，不含滑点以外成本）。'
+        + '其中 ' + biasExcluded + ' 笔无计划净盈亏（旧记录或未设目标价），已排除'
+        + (biasNoPlan ? '；无计划值 ' + biasNoPlan + ' 笔' : '');
     }
   } else {
     biasEl.textContent = '—';

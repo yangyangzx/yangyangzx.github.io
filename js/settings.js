@@ -118,6 +118,27 @@ function _clearSettingsCache() {
 }
 
 /**
+ * 读取维护保证金率，返回小数（0.005 = 0.5%）。
+ *
+ * 单一来源：强平价对 MMR 极度敏感——mmr = 0 时公式退化成「零缓冲」，calculator 会判定
+ * 开仓即被强平并把 maxViableLev 算成 0；mmr = NaN 会让整个强平价列变成 NaN。设置页
+ * 的 mmr 字段有 min 校验，但 localStorage 手工改写、旧版本写入或备份导入都可能落进
+ * 0 / NaN / 负数 / 字符串。三处读取点（calculator 强平校验、risk 中心安全距离、
+ * dashboard 强平列）历史上各写一份，只有 calculator 判了 > 0，另两处只判 != null——
+ * 同一份设置在三个面板会给出不同的强平价。统一收口到这里。
+ */
+function loadMmr() {
+  var mmr = DEFAULT_MMR;
+  try {
+    var raw = parseFloat(loadSettings().mmr);
+    if (Number.isFinite(raw) && raw > 0) mmr = raw / 100;
+  } catch (e) {
+    console.error('[settings] loadMmr 失败，回退默认', e);
+  }
+  return mmr;
+}
+
+/**
  * 设置写入 localStorage（带配额保护）
  * 与 storage.js 的 saveLogs 防护对齐：setItem 抛 QuotaExceededError 时不得静默丢失——
  * 必须给出错误提示并让调用方感知失败，否则会误报"已保存"而数据实际未落盘。
@@ -412,13 +433,16 @@ function parseCSVImport(csvText) {
     'TickSize':'slipTickSize','计划有效退出价':'slipEffectiveExit','GroupId':'groupId',
     '已实现盈亏':'realizedPnl','累计手续费':'realizedFee','已平仓比例%':'closedRatio','初始风险':'initialRiskAmount',
     '初始仓位':'initialPositionSize','平仓明细':'closes','部分平仓':'isPartial',
-    '盘中动作':'actions','止损轨迹':'stopHistory'
+    '盘中动作':'actions','止损轨迹':'stopHistory',
+    '目标盈亏比':'targetRR','计划净盈利':'plannedNetProfit'
   };
   var CSV_ARRAY_FIELDS = ['signals','lossReason','emotions','reason'];
   // actions/stopHistory 与 closes 同为 JSON 列：导出时序列化，导入时还原成数组。
   // 旧导出文件没有这两列，缺列时保持 undefined（recordStopMove 会按需懒初始化）
   var CSV_JSON_FIELDS = ['actions','splitEntries','closes','stopHistory'];
-  var CSV_NUM_FIELDS = ['entryPrice','stopLoss','targetPrice','positionSize','leverage','riskAmount','capital','fee','slippageCost','closePrice','pnlAmount','mae','mfe','lowPrice','highPrice','rMultiple','pnlPercent','holdDuration','realizedPnl','realizedFee','closedRatio','initialRiskAmount','initialPositionSize'];
+  // targetRR / plannedNetProfit 必须入表：stats.js 的「盈亏比偏差」靠这对字段比对，
+  // 缺列时它们退成 undefined 被整笔排除，指标样本量静默缩小（导出→导入一轮后全丢）。
+  var CSV_NUM_FIELDS = ['entryPrice','stopLoss','targetPrice','positionSize','leverage','riskAmount','capital','fee','slippageCost','closePrice','pnlAmount','mae','mfe','lowPrice','highPrice','rMultiple','pnlPercent','holdDuration','realizedPnl','realizedFee','closedRatio','initialRiskAmount','initialPositionSize','targetRR','plannedNetProfit'];
   var CSV_INT_FIELDS = ['mindsetScore','executionScore'];
 
   var headers = lines[0];
@@ -444,7 +468,11 @@ function parseCSVImport(csvText) {
       } else if (key === 'isPartial') {
         obj[key] = v === 'true' || v === '1';
       } else if (CSV_NUM_FIELDS.indexOf(key) !== -1) {
-        var parsed = parseFloat(v);
+        // Excel 里把单元格设成千位分隔后导出会是 "1,234.56"。parseFloat 遇到逗号只取
+        // 逗号前一位（"1,234.56" → 1），26 个数值列全部静默截断且无任何告警。
+        // 先剥掉千位分隔符与空白，让值能按预期还原成数字。
+        var _numSrc = (typeof v === 'string') ? v.replace(/[, ]/g, '') : v;
+        var parsed = parseFloat(_numSrc);
         // rMultiple 可能带 'R' 后缀（如 "2.5R"），需先去除
         if (key === 'rMultiple' && typeof v === 'string') parsed = parseFloat(v.replace(/R$/g, ''));
         obj[key] = isNaN(parsed) ? null : parsed;
@@ -586,7 +614,7 @@ function _logKeys(item) {
 }
 
 // 导入时统一归一化的数值字段（JSON 里可能是字符串或 NaN/Infinity；CSV 解析已给数字，重复归一无害）
-var IMPORT_NUM_FIELDS = ['entryPrice','stopLoss','targetPrice','positionSize','leverage','riskAmount','capital','fee','slippageCost','closePrice','pnlAmount','mae','mfe','lowPrice','highPrice','rMultiple','pnlPercent','holdDuration','effectiveEntryPrice','stopType','atrStopMode','calculationVersion','grossPnlAmount','actualCloseFee','actualExitLegacySlippageCost','realizedPnl','realizedFee','closedRatio','initialRiskAmount','initialPositionSize'];
+var IMPORT_NUM_FIELDS = ['entryPrice','stopLoss','targetPrice','positionSize','leverage','riskAmount','capital','fee','slippageCost','closePrice','pnlAmount','mae','mfe','lowPrice','highPrice','rMultiple','pnlPercent','holdDuration','effectiveEntryPrice','stopType','atrStopMode','calculationVersion','grossPnlAmount','actualCloseFee','actualExitLegacySlippageCost','realizedPnl','realizedFee','closedRatio','initialRiskAmount','initialPositionSize','targetRR','plannedNetProfit'];
 
 /**
  * 数值字段归一化：必须在结构校验之前跑，否则 validateFields 会把 JSON 里的 '100'
@@ -716,10 +744,13 @@ function _showImportValidationFailure(errors) {
  * 不一致的行被整行跳过）。追加模式提交空数组虽无害，但会给「成功导入 0 条」的
  * 误导提示，故两种模式一并拦下。
  */
-function _showImportEmptyResult(existing, warnTxt) {
+function _showImportEmptyResult(existing, warnTxt, deduped) {
+  // 0 条候选最常见的原因是「整批与现有日志重复」（重新导入自己导出的文件）。
+  // 不写出来用户只会以为文件是空的或格式坏了。
   window.confirmDialog({
     title: '没有可导入的记录',
     message: '文件里没有一条记录可通过校验，未写入任何数据。'
+      + (deduped ? '\n其中 ' + deduped + ' 条与现有日志重复，已判为重复跳过。' : '')
       + (existing ? '\n现有 ' + existing + ' 条日志保持原样。' : '')
       + '\n请检查文件是否为正确的导出格式。' + warnTxt,
     alertOnly: true,
@@ -743,7 +774,7 @@ function _confirmImportThenCommit(report, mode) {
   // 历史清空并提示「已导入 0 条日志」——去重整批丢弃（重复导入自己导出的 CSV）或解析
   // 阶段全部落空都会走到这里。详见 _showImportEmptyResult 注释。
   if (candidates.length === 0) {
-    _showImportEmptyResult(existing, warnTxt);
+    _showImportEmptyResult(existing, warnTxt, report.deduped);
     return;
   }
   if (mode !== 'overwrite') {
@@ -759,7 +790,12 @@ function _confirmImportThenCommit(report, mode) {
   if (!existing) { _commitImportedLogs(candidates); return; }
   window.confirmDialog({
     title: '导入将覆盖现有日志',
-    message: '将用文件中的 ' + candidates.length + ' 条记录覆盖现有 ' + existing + ' 条日志。\n原有数据不可恢复。' + warnTxt,
+    message: '将用文件中的 ' + candidates.length + ' 条记录覆盖现有 ' + existing + ' 条日志。\n原有数据不可恢复。'
+      // 去重发生在覆盖之前：不披露的话，用户看到的是「3 条覆盖 2 条」，实际只写入 1 条，
+      // 被去重丢掉的那条若内容是改过的（同 id 已修改），修改会静默消失。
+      // 追加模式已披露同一件事（见上方「重复跳过」），覆盖模式同样要披露。
+      + (report.deduped ? '\n另有 ' + report.deduped + ' 条与现有日志重复，将一并跳过。' : '')
+      + warnTxt,
     confirmText: '覆盖导入',
     danger: true
   }).then(function(ok) { if (ok) _commitImportedLogs(candidates); });

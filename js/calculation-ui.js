@@ -13,6 +13,16 @@
 
   function byId(id) { return document.getElementById(id); }
 
+  // 盈亏比对照图 + 保证金占用图由 calc-visuals.js 维护。计算失败或硬阻断时结果区
+  // 会被换成阻断文案，两张图必须一起收起，否则上一轮的 R:R 与保证金比例会继续
+  // 挂在面板上，读者会拿旧数值做新决策。用 window.CalcVisuals 而非裸标识符，
+  // 与仓库跨模块调用约定一致（calc-visuals.js 在 calculation-ui.js 之前加载）。
+  function hideCalcVisuals() {
+    if (window.CalcVisuals && typeof window.CalcVisuals.hide === 'function') {
+      window.CalcVisuals.hide();
+    }
+  }
+
   function getResultUI() {
     return {
       resultBox: byId('resultBox'),
@@ -77,6 +87,7 @@
   function renderBlocker(ui, blocker) {
     if (!ui) throw new Error('必须先通过 getResultUI() 获取 UI 引用');
     blocker = blocker || {};
+    hideCalcVisuals();
     var title = blocker.title || '禁止开仓';
     var detail = blocker.detail || '当前交易计划未通过开仓前风险控制。';
 
@@ -114,6 +125,8 @@
 
   function resetForCalculation(ui) {
     if (!ui) throw new Error('必须先通过 getResultUI() 获取 UI 引用');
+    // 每次重算开头都会走到这里：先收起上一次的图，_calculateImpl 成功时再重新填充
+    hideCalcVisuals();
     if (ui.resultBox) {
       // 清除所有状态类：warn（有警告）/ is-blocked（硬阻断）/ is-dirty（参数已变更）/ is-provisional（临时止损）
       ui.resultBox.classList.remove('warn', 'is-blocked', 'is-dirty', 'is-provisional');

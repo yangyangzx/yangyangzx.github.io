@@ -43,21 +43,21 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <script src="js/chart-guard.js?v=5.6.10"></script>
-  <link rel="stylesheet" href="css/variables.css?v=5.6.10">
-  <link rel="stylesheet" href="css/base.css?v=5.6.10">
-  <link rel="stylesheet" href="css/calculator.css?v=5.6.10">
-  <link rel="stylesheet" href="css/table.css?v=5.6.10">
-  <link rel="stylesheet" href="css/modals.css?v=5.6.10">
-  <link rel="stylesheet" href="css/responsive.css?v=5.6.10">
-  <link rel="stylesheet" href="css/layout.css?v=5.6.10">
-  <link rel="stylesheet" href="css/dashboard.css?v=5.6.10">
-  <link rel="stylesheet" href="css/planner.css?v=5.6.10">
-  <link rel="stylesheet" href="css/discipline-led.css?v=5.6.10">
-  <link rel="stylesheet" href="css/risk.css?v=5.6.10">
-  <link rel="stylesheet" href="css/analytics.css?v=5.6.10">
-  <link rel="stylesheet" href="css/review.css?v=5.6.10">
-  <link rel="stylesheet" href="css/settings.css?v=5.6.10">
+  <script src="js/chart-guard.js?v=5.6.12"></script>
+  <link rel="stylesheet" href="css/variables.css?v=5.6.12">
+  <link rel="stylesheet" href="css/base.css?v=5.6.12">
+  <link rel="stylesheet" href="css/calculator.css?v=5.6.12">
+  <link rel="stylesheet" href="css/table.css?v=5.6.12">
+  <link rel="stylesheet" href="css/modals.css?v=5.6.12">
+  <link rel="stylesheet" href="css/responsive.css?v=5.6.12">
+  <link rel="stylesheet" href="css/layout.css?v=5.6.12">
+  <link rel="stylesheet" href="css/dashboard.css?v=5.6.12">
+  <link rel="stylesheet" href="css/planner.css?v=5.6.12">
+  <link rel="stylesheet" href="css/discipline-led.css?v=5.6.12">
+  <link rel="stylesheet" href="css/risk.css?v=5.6.12">
+  <link rel="stylesheet" href="css/analytics.css?v=5.6.12">
+  <link rel="stylesheet" href="css/review.css?v=5.6.12">
+  <link rel="stylesheet" href="css/settings.css?v=5.6.12">
 </head>
 <body>
 <nav id="mainNav" role="navigation" aria-label="主导航">
@@ -565,6 +565,49 @@
                   <div class="result-card-sub target-dist" id="targetDistDisplay" style="display:none;"></div>
                 </div>
               </div>
+
+              <!-- 可视化对照：盈亏比比例条 + 保证金占用刻度。
+                   由 CalcVisuals.render() 按 _calculateImpl 已算好的数值填充，
+                   计算失败/硬阻断/清空时由 CalculationUI 调 CalcVisuals.hide() 收起。
+                   条长按价格距离真实比例分配，所以肉眼看到的长短比就是盈亏比。 -->
+              <div class="result-visuals" id="resultVisuals" style="display:none;">
+                <div class="vv-card" id="rrVisualCard" style="display:none;">
+                  <div class="vv-head">
+                    <span class="vv-title"><i class="fas fa-y-sign-dollar"></i> 盈亏比对照</span>
+                    <span class="vv-badge vv-badge-neutral" id="rrBadge">— : 1</span>
+                  </div>
+                  <div class="vv-ladder" id="rrLadder" role="img"></div>
+                  <div class="vv-note" id="rrNote"></div>
+                </div>
+                <div class="vv-card" id="marginVisualCard" style="display:none;">
+                  <div class="vv-head">
+                    <span class="vv-title"><i class="fas fa-wallet"></i> 保证金占用</span>
+                    <span class="vv-badge vv-badge-neutral" id="marginBadge">—</span>
+                  </div>
+                  <div class="vv-gauge">
+                    <div class="vv-g-markers">
+                      <span class="vv-g-mark" id="gMarkSoft">80%</span>
+                      <span class="vv-g-mark vv-g-mark-agg" id="gMarkAgg">90%</span>
+                    </div>
+                    <div class="vv-g-track" id="marginTrack">
+                      <div class="vv-g-fill vv-g-fill-ok" id="marginFill">
+                        <div class="vv-g-fill-used" id="marginFillUsed"></div>
+                        <div class="vv-g-fill-this" id="marginFillThis"></div>
+                      </div>
+                      <span class="vv-g-tick" id="gTickSoft"></span>
+                      <span class="vv-g-tick vv-g-tick-agg" id="gTickAgg"></span>
+                    </div>
+                    <div class="vv-g-scale">
+                      <span>0</span>
+                      <span id="marginScaleLabel">本金 —</span>
+                      <span>100%</span>
+                    </div>
+                  </div>
+                  <div class="vv-note" id="marginNote"></div>
+                  <div class="vv-note" id="marginNote2"></div>
+                </div>
+              </div>
+
               <div class="result-cost-row">
                 <div class="result-cost-line1" id="costLine1">输入参数后点击「计算仓位」</div>
                 <div class="result-cost-line2" id="costLine2"></div>
@@ -1304,31 +1347,32 @@
 
 </main>
 
-  <script src="js/constants.js?v=5.6.10"></script>
-  <script src="js/utils.js?v=5.6.10"></script>
-  <script src="js/toast.js?v=5.6.10"></script>
-  <script src="js/slippage.js?v=5.6.10"></script>
-  <script src="js/storage.js?v=5.6.10"></script>
-  <script src="js/skills-integration.js?v=5.6.10"></script>
-  <script src="js/calculation-ui.js?v=5.6.10"></script>
-  <script src="js/calculator.js?v=5.6.10"></script>
-  <script src="js/logs.js?v=5.6.10"></script>
-  <script src="js/rendering.js?v=5.6.10"></script>
-  <script src="js/stats.js?v=5.6.10"></script>
-  <script src="js/modals.js?v=5.6.10"></script>
-  <script src="js/navigation.js?v=5.6.10"></script>
-  <script src="js/dashboard.js?v=5.6.10"></script>
-  <script src="js/planner.js?v=5.6.10"></script>
-  <script src="js/discipline-led.js?v=5.6.10"></script>
-  <script src="js/settings.js?v=5.6.10"></script>
-  <script src="js/risk.js?v=5.6.10"></script>
-  <script src="js/chart-factory.js?v=5.6.10"></script>
-  <script src="js/analytics.js?v=5.6.10"></script>
-  <script src="js/review.js?v=5.6.10"></script>
-  <script src="js/io.js?v=5.6.10"></script>
-  <script src="js/dom-cache.js?v=5.6.10"></script>
-  <script src="js/app.js?v=5.6.10"></script>
-<script src="js/version.js?v=5.6.10"></script>
+  <script src="js/constants.js?v=5.6.12"></script>
+  <script src="js/utils.js?v=5.6.12"></script>
+  <script src="js/toast.js?v=5.6.12"></script>
+  <script src="js/slippage.js?v=5.6.12"></script>
+  <script src="js/storage.js?v=5.6.12"></script>
+  <script src="js/skills-integration.js?v=5.6.12"></script>
+  <script src="js/calc-visuals.js?v=5.6.12"></script>
+  <script src="js/calculation-ui.js?v=5.6.12"></script>
+  <script src="js/calculator.js?v=5.6.12"></script>
+  <script src="js/logs.js?v=5.6.12"></script>
+  <script src="js/rendering.js?v=5.6.12"></script>
+  <script src="js/stats.js?v=5.6.12"></script>
+  <script src="js/modals.js?v=5.6.12"></script>
+  <script src="js/navigation.js?v=5.6.12"></script>
+  <script src="js/dashboard.js?v=5.6.12"></script>
+  <script src="js/planner.js?v=5.6.12"></script>
+  <script src="js/discipline-led.js?v=5.6.12"></script>
+  <script src="js/settings.js?v=5.6.12"></script>
+  <script src="js/risk.js?v=5.6.12"></script>
+  <script src="js/chart-factory.js?v=5.6.12"></script>
+  <script src="js/analytics.js?v=5.6.12"></script>
+  <script src="js/review.js?v=5.6.12"></script>
+  <script src="js/io.js?v=5.6.12"></script>
+  <script src="js/dom-cache.js?v=5.6.12"></script>
+  <script src="js/app.js?v=5.6.12"></script>
+<script src="js/version.js?v=5.6.12"></script>
 
   <!-- 样式见 css/modals.css #toastContainer（原为内联，z-index 硬编码 400 低于弹窗遮罩 500 导致提示被盖住） -->
   <div id="toastContainer" role="status" aria-live="polite"></div>

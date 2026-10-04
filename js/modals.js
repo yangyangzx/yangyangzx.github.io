@@ -1044,22 +1044,51 @@ function saveEditLog(idx, _raceConfirmed) {
   // （realizedPnl/pnlAmount），编辑时不得用"剩余仓位全量"重算覆盖——否则 pnlAmount/rMultiple/
   // grossPnlAmount 被污染且与 realizedPnl 脱节，后续统计失真；最终平仓（positionSize=0）还会
   // 被结算无效拦截导致完全无法编辑。全新平仓记录（从未部分平仓）保留自动重算（改价同步 PnL）。
-  var _partialChain = (Array.isArray(item.closes) && item.closes.length > 1) ||
-    (item.closeType === 'partialTP' || item.closeType === 'reducePosition') ||
-    (parseFloat(item.positionSize) <= 0);
-  if (item.closeType && item.closePrice != null && !_partialChain && typeof calculateCloseSettlement === 'function') {
-    // BUG#6 修复：rebuildTickSlippageSnapshot 已更新 item.slippage，直接使用 item.fee 而非实际快照字段
-    // 避免保存后实际CloseFee已过时导致结算结果与当前数据不一致
-    var editedSettlement = calculateCloseSettlement(item, item.closePrice);
-    if (!editedSettlement) {
-      Object.assign(item, beforeEdit);
-      showToast('编辑后的平仓结算无效，请检查价格、仓位和费用。', 'warn');
-      return;
+  // 「曾经分批」的判定必须取簿记同步之前的快照：上面的 syncCloseBookkeeping 会重建事件链，
+  // 靠同步后的 closes.length 判定会与调用顺序耦合——顺序一变，收尾编辑就退化成
+  // 「剩余仓位单腿重算」，把之前已实现的盈亏整段覆盖掉（实测少记 79%）。
+  var _rpBefore = parseFloat(item.realizedPnl);
+  var _hadPartialEvt = (Array.isArray(item.closes) && item.closes.length > 0) ||
+    (!isNaN(_rpBefore) && _rpBefore !== 0);
+  var _partialNow = (item.closeType === 'partialTP' || item.closeType === 'reducePosition');
+  if (item.closeType && item.closePrice != null && typeof calculateCloseSettlement === 'function') {
+    if (_hadPartialEvt && !_partialNow && (parseFloat(item.positionSize) > 0)) {
+      // —— 分批链收尾：按 logs.js confirmClose 的收尾口径累加最后一腿，不重算单腿 ——
+      // realizedPnl += 本腿 netPnl → pnlAmount = 累计；R 与收益率改用初始风险/初始保证金
+      // 为基准（剩余 riskAmount 只反映最后一腿，直接用它会让 R 倍数随分批次数漂移）。
+      var _finSettlement = calculateCloseSettlement(item, item.closePrice);
+      if (!_finSettlement) {
+        Object.assign(item, beforeEdit);
+        showToast('编辑后的平仓结算无效，请检查价格、仓位和费用。', 'warn');
+        return;
+      }
+      item.realizedPnl = parseFloat(((_rpBefore || 0) + _finSettlement.netPnl).toFixed(2));
+      item.realizedFee = parseFloat(((parseFloat(item.realizedFee) || 0) + _finSettlement.fee).toFixed(8));
+      item.grossPnlAmount = parseFloat(_finSettlement.grossPnl.toFixed(2));
+      item.pnlAmount = parseFloat(item.realizedPnl.toFixed(2));
+      var _bRisk = parseFloat(item.initialRiskAmount);
+      item.rMultiple = (Number.isFinite(_bRisk) && _bRisk > 0)
+        ? parseFloat((item.realizedPnl / _bRisk).toFixed(2))
+        : (_finSettlement.rMultiple == null ? null : parseFloat(_finSettlement.rMultiple.toFixed(2)));
+      var _bMargin = parseFloat(item.initialMargin);
+      item.pnlPercent = (Number.isFinite(_bMargin) && _bMargin > 0)
+        ? parseFloat((item.realizedPnl / _bMargin * 100).toFixed(2))
+        : parseFloat(_finSettlement.pnlPercent.toFixed(2));
+    } else if (!_hadPartialEvt && !_partialNow) {
+      // 全新平仓记录：改价同步 PnL
+      // BUG#6 修复：rebuildTickSlippageSnapshot 已更新 item.slippage，直接使用 item.fee 而非实际快照字段
+      // 避免保存后实际CloseFee已过时导致结算结果与当前数据不一致
+      var editedSettlement = calculateCloseSettlement(item, item.closePrice);
+      if (!editedSettlement) {
+        Object.assign(item, beforeEdit);
+        showToast('编辑后的平仓结算无效，请检查价格、仓位和费用。', 'warn');
+        return;
+      }
+      item.grossPnlAmount = parseFloat(editedSettlement.grossPnl.toFixed(2));
+      item.pnlAmount = parseFloat(editedSettlement.netPnl.toFixed(2));
+      item.pnlPercent = parseFloat(editedSettlement.pnlPercent.toFixed(2));
+      item.rMultiple = editedSettlement.rMultiple == null ? null : parseFloat(editedSettlement.rMultiple.toFixed(2));
     }
-    item.grossPnlAmount = parseFloat(editedSettlement.grossPnl.toFixed(2));
-    item.pnlAmount = parseFloat(editedSettlement.netPnl.toFixed(2));
-    item.pnlPercent = parseFloat(editedSettlement.pnlPercent.toFixed(2));
-    item.rMultiple = editedSettlement.rMultiple == null ? null : parseFloat(editedSettlement.rMultiple.toFixed(2));
   }
 
   // 平仓价格空值校验（基于 item.closePrice 原值，不依赖 DOM 空字符串误判）
@@ -1069,6 +1098,13 @@ function saveEditLog(idx, _raceConfirmed) {
   // 平仓时间空值校验
   if (item.closeType && !item.closeTime) {
     return abortSave('平仓时间不能为空');
+  }
+  // 已平仓必须有盈亏金额。pnlAmount 为 null 时 utils.isClosedTrade 首行即判「未平仓」，
+  // 「closeType=平仓 + closedRatio=100 + positionSize=0」的记录会变成既不是已平仓也
+  // 不是部分平仓的悬空态：从胜率/期望值/资金曲线/凯利样本里整笔消失，同时反向进入
+  // getOpenPositions 虚增持仓保证金、抬高组合热量，而 CSV 仍把它导出为已平仓。
+  if (item.closeType && (item.pnlAmount == null || isNaN(parseFloat(item.pnlAmount)))) {
+    return abortSave('已平仓记录的盈亏金额不能为空');
   }
   // 亏损单必须选择亏损原因（扩展：pnlAmount<0 || manualLoss || 实时 netPnl<0）
   // 市价单使用 effectiveEntryPrice（含滑点修正），与 emRecalc 实时预览口径一致
@@ -1291,6 +1327,9 @@ function doSaveSplit(calc, count) {
     slippageCost: parseFloat(costs.slippage.planning.totalCost.toFixed(8)),
     calculationVersion: calc.calculationVersion || 2,
     targetRR: calc.targetRR, groupId: groupId,
+    // 与 saveLog 同源（rrAmounts.netProfit）。「盈亏比偏差」靠它做同口径比对，
+    // 分批保存路径漏掉这里会让分批记录永远进不了该指标的分母。
+    plannedNetProfit: calc.targetNetProfit != null ? calc.targetNetProfit : null,
     groupLabel: groupLabel,
     splitEntries: [],  // F4: 记录分批明细
     checklistResults: calc.checklistResults ? JSON.parse(JSON.stringify(calc.checklistResults)) : {},

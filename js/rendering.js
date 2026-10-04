@@ -93,6 +93,17 @@ function buildRowsHTML(dl) {
     const ctLabel = isClosed ? (CLOSE_TYPE_LABELS[item.closeType] || item.closeType) : '持仓中';
 
     // ====== 盈亏 + R 倍数子文本 ======
+    // R 倍数解析：0R 是合法的保本结果，`|| ''` 会把 0 当缺失丢掉（stats.js 同一陷阱）。
+    const storedR = (item.rMultiple === null || item.rMultiple === undefined
+      || String(item.rMultiple).trim() === '')
+      ? NaN : parseFloat(String(item.rMultiple).replace(/R/g, ''));
+    // 回退用的 1R 基准必须优先 initialRiskAmount：部分平仓后 riskAmount 被按比例缩减，
+    // 拿它当 1R 会让 R 随分批次数虚高（已平 50% 高估 2 倍、80% 高估 5 倍）。权威约定
+    // 见 logs.js / modals.js / utils.js（R 一律以 initialRiskAmount 为分母）。
+    const riskBase = parseFloat(item.initialRiskAmount != null
+      && !isNaN(parseFloat(item.initialRiskAmount)) ? item.initialRiskAmount : item.riskAmount);
+    const rVal = !isNaN(storedR) ? storedR
+      : (!isNaN(pnlVal) && Number.isFinite(riskBase) && riskBase > 0 ? pnlVal / riskBase : NaN);
     let pnlVal = parseFloat(item.pnlAmount);
     let pnlHtml = '<span class="pnl-none">—</span>';
     let rSubHtml = '';
@@ -100,13 +111,6 @@ function buildRowsHTML(dl) {
       const cls = pnlVal >= 0 ? 'pnl-positive' : 'pnl-negative';
       const prefix = pnlVal >= 0 ? '+' : '';
       pnlHtml = '<span class="' + cls + '">' + prefix + pnlVal.toFixed(2) + '</span>';
-      const storedR = parseFloat(String(item.rMultiple || '').replace(/R/g, ''));
-      let rVal = NaN;
-      if (!isNaN(storedR)) { rVal = storedR; }
-      else {
-        const risk = parseFloat(item.riskAmount);
-        if (!isNaN(risk) && risk > 0) { rVal = pnlVal / risk; }
-      }
       if (!isNaN(rVal)) {
         rSubHtml = '<span class="pnl-sub">' + (rVal >= 0 ? '+' : '') + rVal.toFixed(2) + 'R</span>';
       }
@@ -114,14 +118,8 @@ function buildRowsHTML(dl) {
 
     // R倍数（detail用）
     let rMultipleHtml = '—';
-    const storedR2 = parseFloat(String(item.rMultiple || '').replace(/R/g, ''));
-    if (!isNaN(storedR2)) {
-      rMultipleHtml = (storedR2 >= 0 ? '+' : '') + storedR2.toFixed(2) + 'R';
-    } else if (!isNaN(pnlVal)) {
-      const risk = parseFloat(item.riskAmount);
-      if (!isNaN(risk) && risk > 0) {
-        rMultipleHtml = (pnlVal/risk >= 0 ? '+' : '') + (pnlVal/risk).toFixed(2) + 'R';
-      }
+    if (!isNaN(rVal)) {
+      rMultipleHtml = (rVal >= 0 ? '+' : '') + rVal.toFixed(2) + 'R';
     }
 
     const otGroup = ORDER_TYPE_GROUP[item.orderType] || '';
