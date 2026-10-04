@@ -45,6 +45,11 @@
 <script src="../js/io.js?v=5.6.12"></script>
 <script src="../js/logs.js?v=5.6.12"></script>
 <script src="../js/modals.js?v=5.6.12"></script>
+<!-- version.js 刻意放在最后：它无依赖也无副作用，但第 30.8 组要读 APP_VERSION 做
+     版本一致性校验。此前这个页面从没加载过 version.js——一旦有断言直接引用
+     APP_VERSION，整个测试套件会因 ReferenceError 在 runAll 里炸掉，
+     结果是 total=0（全部断言都没跑），比一条失败更隐蔽。 -->
+<script src="../js/version.js?v=5.6.12"></script>
 <script>
 (function() {
   // ---- 环境 mock（与生产隔离） ----
@@ -2319,6 +2324,32 @@
       })());
       var drift = vs.filter(function (v) { return v !== APP_VERSION; });
       h += T('没有任何脚本的 ?v= 与 APP_VERSION 漂移', drift.length === 0);
+    })();
+
+    // 30.9 「止损触发损失行」的显示边界：它是唯一带「每批止损价 + 每批损失」信息的面板，
+    // 但只有分批建仓且各批止损独立时才有这个信息。此前非分批 / 分批共用一个止损时它也
+    // 照旧渲染，内容是 L1「最大亏损」那一行的 effectiveRiskAmount 与百分比逐字重复，
+    // 止损距离 L2 又已用「止损 X%」给过——用户看到同一个数字出现两遍。
+    (function () {
+      var b0 = {};
+      var bEmpty = { price: 50000, alloc: '50', stopLoss: '' };
+      var bBad = { price: 50000, alloc: '50', stopLoss: 'abc' };
+      var b1 = { price: 50000, alloc: '50', stopLoss: '49000' };
+      var b2 = { price: 50100, alloc: '50', stopLoss: '' };
+      h += T('非分批：不显示止损触发行', shouldShowStopTriggerRows(false, [b1, b2]) === false);
+      h += T('单批：不显示止损触发行', shouldShowStopTriggerRows(true, [b1]) === false);
+      h += T('两批共用主止损（无一批发独立止损）：不显示（原为与「最大亏损」重复）',
+        shouldShowStopTriggerRows(true, [b0, bEmpty]) === false);
+      h += T('两批中一发独立止损：显示', shouldShowStopTriggerRows(true, [b1, bEmpty]) === true);
+      h += T('三批中一发独立止损：显示', shouldShowStopTriggerRows(true, [b1, bEmpty, b0]) === true);
+      h += T('独立止损为空串不算独立：不显示', shouldShowStopTriggerRows(true, [bEmpty, bEmpty]) === false);
+      h += T('独立止损为非数字不算独立：不显示', shouldShowStopTriggerRows(true, [bBad, bEmpty]) === false);
+      h += T('批次为空数组：不显示', shouldShowStopTriggerRows(true, []) === false);
+      h += T('批次为 undefined 不抛错：不显示', shouldShowStopTriggerRows(true, undefined) === false);
+      h += T('批次为 null 不抛错：不显示', shouldShowStopTriggerRows(true, null) === false);
+      h += T('批次含 null 元素不抛错：不显示', shouldShowStopTriggerRows(true, [null, null]) === false);
+      h += T('批次含 null 元素时仍有有效止损：显示',
+        shouldShowStopTriggerRows(true, [null, b1, null]) === true);
     })();
 
     document.getElementById('out').innerHTML = h;

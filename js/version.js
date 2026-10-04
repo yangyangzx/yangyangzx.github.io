@@ -294,8 +294,17 @@
 //         - 统计小修：win/loss 比的 Infinity 分支原是死代码（Infinity > 0 为真、
 //           Infinity.toFixed(2) 输出字符串 'Infinity'，同面板的 profitFactor 却正确显示
 //           ∞）；成本侵蚀分母改毛盈亏（原用含费净额却提示「毛盈亏」，4.25% vs 正确 4.08%）。
-//         - 测试：513 → 572 断言（新增第 30 组 59 条：positionCurrentRisk 九态、loadMmr
-//           七态、热量按当前止损重算与闸门 blocked、exportCSV→parseCSVImport 全往返、
-//           千分位、fail-closed 校验、盈亏比偏差口径恒等式；第 13 组收尾分支按新不变量
-//           改写，第 29 组两条刻度断言按「单笔 80%」标签改写）。
+//         - 删除「止损触发损失行」的重复渲染：只有「分批建仓 + 至少一批填了独立止损」时
+//           它才携带 L1「最大亏损」拿不到的信息（每批止损价与本批损失）。非分批、或
+//           分批共用一个止损时它原本逐字重复 effectiveRiskAmount 与百分比，而止损距离
+//           L2 又已用「止损 X%」给过——同一个数字在面板上出现两遍。显示边界抽成
+//           shouldShowStopTriggerRows() 纯函数便于单测；不渲染时显式清空并隐藏，
+//           否则从「分批独立止损」切回共用止损时上一轮批次行会残留。
+//         - 测试：513 → 588 断言（新增第 30 组口径统一与显示边界 75 条：positionCurrentRisk
+//           九态、loadMmr 七态、热量按当前止损重算与闸门 blocked、exportCSV→parseCSVImport
+//           全往返、千分位、fail-closed 校验、盈亏比偏差口径恒等式、APP_VERSION 与本页
+//           所有 script 的 ?v= 一致性、止损触发行显示边界 12 态；第 13 组收尾分支按新不变量
+//           改写，第 29 组两条刻度断言按「单笔 80%」标签改写）。测试页原先从没加载过
+//           version.js，第 30.8 组一引用 APP_VERSION 就让整套断言在 runAll 里 ReferenceError
+//           归零（total=0，比一条失败更隐蔽），现已补入。
 var APP_VERSION = '5.6.12';

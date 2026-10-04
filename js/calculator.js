@@ -12,6 +12,15 @@ function _calcCleanup() {
   // 计算失败时移除组合风险行，避免残留上次结果误导
   var _prl = document.getElementById('portfolioRiskLine');
   if (_prl) _prl.remove();
+}
+
+// 「止损触发损失行」是否该出现。仅当分批建仓且至少一批填了独立止损时才出现——
+// 那时每批的止损价与本批损失是上面「最大亏损」行拿不到的信息（总损失掩盖了各批
+// 止损可能远比计划更窄）。其余情况这行原本逐字重复 effectiveRiskAmount 与百分比，
+// 而止损距离 L2 已用「止损 X%」给过，属纯重复。
+function shouldShowStopTriggerRows(splitMode, batches) {
+  return !!(splitMode && Array.isArray(batches) && batches.length >= 2 &&
+    batches.some(function(b) { return b && b.stopLoss && !isNaN(parseFloat(b.stopLoss)); }));
 }  // 防止 calculate() 重入及计算期间的脏事件污染
 
 // ==================== _lastCalc 私有化访问器 ====================
@@ -983,38 +992,41 @@ function _calculateImpl() {
   costL2.innerHTML = costL2HTML;
 
   // ===== 止损触发损失行 =====
+  // 只在「分批建仓 + 至少一批填了独立止损」时出现：那时每批的止损价与本批损失是
+  // L1「最大亏损」拿不到的信息（总损失掩盖了各批止损可能远比计划更窄，或某批被
+  // 仓位截断后实际损失小于分配风险）。非分批、或分批共用一个止损时，这行原本逐字
+  // 重复 L1 的 effectiveRiskAmount 与百分比——止损价 L2 又已用「止损 X%」给过距离，
+  // 用户看到的只是同一个数字出现两遍。
+  // 不渲染时必须显式清空并隐藏：用户可能从「分批独立止损」切回共用止损，
+  // 上一轮的批次行会残留在这块 DOM 上。
   let triggerHTML = '';
-  if (_splitMode && _splitBatches.length >= 2) {
-    const hasIndepSL = _splitBatches.some(function(b) { return b.stopLoss && !isNaN(parseFloat(b.stopLoss)); });
-    if (hasIndepSL) {
-      _splitBatches.forEach(function(b, i) {
-        const bp = parseFloat(b.price), ba = parseFloat(b.alloc);
-        if (isNaN(bp) || isNaN(ba)) return;
-        const bsl = b.stopLoss && !isNaN(parseFloat(b.stopLoss)) ? parseFloat(b.stopLoss) : (stopLoss || 0);
-        if (bsl <= 0) return; // 止损未设置，跳过
-        // BUG#2 修复：统一使用 effectiveRiskAmount（已截断）按批次比例拆分，避免与 bpos 口径不一致
-        const bRisk = effectiveRiskAmount * ba / 100;
-        const bpos = effectivePositionSize * ba / 100;
-        const bstopDist = direction === 'long' ? bp - bsl : bsl - bp;
-        // 实际损失取风险额和计算值的较小者（考虑仓位被截断的情况）
-        // P2 FIX（2026-09-23 开仓逻辑审计）：单批数量应按本批自己的成交价 bp 折算，
-        // 而非全局 effectiveEntryPrice——分批建仓的前提就是各批入场价不同，分母混用使
-        // 价格跨区间时损失失真（bp<加权入场价且本批止损更窄时低估，反之高估）。
-        // 注：bloss 仅用于 triggerHTML 展示，不参与持久化与风控门，故为展示级缺陷。
-        const bloss = Math.min(bRisk,
-          (bstopDist > 0 && bp > 0) ? (bstopDist * bpos / bp) : bRisk);
-        const blossPct = capital > 0 ? (bloss / capital * 100) : 0;
-        triggerHTML += '<div class="trigger-line"><span class="trigger-batch">#' + (i + 1) + '</span><span class="trigger-price">' + bsl.toFixed(5) + '</span><span class="trigger-arrow">→</span><span>损失</span><span class="trigger-loss">' + fmtMoney(bloss, 2) + ' U (' + blossPct.toFixed(2) + '%)</span></div>';
-      });
-    } else {
-      triggerHTML = '<div class="trigger-line"><span class="trigger-price">' + (stopLoss ? parseFloat(stopLoss).toFixed(5) : '—') + '</span><span class="trigger-arrow">→</span><span>损失</span><span class="trigger-loss">' + fmtMoney(effectiveRiskAmount, 2) + ' USDT (' + (effectiveRiskPercent * 100).toFixed(2) + '%)</span></div>';
-    }
-  } else {
-    triggerHTML = '<div class="trigger-line"><span class="trigger-price">' + (stopLoss ? parseFloat(stopLoss).toFixed(5) : '—') + '</span><span class="trigger-arrow">→</span><span>损失</span><span class="trigger-loss">' + fmtMoney(effectiveRiskAmount, 2) + ' USDT (' + (effectiveRiskPercent * 100).toFixed(2) + '%)</span></div>';
+  if (shouldShowStopTriggerRows(_splitMode, _splitBatches)) {
+    _splitBatches.forEach(function(b, i) {
+      const bp = parseFloat(b.price), ba = parseFloat(b.alloc);
+      if (isNaN(bp) || isNaN(ba)) return;
+      const bsl = b.stopLoss && !isNaN(parseFloat(b.stopLoss)) ? parseFloat(b.stopLoss) : (stopLoss || 0);
+      if (bsl <= 0) return; // 止损未设置，跳过
+      // BUG#2 修复：统一使用 effectiveRiskAmount（已截断）按批次比例拆分，避免与 bpos 口径不一致
+      const bRisk = effectiveRiskAmount * ba / 100;
+      const bpos = effectivePositionSize * ba / 100;
+      const bstopDist = direction === 'long' ? bp - bsl : bsl - bp;
+      // 实际损失取风险额和计算值的较小者（考虑仓位被截断的情况）
+      // P2 FIX（2026-09-23 开仓逻辑审计）：单批数量应按本批自己的成交价 bp 折算，
+      // 而非全局 effectiveEntryPrice——分批建仓的前提就是各批入场价不同，分母混用使
+      // 价格跨区间时损失失真（bp<加权入场价且本批止损更窄时低估，反之高估）。
+      // 注：bloss 仅用于 triggerHTML 展示，不参与持久化与风控门，故为展示级缺陷。
+      const bloss = Math.min(bRisk,
+        (bstopDist > 0 && bp > 0) ? (bstopDist * bpos / bp) : bRisk);
+      const blossPct = capital > 0 ? (bloss / capital * 100) : 0;
+      triggerHTML += '<div class="trigger-line"><span class="trigger-batch">#' + (i + 1) + '</span><span class="trigger-price">' + bsl.toFixed(5) + '</span><span class="trigger-arrow">→</span><span>损失</span><span class="trigger-loss">' + fmtMoney(bloss, 2) + ' U (' + blossPct.toFixed(2) + '%)</span></div>';
+    });
   }
   if (triggerHTML) {
     triggerContent.innerHTML = triggerHTML;
     triggerRow.style.display = 'block';
+  } else {
+    triggerContent.innerHTML = '';
+    triggerRow.style.display = 'none';
   }
 
   // ===== 分批建仓独立区 =====
