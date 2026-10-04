@@ -32,10 +32,17 @@ function _formText(id) {
  * calcReverseSL / autoCalcMultiTP）就静默退化成「纯毛利 × RR」——请求 2R 实际只达成
  * 1.78R（88.9%），于是「按 2 倍止损距离放的目标价」会被 2R 门判为不达标，同一份参数
  * 两个结论。费率与 calculator.js:801-802 同源，含未填时按订单类型回落 0.08% / 0.04%。
+ * @param {boolean} [requireStop=true] 止损距离是否为必要前提。默认 true（calcReverseTP /
+ *   autoCalcMultiTP 都要 sd 才能求解）。
+ *   P2 修复（2026-10-04）：calcReverseSL 要解的未知量恰恰是止损，而 sd 依赖止损价，
+ *   `sd > 0` 这个谓词就把整条路径拦在门外——填了入场价与目标价、未填止损价点「反推
+ *   止损」时 getTPUnits() 恒返回 null，且 calcReverseSL 的提示是「请先填写入场价」
+ *   （入场价明明已填）。传 false 时只要求入场价与方向，sd 保持 0。
  * @returns {{ep:number, sd:number, stopLoss:number, unitStop:number,
  *            feeRateFrac:number, unitLoss:number, direction:string, legFee:Function}|null}
  */
-function getTPUnits() {
+function getTPUnits(requireStop) {
+  requireStop = requireStop !== false;
   var calc = getCalc();
   var ep = NaN, stopLoss = NaN, sd = NaN, feeRatePct = NaN;
   var direction = null;
@@ -58,19 +65,26 @@ function getTPUnits() {
     feeRatePct = _formNumber('feeRate');
     if (!(parseFloat(feeRatePct) > 0)) feeRatePct = (_formText('orderType') === 'limit') ? 0.04 : 0.08;
   }
-  if (!(ep > 0) || !(sd > 0) || (direction !== 'long' && direction !== 'short')) return null;
+  if (!(ep > 0) || (direction !== 'long' && direction !== 'short')) return null;
+  // NaN 归一成 0：止损价没填时 sd 保持 NaN，返回 0 比让调用方拿到 NaN 更稳
+  // （requireStop 路径不受影响——NaN 与 0 都会走下面的 null 分支）。
+  if (!Number.isFinite(sd) || sd < 0) sd = 0;
+  if (requireStop && !(sd > 0)) return null;
   var f = parseFloat(feeRatePct) / 100;
   if (!(f >= 0) || isNaN(f)) f = 0;
   var legFee = function(exitPrice) {
     return f * (1 + (exitPrice > 0 ? exitPrice / ep : 1));
   };
+  // sd 无效时（requireStop=false 且止损缺失）unitStop/unitLoss 没有意义：算出来是
+  // 「只含往返手续费」的伪损失。置 null 而不是塞一个看起来能用的数，免得后来调用方误用。
+  var _hasSD = sd > 0;
   return {
     ep: ep,
     sd: sd,
     stopLoss: stopLoss,
-    unitStop: sd / ep,
+    unitStop: _hasSD ? sd / ep : null,
     feeRateFrac: f,
-    unitLoss: sd / ep + legFee(stopLoss),
+    unitLoss: _hasSD ? sd / ep + legFee(stopLoss) : null,
     direction: direction,
     legFee: legFee
   };
@@ -178,7 +192,10 @@ function calcReverseTP() {
 function calcReverseSL() {
   if (getCalcDirty()) { showToast('计算器参数已变更，请先点击「计算仓位」更新结果', 'warn'); return; }
   // v5.6.9：口径与方向全部来自 getTPUnits()，与 calcReverseTP 同源（不再自行读 calc/表单）。
-  var u = getTPUnits();
+  // P2 修复（2026-10-04）：传 requireStop=false——这条路径要解的未知量就是止损，而 sd
+  // 依赖止损价，默认谓词 `sd > 0` 会把「填了入场价与目标价、未填止损价」这个反推止损的
+  // 本职用法整条拦在门外。
+  var u = getTPUnits(false);
 
   var targetPrice = parseFloat(document.getElementById('reverseTP').value);
   var desiredRR = parseFloat(document.getElementById('desiredRR').value);
@@ -189,7 +206,11 @@ function calcReverseSL() {
   }
 
   if (!u) {
-    document.getElementById('reverseSL').value = '请先填写入场价';
+    // u 只在入场价缺失或方向无效时为 null。按真实缺失字段提示——原实现固定报
+    // 「请先填写入场价」，而入场价已填时指错了字段。
+    document.getElementById('reverseSL').value = !(_formNumber('entryPrice') > 0)
+      ? '请先填写入场价'
+      : '请先填写方向（做多/做空）';
     return;
   }
 
@@ -996,4 +1017,34 @@ function updateOrderTypeLabels() {
       updateOrderTypeLabels();
     }
   } catch(e) { console.error('[planner]', e); }
+})();
+
+// ===== 计算状态徽章 =====
+/**
+ * 把 card-header 上的计算状态徽章同步到真实的计算状态。
+ *
+ * 原先这里写死「实时 · 动态风控」，与实现不符：表单的 input/change 只调
+ * markFieldDirty → markCalculationDirty()（calculator.js:1832-1833），没有任何重算；
+ * 唯一的重算入口是「计算仓位」按钮。于是用户改完入场价，卡片上还是旧结果，
+ * 徽章仍在说「实时」——现在是把「改了参数但没点计算」变成可见信号。
+ *
+ * 由 calculator.js 的 setCalcDirty() 驱动：那是 dirty 的唯一写入路径
+ * （window._lastCalcDirty 的 setter 也禁止外部重置为 false），所以不必在每处
+ * setCalcDirty(false) 调用点重复挂钩。
+ */
+function updateCalcStatusBadge() {
+  var el = document.getElementById('calcStatusBadge');
+  if (!el) return;
+  var dirty = !!getCalcDirty();
+  el.setAttribute('data-state', dirty ? 'dirty' : 'fresh');
+  var textEl = document.getElementById('calcStatusText');
+  if (textEl) textEl.textContent = dirty ? '待重算 · 动态风控' : '已计算 · 动态风控';
+  var iconEl = el.querySelector('.calc-status-icon');
+  if (iconEl) iconEl.className = dirty
+    ? 'fas fa-exclamation-triangle calc-status-icon'
+    : 'fas fa-check-circle calc-status-icon';
+}
+
+(function _initCalcStatusBadge() {
+  try { updateCalcStatusBadge(); } catch (e) { console.error('[planner]', e); }
 })();

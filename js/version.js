@@ -169,4 +169,46 @@
 //          0 候选护栏断言；第 15 组因 STATUS 影子项移除净 −1，原 4 条 isStatusCheckItem/
 //          STATUS_CHECK_ITEMS 分类断言改写为 2 条「符号已删除」断言，「状态项 fail 不进
 //          闸门」的前提本身被移除故删除，未单开新组。90 + 7 + 14 − 1 = +110）。
-var APP_VERSION = '5.6.9';
+// 5.6.10：对抗式复核（5 项已确认缺陷）全量修复 + 计算状态徽章状态化
+//         - P0 CSV 导入静默丢交易：同一份文件内的重复记录互相判重后被整条丢弃，
+//           saveSplit 生成的多批次共用 groupId 与同一时间戳、且 _logFingerprint 只有
+//           7 个字段（不含批次标签与平仓字段），等分时逐字相同——实测 3 笔分批导入后
+//           只剩 1 条，errors=0、无任何提示。内容完全相同的两条记录在数学上与
+//           「同一份文件被重复导入两次」无法区分（无 ID 列时两者都是无 ID 全同内容），
+//           判重必然二选一。现改为【只与现有日志比对，同一次导入内部不判重】：
+//           真实分批全部保留，重复导入文件的判据由与现有日志的比对承担、不受影响。
+//         - P1 分批平仓超 100%：「原始仓位」口径下增量即占原始仓位比例，与已平部分
+//           相加可超 100%——实测已平 50 时输入 80，保存成功却得到 closes=[50,80]
+//           （sum=130）、closedRatio 被 clamp 到 100、positionSize 归 0 而 closeType
+//           仍是 partialTP：挂单中间态被判全额平仓，剩余敞口从账面消失，并打破
+//           sum(closes[].ratio) === closedRatio 不变量。现按「累计已平 + 本笔 > 100」
+//           拦截；「剩余仓位」口径代数上不越界，但两种口径统一校验更稳。
+//         - P2 recordStopMove 幂等判据分叉：原先与 stopHistory 末条比较，而末条只反映
+//           本函数自己写过的点——用户用编辑弹窗直改 item.stopLoss（emStopLoss 不写
+//           stopHistory）后两者分叉，此时再移动止损是【真实变化】却被判「无需记录」，
+//           留下 stopLoss 与时间线长期不一致，而仪表盘持仓监控读的是 stopLoss。
+//           现改与 item.stopLoss 比较，缺失或无效时才退回末条。
+//         - P2 反推止损口径不可用时静默出错：calcReverseSL 的未知量就是止损，原先却
+//           仍要求止损已填（getTPUnits 要求 sd>0 才返回口径）——用户按「已知入场价 +
+//           目标价 + 期望 RR 反推止损」这条主流程走不通，且报错固定指「请先填写入场价」，
+//           而入场价已填时指错了字段。现 getTPUnits(requireStop) 加参数，requireStop=
+//           false 时 sd 缺失只把 unitStop/unitLoss 置 null（不冒充「仅费用」的伪止损），
+//           报错按真实缺失字段提示。
+//         - P2 abortSave 浅回滚残留：Object.assign 只覆盖已存在的键、删不掉本次编辑
+//           【新增】的键。新建日志（saveLog 不写 closes / closedRatio / closeTime /
+//           initial*）在编辑弹窗里选「分批」填了比例，syncCloseBookkeeping 写入那一整套
+//           键；此后校验失败时这些键全部残留——closeType 已回滚成空、isClosedTrade
+//           判「未平仓」，却带着 closes / closedRatio / closeTime。而 syncCloseBookkeeping
+//           的空值护栏（closeType 为空即不动簿记）会让残留永远得不到清理。现先删掉快照
+//           里不存在的键再覆盖。
+//         - 计算状态徽章状态化（原写死「实时 · 动态风控」）：表单 input/change 只标脏
+//           （markCalculationDirty），真正重算入口是「计算仓位」按钮，用户改完入场价
+//           卡片上还是旧结果、徽章却说实时。现由 updateCalcStatusBadge() 按
+//           getCalcDirty() 切换：绿「已计算 · 动态风控」/ 琥珀「待重算 · 动态风控」，
+//           图标 fa-check-circle / fa-exclamation-triangle。setCalcDirty() 是唯一的脏
+//           写入路径，故只需在它一处挂钩，不必在每处调用点重复。
+//         - 纪律 LED 屏标题尾部加荧光绿色相呼吸点（--led-green，1.4s ease-in-out 只动
+//           opacity），与青色 LED 靠色相区分；prefers-reduced-motion 退化为常亮。
+//         - 测试：409 → 449 断言（第 24 组 +7、第 25 组 +19、第 27 组 +10、
+//           新增第 28 组计算状态徽章 10 条，第 26 组 2 条断言按 P0 修复改写口径）。
+var APP_VERSION = '5.6.10';

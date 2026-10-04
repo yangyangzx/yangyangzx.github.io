@@ -817,6 +817,16 @@ function saveEditLog(idx, _raceConfirmed) {
   // 半途失败统一回滚：函数前半段已把表单字段逐个写进 item，直接 return 会留下
   // 「一半新值一半旧值」的半污染状态（例如比例越界被拒时 closeType 已变成「分批」）。
   function abortSave(msg, level) {
+    // P2 修复（2026-10-04）：Object.assign 只能覆盖已存在的键，删不掉这次编辑【新增】的键。
+    // 新建日志（saveLog 不写 closes / closedRatio / closeTime / initial*）在编辑弹窗里把
+    // 平仓类型选成「分批」并填了比例，syncCloseBookkeeping 会写入那一整套键；此时若校验
+    // 失败，浅回滚后这些键全部残留——closeType 已回滚成空、isClosedTrade 判「未平仓」，
+    // 却带着 closes:[{ratio:50}] / closedRatio=50 / closeTime，即「全额在仓的持仓同时
+    // 带着已平簿记和平仓时间戳」。而 utils.syncCloseBookkeeping 的空值护栏（closeType 为
+    // 空即不动簿记）会让这条残留永远得不到清理。先删掉快照里没有的键再覆盖。
+    Object.keys(item).forEach(function (k) {
+      if (!(k in beforeEdit)) delete item[k];
+    });
     Object.assign(item, beforeEdit);
     showToast(msg, level || 'warn');
     return false;
@@ -896,6 +906,18 @@ function saveEditLog(idx, _raceConfirmed) {
     deltaOriginal = parseFloat(Math.max(0, Math.min(100, deltaOriginal)).toFixed(4));
     if (!(deltaOriginal > 0 && deltaOriginal < 100)) {
       return abortSave('按所选口径换算后，平仓比例需在 1-99 之间（占原始仓位计）');
+    }
+    // P1 修复（2026-10-04）：增量合法不等于累计不越界。「原始仓位」口径下增量本身就
+    // 是占原始仓位的比例，与已平部分相加可能超过 100%——实测已平 50 时输入 80，
+    // 保存成功却得到 closes=[50,80]（sum=130）、closedRatio 被 clamp 到 100、
+    // positionSize 归 0 而 closeType 仍是 partialTP：挂单中间态被判全额平仓，剩余
+    // 敞口从账面消失，且打破 sum(closes[].ratio) === closedRatio 不变量。
+    // 「剩余仓位」口径代数上不会越界（cumBefore + partialRatio×fracBefore =
+    // 100 − fracBefore×(100 − partialRatio) < 100），但两种口径统一校验更稳。
+    if (cumClosedBeforeEvt + deltaOriginal > 100 + 1e-9) {
+      return abortSave('按所选口径换算后累计已平超过 100%：之前已平 ' + cumClosedBeforeEvt.toFixed(2)
+        + '%，本笔 ' + deltaOriginal.toFixed(2) + '%，超出 '
+        + (cumClosedBeforeEvt + deltaOriginal - 100).toFixed(2) + '%');
     }
     var _orphanClosed = (_partialsNow.length === 0 && cumClosedBeforeEvt > 0) ? cumClosedBeforeEvt : 0;
     // P1 修复（2026-10-03）：簿记同步。confirmClose 在 logs.js 实际读的是 closedRatio/closes，

@@ -169,8 +169,18 @@
       }
     }
     var last = hist.length ? hist[hist.length - 1] : null;
-    if (last && Math.abs(parseFloat(last.price) - p) < 1e-12) {
-      out.skipped = '新止损与当前止损相同（' + p.toFixed(5) + '），无需记录';
+    // P2 修复（2026-10-04）：幂等判据必须比「当前止损」而不是「时间线末条」。
+    // 时间线末条只反映 recordStopMove 自己写过的点；用户用编辑弹窗直改 item.stopLoss
+    // （modals.js 的 emStopLoss 不写 stopHistory）后两者就会分叉。此时再移动止损是
+    // 【真实变化】，按末条比较会把它判成「无需记录」，留下 stopLoss 与时间线长期
+    // 不一致——而仪表盘持仓监控与「止损 vs 强平」距离读的是 stopLoss。
+    // stopLoss 缺失或无效时才退回末条（例如旧数据只有时间线没有 stopLoss）。
+    var currentStop = parseFloat(item.stopLoss);
+    if (!Number.isFinite(currentStop) || currentStop <= 0) {
+      currentStop = last ? parseFloat(last.price) : NaN;
+    }
+    if (Number.isFinite(currentStop) && Math.abs(currentStop - p) < 1e-12) {
+      out.skipped = '新止损与当前止损相同（' + currentStop.toFixed(5) + '），无需记录';
       out.stop = p;
       return out;
     }

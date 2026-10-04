@@ -43,21 +43,21 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <script src="js/chart-guard.js?v=5.6.9"></script>
-  <link rel="stylesheet" href="css/variables.css?v=5.6.9">
-  <link rel="stylesheet" href="css/base.css?v=5.6.9">
-  <link rel="stylesheet" href="css/calculator.css?v=5.6.9">
-  <link rel="stylesheet" href="css/table.css?v=5.6.9">
-  <link rel="stylesheet" href="css/modals.css?v=5.6.9">
-  <link rel="stylesheet" href="css/responsive.css?v=5.6.9">
-  <link rel="stylesheet" href="css/layout.css?v=5.6.9">
-  <link rel="stylesheet" href="css/dashboard.css?v=5.6.9">
-  <link rel="stylesheet" href="css/planner.css?v=5.6.9">
-  <link rel="stylesheet" href="css/discipline-led.css?v=5.6.9">
-  <link rel="stylesheet" href="css/risk.css?v=5.6.9">
-  <link rel="stylesheet" href="css/analytics.css?v=5.6.9">
-  <link rel="stylesheet" href="css/review.css?v=5.6.9">
-  <link rel="stylesheet" href="css/settings.css?v=5.6.9">
+  <script src="js/chart-guard.js?v=5.6.10"></script>
+  <link rel="stylesheet" href="css/variables.css?v=5.6.10">
+  <link rel="stylesheet" href="css/base.css?v=5.6.10">
+  <link rel="stylesheet" href="css/calculator.css?v=5.6.10">
+  <link rel="stylesheet" href="css/table.css?v=5.6.10">
+  <link rel="stylesheet" href="css/modals.css?v=5.6.10">
+  <link rel="stylesheet" href="css/responsive.css?v=5.6.10">
+  <link rel="stylesheet" href="css/layout.css?v=5.6.10">
+  <link rel="stylesheet" href="css/dashboard.css?v=5.6.10">
+  <link rel="stylesheet" href="css/planner.css?v=5.6.10">
+  <link rel="stylesheet" href="css/discipline-led.css?v=5.6.10">
+  <link rel="stylesheet" href="css/risk.css?v=5.6.10">
+  <link rel="stylesheet" href="css/analytics.css?v=5.6.10">
+  <link rel="stylesheet" href="css/review.css?v=5.6.10">
+  <link rel="stylesheet" href="css/settings.css?v=5.6.10">
 </head>
 <body>
 <nav id="mainNav" role="navigation" aria-label="主导航">
@@ -196,7 +196,7 @@
          文案只存在于 js/discipline-led.js（LED_RULES），此处仅空壳容器 -->
     <div class="led-wall" id="disciplineLed" data-active="true" data-collapsed="false" role="complementary" aria-label="交易纪律提示">
       <div class="led-wall-head">
-        <span class="led-wall-title"><i class="fas fa-tv"></i> 纪律 LED 屏</span>
+        <span class="led-wall-title"><i class="fas fa-tv"></i> 纪律 LED 屏<span class="led-wall-live-dot" aria-hidden="true"></span></span>
         <button type="button" class="led-wall-toggle" id="ledWallToggle" aria-expanded="true" aria-controls="ledWallBody">
           <i class="fas fa-chevron-up led-wall-chevron"></i>
           <span id="ledWallToggleLabel">收起</span>
@@ -213,7 +213,11 @@
       <div class="card planner-form-card">
         <div class="card-header">
           <h2><i class="fas fa-calculator"></i> 仓位计算器</h2>
-          <span class="badge-soft"><i class="fas fa-clock"></i> 实时 · 动态风控</span>
+          <!-- 计算状态灯，由 updateCalcStatusBadge() 按 getCalcDirty() 切换。
+               原先写死「实时 · 动态风控」，但 input/change 只标脏、重算要靠按钮点击 -->
+          <span class="badge-soft calc-status-badge" id="calcStatusBadge" data-state="dirty">
+            <i class="fas fa-exclamation-triangle calc-status-icon"></i> <span id="calcStatusText">待重算 · 动态风控</span>
+          </span>
         </div>
 
         <!-- 基础参数 -->
@@ -1300,31 +1304,31 @@
 
 </main>
 
-  <script src="js/constants.js?v=5.6.9"></script>
-  <script src="js/utils.js?v=5.6.9"></script>
-  <script src="js/toast.js?v=5.6.9"></script>
-  <script src="js/slippage.js?v=5.6.9"></script>
-  <script src="js/storage.js?v=5.6.9"></script>
-  <script src="js/skills-integration.js?v=5.6.9"></script>
-  <script src="js/calculation-ui.js?v=5.6.9"></script>
-  <script src="js/calculator.js?v=5.6.9"></script>
-  <script src="js/logs.js?v=5.6.9"></script>
-  <script src="js/rendering.js?v=5.6.9"></script>
-  <script src="js/stats.js?v=5.6.9"></script>
-  <script src="js/modals.js?v=5.6.9"></script>
-  <script src="js/navigation.js?v=5.6.9"></script>
-  <script src="js/dashboard.js?v=5.6.9"></script>
-  <script src="js/planner.js?v=5.6.9"></script>
-  <script src="js/discipline-led.js?v=5.6.9"></script>
-  <script src="js/settings.js?v=5.6.9"></script>
-  <script src="js/risk.js?v=5.6.9"></script>
-  <script src="js/chart-factory.js?v=5.6.9"></script>
-  <script src="js/analytics.js?v=5.6.9"></script>
-  <script src="js/review.js?v=5.6.9"></script>
-  <script src="js/io.js?v=5.6.9"></script>
-  <script src="js/dom-cache.js?v=5.6.9"></script>
-  <script src="js/app.js?v=5.6.9"></script>
-<script src="js/version.js?v=5.6.9"></script>
+  <script src="js/constants.js?v=5.6.10"></script>
+  <script src="js/utils.js?v=5.6.10"></script>
+  <script src="js/toast.js?v=5.6.10"></script>
+  <script src="js/slippage.js?v=5.6.10"></script>
+  <script src="js/storage.js?v=5.6.10"></script>
+  <script src="js/skills-integration.js?v=5.6.10"></script>
+  <script src="js/calculation-ui.js?v=5.6.10"></script>
+  <script src="js/calculator.js?v=5.6.10"></script>
+  <script src="js/logs.js?v=5.6.10"></script>
+  <script src="js/rendering.js?v=5.6.10"></script>
+  <script src="js/stats.js?v=5.6.10"></script>
+  <script src="js/modals.js?v=5.6.10"></script>
+  <script src="js/navigation.js?v=5.6.10"></script>
+  <script src="js/dashboard.js?v=5.6.10"></script>
+  <script src="js/planner.js?v=5.6.10"></script>
+  <script src="js/discipline-led.js?v=5.6.10"></script>
+  <script src="js/settings.js?v=5.6.10"></script>
+  <script src="js/risk.js?v=5.6.10"></script>
+  <script src="js/chart-factory.js?v=5.6.10"></script>
+  <script src="js/analytics.js?v=5.6.10"></script>
+  <script src="js/review.js?v=5.6.10"></script>
+  <script src="js/io.js?v=5.6.10"></script>
+  <script src="js/dom-cache.js?v=5.6.10"></script>
+  <script src="js/app.js?v=5.6.10"></script>
+<script src="js/version.js?v=5.6.10"></script>
 
   <!-- 样式见 css/modals.css #toastContainer（原为内联，z-index 硬编码 400 低于弹窗遮罩 500 导致提示被盖住） -->
   <div id="toastContainer" role="status" aria-live="polite"></div>

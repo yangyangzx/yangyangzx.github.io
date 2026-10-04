@@ -23,7 +23,13 @@ var _lastCalcBlockerStore = null;
 function getCalc()           { return _lastCalcStore; }
 function setCalc(v)          { _lastCalcStore = v; }
 function getCalcDirty()      { return _lastCalcDirtyStore; }
-function setCalcDirty(v)     { _lastCalcDirtyStore = !!v; }
+function setCalcDirty(v) {
+  _lastCalcDirtyStore = !!v;
+  // 计算状态徽章（planner.js 的 updateCalcStatusBadge）由这一条唯一写入路径驱动，
+  // 不必在每处 setCalcDirty(false) 调用点重复挂钩。typeof 守卫：planner.js 在本文件
+  // 之后加载，脚本加载完成前该函数尚不存在。
+  if (typeof updateCalcStatusBadge === 'function') updateCalcStatusBadge();
+}
 function getCalcBlocker()    { return _lastCalcBlockerStore; }
 function setCalcBlocker(v)   { _lastCalcBlockerStore = v; }
 

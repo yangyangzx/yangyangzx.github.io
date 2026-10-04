@@ -657,8 +657,13 @@ function _prepareImportedRecords(records, extraWarnings) {
     if (!_hadId) rec.id = window.utils.genLogId(logs.concat(candidates));
     var _keys = _logKeys(rec);
     if (existing.has(_keys[0]) || (!_hadId && existing.has(_keys[1]))) { report.deduped++; continue; }
-    existing.add(_keys[0]);
-    existing.add(_keys[1]);
+    // P0 修复（2026-10-04）：候选之间不再互相比对——上面两行 existing.add 已删除。
+    // 去重只针对【现有日志】，同一次导入内部不判重。原因：内容完全相同的两条记录，
+    // 在数学上无法与「同一份文件被重复导入两次」区分（没有 ID 列时两者都是无 ID 的
+    // 全同内容），判重必然二选一，而误伤的代价是静默丢掉真实交易——saveSplit 生成的
+    // 多批次共用 groupId 与同一时间戳，_logFingerprint 只有 7 个字段且不含批次标签，
+    // 等分时逐字相同，实测 3 笔分批导入后只剩 1 条、errors=0、无任何提示。
+    // 「重复导入同一份文件」的判据由与现有日志比对承担，那条路径不受影响。
     candidates.push(rec);
   }
   report.candidates = candidates;

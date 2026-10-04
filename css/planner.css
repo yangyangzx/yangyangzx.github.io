@@ -1,5 +1,27 @@
 /* ==================== 开仓计划视图布局 ==================== */
 
+/* ── 计算状态徽章 ──
+   由 updateCalcStatusBadge() 按 getCalcDirty() 切换 data-state。
+   原先写死「实时 · 动态风控」，但表单 input/change 只标脏（markCalculationDirty），
+   真正的重算入口是「计算仓位」按钮——用户改完入场价，卡片上还是旧结果，徽章却说实时。
+   现在的颜色即状态：绿=结果与表单一致，琥珀=改过参数还没重算。
+   注意：两条 [data-state] 规则与 base.css 的 .badge-soft:hover 同为 (0,2,0) 特异性，
+   靠「planner.css 在 base.css 之后加载」让状态色压过 hover 反白——这个徽章不是按钮，
+   不该有 hover 反馈。若日后调整脚本/样式加载顺序，hover 会把状态色冲掉。 */
+.calc-status-badge {
+  cursor: default;
+}
+.calc-status-badge[data-state="fresh"] {
+  background: var(--color-success-bg);
+  border-color: var(--color-success-border);
+  color: var(--color-success);
+}
+.calc-status-badge[data-state="dirty"] {
+  background: var(--color-warning-bg);
+  border-color: var(--color-warning-border);
+  color: var(--color-warning);
+}
+
 .planner-grid {
   display: grid;
   grid-template-columns: 2fr 1fr;

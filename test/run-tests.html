@@ -29,20 +29,20 @@
 </div>
 <div id="out">加载中…</div>
 
-<script src="../js/chart-guard.js?v=5.6.9"></script>
-<script src="../js/constants.js?v=5.6.9"></script>
-<script src="../js/utils.js?v=5.6.9"></script>
-<script src="../js/storage.js?v=5.6.9"></script>
-<script src="../js/slippage.js?v=5.6.9"></script>
-<script src="../js/skills-integration.js?v=5.6.9"></script>
-<script src="../js/calculator.js?v=5.6.9"></script>
-<script src="../js/risk.js?v=5.6.9"></script>
-<script src="../js/planner.js?v=5.6.9"></script>
-<script src="../js/discipline-led.js?v=5.6.9"></script>
-<script src="../js/settings.js?v=5.6.9"></script>
-<script src="../js/io.js?v=5.6.9"></script>
-<script src="../js/logs.js?v=5.6.9"></script>
-<script src="../js/modals.js?v=5.6.9"></script>
+<script src="../js/chart-guard.js?v=5.6.10"></script>
+<script src="../js/constants.js?v=5.6.10"></script>
+<script src="../js/utils.js?v=5.6.10"></script>
+<script src="../js/storage.js?v=5.6.10"></script>
+<script src="../js/slippage.js?v=5.6.10"></script>
+<script src="../js/skills-integration.js?v=5.6.10"></script>
+<script src="../js/calculator.js?v=5.6.10"></script>
+<script src="../js/risk.js?v=5.6.10"></script>
+<script src="../js/planner.js?v=5.6.10"></script>
+<script src="../js/discipline-led.js?v=5.6.10"></script>
+<script src="../js/settings.js?v=5.6.10"></script>
+<script src="../js/io.js?v=5.6.10"></script>
+<script src="../js/logs.js?v=5.6.10"></script>
+<script src="../js/modals.js?v=5.6.10"></script>
 <script>
 (function() {
   // ---- 环境 mock（与生产隔离） ----
@@ -1059,6 +1059,33 @@
         it2.stopHistory.length === 2 && it2.stopHistory[0].price === 3600 && it2.stopHistory[1].price === 3580);
       h += T('止损价无效时不写入', window.utils.recordStopMove(it2, 0, 't3', '').recorded === false);
       h += T('止损价 NaN 时不写入', window.utils.recordStopMove(it2, NaN, 't3', '').recorded === false);
+
+      // P2 修复：幂等判据比「当前止损」item.stopLoss 而不是时间线末条。
+      // 编辑弹窗直改 stopLoss（不写 stopHistory）后两者分叉，此时再移动止损是真实变化，
+      // 按末条比较会误判「无需记录」，留下 stopLoss 与时间线永久不一致。
+      var it3 = { symbol: 'SOL', direction: 'long', entryPrice: 200, stopLoss: 190, time: 't0' };
+      h += T('先移动一次，时间线末条与 stopLoss 一致',
+        (function () {
+          var m = window.utils.recordStopMove(it3, 195, 't1', '');
+          return m.recorded === true && it3.stopHistory.length === 2 &&
+            it3.stopHistory[1].price === 195 && it3.stopLoss === 195;
+        })());
+      it3.stopLoss = 192;   // 模拟编辑弹窗直改止损：时间线不动
+      var mBack = window.utils.recordStopMove(it3, 195, 't2', '移回');
+      h += T('stopLoss 被外部改动后的真实变化仍被记录',
+        mBack.recorded === true && it3.stopHistory.length === 3 && it3.stopHistory[2].price === 195);
+      h += T('记录时 stopLoss 同步回写入值', it3.stopLoss === 195);
+      var mSame = window.utils.recordStopMove(it3, 195, 't3', '');
+      h += T('判据改后同价移动仍被拒绝（幂等语义不丢）',
+        mSame.recorded === false && it3.stopHistory.length === 3 && /相同/.test(mSame.skipped));
+      // stopLoss 缺失（只有时间线）时退回末条判据
+      var it4 = { symbol: 'BTC', direction: 'long', entryPrice: 60000, time: 't0',
+        stopHistory: [{ price: 58000, time: 't0', note: '初始止损' }, { price: 58500, time: 't1', note: '' }] };
+      h += T('stopLoss 缺失时按时间线末条判幂等',
+        (function () {
+          var m = window.utils.recordStopMove(it4, 58500, 't2', '');
+          return m.recorded === false && it4.stopHistory.length === 2 && /相同/.test(m.skipped);
+        })());
     })();
     // CSV 往返：盘中动作与止损轨迹两列必须能被还原成数组
     (function () {
@@ -1214,6 +1241,70 @@
         h += T('旧数据：历史部分补回成一条事件',
           logs[0].closes.length === 2 && logs[0].closes[0].ratio === 50 && logs[0].closes[1].ratio === 20);
         h += T('旧数据：剩余仓位 = 1000×30% = 300', logs[0].positionSize === 300);
+
+        // P1 修复：「原始仓位」口径下增量本身就占原始仓位，与已平部分相加可超过 100%。
+        // 原实现只校验增量 ∈(0,100)，实测已平 50 时输入 80 会保存成功，得到
+        // closes=[50,80]（sum=130）、closedRatio clamp 到 100、positionSize=0 而
+        // closeType 仍是 partialTP——挂单中间态被判全额平仓，剩余敞口从账面消失。
+        var over = makeRec('lg_p2_over');
+        logs = [over];
+        openEditModal(0);
+        var _iniOver = document.querySelector('input[name="emPartialRatioBase"][value="initial"]');
+        _iniOver.checked = true; emSwitchRatioBase();
+        document.getElementById('emPartialRatio').value = '80';
+        var _beforeOver = {
+          closedRatio: over.closedRatio,
+          positionSize: over.positionSize,
+          closes: JSON.stringify(over.closes)
+        };
+        var _toastFn = window.showToast, _toasts = [];
+        window.showToast = function (m) { _toasts.push(String(m)); };
+        h += T('原始口径超出剩余敞口被拒绝', saveEditLog(0) !== true);
+        h += T('拒绝后累计已平不变', logs[0].closedRatio === _beforeOver.closedRatio);
+        h += T('拒绝后剩余仓位不变', logs[0].positionSize === _beforeOver.positionSize);
+        h += T('拒绝后不变量 sum(closes.ratio) === closedRatio 仍成立', sumRatio(logs[0]) === logs[0].closedRatio);
+        h += T('拒绝后 closes 未被写入超平事件', JSON.stringify(logs[0].closes) === _beforeOver.closes);
+        h += T('越界提示说明超出的百分点',
+          _toasts.some(function (t) { return t.indexOf('累计已平超过 100%') >= 0; }));
+        window.showToast = _toastFn;
+
+        // 同口径但未越界时保存必须照常成功（护栏不能把正常路径关掉）
+        openEditModal(0);
+        var _iniOk = document.querySelector('input[name="emPartialRatioBase"][value="initial"]');
+        _iniOk.checked = true; emSwitchRatioBase();
+        document.getElementById('emPartialRatio').value = '10';
+        h += T('原始口径不越界仍正常保存', saveEditLog(0) === true);
+        // 编辑的是最后一条事件：增量 10 是「原始口径」下的替换值，与前一条 50 相加，
+        // 不是叠加在原累计 75 上
+        h += T('不越界：closedRatio = 50 + 10 = 60', logs[0].closedRatio === 60);
+        h += T('不越界：剩余仓位 = 1000×40% = 400', logs[0].positionSize === 400);
+        h += T('不越界：不变量成立', sumRatio(logs[0]) === logs[0].closedRatio);
+
+        // P2 修复：abortSave 原先只 Object.assign，只能覆盖已存在的键、删不掉这次编辑
+        // 新增的键。新建日志（无 closes / closedRatio / closeTime）编辑时被拒，那套键
+        // 会全部残留，留下「未平仓记录带着已平簿记和平仓时间戳」。
+        var fresh = {
+          id: 'lg_p2_fresh', time: '2026-10-04T00:00:00.000Z', symbol: 'ETH', direction: 'long',
+          orderType: 'market', entryPrice: 3500, stopLoss: 3400, positionSize: 10, leverage: 10,
+          riskAmount: 30, capital: 10000, fee: 0, signals: [], closeType: ''
+        };
+        h += T('前提：新建日志没有已平簿记字段',
+          !('closes' in fresh) && !('closedRatio' in fresh) && !('closeTime' in fresh));
+        logs = [fresh];
+        openEditModal(0);
+        document.getElementById('emCloseType').value = 'partialTP';
+        document.getElementById('emPartialRatio').value = '50';
+        document.getElementById('emClosePrice').value = '';
+        var _afterAbort = saveEditLog(0);
+        h += T('平仓价为空时保存被拒', _afterAbort !== true);
+        h += T('回滚后未新增任何簿记字段（closes/closedRatio/closeTime 均不存在）',
+          !('closes' in logs[0]) && !('closedRatio' in logs[0]) && !('closeTime' in logs[0]));
+        h += T('回滚后其它被新增的字段也不残留',
+          !('partialRatio' in logs[0]) && !('initialPositionSize' in logs[0]) &&
+          !('initialRiskAmount' in logs[0]) && !('initialMargin' in logs[0]));
+        h += T('回滚后 closeType 回到空串', logs[0].closeType === '');
+        h += T('回滚后仓位未被削减', logs[0].positionSize === 10);
+        h += T('回滚后仍判定为未平仓', window.utils.isClosedTrade(logs[0]) === false);
       } finally {
         logs = _oldLogs;
       }
@@ -1233,15 +1324,22 @@
         logs = [];
         var rep = _prepareImportedRecords([clone(), clone()]);
         h += T('无校验错误', rep.errors.length === 0);
-        h += T('同文件内两条重复记录只留 1 条', rep.candidates.length === 1);
-        h += T('重复计数为 1', rep.deduped === 1);
-        h += T('自动补 id 且格式正确', /^lg_\d{8}T\d{6}_[a-z0-9]{6}$/.test(rep.candidates[0].id));
+        // P0 修复：同一次导入内部不再判重。内容完全相同的两条记录在数学上无法与
+        // 「同一份文件被重复导入两次」区分（没有 ID 列时两者都是无 ID 的全同内容），
+        // 判重必然二选一，而误伤的代价是静默丢掉真实交易——saveSplit 的等分批次共用
+        // groupId 与时间戳，_logFingerprint 的 7 个字段不含批次标签，逐字相同。
+        h += T('同文件内两条相同记录两条都保留（不静默丢交易）', rep.candidates.length === 2);
+        h += T('同文件内部不产生去重计数', rep.deduped === 0);
+        h += T('两条都自动补上不同 id',
+          /^lg_\d{8}T\d{6}_[a-z0-9]{6}$/.test(rep.candidates[0].id) &&
+          /^lg_\d{8}T\d{6}_[a-z0-9]{6}$/.test(rep.candidates[1].id) &&
+          rep.candidates[0].id !== rep.candidates[1].id);
 
-        // 同一份没有 ID 列的导出重复导入：必须靠去 id 指纹认出来
-        logs = [rep.candidates[0]];
+        // 同一份没有 ID 列的导出重复导入：靠去 id 指纹与【现有日志】比对认出来
+        logs = [rep.candidates[0], rep.candidates[1]];
         var rep2 = _prepareImportedRecords([clone()]);
         h += T('已有同内容记录时判为重复', rep2.candidates.length === 0 && rep2.deduped === 1);
-        h += T('已有日志计数正确', rep2.existingCount === 1);
+        h += T('已有日志计数正确', rep2.existingCount === 2);
 
         // 带 id 且 id 不同、内容也不同的两条仍视为两条记录
         logs = [rep.candidates[0]];
@@ -1518,7 +1616,119 @@
         }
       })();
 
+      // P2 修复：calcReverseSL 要解的未知量恰恰是止损，而 getTPUnits 默认的 sd>0 谓词
+      // 依赖止损价——「填了入场价与目标价、未填止损价」这个反推止损的本职用法被整条
+      // 拦在门外，且报错指错字段（提示「请先填写入场价」而入场价已填）。
+      (function () {
+        clearAll();
+        try {
+          setCalc(null); setCalcDirty(false);
+          mk('entryPrice', EP);
+          mk('stopLoss', '');              // 未填：这正是要反推的量
+          mk('direction', 'long');
+          mk('desiredRR', '2'); mk('feeRate', '0.08');
+          mk('reverseTP', '52000'); mk('reverseSL', '');
+
+          h += T('要求止损的默认调用仍返回 null（原有行为不变）', getTPUnits() === null);
+          var uSL = getTPUnits(false);
+          h += T('requireStop=false 时无需止损也能拿到口径',
+            !!uSL && uSL.ep === EP && uSL.direction === 'long' &&
+            Math.abs(uSL.feeRateFrac - 0.0008) < 1e-12 && uSL.sd === 0);
+          h += T('sd 缺失时 unitStop/unitLoss 为 null 而不是伪损失',
+            uSL.unitStop === null && uSL.unitLoss === null);
+
+          calcReverseSL();
+          var slNum = parseFloat(document.getElementById('reverseSL').value);
+          // 纯毛利 2R → sd 1000；含费口径下止损更【紧】
+          h += T('未填止损价也能反推出止损价', isFinite(slNum));
+          h += T('反推止损使净 RR 精确等于 2',
+            Math.abs((((52000 - EP) / EP) - 0.0008 * (1 + 52000 / EP)) /
+              (((EP - slNum) / EP) + 0.0008 * (1 + slNum / EP)) - 2) < 1e-6);
+          h += T('含费止损更紧（sd < 纯毛利 1000）',
+            isFinite(slNum) && (EP - slNum) < (52000 - EP) / 2 && (EP - slNum) > 0);
+
+          // 方向无效：提示必须指向真实缺失字段，而不是复述已填写的入场价
+          mk('direction', 'x');
+          calcReverseSL();
+          h += T('方向无效时提示填写方向而不是指错字段',
+            document.getElementById('reverseSL').value === '请先填写方向（做多/做空）');
+
+          mk('direction', 'long'); mk('entryPrice', '');
+          calcReverseSL();
+          h += T('入场价缺失时仍提示填写入场价',
+            document.getElementById('reverseSL').value === '请先填写入场价');
+        } finally {
+          clearAll();
+        }
+      })();
+
       setCalc(_savedCalc); setCalcDirty(_savedDirty);
+    })();
+
+    // ---- 28. 计算状态徽章（原先写死「实时 · 动态风控」，与手动重算的实现不符）----
+    h += group('28. 计算状态徽章跟随 getCalcDirty()');
+    h += T('updateCalcStatusBadge 已定义', typeof updateCalcStatusBadge === 'function');
+    (function () {
+      var _savedCalc = getCalc();
+      var _savedDirty = getCalcDirty();
+      var _mkId = ['calcStatusBadge', 'calcStatusText', 'calcStatusIcon'];
+      var _oldEls = {};
+      _mkId.forEach(function (id) { _oldEls[id] = document.getElementById(id); });
+      var _mk = function (id, html) {
+        var old = document.getElementById(id);
+        if (old && old.parentNode) old.parentNode.removeChild(old);
+        var el = document.createElement('span');
+        el.id = id; el.innerHTML = html;
+        document.body.appendChild(el);
+      };
+      try {
+        // 生产 index.html 的默认标记：初始就是 dirty 态（尚未计算过）
+        _mk('calcStatusBadge',
+          '<i class="fas fa-clock calc-status-icon"></i> <span id="calcStatusText">实时 · 动态风控</span>');
+
+        h += T('dirty 态：data-state=dirty',
+          (function () {
+            setCalc(null); setCalcDirty(true); updateCalcStatusBadge();
+            return document.getElementById('calcStatusBadge').getAttribute('data-state') === 'dirty';
+          })());
+        h += T('dirty 态：文案为「待重算 · 动态风控」',
+          document.getElementById('calcStatusText').textContent === '待重算 · 动态风控');
+        h += T('dirty 态：图标为三角警示',
+          /fa-exclamation-triangle/.test(document.querySelector('#calcStatusBadge .calc-status-icon').className));
+
+        setCalc({ entryPrice: 50000 }); setCalcDirty(false); updateCalcStatusBadge();
+        h += T('clean 态：data-state=fresh',
+          document.getElementById('calcStatusBadge').getAttribute('data-state') === 'fresh');
+        h += T('clean 态：文案为「已计算 · 动态风控」',
+          document.getElementById('calcStatusText').textContent === '已计算 · 动态风控');
+        h += T('clean 态：图标为勾',
+          /fa-check-circle/.test(document.querySelector('#calcStatusBadge .calc-status-icon').className));
+
+        // setCalcDirty 是唯一写入路径，改完参数必须让徽章立刻变脏——不用在按钮/输入框上挂监听
+        setCalcDirty(true);
+        h += T('setCalcDirty(true) 驱动徽章变脏（唯一写入路径挂钩生效）',
+          document.getElementById('calcStatusBadge').getAttribute('data-state') === 'dirty' &&
+          document.getElementById('calcStatusText').textContent === '待重算 · 动态风控');
+        setCalcDirty(false);
+        h += T('setCalcDirty(false) 驱动徽章转回 fresh',
+          document.getElementById('calcStatusBadge').getAttribute('data-state') === 'fresh');
+
+        // 徽章不存在时（DOM 未就绪 / 测试环境）不能抛错
+        // 生产标记里 calcStatusText 是 calcStatusBadge 的子节点，删父节点即连带删除
+        var _el = document.getElementById('calcStatusBadge');
+        if (_el && _el.parentNode) _el.parentNode.removeChild(_el);
+        var _txt = document.getElementById('calcStatusText');
+        if (_txt && _txt.parentNode) _txt.parentNode.removeChild(_txt);
+        h += T('徽章元素不存在时安全返回',
+          (function () { try { updateCalcStatusBadge(); return true; } catch (e) { return false; } })());
+      } finally {
+        _mkId.forEach(function (id) {
+          var cur = document.getElementById(id);
+          if (cur && cur.parentNode) cur.parentNode.removeChild(cur);
+          if (_oldEls[id] && _oldEls[id].parentNode !== document.body) document.body.appendChild(_oldEls[id]);
+        });
+        setCalc(_savedCalc); setCalcDirty(_savedDirty);
+      }
     })();
 
     document.getElementById('out').innerHTML = h;

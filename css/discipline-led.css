@@ -24,6 +24,10 @@
   --led-edge:      oklch(65% 0.14 248 / 0.38);
   --led-scan:      oklch(0% 0 0 / 0.20);
 
+  /* 标题尾部荧光绿呼吸点：色相刻意与青色 LED 拉开，靠饱和而不是亮度跳出来 */
+  --led-green:      oklch(88% 0.26 146);
+  --led-green-glow: 0 0 5px oklch(88% 0.26 148 / 0.85), 0 0 11px oklch(85% 0.26 150 / 0.45);
+
   /* ── 几何缺省值（JS 测量后会覆写；这里保证 JS 未跑时也能看） ── */
   --led-track-dur-a: 96s;
   --led-track-dur-b: 82s;
@@ -49,6 +53,8 @@
   --led-glow-soft: 0 0 8px  oklch(66% 0.13 248 / 0.34);
   --led-edge:      oklch(60% 0.13 248 / 0.48);
   --led-line:      oklch(60% 0.015 250 / 0.20);
+  --led-green:      oklch(88% 0.24 146);
+  --led-green-glow: 0 0 5px oklch(88% 0.24 148 / 0.85), 0 0 11px oklch(85% 0.24 150 / 0.45);
   box-shadow: inset 0 1px 0 oklch(100% 0 0 / 0.05), 0 4px 14px oklch(0% 0 0 / 0.16);
 }
 
@@ -92,6 +98,25 @@
   font-size: 12px;
   color: var(--led-text);
   text-shadow: var(--led-glow-soft);
+}
+
+/* ── 标题尾部荧光绿呼吸点：LED 屏「在线」信号 ──
+   只动 opacity（keyframes 内不得用 var()），让色块与其光晕一起呼吸，
+   整屏暗底上靠 0.25 的暗态留出一口气的空间而不是硬切 */
+.led-wall-live-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin-left: 3px;
+  border-radius: 50%;
+  background: var(--led-green);
+  box-shadow: var(--led-green-glow);
+  animation: ledDotBlink 1.4s ease-in-out infinite;
+}
+
+@keyframes ledDotBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
 }
 
 /* ── 收起按钮：透明描边，按下时轻微反白 ── */
@@ -248,5 +273,9 @@
   .led-track {
     -webkit-mask-image: none;
             mask-image: none;
+  }
+  /* 呼吸点退化为常亮：闪烁是唯一的注意力信号，撤掉动画不能让它也灭掉 */
+  .led-wall-live-dot {
+    animation: none !important;
   }
 }
