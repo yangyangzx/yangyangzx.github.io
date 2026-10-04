@@ -105,4 +105,68 @@
 //        - 测试：265 → 299 断言（新增第 22 组 Chart 离线守卫 14 条、第 23 组 id 与
 //          CSV ID 列往返 18 条）；测试页不再预置 Chart，改由守卫安装，与 index.html
 //          一致；harness 补可用的 2d 上下文让画字路径真正执行并验证 __noteDrawn。
-var APP_VERSION = '5.6.8';
+// 5.6.9：反推路径含费口径收口 + 部分平仓编辑基数语义 + STATUS 清单减噪
+//        + 导入流水线合并 + sl_move 落 stopLoss + closeType 空值护栏
+//        + 0 条候选导入护栏（审计遗留项全部收口；复核时另收口 1 个存量数据完整性 bug
+//        与 1 个本轮合并引入的清空回归；详见审计报告）
+//        - P0 反推口径：getTPUnits() 原本只在 _lastCalc 可用时返回口径，
+//          calcReverseTP / calcReverseSL / autoCalcMultiTP 三条路径各自静默 fallback
+//          到「stopDistance × rr」纯毛利解——请求 2R 实际只达成 1.78R（88.9%），
+//          于是「按 2 倍止损距离放的目标价」会被 2R 门判为不达标，同一份参数两个结论。
+//          现 getTPUnits() 在计算结果不可用时退回表单输入（入场价/止损价/方向/费率），
+//          费率与 calculator.js 同源（未填按订单类型回落 0.08%/0.04%）；三条反推路径
+//          不再有纯毛利兜底，口径拿不到时明说「无法按含费口径反推」而不写错值。
+//          注意含费反推会让止损更【紧】而非更宽（ep 50000 / tp 52000 / 费率 0.08%：
+//          含费 sd 879.9 vs 纯毛利 1000）——这是费用同时压缩分子（净毛利）、膨胀分母
+//          （净止损）的必然结果，不是回归。
+//          updateMultiTP 在 calc 为 null 时 f 恒为 0，各行显示的是纯毛利 RR，而
+//          autoCalcMultiTP 回填的是含费解；现改从 getTPUnits() 取费率。RR 是比值、
+//          与仓位规模无关，故改用单位净值相除（原实现乘 origPosSize，calc 为 null 时
+//          origPosSize=0，0/0 会显示成 0.00R）。
+//        - P1 部分平仓编辑路径基数语义：编辑一条已有 ≥2 次部分平仓的记录时，原先把
+//          同一个输入值同时当「相对剩余仓位的削减比例」和「原始仓位的簿记增量」用，
+//          两者只在第一次部分平仓时相等。复现：原始 1000 → 第一次平 50%（剩 500）→
+//          第二次平剩余的 50%（剩 250），此时编辑该记录按原逻辑算出 positionSize=750，
+//          把已经平掉的 500 单位敞口凭空算回账面。现弹窗新增「口径：剩余仓位/原始仓位」
+//          单选并记住上次事件用过的口径（ratioOfRemaining），换算走 utils.closedRatioDelta
+//          的等价标量形式，positionSize/riskAmount/actualMargin/fee 一律按累计 closedRatio
+//          还原。closes[] 为空但 closedRatio>0 的旧数据补回一条历史事件，保住
+//          sum(closes[].ratio) === closedRatio 不变量。saveEditLog 中途失败统一走
+//          abortSave() 回滚（原先直接 return 会留下半污染状态：closeType 已变「分批」
+//          但比例越界被拒）。emFee 的读取提前到部分平仓重算之前——原先重算之后又被
+//          emFee 旧值覆盖回去，「原始费用×剩余占比」的缩减等于白算。
+//        - P1 closeType 空值护栏（复核本轮改动时发现的存量 bug，非本轮引入）：
+//          emCloseType 下拉有 <option value="">—</option>，用户选它是在主动取消平仓标记，
+//          但空值不是分批类型，于是 syncCloseBookkeeping 走「非分批收尾」分支，把
+//          closedRatio 强设 100、closes[] 整链清空、partialRatio 删掉；而 isClosedTrade
+//          首行 !item.closeType 又判「未平仓」。三处合起来留下「closedRatio=100 + 未平仓 +
+//          剩余敞口仍在」的悬空记录——本想撤销标记，却把分批簿记毁掉了，CSV 还会显示
+//          100% 已平。护栏放在权威实现 utils.syncCloseBookkeeping 开头（!closeType 或
+//          非字符串直接返回，不做簿记），这样编辑弹窗、分批保存、confirmClose 任何调用方
+//          都安全，且能直接单测。该分支是 v5.6.1 引入的（当时修的是 closedRatio 该置 100
+//          而非 0），空值路径一直没护栏。
+//        - P2 导入流水线合并：CSV / JSON 两条导入路径原本各写一套校验与确认流程，
+//          设置页文件选择器的 JSON 分支只做形状判断就全量覆盖（跳过结构/字段/XSS
+//          三层校验和去重），而 io.js 拖拽导入的去重键用的是刚生成的 id——同一文件内
+//          两条重复记录会各拿一个新 id 而双双通过。现收敛为一条
+//          _prepareImportedRecords → _confirmImportThenCommit(mode) 流水线，追加与覆盖
+//          两个模式共用校验、去重与文案；去重改双键（带 id / 去 id 指纹），无 ID 列的
+//          旧版导出重复导入不再产生重复记录。
+//        - P1 0 条候选不再能覆盖提交（上项合并引入的回归）：去重把整批丢弃后
+//          report.candidates.length = 0，覆盖分支没有 0 候选的分支，照样弹「将用文件中的
+//          0 条记录覆盖现有 N 条日志」，用户一点就 _commitImportedLogs([]) 把全部历史
+//          清空，还回一条「已导入 0 条日志」的 success 提示——数据已丢，提示还说是成功
+//          的。两个真实触发面：① 用户重新导入自己导出的那份 CSV，双键去重判全部重复；
+//          ② 表头列数与数据行不一致，行被整行跳过。HEAD~1 的 parseCSVImport 不做去重，
+//          重复导入会产生 N 条候选，不会走到 0——修好「重复导入产生重复记录」时把这个
+//          边界打穿了。现在 _confirmImportThenCommit 入口加 0 候选护栏，直接改弹纯告知框
+//          「没有可导入的记录」并返回，不进任何提交路径；追加模式提交空数组虽无害，但会
+//          给「成功导入 0 条」的误导提示，故一并拦下。解析阶段告警照旧跟着提示框显示。
+//        - 测试：299 → 409 断言（新增第 24 组止损移动轨迹 21 条、第 25 组部分平仓
+//          编辑基数语义 33 条、第 26 组导入流水线合并 13 条、第 27 组反推路径 4 种
+//          参数残缺形态 + 口径不可用路径 23 条，合计 90 条；第 13 组
+//          syncCloseBookkeeping 追加 7 条 closeType 空值护栏断言；第 26 组追加 14 条
+//          0 候选护栏断言；第 15 组因 STATUS 影子项移除净 −1，原 4 条 isStatusCheckItem/
+//          STATUS_CHECK_ITEMS 分类断言改写为 2 条「符号已删除」断言，「状态项 fail 不进
+//          闸门」的前提本身被移除故删除，未单开新组。90 + 7 + 14 − 1 = +110）。
+var APP_VERSION = '5.6.9';

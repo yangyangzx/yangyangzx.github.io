@@ -213,6 +213,7 @@ function buildRowsHTML(dl) {
         '<div class="ditem"><span class="dlabel">市场环境</span><span class="dval">' + esc(getMarketConditionLabel(item.marketCondition)) + '</span></div>' +
         '<div class="ditem"><span class="dlabel">出场理由</span><span class="dval">' + esc(item.exitReason || '—') + '</span></div>' +
         (item.actions && item.actions.length ? '<div class="ditem" style="grid-column:span 4;"><span class="dlabel">盘中动作</span><div class="dval">' + renderActionsHtml(item.actions) + '</div></div>' : '') +
+        (item.stopHistory && item.stopHistory.length > 1 ? '<div class="ditem" style="grid-column:span 4;"><span class="dlabel">止损轨迹</span>' + renderStopHistoryHtml(item.stopHistory) + '</div>' : '') +
       '</div></td></tr>';
     }
 

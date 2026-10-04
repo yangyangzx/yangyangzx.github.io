@@ -8,7 +8,7 @@ function exportCSV() {
   if (window.__exportingCSV) { showToast('正在导出中，请稍候', 'info'); return; }
   window.__exportingCSV = true;
   try {
-  const headers = ['ID','时间','品种','方向','订单类型','入场价','有效入场价','止损价','目标价','仓位(USDT)','杠杆','风险额','本金','心态评分','形态/策略','信号K','交易时段','市场环境','平仓类型','平仓价','平仓时间','持仓时长(分钟)','R倍数','盈亏金额','盈亏百分比','MAE%','MFE%','执行评分','出场理由','亏损原因','交易情绪','平仓备注','入场原因','手续费','滑点成本','计算版本','滑点Schema','入场Ticks','退出Ticks','TickSize','计划有效退出价','GroupId','已实现盈亏','累计手续费','已平仓比例%','初始风险','初始仓位','平仓明细','部分平仓'];
+  const headers = ['ID','时间','品种','方向','订单类型','入场价','有效入场价','止损价','目标价','仓位(USDT)','杠杆','风险额','本金','心态评分','形态/策略','信号K','交易时段','市场环境','平仓类型','平仓价','平仓时间','持仓时长(分钟)','R倍数','盈亏金额','盈亏百分比','MAE%','MFE%','执行评分','出场理由','亏损原因','交易情绪','平仓备注','入场原因','手续费','滑点成本','计算版本','滑点Schema','入场Ticks','退出Ticks','TickSize','计划有效退出价','GroupId','已实现盈亏','累计手续费','已平仓比例%','初始风险','初始仓位','平仓明细','部分平仓','盘中动作','止损轨迹'];
   // P2: 导出当前过滤结果（复用 logs.js 的 _filterMatch），无过滤时导出全部
   var hasActiveFilter = !!( _activeFilters.direction || _activeFilters.symbol || _activeFilters.strategy ||
                             _activeFilters.status || _activeFilters.pnl || _activeFilters.time );
@@ -30,7 +30,7 @@ function exportCSV() {
     const ctl = row.closeType ? (CLOSE_TYPE_LABELS[row.closeType]||row.closeType) : '';
     const closeTimeFormatted = fmtTime(row.closeTime);
     const planSlip = row.slippage && row.slippage.planning ? row.slippage.planning : {};
-    const line = [row.id ?? '',fmtTime(row.time),row.symbol,row.direction,row.orderType||'market',row.entryPrice,row.effectiveEntryPrice??planSlip.effectiveEntryPrice??'',row.stopLoss,row.targetPrice??'',row.positionSize,row.leverage,row.riskAmount,row.capital??'',ms,sf,ss,row.session||'',row.marketCondition||'',ctl,row.closePrice??'',closeTimeFormatted,row.holdDuration??'',String(row.rMultiple??'').replace(/R$/,''),row.pnlAmount??'',String(row.pnlPercent??'').replace(/%/g,''),row.mae??'',row.mfe??'',row.executionScore??'',row.exitReason??'',Array.isArray(row.lossReason)?row.lossReason.join(';'):(row.lossReason||''),Array.isArray(row.emotions)?row.emotions.join(';'):(row.emotions||''),row.closeNote??'',Array.isArray(row.reason)?row.reason.join(';'):(row.reason||''),row.fee??'',row.slippageCost??'',row.calculationVersion??'',planSlip.schema??'',planSlip.entryTicks??'',planSlip.exitTicks??'',planSlip.tickSize??'',planSlip.effectiveExitPrice??'',row.groupId??'',row.realizedPnl??'',row.realizedFee??'',row.closedRatio??'',row.initialRiskAmount??'',row.initialPositionSize??'',Array.isArray(row.closes)?JSON.stringify(row.closes):'',row.isPartial??''].map(v=>'"'+(v==null?'':String(v).replace(/"/g,'""'))+'"').join(',');
+    const line = [row.id ?? '',fmtTime(row.time),row.symbol,row.direction,row.orderType||'market',row.entryPrice,row.effectiveEntryPrice??planSlip.effectiveEntryPrice??'',row.stopLoss,row.targetPrice??'',row.positionSize,row.leverage,row.riskAmount,row.capital??'',ms,sf,ss,row.session||'',row.marketCondition||'',ctl,row.closePrice??'',closeTimeFormatted,row.holdDuration??'',String(row.rMultiple??'').replace(/R$/,''),row.pnlAmount??'',String(row.pnlPercent??'').replace(/%/g,''),row.mae??'',row.mfe??'',row.executionScore??'',row.exitReason??'',Array.isArray(row.lossReason)?row.lossReason.join(';'):(row.lossReason||''),Array.isArray(row.emotions)?row.emotions.join(';'):(row.emotions||''),row.closeNote??'',Array.isArray(row.reason)?row.reason.join(';'):(row.reason||''),row.fee??'',row.slippageCost??'',row.calculationVersion??'',planSlip.schema??'',planSlip.entryTicks??'',planSlip.exitTicks??'',planSlip.tickSize??'',planSlip.effectiveExitPrice??'',row.groupId??'',row.realizedPnl??'',row.realizedFee??'',row.closedRatio??'',row.initialRiskAmount??'',row.initialPositionSize??'',Array.isArray(row.closes)?JSON.stringify(row.closes):'',row.isPartial??'',Array.isArray(row.actions)?JSON.stringify(row.actions):'',Array.isArray(row.stopHistory)?JSON.stringify(row.stopHistory):''].map(v=>'"'+(v==null?'':String(v).replace(/"/g,'""'))+'"').join(',');
     csv += line + '\n';
   }
   const b = new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'});
@@ -212,77 +212,37 @@ class ImportValidator {
 
 const importValidator = new ImportValidator();
 
+/**
+ * 拖拽 / 点选导入 JSON（追加模式，与现有日志共存）。
+ *
+ * v5.6.9：只保留「读文件」这一件 io.js 独有的事，迁移 → 校验 → 补 id → 去重 → 确认 → 提交
+ * 全部委托给 settings.js 的公共流水线（_prepareImportedRecords / _confirmImportThenCommit），
+ * 与设置页文件选择器的覆盖导入共用同一套口径。此前这里自有一份：校验有、去重有，但去重键
+ * 用的是刚生成的 id，同一文件内两条重复记录会各拿一个新 id 而双双通过；确认文案也与
+ * parseCSVImport 各写一套。
+ */
 function importJSON(file) {
-  const r = new FileReader();
+  var r = new FileReader();
   r.onload = function(e) {
+    var d;
     try {
-      const d = JSON.parse(e.target.result);
-      
-      // 使用多层验证器进行安全检查
-      const validationReport = importValidator.validateAndSanitize(d);
-      
-      if (validationReport.errors.length > 0) {
-        let errorMsg = `为保证日志完整性，本次未导入任何记录。\n\n${validationReport.errors.slice(0, 5).join('\n')}`;
-        if (validationReport.errors.length > 5) errorMsg += `\n... 还有${validationReport.errors.length - 5}个错误`;
-        // 原生 alert 不跟随主题、不可滚动、内容多了会被截断
-        window.confirmDialog({
-          title: '导入验证失败',
-          message: errorMsg,
-          alertOnly: true,
-          confirmText: '知道了'
-        });
-        return;
-      }
-      
-      if (validationReport.valid.length === 0) {
-        showToast('没有有效的记录可导入','warn');
-        return;
-      }
-      
-      // 新旧导入记录统一进入 Schema 迁移，历史现金滑点仅做明确标记。
-      if (typeof migrateLogsToCurrentSchema === 'function') migrateLogsToCurrentSchema(validationReport.valid, 0);
-      var existing = new Set(logs.map(function(item) { return typeof _logFingerprint === 'function' ? _logFingerprint(item) : JSON.stringify(item); }));
-      // P1 FIX（2026-10-04）：导入记录补稳定 id。缺 id 时 _logFingerprint 退化为
-      // time+symbol+entryPrice+positionSize 拼接，同一笔交易经 CSV 与 JSON 各导入一次
-      // （或导出后原样再导入）会被当成两条不同的日志。
-      var candidates = [];
-      var _importValid = validationReport.valid;
-      for (var _vi = 0; _vi < _importValid.length; _vi++) {
-        var _v = _importValid[_vi];
-        if (!_v.id) _v.id = window.utils.genLogId(logs.concat(candidates));
-        var _vk = typeof _logFingerprint === 'function' ? _logFingerprint(_v) : JSON.stringify(_v);
-        if (existing.has(_vk)) continue;
-        existing.add(_vk);
-        candidates.push(_v);
-      }
-      if (!candidates.length) { showToast('所有记录均已存在，未重复导入。', 'info'); return; }
-      let msg = `导入验证完成：\n有效新记录: ${candidates.length}条\n重复跳过: ${validationReport.valid.length - candidates.length}条`;
-      if (validationReport.warnings.length > 0) msg += `\n警告: ${validationReport.warnings.join(', ')}`;
-      window.confirmDialog({
-        title: '确认导入',
-        message: msg + '\n\n是否继续导入？',
-        confirmText: '继续导入'
-      }).then(function(ok) {
-        if (!ok) return;
-        var originalLength = logs.length;
-        logs.push(...candidates);
-        if (!saveLogs()) {
-          logs.splice(originalLength, candidates.length);
-          showToast('导入未保存，已恢复到导入前状态。', 'error');
-          return;
-        }
-        showToast(`成功导入 ${candidates.length} 条记录`, 'success');
-        // P1: 导入后同步刷新日志表，并清空索引依赖型状态，避免索引错位
-        if (window._pendingDeleteIndices) window._pendingDeleteIndices.clear();
-        if (typeof _expandedRows !== 'undefined') _expandedRows.clear();
-        if (typeof _closePriceEdited !== 'undefined') { for (var _ik in _closePriceEdited) delete _closePriceEdited[_ik]; }
-        if (typeof renderLogs === 'function') renderLogs();
-        // P0-6: 导入后刷新仪表盘
-        if (typeof renderDashboard === 'function') renderDashboard();
-      });
-    } catch(err) { 
-      showToast('解析失败: '+err.message,'error'); 
+      // stripBOM：JSON.parse 遇到 BOM 直接抛 SyntaxError
+      d = JSON.parse(typeof stripBOM === 'function' ? stripBOM(e.target.result) : e.target.result);
+    } catch (err) {
+      showToast('JSON 解析失败: ' + err.message, 'error');
+      return;
     }
+    if (!Array.isArray(d)) { showToast('JSON 格式不正确（应为数组）', 'error'); return; }
+    if (typeof _prepareImportedRecords !== 'function' || typeof _confirmImportThenCommit !== 'function') {
+      showToast('导入功能不可用', 'error');
+      return;
+    }
+    var report = _prepareImportedRecords(d);
+    if (report.errors.length > 0) {
+      if (typeof _showImportValidationFailure === 'function') _showImportValidationFailure(report.errors);
+      return;
+    }
+    _confirmImportThenCommit(report, 'append');
   };
   r.readAsText(file);
 }

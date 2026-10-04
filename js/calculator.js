@@ -1083,7 +1083,8 @@ function _calculateImpl() {
   if (resultBox) resultBox.scrollIntoView({behavior:'smooth'});
   // 更新凯利侧边栏卡片
   try { updateKellySidebar(); } catch(e) { console.error('[calculate] updateKellySidebar error:', e); }
-  // 顺序 FIX：先自动填充多止盈价格，再刷新检查清单（否则 checkTPWeighted 首次计算读到空 TP 误判 skipped）
+  // 顺序：先自动填充多止盈价格（刷新加权期望等展示），再刷新检查清单。
+  // v5.6.9 清单已不含 checkTPWeighted，此顺序只为保证多止盈展示先于清单结论更新。
   try { if (typeof autoCalcMultiTP === 'function') autoCalcMultiTP(); } catch(e) { console.error('[calculate] autoCalcMultiTP error:', e); }
   try { if (typeof updateChecklist === 'function') updateChecklist(); } catch(e) { console.error('[calculate] updateChecklist error:', e); }
   _calculating = false;
@@ -1183,6 +1184,29 @@ function renderActionsHtml(actions) {
 }
 window.renderActionsHtml = renderActionsHtml;
 
+// P2 修复：止损轨迹展示。sl_move 动作原先只写 actions，不落 stopLoss，
+// 所以复盘与持仓监控看到的永远是开仓时的原始止损——移动过一次就全对不上。
+// 轨迹由 utils.recordStopMove 维护（见 stopHistory 字段）。
+function renderStopHistoryHtml(history) {
+  if (!history || !Array.isArray(history) || history.length < 2) return '';
+  var escN = function(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  };
+  var parts = [];
+  for (var i = 0; i < history.length; i++) {
+    var h = history[i];
+    if (h && h.price != null) {
+      var t = h.time ? new Date(h.time).toLocaleString('zh-CN', {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).replace(/\//g,'-') : '';
+      parts.push((t ? t + ' ' : '') + h.price);
+    }
+  }
+  if (parts.length < 2) return '';
+  var moved = history.length - 1;
+  return '<div class="dval" style="font-size:12px;line-height:1.7;"><span style="color:var(--color-primary);">止损轨迹（移动 ' + moved + ' 次）</span><br>' +
+    escN(parts.join(' → ')) + '</div>';
+}
+window.renderStopHistoryHtml = renderStopHistoryHtml;
+
 function saveTradeAction(idx) {
   const item = logs[idx];
   if (!item) return;
@@ -1207,6 +1231,36 @@ function saveTradeAction(idx) {
     })(),
     note: note ? note.value.trim() : ''
   };
+
+  // P2 修复：移动止损要真正生效——落到 stopLoss（持仓监控/复盘读取的字段）并写入轨迹。
+  // 原先只记进 actions 时间线，止损价永不变，仪表盘仍按原始止损展示风险。
+  if (action.type === 'sl_move') {
+    if (!Number.isFinite(action.price) || action.price <= 0) {
+      showToast('移动止损需要填写有效的新止损价', 'warn');
+      return;
+    }
+    var entry = parseFloat(item.entryPrice);
+    // 新止损落在入场价错误一侧 = 开仓即触发，直接拦下而不是留给结算时才发现
+    if (Number.isFinite(entry) && entry > 0) {
+      var dir = item.direction;
+      if ((dir === 'long' && action.price >= entry) || (dir === 'short' && action.price <= entry)) {
+        showToast('新止损 ' + action.price.toFixed(5) + ' 已越过入场价 ' + entry.toFixed(5) + '（' + (dir === 'long' ? '做多止损必须低于入场价' : '做空止损必须高于入场价') + '），已拒绝', 'error');
+        return;
+      }
+    }
+    var mv = window.utils.recordStopMove(item, action.price, action.time, action.note);
+    if (!mv.recorded) {
+      showToast(mv.skipped || '止损未变化，无需记录', 'warn');
+      return;
+    }
+    // 轨迹已写入 stopHistory；动作时间线里补上「旧 → 新」便于逐条阅读
+    var prevStop = null;
+    var _h = item.stopHistory;
+    if (_h && _h.length >= 2) prevStop = parseFloat(_h[_h.length - 2].price);
+    action.note = '止损 ' + (Number.isFinite(prevStop) ? prevStop.toFixed(5) : '?') + ' → ' + action.price.toFixed(5)
+      + (action.note ? '（' + action.note + '）' : '');
+  }
+
   item.actions.push(action);
   actionPanelIdx = -1;
   saveLogs();
@@ -1256,12 +1310,13 @@ function assertSavableCalculation() {
   if (getCalcBlocker()) {
     return { ok: false, message: '当前计划存在硬风控阻断，不能保存。' };
   }
-  // 软闸门：非状态项出现 fail 即拒绝保存（零容忍，与实现一致）。
-  // 状态项 checkLossStreak/checkDailyLoss/checkSymbolConc 已被上游硬阻断覆盖（永不 fail），
-  // checkTPWeighted 是提示性指标（默认 50/30/20 + 1.5/2/3R 配置下加权期望天然低于单档 2R 门槛）；
-  // 名单统一在 planner.js 的 isStatusCheckItem()，结论行与本闸门共用，两处计数不会差 1。
-  // warn 是 v5.6.3 明确定义的「不阻断但可见」提示态（仓位截断、心态降仓、多止盈加权 RR 偏低），
-  // 不参与阻断判断；skipped 是清单项 DOM 缺失或本轮不适用，同样不阻断。
+  // 软闸门：清单里出现 fail 即拒绝保存（零容忍，与实现一致）。
+  // v5.6.9：清单已收敛为 5 个真闸门项——原先 7 个「由硬阻断覆盖」的影子项（止损距离、
+  // 强平安全、连亏、日亏损、组合热量、品种集中度、多止盈加权期望）已移除，因此不存在
+  // 需要排除出分母的「状态项」，planner.js 里对应的 STATUS_CHECK_ITEMS / isStatusCheckItem
+  // 已一并删除。
+  // warn 是 v5.6.3 明确定义的「不阻断但可见」提示态（仓位截断、心态降仓），不参与阻断判断；
+  // skipped 是本轮不适用，同样不阻断。
   // 原先的 `totalExecutables >= 2` 下限没有业务依据：清单结果缺失、或只剩 1 个
   // 可执行项时闸门静默放行——把「无法验证」当成「通过」。现在 fail-closed：
   // 快照里没有清单结果直接拒绝保存，并要求用户重新计算。
@@ -1273,7 +1328,6 @@ function assertSavableCalculation() {
   }
   var failCount = 0;
   for (var k in checklistResults) {
-    if (typeof isStatusCheckItem === 'function' && isStatusCheckItem(k)) continue;
     if (checklistResults[k] === 'skipped') continue;
     if (checklistResults[k] === 'fail') failCount++;
   }

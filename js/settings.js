@@ -355,22 +355,12 @@ function importLogs() {
           // stripBOM：JSON.parse 遇到 BOM 直接抛 SyntaxError，提示会变成笼统的「解析失败」
           var data = JSON.parse(stripBOM(ev.target.result));
           if (Array.isArray(data) && (data.length === 0 || (data[0] && typeof data[0] === 'object' && (data[0].symbol != null || data[0].direction != null || data[0].entryPrice != null)))) {
-            // 导入前归一化所有数值字段（JSON 中可能为字符串或 NaN/Infinity）
-            var numFields = ['entryPrice','stopLoss','targetPrice','positionSize','leverage','riskAmount','capital','fee','slippageCost','closePrice','pnlAmount','mae','mfe','lowPrice','highPrice','rMultiple','pnlPercent','holdDuration','effectiveEntryPrice','stopType','atrStopMode','calculationVersion','grossPnlAmount','actualCloseFee','actualExitLegacySlippageCost','realizedPnl','realizedFee','closedRatio','initialRiskAmount','initialPositionSize'];
-            for (var k = 0; k < data.length; k++) {
-              for (var nf = 0; nf < numFields.length; nf++) {
-                var f = numFields[nf];
-                if (data[k][f] != null) {
-                  var v = parseFloat(data[k][f]);
-                  data[k][f] = isNaN(v) ? null : v;
-                }
-              }
-            }
-            // 所有导入数据先通过统一 Schema 迁移；v2 只标记历史现金滑点，绝不伪造 ticks。
-            if (typeof migrateLogsToCurrentSchema === 'function') migrateLogsToCurrentSchema(data, 0);
-            else if (typeof _migrateTimes === 'function') _migrateTimes(data);
-            // 导入为全量覆盖，先明确提示数量差异（现有日志为空时无数据可丢，跳过确认）
-            _confirmOverwriteThenCommit(data);
+            // v5.6.9：与 io.js 拖拽导入（importJSON）共用同一条「迁移→校验→补 id→去重→确认」
+            // 流水线。此前这里只判断形状就全量覆盖，跳过了结构/字段/XSS 三层校验和去重——
+            // 同一份文件走文件选择器与走拖拽会得到不同结果（甚至重复导入两次）。
+            var rep = _prepareImportedRecords(data);
+            if (rep.errors.length > 0) { _showImportValidationFailure(rep.errors); return; }
+            _confirmImportThenCommit(rep, 'overwrite');
           } else {
             showToast('JSON 格式不正确（应为数组）', 'error');
           }
@@ -421,10 +411,13 @@ function parseCSVImport(csvText) {
     '计算版本':'calculationVersion','滑点Schema':'slipSchema','入场Ticks':'slipEntryTicks','退出Ticks':'slipExitTicks',
     'TickSize':'slipTickSize','计划有效退出价':'slipEffectiveExit','GroupId':'groupId',
     '已实现盈亏':'realizedPnl','累计手续费':'realizedFee','已平仓比例%':'closedRatio','初始风险':'initialRiskAmount',
-    '初始仓位':'initialPositionSize','平仓明细':'closes','部分平仓':'isPartial'
+    '初始仓位':'initialPositionSize','平仓明细':'closes','部分平仓':'isPartial',
+    '盘中动作':'actions','止损轨迹':'stopHistory'
   };
   var CSV_ARRAY_FIELDS = ['signals','lossReason','emotions','reason'];
-  var CSV_JSON_FIELDS = ['actions','splitEntries','closes'];
+  // actions/stopHistory 与 closes 同为 JSON 列：导出时序列化，导入时还原成数组。
+  // 旧导出文件没有这两列，缺列时保持 undefined（recordStopMove 会按需懒初始化）
+  var CSV_JSON_FIELDS = ['actions','splitEntries','closes','stopHistory'];
   var CSV_NUM_FIELDS = ['entryPrice','stopLoss','targetPrice','positionSize','leverage','riskAmount','capital','fee','slippageCost','closePrice','pnlAmount','mae','mfe','lowPrice','highPrice','rMultiple','pnlPercent','holdDuration','realizedPnl','realizedFee','closedRatio','initialRiskAmount','initialPositionSize'];
   var CSV_INT_FIELDS = ['mindsetScore','executionScore'];
 
@@ -486,26 +479,19 @@ function parseCSVImport(csvText) {
     imported.push(obj);
   }
 
-  if (typeof migrateLogsToCurrentSchema === 'function') migrateLogsToCurrentSchema(imported, 0);
-  else if (typeof _migrateTimes === 'function') _migrateTimes(imported);
-  // P1 FIX（2026-10-04）：补稳定 id（旧版导出没有 ID 列）。缺 id 时 storage.js 的
-  // _logFingerprint 退化为 time+symbol+entryPrice+positionSize 拼接，同一笔交易经 CSV 与
-  // JSON 各导入一次（或导出后原样再导入）会被当成两条不同的日志。
-  var _idPool = logs.concat(imported);
-  for (var _idi = 0; _idi < imported.length; _idi++) {
-    if (!imported[_idi].id) imported[_idi].id = window.utils.genLogId(_idPool);
-  }
+  // 迁移、补 id 与去重统一在 _prepareImportedRecords 里做（与 JSON 路径共用），避免两份实现。
   // 列数不匹配的行已跳过：必须让用户知道，否则「少了 N 条」无从追查。
   // 前 5 条明细 + 总数，避免对话框被一屏报错淹没。
   var warnMsg = null;
   if (importWarnings.length > 0) {
-    warnMsg = '⚠ ' + importWarnings.length + ' 行列数与表头不一致，已跳过：\n'
+    warnMsg = importWarnings.length + ' 行列数与表头不一致，已跳过：\n'
       + importWarnings.slice(0, 5).join('\n')
       + (importWarnings.length > 5 ? '\n…（另有 ' + (importWarnings.length - 5) + ' 行）' : '');
-    if (logs.length === 0) showToast(warnMsg, 'warn');
   }
-  // 导入为全量覆盖，先明确提示数量差异（现有日志为空时无数据可丢，跳过确认）
-  _confirmOverwriteThenCommit(imported, warnMsg);
+  // v5.6.9：与 JSON 导入共用「迁移→校验→补 id→去重→确认」流水线，覆盖确认文案只写一处。
+  var rep = _prepareImportedRecords(imported, warnMsg);
+  if (rep.errors.length > 0) { _showImportValidationFailure(rep.errors); return; }
+  _confirmImportThenCommit(rep, 'overwrite');
 }
 
 /**
@@ -584,17 +570,194 @@ function _commitImportedLogs(newLogs) {
 }
 
 /**
- * 覆盖导入确认：现有日志为空时无数据可丢，直接执行不做确认。
- * @param {Array} newLogs 待写入的日志数组
+ * 去重键。_logFingerprint 把 id 放在第一分量，所以「导入时才补了 id 的记录」一旦换上新 id，
+ * 完整指纹就和现有记录永远对不上——同一份没有 ID 列的旧版导出重复导入两次会产生两条记录。
+ * 这里同时给出带 id 与去 id 两种键：带 id 的键负责不误合并不同记录，去 id 的键负责认出
+ * 重复导入。调用方用 `_hadId` 决定是否启用第二种键。
  */
-function _confirmOverwriteThenCommit(newLogs, extraMessage) {
-  if (logs.length === 0) { _commitImportedLogs(newLogs); return; }
+function _logKeys(item) {
+  if (typeof _logFingerprint !== 'function') {
+    var js = JSON.stringify(item);
+    return [js, js];
+  }
+  var noId = Object.assign({}, item);
+  delete noId.id;
+  return [_logFingerprint(item), _logFingerprint(noId)];
+}
+
+// 导入时统一归一化的数值字段（JSON 里可能是字符串或 NaN/Infinity；CSV 解析已给数字，重复归一无害）
+var IMPORT_NUM_FIELDS = ['entryPrice','stopLoss','targetPrice','positionSize','leverage','riskAmount','capital','fee','slippageCost','closePrice','pnlAmount','mae','mfe','lowPrice','highPrice','rMultiple','pnlPercent','holdDuration','effectiveEntryPrice','stopType','atrStopMode','calculationVersion','grossPnlAmount','actualCloseFee','actualExitLegacySlippageCost','realizedPnl','realizedFee','closedRatio','initialRiskAmount','initialPositionSize'];
+
+/**
+ * 数值字段归一化：必须在结构校验之前跑，否则 validateFields 会把 JSON 里的 '100'
+ * 判成「字段类型错误：期望 number，实际 string」，一份纯数字型的备份会被整批拒绝。
+ */
+function _normalizeImportedValues(records) {
+  for (var k = 0; k < records.length; k++) {
+    for (var nf = 0; nf < IMPORT_NUM_FIELDS.length; nf++) {
+      var f = IMPORT_NUM_FIELDS[nf];
+      if (records[k][f] != null) {
+        var v = parseFloat(records[k][f]);
+        records[k][f] = isNaN(v) ? null : v;
+      }
+    }
+  }
+}
+
+/**
+ * 导入提交前的公共收尾：数值归一化 → Schema 迁移 → 结构/字段/XSS 校验 → 补稳定 id → 去重。
+ *
+ * CSV（parseCSVImport）与 JSON（importJSON / 设置页文件选择器）三条入口共用这一条流水线。
+ * 此前每份入口各写一遍：JSON 走设置页选择器时只判断形状就直接全量覆盖，既跳过校验也跳过
+ * 去重；io.js 的拖拽导入自己又做一遍带 id 的去重但用的是「已生成 id」做键，同一文件里
+ * 两条重复记录会各拿一个新 id 因而双双通过。
+ *
+ * 失败即整批放弃（fail-closed）：半截导入会留下一份「看似成功」的部分数据，比整批拒绝危险。
+ * @param {Array} records      解析出的记录数组（会被原地迁移与归一化）
+ * @param {string} [extraWarnings] 解析阶段产出的告警文本
+ * @returns {{errors: Array, warnings: Array, candidates: Array, deduped: number, total: number, existingCount: number}}
+ */
+function _prepareImportedRecords(records, extraWarnings) {
+  var report = { errors: [], warnings: [], candidates: [], deduped: 0, total: records.length, existingCount: logs.length };
+  try {
+    _normalizeImportedValues(records);
+    if (typeof migrateLogsToCurrentSchema === 'function') migrateLogsToCurrentSchema(records, 0);
+    else if (typeof _migrateTimes === 'function') _migrateTimes(records);
+    // 三层校验的唯一实现（结构 → 字段类型/业务规则 → XSS 净化），返回体是它自己的形状，
+    // 这里挑字段拷回 report，保证 candidates/deduped 这些由本函数维护的字段不被丢掉
+    var vr = (typeof importValidator !== 'undefined') ? importValidator.validateAndSanitize(records) : null;
+    report.errors = vr ? vr.errors : [];
+    report.warnings = vr ? vr.warnings.slice() : [];
+    report.valid = vr ? vr.valid : records.slice();
+    report.total = records.length;
+    report.existingCount = logs.length;
+  } catch (e) {
+    report.errors = ['校验失败: ' + e.message];
+  }
+  if (report.errors.length > 0) {
+    report.candidates = [];
+    report.deduped = 0;
+    return report;
+  }
+  report.warnings = report.warnings.slice();
+  if (extraWarnings) report.warnings.push(extraWarnings);
+  var valid = Array.isArray(report.valid) ? report.valid : [];
+  var existing = new Set();
+  for (var _ei = 0; _ei < logs.length; _ei++) {
+    var _ek = _logKeys(logs[_ei]);
+    existing.add(_ek[0]);
+    existing.add(_ek[1]);
+  }
+  var candidates = [];
+  for (var i = 0; i < valid.length; i++) {
+    var rec = valid[i];
+    // 必须先记住有没有原始 id：id 是上面刚生成的，同文件内两条重复记录 id 各不相同，
+    // 只拿 id 当键会双双通过。
+    var _hadId = !!rec.id;
+    if (!_hadId) rec.id = window.utils.genLogId(logs.concat(candidates));
+    var _keys = _logKeys(rec);
+    if (existing.has(_keys[0]) || (!_hadId && existing.has(_keys[1]))) { report.deduped++; continue; }
+    existing.add(_keys[0]);
+    existing.add(_keys[1]);
+    candidates.push(rec);
+  }
+  report.candidates = candidates;
+  return report;
+}
+
+/**
+ * 追加提交：先记下原有长度，保存失败就回滚，避免出现「内存里已改、本地存储没变」。
+ */
+function _commitAppendedLogs(candidates) {
+  var originalLength = logs.length;
+  logs.push.apply(logs, candidates);
+  if (!saveLogs()) {
+    logs.splice(originalLength, candidates.length);
+    showToast('导入未保存，已恢复到导入前状态。', 'error');
+    return;
+  }
+  showToast('成功导入 ' + candidates.length + ' 条记录', 'success');
+  // 导入后同步刷新日志表，并清空索引依赖型状态，避免索引错位
+  if (window._pendingDeleteIndices) window._pendingDeleteIndices.clear();
+  if (typeof _expandedRows !== 'undefined') _expandedRows.clear();
+  if (typeof _closePriceEdited !== 'undefined') { for (var _ik in _closePriceEdited) delete _closePriceEdited[_ik]; }
+  if (typeof renderLogs === 'function') renderLogs();
+  // P0-6: 导入后刷新仪表盘
+  if (typeof renderDashboard === 'function') renderDashboard();
+}
+
+/**
+ * 校验失败提示：整批未导入，只列前 5 条，避免对话框被一屏报错淹没。
+ */
+function _showImportValidationFailure(errors) {
+  window.confirmDialog({
+    title: '导入验证失败',
+    message: '为保证日志完整性，本次未导入任何记录。\n\n'
+      + errors.slice(0, 5).join('\n')
+      + (errors.length > 5 ? '\n…（另有 ' + (errors.length - 5) + ' 个错误）' : ''),
+    alertOnly: true,
+    confirmText: '知道了'
+  });
+}
+
+/**
+ * 0 条候选的收尾提示：明确说明没有写入任何数据，避免用户以为导入生效了。
+ *
+ * P1 修复（2026-10-04）：0 条候选原先仍能提交。覆盖模式会弹出
+ * 「将用文件中的 0 条记录覆盖现有 N 条日志」，用户确认后 _commitImportedLogs([])
+ * 直接把全部历史清空，并回一条「已导入 0 条日志」的 success 提示——数据已丢，
+ * 提示还说是成功的。两个真实触发面：① 去重把整批丢弃（用户重新导入自己导出的
+ * 那份 CSV，双键去重后 candidates=0）；② 解析阶段全部落空（表头列数与数据行
+ * 不一致的行被整行跳过）。追加模式提交空数组虽无害，但会给「成功导入 0 条」的
+ * 误导提示，故两种模式一并拦下。
+ */
+function _showImportEmptyResult(existing, warnTxt) {
+  window.confirmDialog({
+    title: '没有可导入的记录',
+    message: '文件里没有一条记录可通过校验，未写入任何数据。'
+      + (existing ? '\n现有 ' + existing + ' 条日志保持原样。' : '')
+      + '\n请检查文件是否为正确的导出格式。' + warnTxt,
+    alertOnly: true,
+    confirmText: '知道了'
+  });
+}
+
+/**
+ * 导入确认（覆盖 / 追加两种模式共用一套文案与交互）：
+ *   mode='overwrite' 全量覆盖现有日志，明确提示丢失数量；现有日志为空时没有可丢的数据，直接提交
+ *   mode='append'     追加到现有日志之后
+ * @param {Object} report  _prepareImportedRecords 的返回值
+ * @param {string} mode    'overwrite' | 'append'
+ */
+function _confirmImportThenCommit(report, mode) {
+  var candidates = report.candidates || [];
+  var existing = report.existingCount || logs.length;
+  var warnTxt = report.warnings.length ? '\n\n⚠ ' + report.warnings.join('\n') : '';
+  // P1 修复：0 条候选直接收尾，不进任何提交路径。原先覆盖模式在 candidates=0 时仍会
+  // 弹出「用文件中的 0 条记录覆盖现有 N 条日志」，确认后 _commitImportedLogs([]) 把全部
+  // 历史清空并提示「已导入 0 条日志」——去重整批丢弃（重复导入自己导出的 CSV）或解析
+  // 阶段全部落空都会走到这里。详见 _showImportEmptyResult 注释。
+  if (candidates.length === 0) {
+    _showImportEmptyResult(existing, warnTxt);
+    return;
+  }
+  if (mode !== 'overwrite') {
+    window.confirmDialog({
+      title: '确认导入',
+      message: '导入验证完成：\n有效新记录: ' + candidates.length + ' 条'
+        + (report.deduped ? '\n重复跳过: ' + report.deduped + ' 条' : '')
+        + warnTxt + '\n\n是否继续追加导入？',
+      confirmText: '继续导入'
+    }).then(function(ok) { if (ok) _commitAppendedLogs(candidates); });
+    return;
+  }
+  if (!existing) { _commitImportedLogs(candidates); return; }
   window.confirmDialog({
     title: '导入将覆盖现有日志',
-    message: '将用文件中的 ' + newLogs.length + ' 条记录覆盖现有 ' + logs.length + ' 条日志。\n原有数据不可恢复。' + (extraMessage ? '\n\n' + extraMessage : ''),
+    message: '将用文件中的 ' + candidates.length + ' 条记录覆盖现有 ' + existing + ' 条日志。\n原有数据不可恢复。' + warnTxt,
     confirmText: '覆盖导入',
     danger: true
-  }).then(function(ok) { if (ok) _commitImportedLogs(newLogs); });
+  }).then(function(ok) { if (ok) _commitImportedLogs(candidates); });
 }
 
 function resetSettings() {

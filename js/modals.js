@@ -183,6 +183,30 @@ function openEditModal(idx) {
   const slippageLabel = isTickSlippage ? '滑点冲击（已计入有效入场价）' : '历史滑点成本';
   const slippageReadonly = isTickSlippage ? ' readonly' : '';
   window._emMindsetScore = ms;  // 打开弹窗时重置为当前项的实际值，防止跨编辑污染
+
+  // P1 修复（2026-10-04）：编辑弹窗的平仓比例原先没有标注基数，保存侧却一直按
+  // 「占开仓原始仓位」解读（positionSize = initialPositionSize × (1−比例)），
+  // 而记录侧 logs.js 的输入是「占当前剩余仓位」。2 次及以上部分平仓时两套基数不同，
+  // 用户不改任何值直接保存就会把剩余仓位算错。现改为弹窗内显式选基数，默认与记录侧
+  // 一致（剩余仓位）；预填值按所选基数取 closes[] 最后一条分批事件的对应字段，
+  // 两种口径都能还原用户当初输入的那个数字。
+  var _PARTIAL_TYPES_EDIT = ['partialTP', 'reducePosition'];
+  var _lastPartialEvt = null;
+  if (Array.isArray(item.closes)) {
+    for (var _pe = item.closes.length - 1; _pe >= 0; _pe--) {
+      if (_PARTIAL_TYPES_EDIT.indexOf(item.closes[_pe].type) >= 0) { _lastPartialEvt = item.closes[_pe]; break; }
+    }
+  }
+  // 旧数据（v5.6.7 之前）没有 ratioOfRemaining，回退 item.partialRatio
+  var _prefillRemaining = (_lastPartialEvt && _lastPartialEvt.ratioOfRemaining != null)
+    ? _lastPartialEvt.ratioOfRemaining
+    : (item.partialRatio != null ? item.partialRatio : '');
+  var _prefillInitial = (_lastPartialEvt && _lastPartialEvt.ratio != null)
+    ? _lastPartialEvt.ratio
+    : (item.partialRatio != null ? item.partialRatio : '');
+  // 切基数时同步换成该基数下的数值，避免用户切完口径还对着旧数字
+  window._emPartialPrefills = { remaining: _prefillRemaining, initial: _prefillInitial };
+
   let starsHTML = '<div class="star-rating-modal" style="display:flex;gap:4px;">';
   for (let s = 1; s <= 5; s++) {
     starsHTML += '<span class="star' + (s <= ms ? ' active' : '') + '" data-val="' + s + '" onclick="emUpdateStars(' + s + ')">★</span>';
@@ -270,8 +294,8 @@ function openEditModal(idx) {
       '<div class="modal-tab-panel" id="emTab1">' +
         '<div class="fp"><label>平仓类型</label><select id="emCloseType"><option value="">—</option><option value="initialSL"' + (item.closeType === 'initialSL' ? ' selected' : '') + '>初始止损</option><option value="trailingSL"' + (item.closeType === 'trailingSL' ? ' selected' : '') + '>追踪止损</option><option value="initialTP"' + (item.closeType === 'initialTP' ? ' selected' : '') + '>初始止盈</option><option value="manualWin"' + (item.closeType === 'manualWin' ? ' selected' : '') + '>手平赢</option><option value="manualLoss"' + (item.closeType === 'manualLoss' ? ' selected' : '') + '>手平损</option><option value="liquidation"' + (item.closeType === 'liquidation' ? ' selected' : '') + '>强平/爆仓</option><option value="partialTP"' + (item.closeType === 'partialTP' ? ' selected' : '') + '>部分止盈</option><option value="timeStop"' + (item.closeType === 'timeStop' ? ' selected' : '') + '>时间止损</option><option value="reducePosition"' + (item.closeType === 'reducePosition' ? ' selected' : '') + '>减仓</option></select></div>' +
         '<div class="fp" id="emPartialRatioRow" style="display:' + ((item.closeType === 'partialTP' || item.closeType === 'reducePosition') ? 'block' : 'none') + ';">' +
-          '<label>平仓比例 (%)<span style="font-size:11px;color:var(--color-text-muted);margin-left:4px;">剩余仓位 = 原仓位 × (1 − 比例)</span></label>' +
-          '<input type="number" id="emPartialRatio" step="5" min="1" max="100" value="' + (item.partialRatio != null ? item.partialRatio : '') + '" placeholder="如 50 表示平仓 50%" />' +
+          '<label>平仓比例 (%)<span style="font-size:11px;color:var(--color-text-muted);margin-left:4px;">口径：<label style="display:inline;font-weight:400;font-size:11px;cursor:pointer;"><input type="radio" name="emPartialRatioBase" value="remaining" checked onchange="emSwitchRatioBase()" /> 剩余仓位</label> <label style="display:inline;font-weight:400;font-size:11px;cursor:pointer;"><input type="radio" name="emPartialRatioBase" value="initial" onchange="emSwitchRatioBase()" /> 原始仓位</label></span></label>' +
+          '<input type="number" id="emPartialRatio" step="5" min="1" max="100" value="' + _prefillRemaining + '" placeholder="如 50 表示平仓 50%" />' +
         '</div>' +
         '<div class="fp"><label>平仓价</label><input type="number" id="emClosePrice" step="0.00001" value="' + (item.closePrice ?? '') + '" /></div>' +
         '<div class="fp"><label>R倍数</label><input type="text" id="emRMultiple" value="' + (item.rMultiple ?? '') + '" /></div>' +
@@ -604,6 +628,21 @@ function emUpdateExecScore() {
 }
 window.emUpdateExecScore = emUpdateExecScore;
 
+// ==================== 平仓比例基数切换（编辑弹窗） ====================
+// 切换「剩余仓位 / 原始仓位」口径时，把输入框换成该口径下对应的历史值。
+// 两个口径的数值都来自 closes[] 最后一条分批事件（ratioOfRemaining / ratio），
+// 不换算——换算是保存时的事（见 saveEditLog 的 closedRatioDelta）。
+function emSwitchRatioBase() {
+  var el = document.getElementById('emPartialRatio');
+  if (!el) return;
+  var sel = document.querySelector('input[name="emPartialRatioBase"]:checked');
+  var key = sel ? sel.value : 'remaining';
+  var pf = window._emPartialPrefills || {};
+  var v = pf[key];
+  el.value = (v === undefined || v === null || v === '') ? '' : v;
+}
+window.emSwitchRatioBase = emSwitchRatioBase;
+
 // ==================== 执行评分更新（平仓面板） ====================
 function cpUpdateExecScore(idx) {
   const container = document.getElementById('cpExecChecks_' + idx);
@@ -775,6 +814,13 @@ function saveEditLog(idx, _raceConfirmed) {
   }
 
   let v;
+  // 半途失败统一回滚：函数前半段已把表单字段逐个写进 item，直接 return 会留下
+  // 「一半新值一半旧值」的半污染状态（例如比例越界被拒时 closeType 已变成「分批」）。
+  function abortSave(msg, level) {
+    Object.assign(item, beforeEdit);
+    showToast(msg, level || 'warn');
+    return false;
+  }
   v = gv('emSymbol'); if (v !== undefined) item.symbol = v;
   v = gv('emDirection'); if (v !== undefined) item.direction = v;
   v = gv('emOrderType'); if (v !== undefined) item.orderType = v;
@@ -785,6 +831,9 @@ function saveEditLog(idx, _raceConfirmed) {
   v = gn('emPositionSize'); if (v !== undefined && v !== null) item.positionSize = v;
   v = gn('emLeverage'); if (v !== undefined && v !== null) item.leverage = v;
   v = gn('emRiskAmount'); if (v !== undefined && v !== null) item.riskAmount = v;
+  // v5.6.9：emFee 必须在这一步读，不能放在部分平仓重算之后。原先 fee 在
+  // 「原始费用×剩余占比」重算完之后又被 emFee 的旧值覆盖回去，缩减结果等于白算。
+  v = gn('emFee'); if (v !== undefined && v !== null) item.fee = v;
   item.mindsetScore = window._emMindsetScore;
   v = gv('emStrategyFramework'); if (v !== undefined) item.strategyFramework = v;
   v = gv('emStrategyPattern'); if (v !== undefined) item.strategyPattern = v;
@@ -804,59 +853,108 @@ function saveEditLog(idx, _raceConfirmed) {
   // 时生效，程序读取不会被拦；此前会静默保存成 closeType=分批但无有效比例，isClosedTrade
   // 转而看 closedRatio，于是这笔交易落在"既没平完也没平"的悬空状态。
   if (_isPartialClose && !(partialRatio > 0 && partialRatio < 100)) {
-    showToast('分批平仓比例需在 1-99 之间', 'warn');
-    return;
+    return abortSave('分批平仓比例需在 1-99 之间');
   }
   if (_isPartialClose) {
-    // P1 FIX（2026-09-23 开仓逻辑审计）：原以「已被前次平仓削减过」的 positionSize 为基准
-    // 再乘 (1−ratio)。而 emPartialRatio 预填的正是 item.partialRatio —— 用户不改任何值直接
-    // 保存，positionSize / riskAmount / actualMargin / fee 就被重复削减一次（连存两次即腰斩），
-    // 而 pnlAmount 不动 → 盈亏与仓位脱节。
-    // 现锚定开仓原始仓位还原：优先 initialPositionSize（logs.js 关闭流程维护），
-    // 缺失时按真实累计平仓比例反推并一次性补写，此后每次保存均幂等。
-    // 真实累计平仓比例：closes[] 事件数组最可靠，其次 closedRatio
-    var cumClosed = 0;
-    if (Array.isArray(item.closes)) {
-      cumClosed = item.closes.reduce(function(s, c) { return s + (parseFloat(c.ratio) || 0); }, 0);
+    // v5.6.9 P1 修复（基数语义）：编辑路径此前把同一个输入值同时当「相对剩余仓位的削减
+    // 比例」和「原始仓位的簿记增量」用，两者只在第一次部分平仓时相等。复现：原始 1000 →
+    // 第一次平 50%（closedRatio=50，剩 500）→ 第二次平剩余的 50%（closes 里 ratio=25，
+    // closedRatio=75，剩 250）。此时编辑这条记录，输入框按剩余口径预填 50，按原逻辑算出
+    // positionSize = 1000 × (1−25/100) = 750 —— 把已经平掉的 500 单位敞口凭空算回账面，
+    // 正确值应是 250。
+    // 现按口径显式换算：编辑对象是「最后一次部分平仓事件」，其输入换算基准是该事件
+    // 发生前的剩余仓位，而闭合后的仓位按累计 closedRatio 还原。换算权威实现在
+    // utils.closedRatioDelta（此处用等价的 fracBeforeEvt 标量形式）。
+    var _PARTIAL_TYPES_EDIT2 = ['partialTP', 'reducePosition'];
+    var _partialsNow = Array.isArray(item.closes)
+      ? item.closes.filter(function(c) { return _PARTIAL_TYPES_EDIT2.indexOf(c.type) >= 0; })
+      : [];
+    // 编辑前累计已平（含最后一条事件自身）——用于从当前仓位反推原始仓位
+    var cumClosedOld = 0;
+    for (var _ci0 = 0; _ci0 < _partialsNow.length; _ci0++) {
+      cumClosedOld += (parseFloat(_partialsNow[_ci0].ratio) || 0);
     }
-    if (!isFinite(cumClosed) || cumClosed <= 0) cumClosed = parseFloat(item.closedRatio) || 0;
+    // 编辑前累计已平（排除最后一条事件）——最后一次事件发生时的剩余基数
+    var cumClosedBeforeEvt = 0;
+    for (var _ci1 = 0; _ci1 < _partialsNow.length - 1; _ci1++) {
+      cumClosedBeforeEvt += (parseFloat(_partialsNow[_ci1].ratio) || 0);
+    }
+    if (_partialsNow.length === 0) {   // 无事件簿记（旧数据 / CSV 导入）：退回 closedRatio
+      cumClosedOld = cumClosedBeforeEvt = parseFloat(item.closedRatio) || 0;
+    }
+    if (!isFinite(cumClosedOld) || cumClosedOld < 0) cumClosedOld = 0;
+    if (cumClosedOld > 100) cumClosedOld = 100;
+    if (!isFinite(cumClosedBeforeEvt) || cumClosedBeforeEvt < 0) cumClosedBeforeEvt = 0;
+    if (cumClosedBeforeEvt > 100) cumClosedBeforeEvt = 100;
+    var fracOld = 1 - cumClosedOld / 100;
+    var fracBeforeEvt = 1 - cumClosedBeforeEvt / 100;
+    var _baseModeEl = document.querySelector('input[name="emPartialRatioBase"]:checked');
+    var _baseMode = (_baseModeEl && _baseModeEl.value === 'initial') ? 'initial' : 'remaining';
+    var deltaOriginal = (_baseMode === 'initial')
+      ? partialRatio                      // 已按原始仓位计，直接入簿记
+      : partialRatio * fracBeforeEvt;      // 「占剩余仓位」→ 换算成原始仓位增量
+    deltaOriginal = parseFloat(Math.max(0, Math.min(100, deltaOriginal)).toFixed(4));
+    if (!(deltaOriginal > 0 && deltaOriginal < 100)) {
+      return abortSave('按所选口径换算后，平仓比例需在 1-99 之间（占原始仓位计）');
+    }
+    var _orphanClosed = (_partialsNow.length === 0 && cumClosedBeforeEvt > 0) ? cumClosedBeforeEvt : 0;
+    // P1 修复（2026-10-03）：簿记同步。confirmClose 在 logs.js 实际读的是 closedRatio/closes，
+    // 不是 partialRatio —— 不写回去，下一次部分平仓会在新旧比例之间错误叠加。
+    window.utils.syncCloseBookkeeping(item, item.closeType, deltaOriginal);
+    // 旧数据兼容：closes[] 为空但 closedRatio>0（v5.6.1 之前的本地数据，或没有「平仓明细」
+    // 列的旧版 CSV 导入）。syncCloseBookkeeping 会把本次事件当作唯一事件重建 closes，那部分
+    // 历史已平比例会被丢掉，此处补回成一条历史事件，保住 sum(closes[].ratio) === closedRatio。
+    if (_orphanClosed > 0) {
+      item.closes.unshift({ type: item.closeType, ratio: _orphanClosed, note: '历史记录（编辑前已平仓部分）' });
+      item.closedRatio = parseFloat(Math.max(0, Math.min(100,
+        (parseFloat(item.closedRatio) || 0) + _orphanClosed)).toFixed(4));
+    }
+    // partialRatio 存用户输入（占剩余仓位口径），与 logs.js confirmClose 的存储口径一致，
+    // 保证 rendering.js 行内平仓弹窗的预填值仍是人能读懂的那个数。
+    item.partialRatio = partialRatio;
+    // ratioOfRemaining 也要跟着换算更新：上次事件簿记是按「该事件发生前的剩余仓位」存的，
+    // 用原始口径改过之后若不同步，下次打开弹窗「剩余仓位」单选项会预填成旧数字。
+    var _lastEvt2 = (Array.isArray(item.closes) && item.closes.length) ? item.closes[item.closes.length - 1] : null;
+    if (_lastEvt2) {
+      _lastEvt2.ratioOfRemaining = (_baseMode === 'initial')
+        ? (fracBeforeEvt > 0 ? parseFloat((deltaOriginal / fracBeforeEvt).toFixed(4)) : deltaOriginal)
+        : partialRatio;
+    }
+    var cumClosed = parseFloat(item.closedRatio) || 0;
     if (!isFinite(cumClosed) || cumClosed < 0) cumClosed = 0;
     if (cumClosed > 100) cumClosed = 100;
-    var fracNow = 1 - cumClosed / 100;   // 当前剩余仓位占原始仓位的比例
+    var fracNow = 1 - cumClosed / 100;   // 本次编辑后的剩余仓位占原始仓位的比例
     var anchor = function(current, initial, field) {
       var base = parseFloat(initial);
       if (!isFinite(base) || base <= 0) {
-        base = (fracNow > 0) ? (parseFloat(current) / fracNow) : (parseFloat(current) || 0);
+        base = (fracOld > 0) ? (parseFloat(current) / fracOld) : (parseFloat(current) || 0);
         if (isFinite(base) && base > 0) item[field] = base;  // 一次性补写，保证后续幂等
       }
       return base;
     };
     var basePos = anchor(item.positionSize, item.initialPositionSize, 'initialPositionSize');
-    item.positionSize = parseFloat((basePos * (1 - partialRatio / 100)).toFixed(2));
-    // 按比例缩减风险额与保证金
+    item.positionSize = parseFloat((basePos * fracNow).toFixed(2));
+    // 按比例缩减风险额与保证金（同用编辑后的剩余占比，不再用单次输入值）
     var baseRisk = anchor(item.riskAmount, item.initialRiskAmount, 'initialRiskAmount');
-    if (!isNaN(item.riskAmount) && item.riskAmount != null) {
-      item.riskAmount = parseFloat((baseRisk * (1 - partialRatio / 100)).toFixed(2));
+    if (item.riskAmount != null && !isNaN(item.riskAmount)) {
+      item.riskAmount = parseFloat((baseRisk * fracNow).toFixed(2));
     }
     var baseMargin = anchor(item.actualMargin, item.initialMargin, 'initialMargin');
-    if (!isNaN(item.actualMargin) && item.actualMargin != null) {
-      item.actualMargin = parseFloat((baseMargin * (1 - partialRatio / 100)).toFixed(2));
+    if (item.actualMargin != null && !isNaN(item.actualMargin)) {
+      item.actualMargin = parseFloat((baseMargin * fracNow).toFixed(2));
     }
     // P1-3 FIX：编辑部分平仓时同步缩减剩余 round-trip 费用，避免最终平仓重复扣费。
     // 原始费用 = 剩余 fee + 已平仓部分 realizedFee（logs.js 累加维护），无重复计算。
     var baseFee = (parseFloat(item.fee) || 0) + (parseFloat(item.realizedFee) || 0);
-    if (!isNaN(item.fee) && item.fee != null) {
-      item.fee = parseFloat((baseFee * (1 - partialRatio / 100)).toFixed(8));
+    if (item.fee != null && !isNaN(item.fee)) {
+      item.fee = parseFloat((baseFee * fracNow).toFixed(8));
     }
-    // P1 修复（2026-10-03）：簿记同步。此前只改 positionSize 等"金额字段"、不碰
-    // closedRatio/closes，而 confirmClose 在 logs.js 实际读的是这两个字段，不是
-    // partialRatio —— 下一次部分平仓会在新旧比例之间错误叠加，最终平仓的
-    // ratioFinal = 100 - closedRatio 也套在错误的剩余比例上。权威实现在 utils.js。
-    window.utils.syncCloseBookkeeping(item, item.closeType, partialRatio);
   } else {
     // P1 修复（2026-10-03）：closeType 改成非分批类型 = 断言整笔已退出，同步
     // closedRatio/closes，避免留下 closedRatio=50 + closes 非空的孤立簿记。
     // 权威实现在 utils.js（closedRatio 置 100 而非 0）。
+    // closeType 为空（emCloseType 的「—」选项，即用户主动取消平仓标记）时 syncCloseBookkeeping
+    // 直接不动簿记——见 utils.js 里该函数开头的护栏。
     window.utils.syncCloseBookkeeping(item, item.closeType, null);
   }
   v = gn('emClosePrice'); if (v !== undefined && v !== null) item.closePrice = v;
@@ -876,7 +974,8 @@ function saveEditLog(idx, _raceConfirmed) {
   v = gv('emRMultiple'); if (v !== undefined && v !== '') { var rm = parseFloat(v); item.rMultiple = isNaN(rm) ? null : rm; } else if (document.getElementById('emRMultiple')?.value === '') item.rMultiple = null;
   v = gv('emPnlAmount'); if (v !== undefined && v !== '') { var pnlVal = parseFloat(v); item.pnlAmount = isNaN(pnlVal) ? null : pnlVal; } else if (document.getElementById('emPnlAmount')?.value === '') item.pnlAmount = null;
   v = gv('emPnlPercent'); if (v !== undefined && v !== '') { var pnlPct = parseFloat(v); item.pnlPercent = isNaN(pnlPct) ? null : pnlPct; } else if (document.getElementById('emPnlPercent')?.value === '') item.pnlPercent = null;
-  v = gn('emFee'); if (v !== undefined && v !== null) item.fee = v;
+  // emFee 已在上面（部分平仓重算之前）读过，这里不能重复读——否则会把「原始费用×剩余占比」
+  // 的结果覆盖回未削减的旧值。
   v = gn('emSlippageCost'); if (v !== undefined && v !== null) item.slippageCost = v;
   v = gv('emCloseNote'); if (v !== undefined) item.closeNote = v;
   // Entry reason — multi-select checkboxes
@@ -943,13 +1042,11 @@ function saveEditLog(idx, _raceConfirmed) {
 
   // 平仓价格空值校验（基于 item.closePrice 原值，不依赖 DOM 空字符串误判）
   if (item.closeType && (item.closePrice == null || isNaN(item.closePrice) || item.closePrice <= 0)) {
-    showToast('平仓价格不能为空','warn');
-    return;
+    return abortSave('平仓价格不能为空');
   }
   // 平仓时间空值校验
   if (item.closeType && !item.closeTime) {
-    showToast('平仓时间不能为空','warn');
-    return;
+    return abortSave('平仓时间不能为空');
   }
   // 亏损单必须选择亏损原因（扩展：pnlAmount<0 || manualLoss || 实时 netPnl<0）
   // 市价单使用 effectiveEntryPrice（含滑点修正），与 emRecalc 实时预览口径一致
@@ -982,9 +1079,9 @@ function saveEditLog(idx, _raceConfirmed) {
     var lrEl2 = document.getElementById('emLossReason');
     var cbs = lrEl2 ? lrEl2.querySelectorAll('input[type="checkbox"]:checked') : [];
     if (cbs.length === 0) {
-      showToast('亏损单请至少选择一个亏损原因', 'warn');
+      // 先标红表单再回滚：标红是 DOM 上的提示，要留着；item 的半污染值必须撤回
       if (lrEl2) { lrEl2.style.border = '1px solid var(--color-danger)'; lrEl2.style.borderRadius = '4px'; lrEl2.style.padding = '4px'; }
-      return;
+      return abortSave('亏损单请至少选择一个亏损原因');
     }
   }
   // 设计优化：执行评分"止损未被移动/破坏"与极值数据矛盾校验（不阻断，仅警示）

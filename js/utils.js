@@ -61,6 +61,12 @@
    */
   util.syncCloseBookkeeping = function(item, closeType, partialRatio) {
     if (!item) return item;
+    // 没有有效平仓类型就不做簿记。modals.js 的平仓类型下拉有 <option value="">—</option>，
+    // 用户把它选成「—」是在主动取消平仓标记；若空值走到下面的「非分批类型」分支，会把
+    // closedRatio 强设成 100、并把 closes[] 整链清空，而 isClosedTrade 首行又因 closeType
+    // 为空判「未平仓」——于是留下「closedRatio=100 + 未平仓 + 剩余敞口仍在」的悬空记录，
+    // 本来想撤销平仓标记却把分批簿记毁掉了。护栏放在权威实现里，任何调用方都安全。
+    if (!closeType || typeof closeType !== 'string') return item;
     var PARTIAL_TYPES = ['partialTP', 'reducePosition'];
     var clamp4 = function(x) { return parseFloat(Math.max(0, Math.min(100, x)).toFixed(4)); };
     var evts = Array.isArray(item.closes) ? item.closes.slice() : [];
@@ -126,6 +132,54 @@
     if (!Number.isFinite(ini) || ini <= 0) return r;   // 无原始仓位基准时按 1:1 处理
     var frac = Math.min(1, Math.max(0, rem / ini));
     return parseFloat((r * frac).toFixed(4));
+  };
+
+  /**
+   * P2 修复：记录一次止损移动。
+   *
+   * 为什么不用 closes[]：closes[] 是平仓簿记账本，syncCloseBookkeeping() 会按 type 过滤
+   * 分批事件并重建整个数组（item.closes = partials），非分批事件写进去下次编辑就被丢弃；
+   * 而且它参与不变量 sum(closes[].ratio) === closedRatio，动一下就会污染已平仓比例。
+   * 止损移动不是减仓，不该进这个账本。这里用独立的 stopHistory 时间线保存轨迹。
+   *
+   * 副作用只有两个：① 追加一条轨迹；② 把 item.stopLoss 更新为新值——dashboard 的持仓
+   * 监控与「止损 vs 强平」距离都读 log.stopLoss，不更新就仍在用旧止损，风险展示是错的。
+   * R 倍数基准是 initialRiskAmount（开仓即锁定），此处不动，R 口径不变。
+   *
+   * @param {Object} item       日志记录
+   * @param {number} newPrice   新止损价
+   * @param {string} timeIso    动作时间（ISO）
+   * @param {string} note       备注
+   * @returns {{recorded: boolean, skipped: string, stop: number}}
+   */
+  util.recordStopMove = function(item, newPrice, timeIso, note) {
+    var p = parseFloat(newPrice);
+    var out = { recorded: false, skipped: '', stop: parseFloat(item && item.stopLoss) };
+    if (!item) { out.skipped = '记录不存在'; return out; }
+    if (!Number.isFinite(p) || p <= 0) { out.skipped = '止损价无效'; return out; }
+
+    // 首次移动时把原始止损补成时间线的第一条，保证轨迹完整。
+    // 判据是「时间线为空」而不是「字段不存在」：CSV 导入会得到 stopHistory: []，
+    // 只判字段缺失会让第一次移动直接丢掉开仓时的原始止损。幂等：已有起点则不重复补。
+    var hist = Array.isArray(item.stopHistory) ? item.stopHistory.slice() : [];
+    if (hist.length === 0) {
+      var initStop = parseFloat(item.stopLoss);
+      if (Number.isFinite(initStop) && initStop > 0) {
+        hist.push({ price: initStop, time: item.time || null, note: '初始止损' });
+      }
+    }
+    var last = hist.length ? hist[hist.length - 1] : null;
+    if (last && Math.abs(parseFloat(last.price) - p) < 1e-12) {
+      out.skipped = '新止损与当前止损相同（' + p.toFixed(5) + '），无需记录';
+      out.stop = p;
+      return out;
+    }
+    hist.push({ price: p, time: timeIso || new Date().toISOString(), note: note || '' });
+    item.stopHistory = hist;
+    item.stopLoss = p;
+    out.recorded = true;
+    out.stop = p;
+    return out;
   };
 
   /**

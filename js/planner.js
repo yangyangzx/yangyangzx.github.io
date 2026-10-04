@@ -12,31 +12,66 @@
 // 门比较一律走 rrMeetsMin()（skills-integration.js）：按卡片 toFixed(2) 的显示精度取整
 // 后再比阈值，否则反推解的浮点残差会让「显示 2.00:1」与「判 ✗」并存。
 
+/** 读表单数字输入：元素缺失或非数字时返回 NaN（不抛错，便于 calc 缺失时逐级兜底） */
+function _formNumber(id) {
+  var el = document.getElementById(id);
+  return el ? parseFloat(el.value) : NaN;
+}
+
+/** 读表单文本输入：元素缺失时返回 '' */
+function _formText(id) {
+  var el = document.getElementById(id);
+  return el ? String(el.value || '') : '';
+}
+
 /**
  * 取多止盈/反推共用的单位口径（每 1U 名义本金）。
+ *
+ * v5.6.9 P0 修复：计算结果不可用时退回表单输入，而不是返回 null。
+ * 原先 `_lastCalc` 为空时这里直接 return null，三条反推路径（calcReverseTP /
+ * calcReverseSL / autoCalcMultiTP）就静默退化成「纯毛利 × RR」——请求 2R 实际只达成
+ * 1.78R（88.9%），于是「按 2 倍止损距离放的目标价」会被 2R 门判为不达标，同一份参数
+ * 两个结论。费率与 calculator.js:801-802 同源，含未填时按订单类型回落 0.08% / 0.04%。
  * @returns {{ep:number, sd:number, stopLoss:number, unitStop:number,
- *            feeRateFrac:number, unitLoss:number, legFee:Function}|null}
+ *            feeRateFrac:number, unitLoss:number, direction:string, legFee:Function}|null}
  */
 function getTPUnits() {
   var calc = getCalc();
-  if (!calc || !calc.entryPrice) return null;
-  var ep = calc.effectiveEntryPrice || calc.entryPrice;
-  var stopLoss = calc.stopLoss;
-  var sd = calc.stopDistance != null ? calc.stopDistance
-    : (!isNaN(stopLoss) ? Math.abs(stopLoss - ep) : 0);
-  if (!(ep > 0) || !(sd > 0)) return null;
-  var feeRateFrac = (calc.feeRate != null ? parseFloat(calc.feeRate) : 0) / 100;
-  if (isNaN(feeRateFrac) || feeRateFrac < 0) feeRateFrac = 0;
+  var ep = NaN, stopLoss = NaN, sd = NaN, feeRatePct = NaN;
+  var direction = null;
+  if (calc && calc.entryPrice) {
+    ep = calc.effectiveEntryPrice || calc.entryPrice;
+    stopLoss = calc.stopLoss;
+    direction = calc.direction;
+    feeRatePct = calc.feeRate;
+    sd = calc.stopDistance != null ? calc.stopDistance : (isNaN(stopLoss) ? 0 : Math.abs(stopLoss - ep));
+  }
+  var needFromForm = !(ep > 0) || !(stopLoss > 0) || !(sd > 0)
+    || (direction !== 'long' && direction !== 'short');
+  if (needFromForm) {
+    if (!(ep > 0)) ep = _formNumber('entryPrice');
+    if (!(stopLoss > 0)) stopLoss = _formNumber('stopLoss');
+    if (!(sd > 0) && ep > 0 && stopLoss > 0) sd = Math.abs(stopLoss - ep);
+    if (direction !== 'long' && direction !== 'short') direction = _formText('direction');
+  }
+  if (!(parseFloat(feeRatePct) > 0)) {
+    feeRatePct = _formNumber('feeRate');
+    if (!(parseFloat(feeRatePct) > 0)) feeRatePct = (_formText('orderType') === 'limit') ? 0.04 : 0.08;
+  }
+  if (!(ep > 0) || !(sd > 0) || (direction !== 'long' && direction !== 'short')) return null;
+  var f = parseFloat(feeRatePct) / 100;
+  if (!(f >= 0) || isNaN(f)) f = 0;
   var legFee = function(exitPrice) {
-    return feeRateFrac * (1 + (exitPrice > 0 ? exitPrice / ep : 1));
+    return f * (1 + (exitPrice > 0 ? exitPrice / ep : 1));
   };
   return {
     ep: ep,
     sd: sd,
     stopLoss: stopLoss,
     unitStop: sd / ep,
-    feeRateFrac: feeRateFrac,
+    feeRateFrac: f,
     unitLoss: sd / ep + legFee(stopLoss),
+    direction: direction,
     legFee: legFee
   };
 }
@@ -87,18 +122,10 @@ function solveSLForRR(u, rr, tp, direction) {
  */
 function calcReverseTP() {
   if (getCalcDirty()) { showToast('计算器参数已变更，请先点击「计算仓位」更新结果', 'warn'); return; }
-  var calc = getCalc();
-  var entryPrice, stopLoss, direction;
-
-  if (calc && calc.entryPrice && calc.stopLoss) {
-    entryPrice = calc.effectiveEntryPrice || calc.entryPrice;
-    stopLoss = calc.stopLoss;
-    direction = calc.direction;
-  } else {
-    entryPrice = parseFloat(document.getElementById('entryPrice').value);
-    stopLoss = parseFloat(document.getElementById('stopLoss').value);
-    direction = document.getElementById('direction').value;
-  }
+  // v5.6.9：口径全部来自 getTPUnits()（计算结果优先，缺失时退回表单）。此前这里自行再读一遍
+  // calc/表单，方向可能取到与 u 不同的来源——用户改过方向但还没点计算时，会出现
+  // 「方向校验用表单方向、求解用 calc 方向」的错位。
+  var u = getTPUnits();
 
   var desiredRR = parseFloat(document.getElementById('desiredRR').value);
   if (isNaN(desiredRR) || desiredRR <= 0) {
@@ -106,36 +133,42 @@ function calcReverseTP() {
     return;
   }
 
-  if (isNaN(entryPrice) || isNaN(stopLoss) || entryPrice <= 0 || stopLoss <= 0) {
-    document.getElementById('reverseTP').value = '请先填写入场价和止损价';
+  if (!u) {
+    // 口径缺失：区分「没填」和「填了但方向矛盾」（止损价与入场价同侧）。止损=入场价时
+    // sd 为 0，getTPUnits 同样返回 null，此时给方向提示比「请先填写」更有用。
+    var _d0 = _formText('direction');
+    var _e0 = _formNumber('entryPrice'), _s0 = _formNumber('stopLoss');
+    var _badDir = (_e0 > 0 && _s0 > 0) &&
+      ((_d0 === 'long' && _s0 >= _e0) || (_d0 === 'short' && _s0 <= _e0));
+    document.getElementById('reverseTP').value = _badDir
+      ? (_d0 === 'long' ? '做多止损价需 < 入场价' : '做空止损价需 > 入场价')
+      : '请先填写入场价和止损价';
     return;
   }
 
   // 方向校验
-  if (direction === 'long' && stopLoss >= entryPrice) {
+  if (u.direction === 'long' && u.stopLoss >= u.ep) {
     document.getElementById('reverseTP').value = '做多止损价需 < 入场价';
     return;
   }
-  if (direction === 'short' && stopLoss <= entryPrice) {
+  if (u.direction === 'short' && u.stopLoss <= u.ep) {
     document.getElementById('reverseTP').value = '做空止损价需 > 入场价';
     return;
   }
 
-  // 含费净 RR 口径（优先）：反推值回填后盈亏比卡片即显示 requested RR。
+  // 含费净 RR 口径：反推值回填后盈亏比卡片即显示 requested RR。
   // 原实现按 stopDistance × desiredRR 直接乘，是纯毛利距离，回填后实际 RR 恒低于
   // 请求值——实测请求 2R 得 1.7770R（达成率 88.9%），ATR 1% 止损时仅 79.2%；
   // 于是「按 2 倍止损距离放的目标价」会被 2R 门判为不达标，自相矛盾。
-  var u = getTPUnits();
-  var targetPrice = u ? solveTPForRR(u, desiredRR, direction) : null;
-
+  //
+  // v5.6.9 P0 修复：不再有「无 _lastCalc 时退化为纯毛利反推」的兜底。getTPUnits()
+  // 现在会退回表单取值，正常填好入场/止损就能走含费口径；拿不到口径时直接报错，
+  // 而不是塞一个按纯毛利算出来的错值——回填后再被 RR 门判不达标，比不给结果更误导。
+  var targetPrice = solveTPForRR(u, desiredRR, u.direction);
   if (!targetPrice) {
-    // 无 _lastCalc 时退化为纯毛利反推（无费率口径可用）
-    var stopDistance = Math.abs(entryPrice - stopLoss);
-    targetPrice = direction === 'long'
-      ? entryPrice + stopDistance * desiredRR
-      : entryPrice - stopDistance * desiredRR;
+    document.getElementById('reverseTP').value = '无法按含费口径反推目标价（费率过高或参数异常）';
+    return;
   }
-
   document.getElementById('reverseTP').value = targetPrice.toFixed(5);
 }
 
@@ -144,16 +177,8 @@ function calcReverseTP() {
  */
 function calcReverseSL() {
   if (getCalcDirty()) { showToast('计算器参数已变更，请先点击「计算仓位」更新结果', 'warn'); return; }
-  var calc = getCalc();
-  var entryPrice, direction;
-
-  if (calc && calc.entryPrice) {
-    entryPrice = calc.effectiveEntryPrice || calc.entryPrice;
-    direction = calc.direction;
-  } else {
-    entryPrice = parseFloat(document.getElementById('entryPrice').value);
-    direction = document.getElementById('direction').value;
-  }
+  // v5.6.9：口径与方向全部来自 getTPUnits()，与 calcReverseTP 同源（不再自行读 calc/表单）。
+  var u = getTPUnits();
 
   var targetPrice = parseFloat(document.getElementById('reverseTP').value);
   var desiredRR = parseFloat(document.getElementById('desiredRR').value);
@@ -163,7 +188,7 @@ function calcReverseSL() {
     return;
   }
 
-  if (isNaN(entryPrice) || entryPrice <= 0) {
+  if (!u) {
     document.getElementById('reverseSL').value = '请先填写入场价';
     return;
   }
@@ -174,11 +199,11 @@ function calcReverseSL() {
   }
 
   // 方向校验：目标价必须与方向一致（做多需高于入场价，做空需低于入场价）
-  if (direction === 'long' && targetPrice <= entryPrice) {
+  if (u.direction === 'long' && targetPrice <= u.ep) {
     document.getElementById('reverseSL').value = '做多目标价需 > 入场价';
     return;
   }
-  if (direction === 'short' && targetPrice >= entryPrice) {
+  if (u.direction === 'short' && targetPrice >= u.ep) {
     document.getElementById('reverseSL').value = '做空目标价需 < 入场价';
     return;
   }
@@ -187,27 +212,26 @@ function calcReverseSL() {
   // calcReverseSL 的目的是"给定目标价和期望RR，反推止损价"
   // 不应受 calc.stopDistance（ATR 或分批结果）影响，否则失去反推意义
   // 含费净 RR 口径，与 calcReverseTP / 盈亏比卡片同源
-  var u = getTPUnits();
-  var stopLoss = u ? solveSLForRR(u, desiredRR, targetPrice, direction) : null;
-
+  //
+  // v5.6.9 P0 修复：不再有「无 _lastCalc 时退化为纯毛利反推」的兜底——纯毛利解出的止损
+  // 比含费口径【宽】（实测 ep 50000 / tp 52000 / 费率 0.08%：含费 sd 900 vs 纯毛利 1000），
+  // 回填后实际 RR 低于请求值。getTPUnits() 现在会退回表单取值，填好入场价即可走含费口径；
+  // 拿不到就明说，不写一个会被 RR 门判不达标的答案。
+  // 分子 num = tpDist/ep − 目标腿费 必须先为正，否则目标价连手续费都覆盖不了。
+  var _numU = Math.abs(targetPrice - u.ep) / u.ep - u.feeRateFrac * (1 + targetPrice / u.ep);
+  if (!(_numU > 0)) {
+    document.getElementById('reverseSL').value = '目标价太近，覆盖手续费后无正收益，无法反推';
+    return;
+  }
+  var stopLoss = solveSLForRR(u, desiredRR, targetPrice, u.direction);
   if (stopLoss == null) {
-    if (u && !isNaN(targetPrice)) {
-      var num = Math.abs(targetPrice - entryPrice) / u.ep
-        - u.feeRateFrac * (1 + targetPrice / u.ep);
-      if (num <= 0) {
-        document.getElementById('reverseSL').value = '目标价太近，覆盖手续费后无正收益，无法反推';
-        return;
-      }
-    }
-    // 无 _lastCalc 时退化为纯毛利反推
-    var targetDistance = Math.abs(targetPrice - entryPrice);
-    var stopDistance = targetDistance / desiredRR;
-    stopLoss = direction === 'long' ? entryPrice - stopDistance : entryPrice + stopDistance;
+    document.getElementById('reverseSL').value = '无法按含费口径反推止损价（目标价过近或期望盈亏比过大）';
+    return;
   }
 
   // 止损价方向正确性校验
-  if ((direction === 'long' && stopLoss >= entryPrice) ||
-      (direction === 'short' && stopLoss <= entryPrice)) {
+  if ((u.direction === 'long' && stopLoss >= u.ep) ||
+      (u.direction === 'short' && stopLoss <= u.ep)) {
     document.getElementById('reverseSL').value = '期望盈亏比过大，止损价越过入场价，请降低 RR';
     return;
   }
@@ -258,18 +282,23 @@ function autoCalcMultiTP() {
   // 含费净 RR 口径：每档 TP 按「净 RR 恰等于该档 tpRR」求解，使下面 updateMultiTP
   // 显示的 RR 与 settings.tpRRs 一致。原实现按 stopDistance × rr 直接乘，是纯毛利
   // 距离，显示出来的净 RR 恒低于设定的 tpRR（实测 tpRR=1.5 => 显示 1.32R）。
+  //
+  // v5.6.9 P0 修复：不再有「无 _lastCalc 时退化为纯毛利反推」的兜底。getTPUnits() 现在
+  // 会退回表单取值，正常填好入场/止损即可求解；拿不到口径就提示，而不是往三个输入框
+  // 里写一批纯毛利距离（显示出来的净 RR 低于 tpRR，且与 checkTPWeighted 门互相矛盾）。
   var u = getTPUnits();
+  if (!u) {
+    showToast('无法计算止盈位：缺少入场价或止损距离，请先点击「计算仓位」', 'warn');
+    return;
+  }
 
   for (var i = 0; i < 3; i++) {
     var rr = tpRRs[i];
-    var tpPrice = u ? solveTPForRR(u, rr, direction) : null;
+    var tpPrice = solveTPForRR(u, rr, u.direction);
 
     if (tpPrice == null) {
-      // 无 _lastCalc 时退化为纯毛利反推
-      var profitDistance = stopDistance * rr;
-      tpPrice = direction === 'long'
-        ? entryPrice + profitDistance
-        : entryPrice - profitDistance;
+      showToast('第 ' + (i + 1) + ' 档止盈无法求解（净 RR ' + rr + '，费率过高或参数异常）', 'warn');
+      continue;
     }
 
     var el = document.getElementById(tpIds[i]);
@@ -426,28 +455,29 @@ function updateMultiTP() {
       rrEl.textContent = '逆势';
       rrEl.className = 'tp-rr negative';
     } else {
-      // BUG-10 修复：使用 stopDistance 反推原始仓位（而非可能被截断的 positionSize）
-      // grossLoss = stopDistance * positionSize / effectiveEntryPrice = riskAmount
-      // 所以 positionSize = riskAmount * effectiveEntryPrice / stopDistance
       // 守卫（2026-09-23）：无 _lastCalc 但表单止损距离有效时 calc 为 null，原实现
       // 直接读 calc.effectiveEntryPrice 会抛 TypeError。
       var ep = (calc && calc.effectiveEntryPrice) || entryPrice;
-      var riskAmt = (calc && calc.riskAmount) || 0;
-      var origPosSize = (stopDistance > 0 && ep > 0)
-        ? (riskAmt * ep / stopDistance)
-        : ((calc && calc.positionSize) || 0);
       // 费用口径 FIX（2026-09-23 RR 审计）：
       // 1) 按腿的成交价由费率直接算，不再从 calc.fee 反推——calc.fee 在无目标价时是
       //    止损腿费、有目标价时是目标腿费，导致未改任何止盈输入、仅改 #targetPrice
       //    就让本行 RR 位移（实测 1.32R → 1.31R）。
       // 2) 各腿各付各的往返费：毛利侧扣止盈腿费，亏损侧付止损腿费，
       //    与 computeWeightedTPRR 的 unitLoss 定义一致。
-      var f = (calc && calc.feeRate != null) ? parseFloat(calc.feeRate) / 100 : 0;
+      //
+      // v5.6.9 P1 修复：费率改从 getTPUnits() 取，与反推解同源；calc 缺失时退回表单
+      // #feeRate / 订单类型默认值。原先 calc 为 null 时 f 恒为 0，各行显示纯毛利 RR，
+      // 而 autoCalcMultiTP 回填的是含费解——同一批数字两个结论。RR 是比值，与仓位规模
+      // 无关，故直接用单位净值相除（原实现乘 origPosSize，calc 为 null 时 origPosSize=0，
+      // 0/0 会显示成 0.00R）。
+      var _uu = getTPUnits();
+      var f = _uu ? _uu.feeRateFrac
+        : ((calc && calc.feeRate != null) ? parseFloat(calc.feeRate) / 100 : 0);
       if (isNaN(f) || f < 0) f = 0;
       var feeTP = f * (1 + (tp > 0 ? tp / ep : 1));
       var feeStop = f * (1 + (stopLoss > 0 ? stopLoss / ep : 1));
-      var netProfit = (profitDistance / ep - feeTP) * origPosSize;
-      var netLoss = (stopDistance / ep + feeStop) * origPosSize;
+      var netProfit = profitDistance / ep - feeTP;
+      var netLoss = stopDistance / ep + feeStop;
       var rr = netLoss > 0 ? netProfit / netLoss : 0;
       rrEl.textContent = rr.toFixed(2) + 'R';
       rrEl.className = 'tp-rr' + (rr < 1.5 ? ' negative' : '');
@@ -507,29 +537,24 @@ function initMultiTPListeners() {
 
 // ==================== 检查清单 ====================
 
-// 12 项并不是 12 个平权的闸门。上游 renderHardBlock 会 setCalc(null)，此后所有检查项都返回
-// null（skipped）——所以任何「由硬阻断覆盖」的条件在清单里永远不可能显示 ✗，它们只是状态行。
-// STATUS_CHECK_ITEMS 是唯一的归类来源：结论行分母、保存闸门、结果采集都用它做排除，
-// 三者必须共用同一张名单，否则会出现结论行说「2 项未通过」、toast 说「1 项未通过」的计数差 1。
-// HTML 里对应 data-status 属性，新增检查项时必须两边同步。
-// 注意：STATUS 项里的 checkTPWeighted 是提示性指标（默认 50/30/20+1.5/2/3R 配置下加权期望
-// 天然低于单档 2R 门槛，每笔新计划都会红一条），因此它永不阻断保存。
-var STATUS_CHECK_ITEMS = ['checkLossStreak', 'checkDailyLoss', 'checkSymbolConc', 'checkTPWeighted'];
-
-/**
- * 是否参与结论行计数与保存闸门。STATUS 项要么被上游硬阻断覆盖（永不 fail），
- * 要么是提示性指标，任何情况下都不该进闸门。
- */
-function isStatusCheckItem(itemId) {
-  for (var i = 0; i < STATUS_CHECK_ITEMS.length; i++) {
-    if (STATUS_CHECK_ITEMS[i] === itemId) return true;
-  }
-  return false;
-}
+// v5.6.9：清单已收敛为 5 个真闸门项，不再有「状态行」。
+// 原先 12 项里有 7 项由上游 renderHardBlock 覆盖——硬阻断时 setCalc(null)，所有项都返回
+// null（skipped），因此这些条件在清单里永不显示 ✗，每笔计划只贡献一个恒绿的 ✓（纯确认噪音）：
+//   checkStopDist       ← custom-stop-limit-exceeded 硬阻断
+//   checkLiqSafe        ← liquidation-stop-conflict / leverage-below-mmr / liquidation-unsolvable
+//   checkLossStreak     ← loss-streak-limit
+//   checkDailyLoss      ← daily-loss-limit
+//   checkPortfolioHeat  ← portfolio-heat-limit（阈值同为 getHeatHardMax()）
+//   checkSymbolConc     ← symbol-concentration-limit（截断分支回读的是截断后仓位，恒 pass）
+//   checkTPWeighted     ← 提示性指标（默认 50/30/20 + 1.5/2/3R 下加权期望天然低于单档门槛）
+// 这些规则本身没有消失，仍由 _calculateImpl 的硬阻断序列执行，并在 #checklistAtrNote 汇总。
+// 因此原先用于把「状态项」排除出结论行分母与保存闸门的 STATUS_CHECK_ITEMS / isStatusCheckItem
+// 已一并删除——留着就是恒为 false 的死分支（与 v5.6.7 删 evaluateOpeningBlockers 同理）。
+// 注意：新增检查项若属于「硬阻断覆盖」那一类，不要加回清单，保持闸门语义纯净。
 
 /**
  * 硬阻断时刷清单：所有项置 skipped，结论行显示阻断原因。
- * 上一轮的 PASS/FAIL 必须清掉——否则卡片上残留着另一笔合法计划的「10 项 PASS」，
+ * 上一轮的 PASS/FAIL 必须清掉——否则卡片上残留着另一笔合法计划的结果，
  * 而真正的阻断原因（如止损越过强平价）在清单里完全没痕迹。
  */
 function renderChecklistBlocked(blocker) {
@@ -567,7 +592,8 @@ function renderChecklistBlocked(blocker) {
 
 /**
  * 更新开仓前检查清单（读取 _lastCalc）
- * 增强版：新增日亏损上限检查、心态评分检查，支持可配止损阈值，检查结果持久化至日志
+ * v5.6.9：只保留 5 个真闸门项（计划风险截断 / 盈亏比 / 保证金 / 入场理由 / 心态评分），
+ * 检查结果持久化至日志供保存闸门使用。
  */
 function updateChecklist() {
   // P0-10: 检查清单逐条入场动效
@@ -587,18 +613,6 @@ function updateChecklist() {
     return;
   }
 
-  // 结论行先同步再判 dirty：参数已变更但用户没重算时，上一轮结果仍是卡片上
-  // 实际显示的事实，早退不该让结论行停在更旧的状态
-  var calc = getCalc();
-  updateChecklistSummary(calc);
-  if (getCalcDirty()) { showToast('计算器参数已变更，请先点击「计算仓位」更新结果', 'warn'); return; }
-  // P0-10: 检查清单逐条入场动效
-  var cc = document.getElementById('checklistCard');
-  if (cc) {
-    cc.classList.remove('checklist-anim');
-    void cc.offsetWidth;
-    cc.classList.add('checklist-anim');
-  }
   // 结论行先同步再判 dirty：参数已变更但用户没重算时，上一轮结果仍是卡片上
   // 实际显示的事实，早退不该让结论行停在更旧的状态
   var calc = getCalc();
@@ -681,30 +695,7 @@ function updateChecklist() {
     return { result: true, message: '实际风险 ' + actPct.toFixed(2) + '% = 计划 ' + plPct.toFixed(2) + '%' };
   });
 
-  // 2. 止损距离合理（边界统一走 getStopLimitPct()，原先此处把 ETH 2%/其余 3% 又抄了一份）
-  updateCheckItemWithResult('checkStopDist', function() {
-    if (!calc || calc.stopPct == null) return null;
-    var maxPct = getStopLimitPct(calc.symbol);
-    var passed = calc.stopPct <= maxPct;
-    return { result: passed, message: '止损 ' + calc.stopPct.toFixed(2) + '% ≤ 上限 ' + maxPct + '%' };
-  });
-
-  // 3. 止损在强平价格之上（安全）
-  updateCheckItemWithResult('checkLiqSafe', function() {
-    if (!calc) return null;
-    if (calc.leverage <= 0) return { result: true, message: '现货模式无需强平检查' };
-    if (calc.cappedByLiquidation == null) return null;
-    return { result: !calc.cappedByLiquidation, message: calc.cappedByLiquidation ? '止损穿越强平价！' : '止损在强平之上，安全' };
-  });
-
-  // 4. 连亏未触发熔断（＜3 笔）
-  updateCheckItemWithResult('checkLossStreak', function() {
-    if (!calc || calc.lossStreak == null) return null;
-    var passed = calc.lossStreak < 3;
-    return { result: passed, message: '连亏 ' + calc.lossStreak + ' 笔 (<3) ' + (passed ? '正常' : '已熔断') };
-  });
-
-  // 5. 盈亏比达标（使用设置中的最低盈亏比，优先读取，否则默认 2）
+  // 2. 盈亏比达标（使用设置中的最低盈亏比，优先读取，否则默认 2）
   updateCheckItemWithResult('checkRR', function() {
     if (!calc || calc.targetRR == null) return null;
     var minRR = (settings.minRRRatio != null && settings.minRRRatio > 0) ? settings.minRRRatio : 2;
@@ -712,7 +703,7 @@ function updateChecklist() {
     return { result: passed, message: '盈亏比 ' + calc.targetRR.toFixed(2) + ':1 ' + (passed ? '达标' : '偏低') };
   });
 
-  // 6. 保证金占本金 ≤ 80%
+  // 3. 保证金占本金 ≤ 80%
   // 80% 是 calculator.js 的**截断**边界而非阻断，截断后 actualMargin 恰好等于 80% 本金，
   // 所以 `ratio <= 0.8` 恒为真。改为报告「是否被截断过」，标志需从 calc 读取
   // （原先 cappedByMargin 没有暴露到 calc 对象，清单想报也拿不到）。
@@ -729,7 +720,7 @@ function updateChecklist() {
     return { result: true, message: '保证金占比 ' + (ratio * 100).toFixed(1) + '% ≤ 80%' };
   });
 
-  // 7. 入场理由已明确选择
+  // 4. 入场理由已明确选择
   updateCheckItemWithResult('checkReason', function() {
     if (!calc) return null;
     if (calc.reason == null) return null;
@@ -737,26 +728,12 @@ function updateChecklist() {
     return { result: passed, message: '入场理由已明确' };
   });
 
-  // 【增强8】当日未超日亏损上限（新增检查项，基于设置中的 dailyLossLimit）
-  updateCheckItemWithResult('checkDailyLoss', function() {
-    // 没有设置或本金无法确定时跳过检查
-    if (!settings.dailyLossLimit || !calc) {
-      return null; // 不适用
-    }
-    // 优先使用 getAccountCapital()，兜底到 calc.capital
-    var capital = (typeof getAccountCapital === 'function') ? getAccountCapital() : null;
-    if (!capital || capital <= 0) capital = (calc.capital != null && calc.capital > 0) ? calc.capital : null;
-    if (!capital) return null;
-    // 统一使用硬阻断同一函数 checkDailyLossLimit()；函数不存在时跳过（返回 null），不再使用旧口径兜底
-    var dailyCheck = (typeof checkDailyLossLimit === 'function') ? checkDailyLossLimit() : null;
-    if (!dailyCheck) return null;
-    return { result: !dailyCheck.blocked, message: '今日净盈亏 ' + dailyCheck.todayPnl.toFixed(2) + ' / 上限 ' + dailyCheck.limit.toFixed(2) + ' (' + dailyCheck.pctOfLimit.toFixed(0) + '%)' };
-  });
-
-  // 【增强9】心态评分检查
+  // 5. 心态评分检查
   // 判定统一走 getMindsetAdjustment()，与仓位管线共用同一套语义：1 分禁止开仓、
   // 2 分降仓 50%、其余低于最低分降仓 80%。原先用 `score >= minScore` 判，把计算层已经
   // 接受并降仓的 2 分又拦了一遍——卡片显示「建议降仓至 50%」，点保存却被拒。
+  // adj.blocked 分支实际到不了（1 分已被 mindset-limit 硬阻断），但保留为 fail 方向：
+  // 万一上游条件变化，宁可在保存前拦住也不能放行。
   updateCheckItemWithResult('checkMindset', function() {
     if (!calc) return null;
     var adj = getMindsetAdjustment(calc.mindsetScore);
@@ -774,59 +751,6 @@ function updateChecklist() {
     return { result: true, message: '心态评分 ' + calc.mindsetScore + '/5（平静/良好）' };
   });
 
-  // Skills 融合：组合热量检查
-  // 必须含本仓，且与 calculator.js 的硬阻断同口径（同一 calcPortfolioHeat 调用方式）。
-  // 阈值比较用 < 而不是 <=：硬阻断是 `heat >= maxHeat`，清单用 <= 会在恰好等于上限时
-  // 一边放行一边阻断。
-  updateCheckItemWithResult('checkPortfolioHeat', function() {
-    if (!calc || !calc.capital || calc.capital <= 0) return null;
-    var heatCheck = calcPortfolioHeat(calc.riskAmount, calc.symbol, calc.capital);
-    if (!heatCheck || heatCheck.heat === undefined) return null;
-    var maxHeat = getHeatHardMax();  // 与闸门同一口径
-    var passed = heatCheck.heat < maxHeat;
-    return {
-      result: passed,
-      message: '组合总风险 ' + heatCheck.heat.toFixed(1)
-        + '%（已持仓 ' + (heatCheck.existingHeat != null ? heatCheck.existingHeat.toFixed(1) : '0.0')
-        + '% + 本仓 ' + (heatCheck.planPct != null ? heatCheck.planPct.toFixed(1) : '0.0')
-        + '%）/ 上限 ' + maxHeat + '%'
-    };
-  });
-
-  // Skills 融合：品种集中度检查
-  updateCheckItemWithResult('checkSymbolConc', function() {
-    if (!calc || !calc.capital || calc.capital <= 0 || !calc.positionSize) return null;
-    var openPositions = getOpenPositions();
-    var concCheck = checkSymbolConcentration(calc.symbol, calc.positionSize, calc.leverage, calc.capital, openPositions);
-    if (!concCheck || concCheck.maxPct === undefined) return null;
-    var passed = concCheck.pass;
-    return { result: passed, message: concCheck.warning || (passed ? '品种集中度正常' : '集中度超限') };
-  });
-
-  // 【增强12】多止盈加权期望（提示性指标，永不阻断保存）
-  // 默认 50/30/20 + 1.5/2/3R 配置下加权期望天然低于单档 2R 门槛，所以它显示为「注意」
-  // 而不是红色 FAIL——原先两边都用 FAIL 表达，但 gate 又把它排除在外，
-  // 结论行「2 项未通过」和 toast「1 项未通过」各说一个数。
-  updateCheckItemWithResult('checkTPWeighted', function() {
-    if (!calc) return null;
-    if (typeof computeWeightedTPRR !== 'function') return null;
-    var w = computeWeightedTPRR();
-    if (!w || w.rr == null) return null; // 未规划多止盈 → 跳过
-    var minRR = (settings.minRRRatio != null && settings.minRRRatio > 0) ? settings.minRRRatio : 2;
-    if (w.overLimit) {
-      return { result: false, level: 'warn', message: 'TP 减仓比例合计 ' + w.sumRatio + '% 超过 100%，请调整' };
-    }
-    var passed = rrMeetsMin(w.rr, minRR);   // 容差对齐卡片 toFixed(2) 显示
-    if (passed) {
-      return { result: true, message: '多止盈加权期望 ' + w.rr.toFixed(2) + 'R ≥ ' + minRR + '（剩余仓位 ' + w.remain + '% 按止损计）' };
-    }
-    return {
-      result: false,
-      level: 'warn',
-      message: '多止盈加权期望 ' + w.rr.toFixed(2) + 'R < ' + minRR + '（剩余仓位 ' + w.remain + '% 按止损计）'
-    };
-  });
-
   // ========== 结论行 + 折叠态 ==========
   // 原先 _lastCalc 为 null 时是往卡片末尾 append 一段提示文字（checklistHint），
   // 现在提示并入卡片顶部的结论行，状态切换不再增删 DOM 节点。
@@ -834,10 +758,10 @@ function updateChecklist() {
 
   // ========== 将检查结果持久化到 _lastCalc，供日志保存时使用 ==========
   if (calc) {
-    // 收集所有检查的结果（用于写入日志复盘）。状态项也一并记录供复盘对照，
-    // 但保存闸门只认非 status 项（见 isStatusCheckItem）。
+    // 收集检查项的结果（写入日志，复盘时可对照当时的闸门状态）。
+    // 清单里只剩真闸门项，所以这里不再有「状态项」需要排除。
     var checklistResults = {};
-    var checkItems = ['checkRiskPct','checkStopDist','checkLiqSafe','checkLossStreak','checkRR','checkMargin','checkReason','checkDailyLoss','checkMindset','checkPortfolioHeat','checkSymbolConc','checkTPWeighted'];
+    var checkItems = ['checkRiskPct', 'checkRR', 'checkMargin', 'checkReason', 'checkMindset'];
     for (var i = 0; i < checkItems.length; i++) {
       var id = checkItems[i];
       var el = document.getElementById(id);
@@ -859,8 +783,8 @@ function updateChecklist() {
 
 /**
  * 汇总检查清单成一行结论，并同步折叠开关文案。
- * 闸门要回答的是「能不能保存」，不是 12 行等权状态：STATUS 项（被上游硬阻断覆盖，
- * 永不 fail）不进分母，结论行与保存闸门因此给出同一个数。
+ * 闸门要回答的是「能不能保存」：清单里每一项都是真闸门项（硬阻断覆盖的项已移除），
+ * 所以这里直接数所有行，与保存闸门的计数天然一致，不再需要排除名单。
  * @param {Object|null} calc  传入 null 表示尚未计算过（显示引导文案）
  */
 function updateChecklistSummary(calc) {
@@ -875,7 +799,6 @@ function updateChecklistSummary(calc) {
   var total = 0;
   for (var i = 0; i < items.length; i++) {
     var it = items[i];
-    if (isStatusCheckItem(it.id)) continue;
     var ic = it.querySelector('.check-icon');
     if (!ic) continue;
     total++;
@@ -980,9 +903,8 @@ function refreshChecklistLabels() {
   // checkRiskPct 不再是「≤ 账户风险比例」的重复表述（那是 :353 硬阻断的事），
   // 现在比较的是计划风险 vs 实际风险，与设置项无关，故不在此处动态改写标签。
   var rules = [
-    { id: 'checkRR',           get: function() { return settings.minRRRatio; },        format: function(v) { return '盈亏比 ≥ ' + v + ':1'; } },
-    { id: 'checkMindset',      get: function() { return settings.mindsetMinScore; },   format: function(v) { return '心态评分达标（≥ ' + v + '，2 分减半仓）'; } },
-    { id: 'checkPortfolioHeat', get: getHeatHardMax,                                  format: function(v) { return '组合总风险含本仓（≤ ' + v + '%）'; } }
+    { id: 'checkRR',      get: function() { return settings.minRRRatio; },   format: function(v) { return '盈亏比 ≥ ' + v + ':1'; } },
+    { id: 'checkMindset', get: function() { return settings.mindsetMinScore; }, format: function(v) { return '心态评分达标（≥ ' + v + '，2 分减半仓）'; } }
   ];
   for (var i = 0; i < rules.length; i++) {
     var r = rules[i];
@@ -1001,18 +923,31 @@ function refreshChecklistLabels() {
       if (def) span.textContent = def;
     }
   }
-  // 同步 ATR 开关状态到检查清单底部说明
+  // 同步 ATR 开关状态与硬阻断维度到检查清单底部说明
+  // v5.6.9：清单只留 5 个真闸门项后，被移除的硬阻断维度不能一起消失——
+  // 这里统一列出，用户仍能看到完整规则集，只是它们不再占清单行。
   var atrNote = document.getElementById('checklistAtrNote');
   if (!atrNote) return; // checklistCard 已被移除时跳过，避免静默失败
   try {
     var formAtrEnabled = document.getElementById('formAtrStopEnabled');
     var atrOn = (formAtrEnabled && formAtrEnabled.checked) || settings.atrStopEnabled === true;
     var atrMult = parseFloat(document.getElementById('atrMultiplier').value) || settings.atrDefaultMultiplier || 2;
+    var hardBlockTxt = '';
+    try {
+      if (typeof getStopLimitPct === 'function') {
+        var _symEl = document.getElementById('symbol');
+        var _sym = (_symEl && _symEl.value) ? _symEl.value : 'BTC';
+        hardBlockTxt = '止损距离 ≤ ' + getStopLimitPct(_sym) + '% · ';
+      }
+    } catch(e) { /* 品种读不到时略过这一节，不影响其余规则展示 */ }
     atrNote.textContent = '当前生效规则：' +
       (atrOn ? 'ATR 动态止损 ×' + atrMult.toFixed(1) + ' · ' : '') +
       '盈亏比 ≥ ' + (settings.minRRRatio || 2) + ':1 · ' +
       '心态评分 ≥ ' + (settings.mindsetMinScore || 3) + '（2 分自动降仓 50%）' +
-      ' · 组合总风险含本仓 ≤ ' + getHeatHardMax() + '%';
+      ' · 单笔风险 ≤ ' + (settings.riskPercent || 10) + '% · ' +
+      hardBlockTxt +
+      '组合总风险含本仓 ≤ ' + getHeatHardMax() + '% · 单品种占比 ≤ ' + (settings.singleSymbolMaxPct || 30) + '%；' +
+      '以上任一项超限一律禁止开仓（不占清单行，触发时不产生计算结果）。';
     atrNote.style.display = 'block';
   } catch(e) { console.error('[planner] refreshChecklistLabels atrNote error:', e); }
 }

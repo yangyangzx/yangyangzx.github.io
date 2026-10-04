@@ -43,21 +43,21 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <script src="js/chart-guard.js?v=5.6.8"></script>
-  <link rel="stylesheet" href="css/variables.css?v=5.6.8">
-  <link rel="stylesheet" href="css/base.css?v=5.6.8">
-  <link rel="stylesheet" href="css/calculator.css?v=5.6.8">
-  <link rel="stylesheet" href="css/table.css?v=5.6.8">
-  <link rel="stylesheet" href="css/modals.css?v=5.6.8">
-  <link rel="stylesheet" href="css/responsive.css?v=5.6.8">
-  <link rel="stylesheet" href="css/layout.css?v=5.6.8">
-  <link rel="stylesheet" href="css/dashboard.css?v=5.6.8">
-  <link rel="stylesheet" href="css/planner.css?v=5.6.8">
-  <link rel="stylesheet" href="css/discipline-led.css?v=5.6.8">
-  <link rel="stylesheet" href="css/risk.css?v=5.6.8">
-  <link rel="stylesheet" href="css/analytics.css?v=5.6.8">
-  <link rel="stylesheet" href="css/review.css?v=5.6.8">
-  <link rel="stylesheet" href="css/settings.css?v=5.6.8">
+  <script src="js/chart-guard.js?v=5.6.9"></script>
+  <link rel="stylesheet" href="css/variables.css?v=5.6.9">
+  <link rel="stylesheet" href="css/base.css?v=5.6.9">
+  <link rel="stylesheet" href="css/calculator.css?v=5.6.9">
+  <link rel="stylesheet" href="css/table.css?v=5.6.9">
+  <link rel="stylesheet" href="css/modals.css?v=5.6.9">
+  <link rel="stylesheet" href="css/responsive.css?v=5.6.9">
+  <link rel="stylesheet" href="css/layout.css?v=5.6.9">
+  <link rel="stylesheet" href="css/dashboard.css?v=5.6.9">
+  <link rel="stylesheet" href="css/planner.css?v=5.6.9">
+  <link rel="stylesheet" href="css/discipline-led.css?v=5.6.9">
+  <link rel="stylesheet" href="css/risk.css?v=5.6.9">
+  <link rel="stylesheet" href="css/analytics.css?v=5.6.9">
+  <link rel="stylesheet" href="css/review.css?v=5.6.9">
+  <link rel="stylesheet" href="css/settings.css?v=5.6.9">
 </head>
 <body>
 <nav id="mainNav" role="navigation" aria-label="主导航">
@@ -589,32 +589,23 @@
           <div class="card-header">
             <span>开仓前检查</span>
             <button type="button" class="checklist-toggle" id="checklistToggle"
-                    aria-expanded="false" aria-controls="checklistList">展开明细（12 项）</button>
+                    aria-expanded="false" aria-controls="checklistList">展开明细（5 项）</button>
           </div>
           <div class="checklist-summary" id="checklistSummary" data-state="idle">
             <span class="cs-icon" id="csIcon">—</span>
             <span class="cs-text" id="csText">点击「计算仓位」后生成</span>
             <span class="cs-count" id="csCount"></span>
           </div>
+          <!-- v5.6.9：清单只留「计算能独立完成判定」的项。上游硬阻断覆盖的条件
+               （止损距离超限、止损越过强平价、连亏熔断、日亏损熔断、组合热量超限、
+               品种集中度超限）在触发时根本不会产生计算结果，清单行只会每笔恒绿，
+               属于纯确认噪音——已移除，规则本身仍由 _calculateImpl 硬阻断执行。
+               多止盈加权期望是提示性指标（默认配置下天然低于单档门槛），同样移除。
+               生效规则汇总在下方 #checklistAtrNote。 -->
           <div class="checklist" id="checklistList">
             <div class="check-item" id="checkRiskPct">
               <span class="check-icon skipped">—</span>
               <span class="check-label" data-default="计划风险未被截断">计划风险未被截断</span>
-              <span class="check-note"></span>
-            </div>
-            <div class="check-item" id="checkStopDist">
-              <span class="check-icon skipped">—</span>
-              <span class="check-label">止损距离合理（品种可配）</span>
-              <span class="check-note"></span>
-            </div>
-            <div class="check-item" id="checkLiqSafe">
-              <span class="check-icon skipped">—</span>
-              <span class="check-label">止损在强平价格之上（安全）</span>
-              <span class="check-note"></span>
-            </div>
-            <div class="check-item" id="checkLossStreak" data-status="1">
-              <span class="check-icon skipped">—</span>
-              <span class="check-label">连亏未触发熔断（＜3 笔）</span>
               <span class="check-note"></span>
             </div>
             <div class="check-item" id="checkRR">
@@ -632,34 +623,10 @@
               <span class="check-label">入场理由已明确</span>
               <span class="check-note"></span>
             </div>
-            <!-- 【增强8】当日未超日亏损上限 -->
-            <div class="check-item" id="checkDailyLoss" data-status="1">
-              <span class="check-icon skipped">—</span>
-              <span class="check-label">当日亏损未超上限</span>
-              <span class="check-note"></span>
-            </div>
             <!-- 【增强9】心态评分检查 -->
             <div class="check-item" id="checkMindset">
               <span class="check-icon skipped">—</span>
               <span class="check-label" data-default="心态评分达标（≥ 3，2 分减半仓）">心态评分达标（≥ 3，2 分减半仓）</span>
-              <span class="check-note"></span>
-            </div>
-            <!-- Skills 融合：组合热量检查 -->
-            <div class="check-item" id="checkPortfolioHeat">
-              <span class="check-icon skipped">—</span>
-              <span class="check-label" data-default="6">组合总风险含本仓（≤ 6%）</span>
-              <span class="check-note"></span>
-            </div>
-            <!-- Skills 融合：品种集中度检查 -->
-            <div class="check-item" id="checkSymbolConc" data-status="1">
-              <span class="check-icon skipped">—</span>
-              <span class="check-label">品种集中度未超限</span>
-              <span class="check-note"></span>
-            </div>
-            <!-- 【增强12】多止盈加权期望盈亏比（提示性指标，不参与保存门槛） -->
-            <div class="check-item" id="checkTPWeighted" data-status="1">
-              <span class="check-icon skipped">—</span>
-              <span class="check-label">多止盈加权期望盈亏比（提示）</span>
               <span class="check-note"></span>
             </div>
           </div>
@@ -1333,31 +1300,31 @@
 
 </main>
 
-  <script src="js/constants.js?v=5.6.8"></script>
-  <script src="js/utils.js?v=5.6.8"></script>
-  <script src="js/toast.js?v=5.6.8"></script>
-  <script src="js/slippage.js?v=5.6.8"></script>
-  <script src="js/storage.js?v=5.6.8"></script>
-  <script src="js/skills-integration.js?v=5.6.8"></script>
-  <script src="js/calculation-ui.js?v=5.6.8"></script>
-  <script src="js/calculator.js?v=5.6.8"></script>
-  <script src="js/logs.js?v=5.6.8"></script>
-  <script src="js/rendering.js?v=5.6.8"></script>
-  <script src="js/stats.js?v=5.6.8"></script>
-  <script src="js/modals.js?v=5.6.8"></script>
-  <script src="js/navigation.js?v=5.6.8"></script>
-  <script src="js/dashboard.js?v=5.6.8"></script>
-  <script src="js/planner.js?v=5.6.8"></script>
-  <script src="js/discipline-led.js?v=5.6.8"></script>
-  <script src="js/settings.js?v=5.6.8"></script>
-  <script src="js/risk.js?v=5.6.8"></script>
-  <script src="js/chart-factory.js?v=5.6.8"></script>
-  <script src="js/analytics.js?v=5.6.8"></script>
-  <script src="js/review.js?v=5.6.8"></script>
-  <script src="js/io.js?v=5.6.8"></script>
-  <script src="js/dom-cache.js?v=5.6.8"></script>
-  <script src="js/app.js?v=5.6.8"></script>
-<script src="js/version.js?v=5.6.8"></script>
+  <script src="js/constants.js?v=5.6.9"></script>
+  <script src="js/utils.js?v=5.6.9"></script>
+  <script src="js/toast.js?v=5.6.9"></script>
+  <script src="js/slippage.js?v=5.6.9"></script>
+  <script src="js/storage.js?v=5.6.9"></script>
+  <script src="js/skills-integration.js?v=5.6.9"></script>
+  <script src="js/calculation-ui.js?v=5.6.9"></script>
+  <script src="js/calculator.js?v=5.6.9"></script>
+  <script src="js/logs.js?v=5.6.9"></script>
+  <script src="js/rendering.js?v=5.6.9"></script>
+  <script src="js/stats.js?v=5.6.9"></script>
+  <script src="js/modals.js?v=5.6.9"></script>
+  <script src="js/navigation.js?v=5.6.9"></script>
+  <script src="js/dashboard.js?v=5.6.9"></script>
+  <script src="js/planner.js?v=5.6.9"></script>
+  <script src="js/discipline-led.js?v=5.6.9"></script>
+  <script src="js/settings.js?v=5.6.9"></script>
+  <script src="js/risk.js?v=5.6.9"></script>
+  <script src="js/chart-factory.js?v=5.6.9"></script>
+  <script src="js/analytics.js?v=5.6.9"></script>
+  <script src="js/review.js?v=5.6.9"></script>
+  <script src="js/io.js?v=5.6.9"></script>
+  <script src="js/dom-cache.js?v=5.6.9"></script>
+  <script src="js/app.js?v=5.6.9"></script>
+<script src="js/version.js?v=5.6.9"></script>
 
   <!-- 样式见 css/modals.css #toastContainer（原为内联，z-index 硬编码 400 低于弹窗遮罩 500 导致提示被盖住） -->
   <div id="toastContainer" role="status" aria-live="polite"></div>
