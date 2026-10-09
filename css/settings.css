@@ -130,8 +130,14 @@
 
 /* ——— 储蓄按钮 ——— */
 .settings-save-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
   margin-top: 16px;
+  padding: 12px 0 4px;
   text-align: right;
+  /* 滚动时常驻可见，顶部渐隐背景避免遮住上方内容文字 */
+  background: linear-gradient(to top, var(--color-bg) 72%, transparent);
 }
 
 .settings-save-bar .btn {

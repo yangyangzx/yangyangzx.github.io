@@ -209,6 +209,60 @@ function renderSettings() {
 }
 
 /**
+ * 脏检查快照：进入设置页并完成渲染后调用，记录"已保存态"基准。
+ * 含全部风控/交易/Skills 字段（含开关、自定义止损 JSON 文本框）+ 品种草稿。
+ * 下次离开设置页时与当前 DOM/草稿重新比对，差异即"未保存修改"。
+ * 避免直接 diff 已保存对象——表单渲染由 renderSettings 负责，二者口径天然一致，
+ * 快照/比对都走同一套元素读取即可。
+ */
+var _SETTINGS_FIELD_IDS = [
+  'setAccountBalance', 'setRiskPercent', 'setProvisionalStopPct', 'setDailyLossLimit',
+  'setMaxDrawdownAlert', 'setDefaultLeverage', 'setMmr', 'setBackupCount',
+  'setMindsetMinScore', 'setAtrStopEnabled', 'setAtrMultiplier', 'setPortfolioHeatMax',
+  'setRiskHeatMax', 'setMinRRRatio', 'setSingleSymbolMaxPct', 'setDailyTradeMax',
+  'setCustomStopLimit', 'setAutoBackup'
+];
+var _settingsSnapshot = null;
+
+function _captureSettingsSnapshot() {
+  var parts = [];
+  for (var i = 0; i < _SETTINGS_FIELD_IDS.length; i++) {
+    var el = document.getElementById(_SETTINGS_FIELD_IDS[i]);
+    if (!el) continue;
+    parts.push(_SETTINGS_FIELD_IDS[i] + '=' + (el.type === 'checkbox' ? el.checked : el.value));
+  }
+  // 品种草稿快照（键名大写、按当前 DOM 草稿，与保存落库口径一致）
+  var draft = _symbolDraftInit();
+  parts.push('SYMBOLS=' + JSON.stringify(draft));
+  _settingsSnapshot = parts.join('|');
+}
+
+/**
+ * 设置页是否有未保存修改（与保存后基准比对）。
+ * @returns {boolean}
+ */
+function settingsIsDirty() {
+  if (_settingsSnapshot == null) return false;
+  var parts = [];
+  for (var i = 0; i < _SETTINGS_FIELD_IDS.length; i++) {
+    var el = document.getElementById(_SETTINGS_FIELD_IDS[i]);
+    if (!el) continue;
+    parts.push(_SETTINGS_FIELD_IDS[i] + '=' + (el.type === 'checkbox' ? el.checked : el.value));
+  }
+  var draft = _symbolDraftInit();
+  parts.push('SYMBOLS=' + JSON.stringify(draft));
+  return _settingsSnapshot !== parts.join('|');
+}
+window.settingsIsDirty = settingsIsDirty;
+
+/**
+ * 保存成功后刷新基准，避免刚保存又被判为脏。
+ */
+function _refreshSettingsSnapshot() {
+  _captureSettingsSnapshot();
+}
+
+/**
  * 保存设置
  */
 function saveSettings() {
@@ -346,6 +400,7 @@ function saveSettings() {
   }
 
   showToast('设置已保存', 'success');
+  _refreshSettingsSnapshot();
 }
 
 // ==================== 数据管理 ====================
@@ -1070,5 +1125,25 @@ function saveCustomSymbols() {
   _symbolDraft = null;  // 清草稿，下次进设置页重新从落库值初始化
   syncSymbolDatalist();
   showToast('品种列表已保存', 'success');
+  _refreshSettingsSnapshot();
   return true;
 }
+
+/**
+ * 多标签页同步：另一标签页改了设置（写入 trade_settings_v1），本标签页的
+ * SETTINGS_CACHE 立即失效，避免继续拿旧值参与风控计算。若当前正停留在设置页，
+ * 同时刷新表单与品种草稿，让用户看到最新值。
+ */
+(function bindStorageSettingsSync() {
+  if (typeof window.addEventListener !== 'function') return;
+  window.addEventListener('storage', function(e) {
+    if (!e || e.key !== SETTINGS_KEY) return;
+    _clearSettingsCache();
+    var onSettings = (typeof getCurrentView === 'function') ? getCurrentView() === 'settings' : false;
+    if (onSettings) {
+      renderSettings();
+      if (typeof renderCustomSymbols === 'function') renderCustomSymbols();
+      if (typeof _captureSettingsSnapshot === 'function') _captureSettingsSnapshot();
+    }
+  });
+})();

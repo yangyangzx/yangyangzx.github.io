@@ -20,7 +20,44 @@ var _currentView = 'planner';
  *                                   false: popstate 回退触发（不写历史，避免 popstate→pushState 递归）
  *                                   未传: 首次加载/深链（replaceState，不产生多余历史条目）
  */
+var _bypassSettingsDirtyOnce = false;
+
+/**
+ * 切换视图（对外入口）。
+ * 离设置页时若检测到未保存修改，复用 confirmDialog 弹确认；
+ * 取消则中止本次切换（不写历史、不丢失修改），确认则继续。
+ */
 function switchView(viewName, writeHistory) {
+  if (!_viewMap[viewName]) {
+    console.warn('[Navigation] 无效视图名:', viewName);
+    return;
+  }
+  // 离开设置页：未保存修改需确认（避免静默丢失）。
+  // confirmDialog 为异步；确认回调里用 _bypassSettingsDirtyOnce 跳过二次脏检查，
+  // 否则重入 switchView 会再次触发确认形成死循环。
+  if (!_bypassSettingsDirtyOnce &&
+      _currentView === 'settings' && viewName !== 'settings' &&
+      typeof window.settingsIsDirty === 'function' && window.settingsIsDirty()) {
+    if (typeof window.confirmDialog === 'function') {
+      window.confirmDialog({
+        title: '放弃未保存的设置？',
+        message: '系统设置页有未保存的修改，切换页面后这些修改会丢失。',
+        confirmText: '放弃并切换',
+        danger: true
+      }).then(function(ok) {
+        if (ok) {
+          _bypassSettingsDirtyOnce = true;
+          _doSwitchView(viewName, writeHistory);
+          _bypassSettingsDirtyOnce = false;
+        }
+      });
+      return;
+    }
+  }
+  _doSwitchView(viewName, writeHistory);
+}
+
+function _doSwitchView(viewName, writeHistory) {
   // 合法性检查
   if (!_viewMap[viewName]) {
     console.warn('[Navigation] 无效视图名:', viewName);
@@ -218,6 +255,10 @@ function onViewActivated(viewName) {
     }
     if (typeof syncSymbolDatalist === 'function') {
       syncSymbolDatalist();
+    }
+    // 渲染完成后建立脏检查基准（在草稿/表单已对齐落库值之后）
+    if (typeof _captureSettingsSnapshot === 'function') {
+      _captureSettingsSnapshot();
     }
   }
 }
