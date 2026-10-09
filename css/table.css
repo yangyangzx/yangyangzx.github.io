@@ -13,9 +13,12 @@
 }
 
 
-/* 纵向滚动容器 — 为 th / batch-bar 的 position:sticky 提供滚动参照物 */
+/* 纵向滚动容器 — 为 th / batch-bar 的 position:sticky 提供滚动参照物
+   P1-6 修复（v5.6.14）：min-height 兜底——分屏/折叠屏超矮视口下
+   calc(100dvh - 230px) 可能 ≤ 0，表格会塌成不可见。 */
 #tableWrap {
   max-height: calc(100dvh - 230px);
+  min-height: 120px;
   overflow-y: auto;
 }
 
@@ -1452,4 +1455,28 @@ tbody tr:hover > td {
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+}
+/* ═══════════════════════════════════════════════
+   移动端卡片化模式：sticky 标签条（P1-4 修复，v5.6.14）
+   卡片化后 thead 被 responsive.css 隐藏（display:none），th 的 position:sticky
+   成死规则，长日志卡片化后失去滚动锚点。#tableWrap 内::before 生成一条
+   sticky 标签条作为替代锚点，仅 48rem 以下生效。
+   ═══════════════════════════════════════════════ */
+@media (max-width: 48rem) {
+  #tableWrap {
+    position: relative;
+  }
+  #tableWrap::before {
+    content: '交易日志';
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    display: block;
+    padding: 8px 12px;
+    font-size: var(--font-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-secondary);
+    background: var(--glass-bg-heavy);
+    border-bottom: 1px solid var(--glass-border);
+  }
 }

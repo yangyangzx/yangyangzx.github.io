@@ -230,11 +230,37 @@
     font-size: 12px;
   }
 
+  /* ——— 表格卡片化：隐藏无标签列 + 空 ::before 兜底（P1-3 / P1-5 修复，v5.6.14）———
+     卡片模式下 thead 被隐藏，td::before 用 data-label 显示字段名；
+     批量选择列（.batch-col）已在上文隐藏；展开按钮列（第 2 列，rendering.js 生成的
+     .btn-expand 所在 td）没有 data-label，此前会渲染一条空 ::before 占位行，
+     现显式隐藏。无 data-label 的 td 一律不出 ::before。 */
+  .log-row td:nth-child(2) {
+    display: none;
+  }
+  td:not([data-label])::before {
+    content: none;
+  }
+
   /* ——— 备份工具紧凑 ——— */
   .backup-tools {
     flex-direction: column;
     align-items: flex-start;
     gap: var(--space-sm);
+  }
+
+  /* ——— Toast 移动端定位（P0-1 修复，v5.6.14）———
+     桌面端 #toastContainer 固定 top/right（modals.css），375px 下与
+     max-width:620px 的弹窗内容区几何重叠，被遮罩 backdrop-filter 糊住。
+     移动端改为居中横条、上沿让开汉堡按钮（44px + 12px top + 安全区）。 */
+  #toastContainer {
+    top: calc(56px + env(safe-area-inset-top));
+    right: 12px;
+    left: 12px;
+    align-items: center;
+  }
+  .toast {
+    max-width: 100%;
   }
 }
 

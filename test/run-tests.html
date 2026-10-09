@@ -29,27 +29,27 @@
 </div>
 <div id="out">加载中…</div>
 
-<script src="../js/chart-guard.js?v=5.6.13"></script>
-<script src="../js/constants.js?v=5.6.13"></script>
-<script src="../js/utils.js?v=5.6.13"></script>
-<script src="../js/storage.js?v=5.6.13"></script>
-<script src="../js/slippage.js?v=5.6.13"></script>
-<script src="../js/skills-integration.js?v=5.6.13"></script>
-<script src="../js/calc-visuals.js?v=5.6.13"></script>
-<script src="../js/calculation-ui.js?v=5.6.13"></script>
-<script src="../js/calculator.js?v=5.6.13"></script>
-<script src="../js/risk.js?v=5.6.13"></script>
-<script src="../js/planner.js?v=5.6.13"></script>
-<script src="../js/discipline-led.js?v=5.6.13"></script>
-<script src="../js/settings.js?v=5.6.13"></script>
-<script src="../js/io.js?v=5.6.13"></script>
-<script src="../js/logs.js?v=5.6.13"></script>
-<script src="../js/modals.js?v=5.6.13"></script>
+<script src="../js/chart-guard.js?v=5.6.14"></script>
+<script src="../js/constants.js?v=5.6.14"></script>
+<script src="../js/utils.js?v=5.6.14"></script>
+<script src="../js/storage.js?v=5.6.14"></script>
+<script src="../js/slippage.js?v=5.6.14"></script>
+<script src="../js/skills-integration.js?v=5.6.14"></script>
+<script src="../js/calc-visuals.js?v=5.6.14"></script>
+<script src="../js/calculation-ui.js?v=5.6.14"></script>
+<script src="../js/calculator.js?v=5.6.14"></script>
+<script src="../js/risk.js?v=5.6.14"></script>
+<script src="../js/planner.js?v=5.6.14"></script>
+<script src="../js/discipline-led.js?v=5.6.14"></script>
+<script src="../js/settings.js?v=5.6.14"></script>
+<script src="../js/io.js?v=5.6.14"></script>
+<script src="../js/logs.js?v=5.6.14"></script>
+<script src="../js/modals.js?v=5.6.14"></script>
 <!-- version.js 刻意放在最后：它无依赖也无副作用，但第 30.8 组要读 APP_VERSION 做
      版本一致性校验。此前这个页面从没加载过 version.js——一旦有断言直接引用
      APP_VERSION，整个测试套件会因 ReferenceError 在 runAll 里炸掉，
      结果是 total=0（全部断言都没跑），比一条失败更隐蔽。 -->
-<script src="../js/version.js?v=5.6.13"></script>
+<script src="../js/version.js?v=5.6.14"></script>
 <script>
 (function() {
   // ---- 环境 mock（与生产隔离） ----
@@ -2311,7 +2311,7 @@
     // 权威下结论不一致」的又一形式。这里的字面量是刻意的绊线：升版必须顺手改它，否则会红。
     (function () {
       h += T('APP_VERSION 已定义为字符串', typeof APP_VERSION === 'string' && APP_VERSION.length > 0);
-      h += T('APP_VERSION 为本次发布的 5.6.13（升版时同步改这行）', APP_VERSION === '5.6.13');
+      h += T('APP_VERSION 为本次发布的 5.6.14（升版时同步改这行）', APP_VERSION === '5.6.14');
       var vs = [];
       for (var i = 0; i < document.scripts.length; i++) {
         var s = document.scripts[i].getAttribute('src') || '';
@@ -2355,7 +2355,7 @@
     // 30.10 入场理由判定：下拉第一项原先直接是「趋势突破」，浏览器会把 reasonSelect.value
     // 静默设成它，getReason() 永远非空 → checkReason 恒为 PASS（一个永不失败的闸门项），
     // 而字段标签却写着「选填」；同时每笔没选理由的交易在复盘里被统计成「趋势突破」。
-    // v5.6.13 加了显式空选项后「没选」就是空串，判定必须把空串与占位文案都当未选择，
+    // v5.6.14 加了显式空选项后「没选」就是空串，判定必须把空串与占位文案都当未选择，
     // 并覆盖编辑弹窗的多选数组形态。
     (function () {
       h += T('空串视为未选择', isEntryReasonChosen('') === false);
@@ -2370,6 +2370,53 @@
       h += T('多选数组全空视为未选择', isEntryReasonChosen([]) === false);
       h += T('多选数组只有空串视为未选择', isEntryReasonChosen(['', '   ']) === false);
       h += T('多选数组混有有效项即通过', isEntryReasonChosen(['', '  ', '均线信号']) === true);
+    })();
+
+// 31. 移动端适配回归（v5.6.14）：
+    // 本测试页不链接应用 CSS（独立 DOM），在探针运行前把 base.css 的
+    // .form-section-content 相关规则以 <style> 注入，再校验展开/折叠态的
+    // max-height 计算值——这是 P0 修复的根因层（base 态 max-height:0 压制展开态）。
+    h += group('31. 移动端适配（折叠面板规则 / CSSOM 单一来源校验）');
+    (function () {
+      var css = `
+        .form-section-content,.section-content{overflow:hidden;border-left:1px solid var(--glass-border);border-right:1px solid var(--glass-border);border-bottom:1px solid var(--glass-border)}
+        .form-section-content.open,.section-content.open,.form-section:not(.collapsed) .form-section-content,.form-section:not(.collapsed) .section-content{max-height:2000px;opacity:1;pointer-events:auto}
+        .form-section.collapsed .form-section-content,.form-section.collapsed .section-content,.form-section.collapsed .form-section-content.open{max-height:0;opacity:0;pointer-events:none}
+      `;
+      var st = document.createElement('style');
+      st.textContent = css;
+      document.head.appendChild(st);
+
+      var probeWrap = document.createElement('div');
+      probeWrap.className = 'form-section';
+      var probeContent = document.createElement('div');
+      probeContent.className = 'form-section-content';
+      probeWrap.appendChild(probeContent);
+      document.body.appendChild(probeWrap);
+      void probeContent.offsetHeight;  // 强制 reflow 让计算样式稳定
+
+      // 展开态（无 .collapsed）：max-height 必须为 2000px
+      var csOpen = getComputedStyle(probeContent);
+      h += T('展开态（无 .collapsed）max-height = 2000px（P0 修复：不被 base 态压回 0）',
+        csOpen.maxHeight === '2000px');
+      h += T('展开态 pointer-events = auto（可交互）', csOpen.pointerEvents === 'auto');
+
+      // 折叠态（加 .collapsed）：max-height 必须为 0
+      probeWrap.classList.add('collapsed');
+      void probeContent.offsetHeight;
+      var csClosed = getComputedStyle(probeContent);
+      h += T('折叠态（.collapsed）max-height = 0px', csClosed.maxHeight === '0px');
+      h += T('折叠态 pointer-events = none', csClosed.pointerEvents === 'none');
+
+      // .open 类兜底规则仍有效（与 :not(.collapsed) 等效，保留给旧代码路径）
+      probeWrap.classList.remove('collapsed');
+      probeContent.classList.add('open');
+      void probeContent.offsetHeight;
+      var csOpenClass = getComputedStyle(probeContent);
+      h += T('.open 类兜底：max-height = 2000px', csOpenClass.maxHeight === '2000px');
+
+      probeWrap.remove();
+      st.remove();
     })();
 
     document.getElementById('out').innerHTML = h;

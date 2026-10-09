@@ -851,6 +851,20 @@ body {
   }
 }
 
+/* 超小屏（≤ 25rem / 400px，含 iPhone SE 1/8）：汉堡按钮缩到 40px，
+   内容区顶部预留同步收窄——动态岛机型 env(safe-area-inset-top) 可达 ~54px，
+   72px 预留 + 大按钮会把首屏内容推到过低的起点（P2-7 修复，v5.6.14） */
+@media (max-width: 25rem) {
+  .nav-mobile-toggle {
+    width: 40px;
+    height: 40px;
+  }
+  #mainContent {
+    padding: 10px;
+    padding-top: calc(56px + env(safe-area-inset-top));
+  }
+}
+
 /* 大屏优化 */
 @media (min-width: 100rem) {
   #mainContent {

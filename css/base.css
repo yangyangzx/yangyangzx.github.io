@@ -899,40 +899,59 @@ button:disabled {
   color: var(--color-primary-strong);
 }
 
+/* 折叠面板内容容器 — 单一事实来源是 .collapsed 类（JS toggleFormSection 只 toggle 它）。
+   P0 修复（v5.6.14）：
+   1. 此前 .form-section-content 自身无条件声明 max-height:0 / opacity:0，而该规则的
+      加载顺序在 .form-section:not(.collapsed) .form-section-content 之后，把展开态的
+      2000px 又压回 0 —— 四个 section（订单类型/市场环境/策略与信号/入场原因）点击
+      展开后内容高度恒为 0、不可见、不可交互。
+   2. 第二层根因（实测 V22 确认）：transition: max-height 在「折叠态 max-height:0
+      持续了较长挂载期」之后，切换目标态的过渡起点计算在部分视口/滚动状态下被
+      冻结为 0，展开后 clientH 持续 0。改为 base 态完全不声明 max-height/opacity
+      过渡，只在 .collapsed 折叠规则上挂 max-height transition（仅影响展开→折叠
+      的收起动画）；展开态（:not(.collapsed)）无过渡直接落到 2000px，保证内容
+      立即可见。
+   3. .open 类保留为兼容兜底（discipline-led.js 等模块可能加它）。 */
 .form-section-content,
 .section-content {
-  max-height: 0;
   overflow: hidden;
-  transition: max-height var(--dur-slow) var(--ease-out),
-              opacity var(--dur-short) var(--ease-out);
-  opacity: 0;
   border-left: 1px solid var(--glass-border);
   border-right: 1px solid var(--glass-border);
   border-bottom: 1px solid var(--glass-border);
   border-radius: 0 0 var(--radius-md) var(--radius-md);
 }
 
+/* 展开态 — 单一事实来源是 :not(.collapsed)（JS 实际行为路径）。
+   不声明 transition：折叠→展开瞬间完成（内容立即可见），只靠 .collapsed 规则
+   上的 max-height transition 实现展开→折叠的收起动画。
+   特异性 (.form-section:not(.collapsed) .form-section-content) = 3 class，
+   与下方 .collapsed 规则（同 3 class）互斥——同一元素只会命中其中一条，无竞争。 */
 .form-section-content.open,
-.section-content.open {
+.section-content.open,
+.form-section:not(.collapsed) .form-section-content,
+.form-section:not(.collapsed) .section-content {
   max-height: 2000px;
   opacity: 1;
+  pointer-events: auto;
 }
 
 .form-section-content-inner {
   padding: var(--space-lg) 16px;
 }
 
-/* grid-template-rows 方案已由上方 .form-section-content 规则处理，此处保留兼容性兜底 */
-.form-section.collapsed .form-section-content {
+/* 折叠态 — .collapsed 是 toggleFormSection 唯一管理的类；
+   收起动画（max-height 2000px→0）的 transition 挂在这里，展开态规则加载顺序在前、
+   不声明 transition，故展开时不受影响。
+   注意 transition 属性必须写在 .collapsed 自身（不能写 base）：写在 base 的
+   transition 在展开态生效时起点值会被冻结（实测 V18：clientH 持续 0）。 */
+.form-section.collapsed .form-section-content,
+.form-section.collapsed .section-content,
+.form-section.collapsed .form-section-content.open {
   max-height: 0;
   opacity: 0;
   pointer-events: none;
-}
-
-.form-section:not(.collapsed) .form-section-content {
-  max-height: 2000px;
-  opacity: 1;
-  pointer-events: auto;
+  transition: max-height var(--dur-slow) var(--ease-out),
+              opacity var(--dur-short) var(--ease-out);
 }
 
 /* ═══════════════════════════════════════
@@ -988,8 +1007,23 @@ button:disabled {
   body {
     -webkit-touch-callout: none;
   }
-  /* 消除双击缩放 */
-  * {
+  /* 消除双击缩放 — 限定选择器而非全局 *：
+     全局 * 会误伤 .chart-wrap canvas 未来可能加的双指缩放交互
+     （P2-9 修复，v5.6.14） */
+  button, a, input, select, textarea, .btn, .nav-item {
     touch-action: manipulation;
+  }
+}
+
+/* iOS Safari 聚焦自动缩放防护：聚焦 <16px 字号的输入框时浏览器会自动
+   zoom-in，页面剧烈跳动。移动端（≤48rem）统一提到 16px。
+   桌面端不动，保持 15px 设计密度。 */
+@media (max-width: 48rem) {
+  .form-group input,
+  .form-group select,
+  .filter-row select,
+  .custom-symbols-table input,
+  .setting-row input[type="number"] {
+    font-size: 16px;
   }
 }
