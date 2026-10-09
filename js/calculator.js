@@ -1694,11 +1694,16 @@ function computeWeightedEntry() {
   _cachedWeightedEntryHash = hash;
   return result;
 }
+// 分批建仓的批次上下限——唯一来源。
+// 修复（2026-10-09）：原先 MIN_SPLITS/MAX_SPLITS 在 addSplitBatch / removeSplitBatch /
+// updateSplitButtons 三个函数里各写一份（2 / 5），且每份只用其中一个、另一个是未使用
+// 变量（ESLint no-unused-vars 报错）。三处常量一旦改动不同步，就会出现「添加按钮还亮着
+// 但 addSplitBatch 拒绝」或「删除按钮还亮着但 removeSplitBatch 拒绝」的自相矛盾：
+// UI 放行、逻辑拦下，用户只看到一句 toast。提到模块级，三处共用同一对数字。
+const MIN_SPLITS = 2;   // 最少 2 批
+const MAX_SPLITS = 5;   // 最多 5 批
+
 function addSplitBatch() {
-  // 修复Bug: 统一分批建仓限制逻辑，支持2-5批的合理分批策略
-  const MIN_SPLITS = 2;  // 最少2批
-  const MAX_SPLITS = 5;  // 最多5批
-  
   if (_splitBatches.length >= MAX_SPLITS) {
     showToast(`分批建仓最多支持${MAX_SPLITS}批，当前已有${_splitBatches.length}批`, "warn");
     return false; // 明确返回false表示添加失败
@@ -1713,9 +1718,6 @@ function addSplitBatch() {
 }
 function removeSplitBatch(idx) {
   // 修复Bug: 统一分批建仓限制逻辑，最少保留2批
-  const MIN_SPLITS = 2;  // 最少2批
-  const MAX_SPLITS = 5;  // 最多5批
-  
   if (_splitBatches.length <= MIN_SPLITS) {
     showToast(`分批建仓最少需要${MIN_SPLITS}批，当前已有${_splitBatches.length}批`, "warn");
     return false; // 明确返回false表示删除失败
@@ -1743,8 +1745,6 @@ function updateSplitButtons() {
   
   if (!addBtn) return;
   
-  const MIN_SPLITS = 2;
-  const MAX_SPLITS = 5;
   const currentCount = _splitBatches ? _splitBatches.length : 2;
   
   // 控制添加按钮显示
@@ -1819,6 +1819,9 @@ function resetForm() {
       ot.options[1].text = '限价单 (Buy Limit)';
       ot.options[2].text = '止损单 (Buy Stop)';
     }
+    // 同步自定义外壳：option 文案重建后重绘外壳 listbox（原生 option.text
+    // 直改不会触发 SelectUI 的 option 变化，需要显式同步）
+    if (window.SelectUI) SelectUI.syncFromNative('orderType');
   })();
   document.getElementById('stopLoss').value = '';
   document.getElementById('targetPrice').value = '';
@@ -1857,6 +1860,12 @@ if (_splitMode) toggleSplitMode();
   // 入场理由，把 v5.6.12 加的空选项绕过，checkReason 又变回恒 PASS。
   document.getElementById('reasonSelect').value = '';
   document.getElementById('reasonCustom').value = '';
+  // 重置了上面 9 个 select 的 .value / .innerHTML，同步自定义外壳（v5.6.14 SelectUI）
+  if (window.SelectUI) {
+    ['riskInput','leverage','direction','orderType','stopType','slippageMode',
+     'strategyPattern','reasonSelect','tradeSession','marketCondition']
+      .forEach(function(id) { SelectUI.syncFromNative(id); });
+  }
   document.getElementById('positionDisplay').textContent = '—';
   document.getElementById('detailDisplay') && (document.getElementById('detailDisplay').textContent = '输入参数后点击「计算仓位」');
   document.getElementById('warningDisplay').innerHTML = '';

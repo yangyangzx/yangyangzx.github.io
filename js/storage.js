@@ -453,10 +453,15 @@ function populatePatternSelect() {
   const framework = document.getElementById('strategyFramework').value;
   const patternSelect = document.getElementById('strategyPattern');
   if (!framework) {
-    patternSelect.innerHTML = '<option value="">— 不选择 —</option>';
+    const html = '<option value="">— 不选择 —</option>';
+    // 走 SelectUI.setOptions 让自定义外壳同步刷新（未初始化时回退直接写 innerHTML）
+    if (window.SelectUI) SelectUI.setOptions('strategyPattern', html);
+    else patternSelect.innerHTML = html;
     return;
   }
-  patternSelect.innerHTML = buildPatternOptions('', true);
+  const html = buildPatternOptions('', true);
+  if (window.SelectUI) SelectUI.setOptions('strategyPattern', html);
+  else patternSelect.innerHTML = html;
 }
 
 // ==================== 订单类型过滤 ====================
@@ -487,6 +492,9 @@ function filterOrderTypes(direction) {
   } else {
     sel.value = cur;
   }
+  // 同步自定义外壳：option.disabled/hidden 变化后重绘 listbox，
+  // 让被禁用的订单类型在 sl-select 里也灰显不可选。
+  if (window.SelectUI) SelectUI.syncFromNative('orderType');
 }
 
 // ==================== 策略/信号 取值 ====================

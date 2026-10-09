@@ -2,22 +2,29 @@
 /* OKLCH 色板 · 命名时长 · 命名 z-index · 统一 spacing */
 
 /* prefers-color-scheme 兜底：JS 加载前使用深色主题默认值 */
+/* ═══════════════════════════════════════
+   浅色纸色：#F9F6ED = oklch(97.30% 0.0123 91.5)
+   用户指定的背景基准色。注意它的色相是 91.5（暖），而整个浅色中性梯队原先
+   统一挂在 250（冷蓝灰）上——这是「不和谐」的根源：暖纸底 + 冷文字/冷边框。
+   本文件所有浅色 surface / text / border / glass / chart 中性 token 已同步转到
+   同一色相 91.5，且每条的 OKLCH L 值保持原样，故 WCAG 对比度不变（正文 ≥7:1）。
+   ═══════════════════════════════════════ */
 @media (prefers-color-scheme: light) {
   :root:not([data-theme]) {
-    --color-bg:             oklch(97% 0.008 250);
-    --color-surface:        oklch(100% 0.003 250 / 0.92);
-    --color-surface-raised: oklch(100% 0.003 250);
-    --color-border:         oklch(70% 0.012 250 / 0.20);
-    --color-text:           oklch(22% 0.012 250);
-    --color-text-secondary: oklch(38% 0.014 250);
-    --color-text-muted:     oklch(43% 0.013 250);
-    --color-text-subtle:    oklch(48% 0.012 250);
-    --color-text-placeholder: oklch(58% 0.012 250);
-    --color-text-inverse:   oklch(97% 0.008 250);
+    --color-bg:             oklch(97.30% 0.0123 91.5);
+    --color-surface:        oklch(99.40% 0.0035 91.5 / 0.92);
+    --color-surface-raised: oklch(99.80% 0.0018 91.5);
+    --color-border:         oklch(72% 0.020 91.5 / 0.22);
+    --color-text:           oklch(22% 0.014 91.5);
+    --color-text-secondary: oklch(38% 0.016 91.5);
+    --color-text-muted:     oklch(43% 0.015 91.5);
+    --color-text-subtle:    oklch(48% 0.014 91.5);
+    --color-text-placeholder: oklch(58% 0.014 91.5);
+    --color-text-inverse:   oklch(97.30% 0.0123 91.5);
     /* 玻璃层同步到浅色，否则无 JS 时出现「浅底 + 深色玻璃卡片」的半截主题 */
-    --glass-bg:             oklch(100% 0.003 250 / 0.88);
-    --glass-border:         oklch(70% 0.012 250 / 0.35);
-    --nav-bg:               oklch(98% 0.006 250 / 0.95);
+    --glass-bg:             oklch(99.30% 0.0040 91.5 / 0.88);
+    --glass-border:         oklch(72% 0.020 91.5 / 0.35);
+    --nav-bg:               oklch(97.90% 0.0095 91.5 / 0.95);
   }
 }
 
@@ -309,7 +316,7 @@ html {
 
   --color-dd-danger: oklch(52% 0.18 25);
   --color-dd-warn:   oklch(50% 0.16 80);
-  --color-dd-safe:   oklch(42% 0.015 250);
+  --color-dd-safe:   oklch(42% 0.017 91.5);
 
   --color-gold:           oklch(50% 0.16 78);
   --color-gold-dark:      oklch(40% 0.14 78);
@@ -318,41 +325,48 @@ html {
   --color-pnl-positive:   oklch(48% 0.14 158);
   --color-pnl-negative:   oklch(52% 0.18 25);
 
-  /* 浅色纸色：oklch(97% 0.008 250) — 非纯白 */
-  --color-bg:             oklch(97% 0.008 250);
-  --color-surface:        oklch(100% 0.003 250 / 0.92);
-  --color-surface-hover:  oklch(98% 0.006 250 / 0.92);
-  --color-surface-raised: oklch(100% 0.003 250);
+  /* 浅色纸面梯队
+     #F9F6ED = oklch(97.30% 0.0123 91.5)——用户指定背景（原先是 oklch(97% 0.008 250)）。
+     #F9F6ED 的色相是 91.5（暖），故下面整条中性梯队从 hue 250 迁到 hue 91.5，
+     避免「暖纸底 + 冷蓝灰卡片/文字/边框」的拼贴感。每条的 L 值不变 → 对比度不变：
+       正文 vs 背景      16.1:1（原 15.9）· secondary 9.3（原 9.2）
+       muted 7.5（原 7.4）· subtle 6.1（原 6.0）· placeholder 4.0（原 3.9，AA 大字档）
+     强调色（primary/success/danger/warning/gold）刻意保留原色相：它们承载盈亏语义，
+     改动会让「绿涨红跌」的识别建立成本重新付出，收益远小于风险。 */
+  --color-bg:             oklch(97.30% 0.0123 91.5);   /* #F9F6ED */
+  --color-surface:        oklch(99.40% 0.0035 91.5 / 0.92);
+  --color-surface-hover:  oklch(96.30% 0.0155 91.5 / 0.92);
+  --color-surface-raised: oklch(99.80% 0.0018 91.5);
 
-  --color-border:         oklch(70% 0.012 250 / 0.20);
-  --color-border-light:   oklch(70% 0.012 250 / 0.12);
+  --color-border:         oklch(72% 0.020 91.5 / 0.22);
+  --color-border-light:   oklch(72% 0.020 91.5 / 0.13);
 
-  --color-text:           oklch(22% 0.012 250);
-  --color-text-secondary: oklch(38% 0.014 250);
+  --color-text:           oklch(22% 0.014 91.5);
+  --color-text-secondary: oklch(38% 0.016 91.5);
   /* 原与 secondary 同为 38%，浅色下二级/三级文字合并成一级（深色下是 85% vs 72% 两级）。
-     取 43%，落在 secondary(38) 与 subtle(48) 之间，对 --color-bg 约 5.4:1，稳过 AA。 */
-  --color-text-muted:     oklch(43% 0.013 250);
-  /* 次级说明文字：浅色下介于 muted 与 placeholder 之间，实测 ≥4.9:1 */
-  --color-text-subtle:    oklch(48% 0.012 250);
-  --color-text-placeholder: oklch(58% 0.012 250);
-  --color-text-inverse:   oklch(97% 0.008 250);
+     取 43%，落在 secondary(38) 与 subtle(48) 之间，对 --color-bg 约 7.5:1，稳过 AA。 */
+  --color-text-muted:     oklch(43% 0.015 91.5);
+  /* 次级说明文字：浅色下介于 muted 与 placeholder 之间，实测 ≥6.0:1 */
+  --color-text-subtle:    oklch(48% 0.014 91.5);
+  --color-text-placeholder: oklch(58% 0.014 91.5);
+  --color-text-inverse:   oklch(97.30% 0.0123 91.5);
 
   /* 浅色毛玻璃 */
-  --glass-bg:           oklch(100% 0.003 250 / 0.88);
-  --glass-bg-light:     oklch(100% 0.003 250 / 0.75);
-  --glass-bg-heavy:     oklch(98% 0.006 250 / 0.96);
-  --glass-border:       oklch(70% 0.012 250 / 0.35);
-  --glass-border-light: oklch(70% 0.012 250 / 0.25);
+  --glass-bg:           oklch(99.30% 0.0040 91.5 / 0.88);
+  --glass-bg-light:     oklch(99.00% 0.0055 91.5 / 0.75);
+  --glass-bg-heavy:     oklch(98.40% 0.0075 91.5 / 0.96);
+  --glass-border:       oklch(72% 0.020 91.5 / 0.35);
+  --glass-border-light: oklch(72% 0.020 91.5 / 0.25);
   --glass-blur:         blur(12px);
   --glass-blur-light:   blur(8px);
   --glass-blur-heavy:   blur(20px);
   --glass-shadow:       0 4px 12px oklch(0% 0 0 / 0.08), 0 2px 4px oklch(0% 0 0 / 0.04);
 
-  --nav-bg:         oklch(98% 0.006 250 / 0.95);
-  --nav-border:     oklch(70% 0.012 250 / 0.20);
+  --nav-bg:         oklch(97.90% 0.0095 91.5 / 0.95);
+  --nav-border:     oklch(72% 0.020 91.5 / 0.22);
 
   /* 导航按钮（浅色主题）：白玻璃浮起层 + 暗色凹陷 */
-  --nav-btn-color:  oklch(100% 0.003 250 / 0.75);
+  --nav-btn-color:  oklch(99.60% 0.0028 91.5 / 0.75);
   --nav-recess:     oklch(0% 0 0 / 0.04);
   --nav-recess-highlight: oklch(100% 0 0 / 0.40);
 
@@ -361,29 +375,30 @@ html {
   --shadow-lg:  0 6px 20px oklch(0% 0 0 / 0.10), 0 2px 6px oklch(0% 0 0 / 0.06);
   --shadow-xl:  0 10px 30px oklch(0% 0 0 / 0.12), 0 4px 10px oklch(0% 0 0 / 0.08);
 
-  /* Chart.js 浅色 */
-  --chart-tooltip-bg:      oklch(100% 0.003 250 / 0.95);
-  --chart-tooltip-title:   oklch(22% 0.012 250);
-  --chart-tooltip-body:    oklch(38% 0.014 250);
-  --chart-grid-color:      oklch(70% 0.012 250 / 0.20);
-  --chart-tick-color:      oklch(38% 0.014 250);
-  --chart-axis-title:      oklch(38% 0.014 250);
-  --chart-legend-text:     oklch(38% 0.014 250);
-  --chart-canvas-text:     oklch(38% 0.014 250);
-  --chart-canvas-grid:     oklch(70% 0.012 250 / 0.25);
-  --chart-canvas-fill:     oklch(38% 0.014 250);
+  /* Chart.js 浅色 — 中性类（网格/刻度/坐标轴/图例/tooltip 底与字/bar 描边与中性柱）
+     同步到纸色相 91.5，与卡片上的文字同一梯队；语义类（up/down/zero/warn）保留原色相。 */
+  --chart-tooltip-bg:      oklch(99.40% 0.0030 91.5 / 0.95);
+  --chart-tooltip-title:   oklch(22% 0.014 91.5);
+  --chart-tooltip-body:    oklch(38% 0.016 91.5);
+  --chart-grid-color:      oklch(72% 0.020 91.5 / 0.20);
+  --chart-tick-color:      oklch(38% 0.016 91.5);
+  --chart-axis-title:      oklch(38% 0.016 91.5);
+  --chart-legend-text:     oklch(38% 0.016 91.5);
+  --chart-canvas-text:     oklch(38% 0.016 91.5);
+  --chart-canvas-grid:     oklch(72% 0.020 91.5 / 0.25);
+  --chart-canvas-fill:     oklch(38% 0.016 91.5);
   --chart-canvas-bg:       oklch(0% 0 0 / 0.03);
   --chart-canvas-zero:     oklch(52% 0.18 25 / 0.40);
   --chart-canvas-up:       oklch(48% 0.14 158 / 0.95);
   --chart-canvas-down:     oklch(52% 0.18 25 / 0.95);
-  --chart-canvas-ptcenter: oklch(100% 0.003 250);
-  --chart-bar-border:      oklch(22% 0.012 250 / 0.08);
+  --chart-canvas-ptcenter: oklch(99.80% 0.0018 91.5);
+  --chart-bar-border:      oklch(30% 0.016 91.5 / 0.10);
   --chart-positive-point:  oklch(48% 0.14 158);
   --chart-negative-point:  oklch(52% 0.18 25);
   --chart-bar-win:         oklch(48% 0.14 158 / 0.70);
   --chart-bar-warn:        oklch(50% 0.16 80 / 0.70);
   --chart-bar-loss:        oklch(52% 0.18 25 / 0.70);
-  --chart-bar-neutral:     oklch(50% 0.012 250 / 0.70);
+  --chart-bar-neutral:     oklch(50% 0.014 91.5 / 0.70);
   --chart-accent-warning:  oklch(50% 0.16 80);
   --chart-scatter-win:     oklch(48% 0.14 158 / 0.80);
   --chart-scatter-loss:    oklch(52% 0.18 25 / 0.80);
@@ -408,12 +423,14 @@ html {
   --btn-warning-hover-shadow: 0 2px 10px oklch(50% 0.16 80 / 0.26);
   --review-rank-1-border:  1px solid oklch(50% 0.16 78 / 0.25);
   --review-card-hover-shadow: 0 12px 40px oklch(0% 0 0 / 0.12);
-  --switch-bg:         oklch(70% 0.012 250 / 0.35);
+  --switch-bg:         oklch(72% 0.018 91.5 / 0.35);
 }
 
-/* Overlay bg for light theme */
+/* Overlay bg for light theme
+   原先是 hue 250 的冷黑遮罩，盖在暖纸色 #F9F6ED 上会透出一层冷调；
+   转到纸色相 91.5 并略提 L，压暗效果不变但色调连贯。 */
 [data-theme="light"] .modal-overlay {
-  --modal-overlay-bg: oklch(14% 0.010 250 / 0.40);
+  --modal-overlay-bg: oklch(18% 0.020 91.5 / 0.40);
 }
 
 /* ─── 浅色主题动画切换：@keyframes 内不支持 var()，改用同名 Light 变体 ─── */

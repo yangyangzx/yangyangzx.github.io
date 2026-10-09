@@ -324,8 +324,16 @@
    不该等 540ms 才出现，它正是需要立刻被看见的东西。 */
 #checklistCard.gates-collapsed .check-item:not(.fail-row):not(.warn-row) { display: none; }
 #checklistCard.gates-collapsed .check-item { transition-delay: 0ms; }
-/* 折叠到「零条失败/注意项」时列表容器不该留下空 gap 占位 */
-#checklistCard.gates-collapsed .checklist:has(.check-item:not(.fail-row):not(.warn-row)) { display: none; }
+/* 折叠到「零条失败/注意项」时列表容器不该留下空 gap 占位。
+   P0 修复（2026-10-09）：原选择器写成了
+       .checklist:has(.check-item:not(.fail-row):not(.warn-row))
+   语义正好相反——只要存在**任何**一条非失败项就命中。常态下 5 项里只要有 1 条
+   fail，其余 4 条非失败项必然使 :has() 成立，于是整个 .checklist 被
+   display:none，连同本该始终可见的失败项一起消失。用户看到结论行「1 项未通过」
+   （文案由 JS 按 DOM 图标统计，不受影响），下面的清单却是空的，必须点「展开明细」
+   才知道卡在哪一项——闸门等于失效。改为「不存在失败/注意项才收起容器」：
+   只剩通过/待补充项时它们已被上面的规则逐条隐藏，空容器才需要一起收掉。 */
+#checklistCard.gates-collapsed .checklist:not(:has(.fail-row, .warn-row)) { display: none; }
 
 /* 状态项：由 calculator.js 的硬阻断覆盖（连亏熔断/日亏损/品种集中度）或纯提示
    （多止盈加权期望），永不 fail，因此不进结论行分母。压低视觉权重，

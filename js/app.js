@@ -45,7 +45,10 @@ var ThemeManager = (function() {
     for (var mi = 0; mi < metaEls.length; mi++) {
       var m = metaEls[mi];
       m.removeAttribute('media');
-      m.setAttribute('content', theme === 'dark' ? '#0f1419' : '#ffffff');
+      // P2 修复（2026-10-09）：浅色值从 #ffffff 改为纸色 #F9F6ED，与
+      // variables.css 的 --color-bg 浅色值保持一致。原先纯白 + 米白页面，
+      // 在移动端地址栏与页面交界处会出现一条明显的色差分界线。
+      m.setAttribute('content', theme === 'dark' ? '#0f1419' : '#F9F6ED');
     }
     // P2-6 FIX：派发事件通知图表重绘——Chart.js 只在 new Chart() 时读取一次 CSS 变量，
     // 主题切换不会自动重绘（--chart-tooltip-bg 暗色白底/浅色黑底，切换后 tooltip 与
@@ -149,6 +152,45 @@ document.addEventListener('DOMContentLoaded', function() {
   filterOrderTypes(document.getElementById('direction').value);
 
   var directionEl = document.getElementById('direction'); if (directionEl) directionEl.addEventListener('change', function() { filterOrderTypes(this.value); });
+
+  // ==================== 全站 select 统一组件（v5.6.14）====================
+  // 16 个 select 全部换成自定义 listbox（SelectUI.enhance）。
+  // 原 <select> 保留在 DOM（.sl-native 视觉隐藏），20+ 处 JS 的 .value 读点
+  // 与 change 监听零改动——组件写值时同步 select.value 并 dispatch change。
+  // hue 按模块 --nav-hue：planner=248 / journal 过滤=205（青）。
+  if (window.SelectUI) {
+    // planner 录入型（6）：方向 / 订单类型 / 止损执行 / 滑点模型 / 策略形态 / 入场原因
+    SelectUI.enhance('direction',        { hue: 248, ariaLabel: '方向' });
+    SelectUI.enhance('orderType',        { hue: 248, ariaLabel: '入场订单类型' });
+    SelectUI.enhance('stopType',         { hue: 248, ariaLabel: '止损执行类型' });
+    SelectUI.enhance('slippageMode',     { hue: 248, ariaLabel: '滑点模型' });
+    SelectUI.enhance('strategyPattern',  { hue: 248, ariaLabel: '形态方向/具体形态' });
+    SelectUI.enhance('reasonSelect',     { hue: 248, ariaLabel: '入场原因（保存前必填）' });
+    // planner 交易参数（5）：风险比例 / 杠杆 / 交易时段 / 市场环境
+    SelectUI.enhance('riskInput',        { hue: 248, ariaLabel: '接受亏损比例' });
+    SelectUI.enhance('leverage',         { hue: 248, ariaLabel: '杠杆倍数' });
+    SelectUI.enhance('tradeSession',     { hue: 248, ariaLabel: '交易时段' });
+    SelectUI.enhance('marketCondition',  { hue: 248, ariaLabel: '市场环境' });
+    // journal 过滤型（6）：青 205，密度优先（氛围光 CSS 里自动降饱和）
+    SelectUI.enhance('fltDirection',     { hue: 205, ariaLabel: '方向筛选' });
+    SelectUI.enhance('fltSymbol',        { hue: 205, ariaLabel: '品种筛选' });
+    SelectUI.enhance('fltStrategy',      { hue: 205, ariaLabel: '策略筛选' });
+    SelectUI.enhance('fltStatus',        { hue: 205, ariaLabel: '状态筛选' });
+    SelectUI.enhance('fltPnl',           { hue: 205, ariaLabel: '盈亏筛选' });
+    SelectUI.enhance('fltTime',          { hue: 205, ariaLabel: '时间筛选' });
+  }
+
+  // 「时间框架+区域」(#strategyFramework) 与「交易品种」(#symbol) 是
+  // input + datalist。原生 datalist 弹层由浏览器合成器绘制、不参与页面层级，
+  // 在部分渲染环境（内嵌预览 WebView）没有不透明背景，选项文字直接透叠在
+  // 页面内容上不可用；且桌面端点击输入框原生也不会主动弹出。
+  // 改用 SelectUI.combobox 自绘建议列表（与 SelectUI 下拉同一套玻璃视觉、
+  // 参与 z-index、右缘防溢出），点击/聚焦即弹出、输入即过滤，自由输入保留。
+  // symbolDatalist 由设置页动态填充，combobox 每次展开时重读 datalist 选项。
+  if (window.SelectUI && typeof SelectUI.combobox === 'function') {
+    SelectUI.combobox('strategyFramework', { ariaLabel: '时间框架+区域' });
+    SelectUI.combobox('symbol',            { ariaLabel: '交易品种' });
+  }
 
   // P0-6 FIX: 页面可见性变化时刷新仪表盘，防止多标签页数据延迟导致 Heat / PnL / 强平预警显示过时
   var _dashRefreshTimer = null;
@@ -319,7 +361,12 @@ function clearFilters() {
 
 function syncFilterDOM() {
   var f = _activeFilters;
-  function setVal(id, val) { var el = document.getElementById(id); if (el) el.value = val; }
+  function setVal(id, val) {
+    var el = document.getElementById(id); if (el) el.value = val;
+    // 原生 .value 直写不会触发自定义外壳重绘（见 storage.js 的同款处理），
+    // SelectUI 已接管这些 filter 时补一次同步，否则外壳文案会停在旧值
+    if (el && window.SelectUI) SelectUI.syncFromNative(id);
+  }
   setVal('fltDirection', f.direction);
   setVal('fltSymbol',    f.symbol);
   setVal('fltStrategy',  f.strategy);

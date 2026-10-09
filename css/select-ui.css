@@ -1,0 +1,356 @@
+/* ==================== 全站 select 统一组件（v5.6.14）====================
+   自定义 listbox 替代原生 <select>：
+   - 原 <select> 视觉隐藏（sl-native）但保留在 DOM，20+ 处 JS 的
+     document.getElementById('xxx').value 读点与 change 监听零改动
+   - 外壳：玻璃底 + 右上柔和氛围光（从 --sl-hue 派生，默认 248 蓝）
+   - 未选择态：专属底色提示（.sl-select.is-empty）
+   - 展开的 listbox 也带玻璃质感（原生 select 弹层做不到）
+   - 键盘 / 读屏 / 触屏三条路完整（见 select-ui.js 注释）
+
+   加载顺序：select-ui.css 在 variables.css / base.css 之后加载
+   （index.html 里放在 modals.css 之后、responsive.css 之前）。 */
+
+/* 隐藏的原生 select：保留 DOM 供 JS 读 .value 与 change 事件，
+   但不可见、不可交互、不占布局 */
+select.sl-native {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+  /* 保持可聚焦（键盘用户 Tab 到它时组件内部接管焦点管理） */
+}
+
+/* ═══════════════════════════════════════════
+   外壳
+   ═══════════════════════════════════════════ */
+.sl-select {
+  --sl-hue: 248;
+  --sl-glow-alpha: 0.14;
+
+  position: relative;
+  display: block;
+}
+
+.sl-select-btn {
+  position: relative;
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  padding: 10px var(--space-md);
+  box-sizing: border-box;
+  background: var(--glass-bg-light);
+  border: 1.5px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  font-size: var(--font-base);
+  font-weight: var(--font-weight-normal);
+  cursor: pointer;
+  overflow: hidden;
+  text-align: left;
+  transition: border-color var(--dur-short) var(--ease-out),
+              background-color var(--dur-short) var(--ease-out),
+              box-shadow var(--dur-short) var(--ease-out);
+}
+
+.sl-select-btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-color: transparent;
+}
+
+/* ── 柔和氛围光：从模块 --nav-hue 派生的低饱和 radial-gradient，
+      不用 filter:blur（GPU 合成层，移动端 6 个同屏会掉帧）。
+      右上 1/4 圆区，透明度 0.14，与玻璃底色融合。
+      桌面端 hover 时微增亮度给反馈。 ── */
+.sl-select-glow {
+  position: absolute;
+  top: -24px;
+  right: -24px;
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 50%,
+    oklch(72% 0.09 var(--sl-hue) / var(--sl-glow-alpha)) 0%,
+    oklch(72% 0.09 var(--sl-hue) / calc(var(--sl-glow-alpha) * 0.55)) 45%,
+    transparent 72%);
+  pointer-events: none;
+  z-index: 0;
+  transition: opacity var(--dur-short) var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .sl-select-btn:hover .sl-select-glow {
+    opacity: 1.6;
+  }
+}
+
+/* 内容层在氛围光之上 */
+.sl-select-value,
+.sl-select-icon {
+  position: relative;
+  z-index: 1;
+}
+
+/* 当前值文案 */
+.sl-select-value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 未选择态：专属底色 + 占位文案弱化 */
+.sl-select.is-empty .sl-select-value {
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-normal);
+}
+.sl-select.is-empty .sl-select-btn {
+  background: var(--glass-bg-light);
+  border-style: dashed;
+}
+
+/* 展开态：边框点亮 + 氛围光增亮 + 图标旋转归位（Uiverse 同款交互反馈） */
+.sl-select.open .sl-select-btn {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px oklch(58% 0.18 248 / 0.12);
+}
+.sl-select.open .sl-select-glow {
+  opacity: 1.4;
+}
+
+/* 装饰图标：Uiverse 的 rotate-45 → hover/open 归位 */
+.sl-select-icon {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  color: var(--color-text-muted);
+  transform: rotate(-45deg);
+  transition: transform var(--dur-normal) var(--ease-out),
+              color var(--dur-short) var(--ease-out);
+}
+.sl-select.open .sl-select-icon,
+.sl-select-btn:hover .sl-select-icon {
+  transform: rotate(0deg);
+  color: var(--color-primary-strong);
+}
+
+/* ═══════════════════════════════════════════
+   下拉列表（role=listbox）
+   ═══════════════════════════════════════════ */
+.sl-select-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  /* 宽度不再锁死为触发器宽度（原 left:0;right:0）：入场原因/筛选器等窄触发器的
+     长选项（如「突破回踩确认」「全部策略」）会被 nowrap+ellipsis 截断得不可读。
+     现按选项内容自适应展开，min-width 保证不窄于触发器，max-width 防止极端
+     长文案撑爆视口；宽触发器场景下列表仍与其等宽（min-width:100% 兜底）。 */
+  left: 0;
+  right: auto;
+  min-width: 100%;
+  width: max-content;
+  max-width: min(420px, calc(100vw - 32px));
+  z-index: var(--z-popover);
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  max-height: 280px;
+  overflow-y: auto;
+  background: var(--glass-bg-heavy);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  /* 淡入动画 */
+  animation: slSelectIn var(--dur-short) var(--ease-out);
+}
+
+@keyframes slSelectIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* 右缘防溢出：触发器靠视口右侧且列表比触发器宽时，由 select-ui.js 在展开
+   瞬间实测并加上本类，改为右对齐展开（左边不再越界）。 */
+.sl-select.sl-flip-right .sl-select-list {
+  left: auto;
+  right: 0;
+}
+
+.sl-select-opt {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-sm);
+  color: var(--color-text);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background-color var(--dur-fast) var(--ease-out),
+              color var(--dur-fast) var(--ease-out);
+}
+
+.sl-select-opt[aria-selected="true"] {
+  color: var(--color-primary-strong);
+  font-weight: var(--font-weight-semibold);
+}
+.sl-select-opt[aria-selected="true"]::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  flex-shrink: 0;
+}
+.sl-select-opt[aria-selected="true"] {
+  padding-left: 22px;
+  position: relative;
+}
+.sl-select-opt[aria-selected="true"]::before {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  margin-top: -3px;
+}
+
+/* 键盘 active 项（未选中但光标所在） */
+.sl-select-opt.sl-active {
+  background: var(--color-surface-hover);
+}
+.sl-select-opt.sl-active[aria-selected="true"] {
+  background: var(--color-primary-bg);
+}
+
+/* 禁用项（filterOrderTypes 联动） */
+.sl-select-opt[aria-disabled="true"] {
+  color: var(--color-text-subtle);
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+/* optgroup 标题（strategyPattern 按形态分类） */
+.sl-select-group {
+  padding: 6px 10px 4px;
+  font-size: var(--font-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* 触屏/粗指针：选项命中区放大 */
+@media (hover: none) and (pointer: coarse) {
+  .sl-select-opt {
+    padding: 12px 14px;
+    font-size: var(--font-base);
+  }
+  .sl-select-list {
+    max-height: 55dvh;
+  }
+}
+
+/* 极窄屏：氛围光缩小避免溢出 */
+@media (max-width: 30rem) {
+  .sl-select-glow {
+    width: 64px;
+    height: 64px;
+    top: -16px;
+    right: -16px;
+  }
+}
+
+/* ═══════════════════════════════════════════
+   combobox（input + datalist 的自绘建议列表）
+   替代原生 datalist 弹层：原生弹层由浏览器合成器绘制，不参与页面层级，
+   在部分渲染环境无不透明背景，选项文字会透叠在页面内容上。
+   视觉与 .sl-select-list 同一套 token。
+   ═══════════════════════════════════════════ */
+.sl-combo {
+  position: relative;
+  display: block;
+}
+
+.sl-combo-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: auto;
+  min-width: 100%;
+  width: max-content;
+  max-width: min(420px, calc(100vw - 32px));
+  z-index: var(--z-popover);
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  max-height: 280px;
+  overflow-y: auto;
+  background: var(--glass-bg-heavy);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  animation: slSelectIn var(--dur-short) var(--ease-out);
+}
+
+/* 右缘防溢出翻转（select-ui.js 展开瞬间实测加类） */
+.sl-combo.sl-flip-right .sl-combo-list {
+  left: auto;
+  right: 0;
+}
+
+.sl-combo-opt {
+  display: flex;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-sm);
+  color: var(--color-text);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+.sl-combo-opt.sl-active {
+  background: var(--color-surface-hover);
+}
+
+/* 输入过滤命中的片段高亮 */
+.sl-combo-hit {
+  color: var(--color-primary-strong);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* 无匹配提示（自由输入仍有效，只作引导） */
+.sl-combo-hint {
+  padding: 8px 10px;
+  font-size: var(--font-sm);
+  color: var(--color-text-muted);
+  cursor: default;
+  white-space: nowrap;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .sl-combo-opt {
+    padding: 12px 14px;
+    font-size: var(--font-base);
+  }
+  .sl-combo-list {
+    max-height: 55dvh;
+  }
+}

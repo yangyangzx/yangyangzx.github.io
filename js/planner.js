@@ -438,10 +438,20 @@ function updateMultiTP() {
     remainEl.style.color = totalRatio > 100 ? 'var(--color-danger)' : (totalRatio === 100 ? 'var(--color-success)' : 'var(--color-text-muted)');
   }
 
+  // P1 修复（2026-10-09）：原实现在此处直接 return，漏掉了 #tpWeightedRR。
+  // 场景：算出一笔计划（非空加权值如「加权期望 1.80R」），随后清空止损价或让
+  // 计算被清空（复位 / 切换品种导致 stopDistance 归零），三档 RR 被重置成「—」，
+  // 底部组合行却仍留着上一笔的 1.80R——页面上三档全是「—」而组合却有个正数，
+  // 同一时刻给出两套互相否定的结论。现在一并归零。
+  // 同时补 getElementById 的空守卫：这三个元素是静态 DOM，缺失时原写法会抛
+  // TypeError 让整个 updateMultiTP 中断（后面 #tpRemain 的颜色也不更新）。
   if (stopDistance <= 0) {
-    document.getElementById('tp1RR').textContent = '—';
-    document.getElementById('tp2RR').textContent = '—';
-    document.getElementById('tp3RR').textContent = '—';
+    ['tp1RR', 'tp2RR', 'tp3RR'].forEach(function(id) {
+      var el = document.getElementById(id);
+      if (el) { el.textContent = '—'; el.className = 'tp-rr'; }
+    });
+    var _w0 = document.getElementById('tpWeightedRR');
+    if (_w0) { _w0.textContent = '—'; _w0.className = 'tp-rr'; }
     return;
   }
 
@@ -459,6 +469,7 @@ function updateMultiTP() {
   for (var i = 0; i < 3; i++) {
     var tp = tpPrices[i];
     var rrEl = document.getElementById(tpRRs[i]);
+    if (!rrEl) continue;   // 元素缺失时跳过本行，不让整份 updateMultiTP 中断
     if (isNaN(tp) || tp <= 0) {
       rrEl.textContent = '—';
       rrEl.className = 'tp-rr';
@@ -525,6 +536,16 @@ function updateMultiTP() {
 /**
  * 初始化多止盈位事件监听
  */
+// P2 修复（2026-10-09）：方向/止损价的 change 监听原先挂在循环内的具名函数表达式
+// `resetOnBaseChange` 上，用 `resetOnBaseChange._bound` 去重。该表达式每轮迭代都会新建
+// 一个函数对象，闭包上的 _bound 也跟着是全新的 undefined——守卫恒定失效，
+// `directionEl.addEventListener('change', resetAllTPFlags)` 被执行 3 次（tp1/2/3Price
+// 各一次），且绑定的是 3 个不同的 resetAllTPFlags 闭包。
+// 副作用有限（resetAllTPFlags 是幂等的置 false），但它是白白重复的监听器：
+// 每次用户改方向都会跑 3 遍，且将来若有人改成非幂等操作就会放大成真实错误。
+// 提到循环外，用模块级一次性守卫。
+var _tpBaseChangeBound = false;
+
 function initMultiTPListeners() {
   var tpInputs = ['tp1Price', 'tp2Price', 'tp3Price', 'tp1Ratio', 'tp2Ratio', 'tp3Ratio'];
   for (var i = 0; i < tpInputs.length; i++) {
@@ -534,26 +555,26 @@ function initMultiTPListeners() {
       // 用户手动输入 TP 价格后标记为已编辑，阻止 autoCalcMultiTP 覆盖
       if (tpInputs[i].indexOf('Price') !== -1) {
         el.addEventListener('input', function() { this._userEdited = true; }, true);
-        // 当方向或止损价变化时重置所有 TP 标记，允许重新自动计算
-        (function resetOnBaseChange() {
-          var directionEl = document.getElementById('direction');
-          var stopLossEl = document.getElementById('stopLoss');
-          function resetAllTPFlags() {
-            ['tp1Price','tp2Price','tp3Price'].forEach(function(id) {
-              var e = document.getElementById(id);
-              if (e) e._userEdited = false;
-            });
-          }
-          if (!resetOnBaseChange._bound) {
-            directionEl.addEventListener('change', resetAllTPFlags);
-            stopLossEl.addEventListener('change', resetAllTPFlags);
-            resetOnBaseChange._bound = true;
-          }
-        })();
       }
       el._tpListenerAttached = true;
     }
   }
+
+  // 当方向或止损价变化时重置所有 TP 标记，允许重新自动计算。
+  // #direction / #stopLoss 缺失时静默跳过（缺元素的视图不该让 initMultiTPListeners 抛错）。
+  if (_tpBaseChangeBound) return;
+  var directionEl = document.getElementById('direction');
+  var stopLossEl = document.getElementById('stopLoss');
+  if (!directionEl || !stopLossEl) return;
+  function resetAllTPFlags() {
+    ['tp1Price', 'tp2Price', 'tp3Price'].forEach(function(id) {
+      var e = document.getElementById(id);
+      if (e) e._userEdited = false;
+    });
+  }
+  directionEl.addEventListener('change', resetAllTPFlags);
+  stopLossEl.addEventListener('change', resetAllTPFlags);
+  _tpBaseChangeBound = true;
 }
 
 // ==================== 检查清单 ====================
@@ -840,6 +861,52 @@ function updateChecklistSummary(calc) {
   var items = card ? card.querySelectorAll('.check-item') : [];
   var fails = 0, warns = 0, passes = 0, skipped = 0;
   var total = 0;
+
+  // 折叠开关的文案要由「实际被藏起来的条目数」推出，而下面两个分支（阻断态早退 /
+  // 正常统计）都要用，故先定义共用实现。
+  // 注意 hidden 要把 warn-row 排除：CSS 的 gates-collapsed 规则是
+  //   :not(.fail-row):not(.warn-row) → 注意项在折叠态【可见】。
+  // 原先 hidden = total - fails，把本就露在外面的注意项也算成「未显示」，
+  // 于是 5 项里有 2 条注意项时按钮写「展开明细（5 项）」，实际只藏了 3 条。
+  // 两种情况下都能观察到：① 折叠态下肉眼可见 2 条黄框，按钮却说藏了 5 条；
+  // ② 展开后条目数与按钮承诺的数字对不上。
+  var toggle = document.getElementById('checklistToggle');
+  function syncToggleText() {
+    if (!toggle) return;
+    var hidden = total - fails - warns;
+    toggle.textContent = isChecklistExpanded() ? '收起明细' : ('展开明细（' + hidden + ' 项）');
+    toggle.setAttribute('aria-expanded', String(isChecklistExpanded()));
+  }
+
+  // P0 修复（2026-10-09）：硬阻断态不能被本次调用抹掉。
+  // renderChecklistBlocked() 把结论行刷成「⛔ 已阻断：<原因>」后，任何后续调用
+  // updateChecklistSummary(getCalc()) 都会走到 `!calc` 分支把文案改回
+  // 「点击「计算仓位」后生成检查结果」——而硬阻断时 getCalc() 恒为 null
+  // （renderHardBlock 就是 setCalc(null) + setCalcBlocker(...)）。
+  // 触发面很普通：被熔断/热量超限阻断后，用户点一下「展开明细」看详情，
+  // 阻断原因就从结论行消失，只剩一句无关的引导语。改从这里统一兜住，
+  // 而不是在每个调用点（toggleChecklistDetail / focusChecklistFailures /
+  // navigation 切视图）各判一次——那三条路径都会被调用到。
+  var _blocker = (typeof getCalcBlocker === 'function') ? getCalcBlocker() : null;
+  if (!calc && _blocker) {
+    summary.dataset.state = 'fail';
+    icon.textContent = '⛔';
+    text.textContent = '已阻断：' + (_blocker.title || '风控未通过');
+    count.textContent = '';
+    summary.title = _blocker.detail || '';
+    // 文案已置为阻断态，剩下的只是给 syncToggleText 填好计数（此处只需要
+    // fails/warns，它们在折叠态一律可见，不进 hidden）。
+    for (var b = 0; b < items.length; b++) {
+      var bic = items[b].querySelector('.check-icon');
+      if (!bic) continue;
+      total++;
+      if (bic.className.indexOf('fail') !== -1) fails++;
+      else if (bic.className.indexOf('warn') !== -1) warns++;
+    }
+    syncToggleText();
+    return;
+  }
+
   for (var i = 0; i < items.length; i++) {
     var it = items[i];
     var ic = it.querySelector('.check-icon');
@@ -881,13 +948,9 @@ function updateChecklistSummary(calc) {
     text.textContent = '全部通过，可以保存';
     count.textContent = ok + '/' + total + ' 通过';
   }
-  // 折叠时只藏通过/注意/待补充项，失败项始终可见——开关文案只数被藏起来的部分
-  var toggle = document.getElementById('checklistToggle');
-  if (toggle) {
-    var hidden = total - fails;
-    toggle.textContent = isChecklistExpanded() ? '收起明细' : ('展开明细（' + hidden + ' 项）');
-    toggle.setAttribute('aria-expanded', String(isChecklistExpanded()));
-  }
+  // 折叠态由 CSS 的 :not(.fail-row):not(.warn-row) 决定：失败项与注意项都保持可见。
+  // （原注释写「只藏通过/注意/待补充项」，与该 CSS 规则不符——按 CSS 为准。）
+  syncToggleText();
 }
 
 function isChecklistExpanded() {
@@ -1013,9 +1076,11 @@ function updateOrderTypeLabels() {
   if (!dir || !ot) return;
 
   var isLong = dir.value === 'long';
-  // 保留当前选中值
-  var curVal = ot.value;
+  // P2 修复（2026-10-09）：删掉 `var curVal = ot.value;`。原注释写着「保留当前选中值」，
+  // 但后面从未把 curVal 赋回 ot.value——改动的是 option 的 text，浏览器不会因此重置
+  // select.value，所以赋值与否行为完全一致，这是一行只会误导后来人的死变量。
   var options = ot.options;
+  if (options.length < 3) return;   // 少选项时不臆造下标
 
   if (isLong) {
     // 做多：市价单 / Buy Limit / Buy Stop

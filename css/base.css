@@ -71,12 +71,21 @@ button:disabled {
   margin-bottom: var(--space-lg);
   transition: var(--transition-normal);
   position: relative;
-  overflow: hidden;
+  /* 不裁剪：卡片内最后一个折叠面板的 SelectUI 下拉（absolute 向下展开）会超出卡片
+     底边，若 overflow:hidden 会被切掉。子元素有 padding 间距、不会贴边露出直角，
+     卡片圆角仍由 border-radius 自身约束（伪元素均在边界内，不依赖此裁剪）。 */
+  overflow: visible;
 }
 
+/* 浅色卡片
+   P1 修复（2026-10-09）：原先这条规则把卡片的渐变背景和描边写死成 hue 250 的冷白
+   （oklch(100% 0.003 250 / 0.95)），完全绕过 variables.css 的 token 体系。
+   页面背景 --color-bg 换成暖纸色 #F9F6ED 后，所有卡片仍是冷白——视觉割裂的最大单点，
+   而且它把「改 token」这条路堵死了：光改 variables.css 永远动不了这里。
+   现改为引用 token，卡片色随纸面梯队自动联动。 */
 [data-theme="light"] .card {
-  background: linear-gradient(135deg, oklch(100% 0.003 250 / 0.95) 0%, oklch(98% 0.006 250 / 0.90) 100%);
-  border: 1px solid oklch(70% 0.012 250 / 0.35);
+  background: linear-gradient(135deg, var(--color-surface-raised) 0%, var(--color-surface) 100%);
+  border: 1px solid var(--glass-border);
   box-shadow: var(--shadow-md);
 }
 
@@ -115,8 +124,10 @@ button:disabled {
   transition: opacity var(--dur-short) var(--ease-out);
 }
 
+/* 悬停高亮线：取 --color-text 的浅色值（22% 0.014 91.5）再给 8% 透明度，
+   与 variables.css 的纸色相对齐；原先是 hue 250 的冷黑。 */
 [data-theme="light"] .card::after {
-  background: linear-gradient(90deg, transparent, oklch(22% 0.012 250 / 0.08), transparent);
+  background: linear-gradient(90deg, transparent, oklch(22% 0.014 91.5 / 0.08), transparent);
 }
 
 /* ═══════════════════════════════════════
@@ -708,7 +719,8 @@ button:disabled {
 }
 
 [data-theme="light"] .btn-ghost:hover {
-  background: oklch(70% 0.012 250 / 0.15);
+  /* 原 hue 250 冷灰；随纸色相，与 --color-border 同一 hue/彩度路线 */
+  background: oklch(72% 0.020 91.5 / 0.15);
   color: var(--color-text);
 }
 
@@ -914,7 +926,15 @@ button:disabled {
    3. .open 类保留为兼容兜底（discipline-led.js 等模块可能加它）。 */
 .form-section-content,
 .section-content {
-  overflow: hidden;
+  /* 基础态不裁剪：展开态里的自定义下拉（SelectUI listbox / datalist）是
+     position:absolute，向下展开必然溢出该容器，若 overflow:hidden 会被整段切掉，
+     表现为「点开下拉却看不到菜单 / 只露一半」。折叠动画所需的裁剪改由 .collapsed
+     态提供（见下方 .form-section.collapsed 规则）。 */
+  overflow: visible;
+  /* 水平内边距：这 5 个面板都是 .form-section-content.grid-2 直接当栅格用，
+     form-group 之前距左右 1px 边框为 0，输入框/下拉按钮的边线与面板边线
+     几乎重叠。16px 与 .grid-2 的 24px 列间距形成「边距 < 内距」的正常层次。 */
+  padding: var(--space-sm) var(--space-lg);
   border-left: 1px solid var(--glass-border);
   border-right: 1px solid var(--glass-border);
   border-bottom: 1px solid var(--glass-border);
@@ -933,6 +953,8 @@ button:disabled {
   max-height: 2000px;
   opacity: 1;
   pointer-events: auto;
+  /* 展开态必须可见，否则内部 SelectUI 下拉（absolute 向下展开）被裁剪 */
+  overflow: visible;
 }
 
 .form-section-content-inner {
@@ -950,6 +972,8 @@ button:disabled {
   max-height: 0;
   opacity: 0;
   pointer-events: none;
+  /* 折叠态需要裁剪以隐藏收起的内容（动画 max-height 2000px→0 依赖它） */
+  overflow: hidden;
   transition: max-height var(--dur-slow) var(--ease-out),
               opacity var(--dur-short) var(--ease-out);
 }

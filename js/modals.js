@@ -1446,6 +1446,8 @@ function populateFilterOptions() {
       if (s === curVal) opt.selected = true;
       selSym.appendChild(opt);
     });
+    // 同步自定义外壳（v5.6.14 SelectUI）：原生 innerHTML 重建后外壳 listbox 也要重绘
+    if (window.SelectUI) SelectUI.syncFromNative('fltSymbol');
   }
   // 策略
   var selStg = document.getElementById('fltStrategy');
@@ -1461,6 +1463,7 @@ function populateFilterOptions() {
       if (s === curVal2) opt.selected = true;
       selStg.appendChild(opt);
     });
+    if (window.SelectUI) SelectUI.syncFromNative('fltStrategy');
   }
 }
 

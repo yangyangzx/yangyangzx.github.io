@@ -1365,6 +1365,17 @@ tbody tr:hover > td {
   transition: border-color var(--dur-fast) var(--ease-out);
 }
 
+/* 可见的 SelectUI 外壳：原 min-width 只命中被视觉隐藏的原生 select（sl-native），
+   对外壳无效——按钮宽度完全随当前值文字收缩，短文案（如「全部」）时控件
+   窄到文字几乎贴住边框。这里给外壳与按钮统一最小宽度，与原生口径一致。 */
+.filter-row .sl-select {
+  min-width: 110px;
+}
+
+.stats-filter-bar .sl-select {
+  min-width: 120px;
+}
+
 .filter-row select:focus {
   border-color: var(--color-primary);
 }

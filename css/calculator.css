@@ -9,12 +9,13 @@
   border-radius: var(--radius-lg);
   padding: var(--space-2xl) 24px;
   margin-top: var(--font-xl);
-  border-top: 3px solid var(--color-primary);
   display: flex;
   flex-direction: column;
   gap: 16px;
-  box-shadow: var(--glass-shadow);
+  /* 克制精致化：顶部主色强调改用内描边，避免外边框推高布局；
+     圆角下内描边自动贴合，且不干扰下方卡片的 mask 切口 */
   border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow), inset 0 3px 0 var(--color-primary);
   transition: box-shadow var(--dur-slow) var(--ease-out);
 }
 
@@ -25,6 +26,30 @@
 
 .result-box.warn {
   border-left-color: var(--color-warning);
+  box-shadow: var(--glass-shadow), inset 0 3px 0 var(--color-primary),
+              inset 3px 0 0 var(--color-warning);
+}
+
+/* 三张指标卡交错入场 — 复用现有入场语义，强化「结果浮现」的层次感。
+   仅用 transform 位移（不叠 opacity），避免与外层面板 resultReveal 的双重淡入相互打架。 */
+#resultArea.result-animate .result-card {
+  animation: cardRise 380ms var(--ease-out) both;
+}
+#resultArea.result-animate .result-card:nth-child(1) { animation-delay: 70ms; }
+#resultArea.result-animate .result-card:nth-child(2) { animation-delay: 140ms; }
+#resultArea.result-animate .result-card:nth-child(3) { animation-delay: 210ms; }
+
+/* margin-danger 卡片需同时保留入场位移与风险脉冲：两条动画合成到同一
+   animation 声明，否则会被上面的 result-animate 规则整体覆盖；cardMargin
+   恒为第 2 张，故 cardRise 延迟沿用 140ms。 */
+#resultArea.result-animate .result-card.margin-danger {
+  animation: cardRise 380ms var(--ease-out) 140ms both,
+             marginPulse var(--dur-normal) var(--ease-out) 1;
+}
+
+@keyframes cardRise {
+  from { transform: translateY(10px); }
+  to   { transform: translateY(0); }
 }
 
 /* 三卡片容器 */
@@ -35,6 +60,7 @@
 
 .result-card {
   flex: 1;
+  position: relative;
   background: var(--glass-bg-light);
   backdrop-filter: var(--glass-blur-light);
   -webkit-backdrop-filter: var(--glass-blur-light);
@@ -46,10 +72,28 @@
   justify-content: center;
   text-align: center;
   border: 1px solid var(--glass-border);
-  /* 指定 transition — gate 10 */
+  /* 克制精致化：顶端中心一处半圆「切口」——票根穿孔的轻量转译。
+     只用单条 mask（不用 mask-composite，避免跨浏览器失效），露出下层玻璃，
+     呼应票根隐喻但不落入主题化；不支持 mask 的浏览器直接回退为普通卡片。 */
+  -webkit-mask-image: radial-gradient(circle at 50% 0, transparent 0 6px, #000 6.5px);
+          mask-image: radial-gradient(circle at 50% 0, transparent 0 6px, #000 6.5px);
+  -webkit-mask-repeat: no-repeat;
+          mask-repeat: no-repeat;
+  /* 细微浮起，token 化阴影 */
+  box-shadow: var(--shadow-sm);
+  /* 指定 transition — gate 10（补全 transform 以支持悬浮抬升） */
   transition: background-color var(--dur-short) var(--ease-out),
               border-color var(--dur-short) var(--ease-out),
-              box-shadow var(--dur-short) var(--ease-out);
+              box-shadow var(--dur-short) var(--ease-out),
+              transform var(--dur-short) var(--ease-out);
+}
+
+/* 悬浮抬升：仅改阴影（不改 transform），避免与入场动画 cardRise 的
+   forwards 锁定的 transform 冲突；克制不抢戏 */
+@media (hover: hover) and (pointer: fine) {
+  .result-card:hover {
+    box-shadow: var(--shadow-md);
+  }
 }
 
 .result-card-label {
@@ -64,6 +108,7 @@
   font-weight: var(--font-weight-bold);
   color: var(--color-text);
   letter-spacing: -0.5px;
+  font-variant-numeric: tabular-nums;
 }
 
 .result-card-value.amount {
@@ -109,11 +154,11 @@
 .result-card-sub.target-dist.red    { color: var(--color-danger); }
 .result-card-sub.target-dist.neutral{ color: var(--color-text-secondary); }
 
-.result-card.rr-green  { background: var(--color-success-bg); border-color: var(--color-success-border); }
+.result-card.rr-green  { background: var(--color-success-bg); border-color: var(--color-success-border); border-top: 2px solid var(--color-success); }
 .result-card.rr-green  .result-card-value.rr { color: var(--color-success-dark); }
-.result-card.rr-amber  { background: var(--color-warning-bg); border-color: var(--color-warning-border); }
+.result-card.rr-amber  { background: var(--color-warning-bg); border-color: var(--color-warning-border); border-top: 2px solid var(--color-warning); }
 .result-card.rr-amber  .result-card-value.rr { color: var(--color-warning-dark); }
-.result-card.rr-red    { background: var(--color-danger-bg);  border-color: var(--color-danger-border); }
+.result-card.rr-red    { background: var(--color-danger-bg);  border-color: var(--color-danger-border); border-top: 2px solid var(--color-danger); }
 .result-card.rr-red    .result-card-value.rr { color: var(--color-danger); }
 .result-card.rr-neutral { }
 

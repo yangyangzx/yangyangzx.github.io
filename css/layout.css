@@ -45,8 +45,11 @@ body {
   padding-top: env(safe-area-inset-top);
 }
 
+/* 侧栏在浅色下需要比默认更实的底色（遮挡其下滚动内容）外加一道分隔阴影，故保留这条覆盖。
+   背景原先写死 hue 250 的冷白，与暖纸色 #F9F6ED 拼在一起会出现「冷白导航栏 + 米白页面」
+   的割裂；改引 --nav-bg token（浅色值已经在同色相 91.5 的梯队里），一处改动全局联动。 */
 [data-theme="light"] #mainNav {
-  background: oklch(98% 0.006 250 / 0.98);
+  background: var(--nav-bg);
   box-shadow: 2px 0 8px oklch(0% 0 0 / 0.04);
 }
 
