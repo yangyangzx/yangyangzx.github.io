@@ -350,7 +350,7 @@ function checkSymbolConcentration(symbol, positionSize, leverage, capital, openP
  * 检查日亏损硬止损
  * @returns {object} {overLimit, todayPnl, limit, blocked}
  */
-function checkDailyLossLimit() {
+function checkDailyLossLimit(capitalOverride) {
   var todayStr = window.utils.toLocalDateStr(new Date().toISOString());
   var todayPnl = 0;
   // 统一使用 isClosedTrade 判定已平仓，与 renderLogs/stats.js 口径一致
@@ -370,7 +370,9 @@ function checkDailyLossLimit() {
   }
 
   var settings = loadSettings();
-  var capital = getAccountCapital();
+  // 口径统一：优先用调用方传入的表单本金（与本次计算的风险预算分母一致），
+  // 未传入（风控中心/定时巡检等场景）时回退到 settings.accountBalance。
+  var capital = (capitalOverride != null && capitalOverride > 0) ? capitalOverride : getAccountCapital();
   var dailyLossPct = settings.dailyLossLimit || 5;
   var dailyLossLimit = capital > 0 ? capital * (dailyLossPct / 100) : Infinity;
 

@@ -41,6 +41,15 @@ a:focus-visible {
   outline-offset: 2px;
 }
 
+/* 自定义可交互元素（带 tabindex 的卡片/面板/折叠头、显式可点元素）也需可见焦点，
+   否则键盘用户无法辨识「当前聚焦在哪」。提升可访问性与辨识度。 */
+[tabindex]:not([tabindex="-1"]):focus-visible,
+summary:focus-visible,
+.clickable:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
 /* :disabled — gate 26 · 三通道信号：opacity + cursor + pointer-events */
 input:disabled,
 select:disabled,
@@ -293,6 +302,34 @@ button:disabled {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
   border-color: transparent;
+}
+
+/* 输入校验错误态 — 友好度：报错时红框 + 轻抖动，用户立刻定位出错字段（showCalcError 联动加类） */
+.form-group input.input-error,
+.form-group select.input-error {
+  border-color: var(--color-danger);
+  box-shadow: 0 0 0 3px var(--color-danger-bg);
+  animation: fieldShake var(--dur-normal) var(--ease-out);
+}
+.form-group input.input-error:focus,
+.form-group select.input-error:focus {
+  border-color: var(--color-danger);
+  box-shadow: 0 0 0 3px var(--color-danger-bg);
+}
+.field-tip.error {
+  color: var(--color-danger);
+  font-weight: var(--font-weight-medium);
+}
+@keyframes fieldShake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-4px); }
+  40% { transform: translateX(4px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(3px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .form-group input.input-error,
+  .form-group select.input-error { animation: none; }
 }
 
 .form-group select:disabled {
@@ -584,6 +621,19 @@ button:disabled {
 .btn:focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
+}
+
+/* 按钮禁用态：明确「不可点」——去阴影、降饱和、灰化，避免禁用按钮仍显主色渐变误导。
+   覆盖 base.css :disabled 的单纯 opacity，使禁用态在视觉上更易辨识。 */
+.btn:disabled,
+.btn-primary:disabled,
+.btn-danger:disabled {
+  opacity: 1;
+  cursor: not-allowed;
+  pointer-events: none;
+  filter: grayscale(0.65) opacity(0.5);
+  box-shadow: none;
+  transform: none;
 }
 
 .btn i { font-size: 14px; }

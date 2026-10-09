@@ -559,6 +559,7 @@
                 <div class="result-card" id="cardPosition">
                   <div class="result-card-label">建议仓位</div>
                   <div class="result-card-value amount" id="positionDisplay">—</div>
+                  <div class="result-card-sub" id="positionSub"></div>
                 </div>
                 <div class="result-card" id="cardMargin">
                   <div class="result-card-label">保证金</div>
@@ -580,10 +581,9 @@
                 <div class="vv-card" id="rrVisualCard" style="display:none;">
                   <div class="vv-head">
                     <span class="vv-title"><i class="fas fa-y-sign-dollar"></i> 盈亏比对照</span>
-                    <span class="vv-badge vv-badge-neutral" id="rrBadge">— : 1</span>
                   </div>
                   <div class="vv-ladder" id="rrLadder" role="img"></div>
-                  <div class="vv-note" id="rrNote"></div>
+                  <details class="vv-details"><summary>口径与费用明细</summary><div class="vv-note" id="rrNote"></div></details>
                 </div>
                 <div class="vv-card" id="marginVisualCard" style="display:none;">
                   <div class="vv-head">

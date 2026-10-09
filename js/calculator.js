@@ -172,7 +172,7 @@ function _calculateImpl() {
       }
     } catch(e) { /* 忽略 */ }
   }
-  if (!capital || capital <= 0) { showCalcError('无效本金', '请输入本金，或在系统设置中填写账户余额'); _calcCleanup(); return; }
+  if (!capital || capital <= 0) { showCalcError('无效本金', '请输入本金，或在系统设置中填写账户余额', 'capital'); _calcCleanup(); return; }
   const leverageEl = document.getElementById('leverage');
   const leverage = leverageEl ? Math.max(0, parseFloat(leverageEl.value) || 0) : 0;
   const directionEl = document.getElementById('direction');
@@ -235,7 +235,8 @@ function _calculateImpl() {
   }
 
   // ===== P0-01：日亏损硬止损检查 =====
-  var dailyLossCheck = checkDailyLossLimit();
+  // 传入表单本金，使熔断阈值与本次风险预算分母（capital）一致，避免两处资本口径分歧。
+  var dailyLossCheck = checkDailyLossLimit(capital);
   if (dailyLossCheck.blocked) {
     _calcCleanup();
     return renderHardBlock(
@@ -283,10 +284,28 @@ function _calculateImpl() {
 
   if (ui.riskHint) ui.riskHint.textContent = '';
 
-  function showCalcError(title, msg) {
+  function showCalcError(title, msg, relatedInput) {
     setCalc(null);
     setCalcDirty(true);
     CalculationUI.renderValidationError(ui, title, msg || '请修正输入后重新计算。');
+    // 友好度增强：高亮相关输入框，帮助用户立刻定位出错字段。可直接传入元素或 id；
+    // 未传时回退到当前聚焦的表单字段（校验失败通常发生在此前刚填写的字段）。
+    var el = null;
+    if (relatedInput) {
+      el = typeof relatedInput === 'string' ? document.getElementById(relatedInput) : relatedInput;
+    } else if (document.activeElement && /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName)) {
+      el = document.activeElement;
+    }
+    if (el && el.classList) {
+      el.classList.add('input-error');
+      var clear = function () {
+        el.classList.remove('input-error');
+        el.removeEventListener('input', clear);
+        el.removeEventListener('change', clear);
+      };
+      el.addEventListener('input', clear);
+      el.addEventListener('change', clear);
+    }
   }
 
   function renderHardBlock(code, title, detail, raw) {
@@ -323,9 +342,9 @@ function _calculateImpl() {
     }
   })();
 
-  if (entryPrice <= 0) { showCalcError('无效入场价', '入场价必须大于 0'); _calcCleanup(); return; }
-  if (isNaN(capital) || capital <= 0) { showCalcError('无效本金', '请输入本金'); _calcCleanup(); return; }
-  if (isNaN(stopLoss) || stopLoss <= 0) { showCalcError('无效止损价', '请输入有效止损价格'); _calcCleanup(); return; }
+  if (entryPrice <= 0) { showCalcError('无效入场价', '入场价必须大于 0', 'entryPrice'); _calcCleanup(); return; }
+  if (isNaN(capital) || capital <= 0) { showCalcError('无效本金', '请输入本金', 'capital'); _calcCleanup(); return; }
+  if (isNaN(stopLoss) || stopLoss <= 0) { showCalcError('无效止损价', '请输入有效止损价格', 'stopLoss'); _calcCleanup(); return; }
 
   let riskAmount=0, riskPercent=0;
   // 凯利驱动取消还原：必须在读取 riskInput 之前执行，否则取消后 riskPercent 仍沿用驱动值
@@ -578,7 +597,12 @@ function _calculateImpl() {
   // ===== 仓位硬上限：所有未平仓日志的保证金均须相加 =====
   // 拆分保存的同 groupId 条目是同一计划的分段仓位，不是重复记录，不能去重。
   var usedMargin = 0;
-  var consumedCapital = 0; // 已消耗的总资金：保证金 + 滑点成本 + 手续费
+  // 已消耗资金 = 当前在仓保证金占用。
+  // 口径修正：capital 取自 settings.accountBalance（反映实际账户状态的净余额，已含历史
+  // 手续费/滑点），因此不得再把已平仓单的 fee / realizedFee / slippageCost 重复扣减——
+  // 原逻辑会不必要地（甚至过度地）压低可用本金、击穿为 0，与净余额口径自相矛盾。
+  // 仅在仓保证金是真正的当前占用，必须计入。
+  var consumedCapital = 0;
   // P1 FIX（2026-09-23 开仓逻辑审计）：原 `!closeType || closeType === ''` 把所有非空
   // closeType 判为已平仓，而权威口径（utils.isClosedTrade）把 partialTP / reducePosition
   // 且 closedRatio < 99.999% 判为**仍在仓**。部分平仓的剩余仓位因此被排除在
@@ -596,12 +620,6 @@ function _calculateImpl() {
       usedMargin += ps / lev;
       consumedCapital += ps / lev;
     }
-    // 滑点成本与手续费在开仓时已支付，从可用资金中扣除。
-    // P2 FIX：原只扣滑点不扣手续费，与"成本侵蚀"口径（stats.js 用 realizedFee 计累计费用）不一致。
-    // fee + realizedFee 不会重复计算：realizedFee 仅累加已平仓部分，fee 只保留剩余仓位部分。
-    consumedCapital += (parseFloat(pos.slippageCost) || 0)
-                     + (parseFloat(pos.fee) || 0)
-                     + (parseFloat(pos.realizedFee) || 0);
   }
   var availableCapital = capital - consumedCapital;
   if (availableCapital < 0) availableCapital = 0;
@@ -913,12 +931,17 @@ function _calculateImpl() {
   }
 
   // ===== 三卡片：仓位 =====
-  posD.textContent = fmtMoney(effectivePositionSize, 2) + ' U';
+  posD.innerHTML = fmtMoney(effectivePositionSize, 2) + '<span class="v-unit">U</span>';
+  var _posSub = document.getElementById('positionSub');
+  if (_posSub) {
+    _posSub.textContent = '本金 ' + (capital > 0 ? (effectivePositionSize / capital).toFixed(1) : '—') + '×';
+  }
 
   // ===== 三卡片：保证金 =====
-  marginD.textContent = fmtMoney(effectiveMargin, 2) + ' USDT';
+  marginD.innerHTML = fmtMoney(effectiveMargin, 2) + '<span class="v-unit">USDT</span>';
+  var _occPct = capital > 0 ? (effectiveMargin / capital * 100).toFixed(1) : '0';
   if (leverage > 0) {
-    levD.textContent = leverage + 'x 杠杆';
+    levD.textContent = leverage + 'x · 占本金 ' + _occPct + '%';
   } else {
     levD.textContent = '现货 (1x)';
   }
@@ -927,15 +950,15 @@ function _calculateImpl() {
   // ===== 三卡片：盈亏比 =====
   let rrCheckResult = null;
   if (targetRR !== null) {
-    rrD.textContent = targetRR.toFixed(2) + ' : 1';
-    // 颜色分级必须与上面 toFixed(2) 的显示口径一致，否则反推解自带的约 4e-9 浮点
-    // 残差（实测 1.9993518302）会让「显示 2.00 : 1、checkRR 判 ✓」的卡片被染成红色——
-    // 同一数值给出「绿/黄/红 + ✓/✗」两种互相矛盾的结论。与三处 RR 门共用 rrMeetsMin()
-    // （skills-integration.js），保证颜色、文字、门三者对同一数字给出同一档结论。
-    // 注：2/3 两个档位阈值仍为原硬编码值，未改为读取 settings.minRRRatio。
-    if (rrMeetsMin(targetRR, 3)) {
+    rrD.textContent = targetRR.toFixed(2) + 'R';
+    // 颜色分级与「开仓清单 RR 闸门」同源：达标（≥ minRRRatio）为绿、未达标但接近
+    // （≥ 90% minRR）为琥珀、明显不足为红。既复用 rrMeetsMin() 的浮点容差口径，又保证
+    // 「卡片颜色 / 告警文字 / 闸门结论」三者对同一 RR 数字给出同一档判断，不再出现
+    // minRR=2.5 时 2.37 卡显琥珀、清单门却判未过的矛盾。
+    const minRR = (settings.minRRRatio != null && settings.minRRRatio > 0) ? settings.minRRRatio : 2;
+    if (rrMeetsMin(targetRR, minRR)) {
       cardRR.className = 'result-card rr-green';
-    } else if (rrMeetsMin(targetRR, 2)) {
+    } else if (targetRR >= minRR * 0.9) {
       cardRR.className = 'result-card rr-amber';
     } else {
       cardRR.className = 'result-card rr-red';
@@ -945,17 +968,15 @@ function _calculateImpl() {
       rw = '<span class="warning-tag alert"><i class="fas fa-exclamation-triangle"></i> ' + rrCheckResult.message + '</span>' + (rw ? '<br>' + rw : '');
     }
   } else {
-    rrD.textContent = '— : 1';
+    rrD.textContent = '—';
     cardRR.className = 'result-card rr-neutral';
   }
   // 距目标百分比
   if (targetPct !== null) {
     const distSign = direction === 'long' ? '+' : '';
     const distPct = targetPct; // long: 正数, short: 已是正绝对值
-    // 必须走 rrMeetsMin 的显示取整口径：卡片显示的是 toFixed(2)，含费反推自带 ~4e-9 的
-    // 浮点残差。裸比较下 1.9999999962 会判 'red'，而同一数字的卡片判黄、checkRR 判达标——
-    // 同一屏上「黄卡 + 红子块 + 红色不足 2:1 警示」四个信号互相矛盾。
-    const distClass = rrMeetsMin(targetRR, 3) ? 'green' : (rrMeetsMin(targetRR, 2) ? 'neutral' : 'red');
+    // 与上面卡片色阶同源：达标绿、接近琥珀、明显不足红，避免「距目标」子块与卡片颜色矛盾。
+    const distClass = rrMeetsMin(targetRR, minRR) ? 'green' : (targetRR >= minRR * 0.9 ? 'neutral' : 'red');
     targetDistD.textContent = '距目标 ' + distSign + distPct.toFixed(1) + '%';
     targetDistD.className = 'result-card-sub target-dist ' + distClass;
     targetDistD.style.display = 'block';
@@ -964,10 +985,16 @@ function _calculateImpl() {
   }
 
   // ===== 风险与成本行 L1：最大亏损 + 预估止损成本 =====
-  let riskClass = (effectiveRiskPercent*100) <= 2 ? 'low' : ((effectiveRiskPercent*100) <= 5 ? 'mid' : 'high');
   // stopCost：用于与"最大亏损"并列，始终基于止损路径计算（不受目标价影响）
   const stopCost = stopFee + stopSlippage.totalCost;
-  let costL1HTML = '<span>最大亏损 <span class="cost-loss ' + riskClass + '">' + fmtMoney(effectiveRiskAmount, 2) + ' USDT (' + (effectiveRiskPercent*100).toFixed(2) + '%)</span></span>';
+  // 口径修正：头条「最大亏损」必须与折叠明细「1R = 含费净止损」同源，均为含费净止损。
+  // 原 effectiveRiskAmount 仅为价格距离风险（不含费），会低估真实最大亏损约 19%，且两处
+  // 数字互相矛盾，交易者易误判风险。有目标价时取 rrAmounts.netLoss（与 RR 分母同源）；
+  // 无目标价时取价格距离风险 + 止损腿费用/滑点。
+  const realMaxLoss = rrAmounts ? rrAmounts.netLoss : (effectiveRiskAmount + stopCost);
+  const realMaxLossPct = capital > 0 ? (realMaxLoss / capital * 100) : 0;
+  let riskClass = (realMaxLossPct) <= 2 ? 'low' : ((realMaxLossPct) <= 5 ? 'mid' : 'high');
+  let costL1HTML = '<span>最大亏损 <span class="cost-loss ' + riskClass + '">' + fmtMoney(realMaxLoss, 2) + ' USDT (' + realMaxLossPct.toFixed(2) + '%)</span> <span class="cost-tag">含费</span></span>';
   if (stopCost > 0) {
     costL1HTML += '<span>止损预估费用 ' + fmtMoney(stopCost, 2) + ' USDT</span>';
     costL1HTML += '<span>滑点 ' + planSlippageInput.entryTicks + '+' + planSlippageInput.exitTicks + ' ticks</span>';
@@ -1254,7 +1281,6 @@ function renderPortfolioRisk(calc) {
       '<span>现有持仓 <strong>' + openLogs.length + '</strong> 笔</span>' +
       '<span>组合风险 <strong style="' + riskCls + '">' + fmtMoney(portRisk, 2) + ' U（' + (portRisk / capital * 100).toFixed(1) + '%）</strong></span>' +
       '<span>本仓后总风险 <strong style="' + riskCls + '">' + fmtMoney(totalRisk, 2) + ' U（' + riskPct.toFixed(1) + '%）</strong></span>' +
-      '<span>保证金占用 <strong style="' + marginCls + '">' + marginPct.toFixed(1) + '%</strong></span>' +
     '</div>' +
     (atrNote ? '<div style="margin-top:4px;color:var(--color-warning);">' + atrNote + '</div>' : '');
   box.appendChild(line);
@@ -1569,10 +1595,12 @@ function toggleSplitMode() {
     if (window.CalculationUI) {
       CalculationUI.renderDirty(CalculationUI.getResultUI());
     }
-    document.getElementById('positionDisplay').textContent = '—';
-    document.getElementById('marginDisplay').textContent = '—';
+    document.getElementById('positionDisplay').innerHTML = '—';
+    document.getElementById('marginDisplay').innerHTML = '—';
     document.getElementById('leverageDisplay').textContent = '';
-    document.getElementById('rrDisplay').textContent = '— : 1';
+    var _posSubReset = document.getElementById('positionSub');
+    if (_posSubReset) _posSubReset.textContent = '';
+    document.getElementById('rrDisplay').textContent = '—';
     var _crr = document.getElementById('cardRR');
     if (_crr) _crr.className = 'result-card rr-neutral';
     var _cm = document.getElementById('cardMargin');

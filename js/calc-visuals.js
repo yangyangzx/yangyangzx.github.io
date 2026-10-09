@@ -400,8 +400,7 @@
     var note = byId('marginNote');
     if (note) {
       note.replaceChildren();
-      note.appendChild(noteItem('本仓保证金', fmtAmt(m.thisMargin) + ' U（占可用本金 ' +
-        m.posUtilPct.toFixed(1) + '%）'));
+      note.appendChild(noteItem('本仓保证金', fmtAmt(m.thisMargin) + ' U'));
       if (m.usedMargin > 0) note.appendChild(noteItem('已有持仓', fmtAmt(m.usedMargin) + ' U'));
       note.appendChild(noteItem(m.overCapital ? '已超出本金' : '剩余可用',
         fmtAmt(Math.abs(m.overCapital ? m.totalMargin - m.capital : m.free)) + ' U'));
@@ -410,10 +409,6 @@
     var note2 = byId('marginNote2');
     if (note2) {
       note2.replaceChildren();
-      var nominal = d && isNum(d.nominal) ? d.nominal : null;
-      if (!isNil(nominal) && m.capital > 0) {
-        note2.appendChild(noteItem('名义仓位', fmtAmt(nominal) + ' U（本金 ' + (nominal / m.capital).toFixed(1) + '×）'));
-      }
       if (d && isNum(d.leverage)) {
         note2.appendChild(noteItem(d.leverage > 0 ? '保证金率' : '现货', d.leverage > 0 ? (100 / d.leverage).toFixed(1) + '%' : '100%'));
       }
