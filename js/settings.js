@@ -214,12 +214,11 @@ function renderSettings() {
 function saveSettings() {
   var settings = loadSettings();
 
-  // ✅ 保存品种管理（从 settings UI 编辑）
-  // quiet=true：本调用被 saveSettings 串联，成功提示由下方「设置已保存」统一给出。
-  // 必须检查返回值——此处若因配额耗尽失败，后面的主设置写入必然同样失败，
-  // 不中止就会连弹两条「存储空间不足」，且旧实现下本函数成功/失败都返回 undefined，
-  // 无法区分。
-  if (typeof saveCustomSymbols === 'function' && !saveCustomSymbols(true)) return;
+  // 品种管理走独立保存入口「保存品种」按钮（saveCustomSymbols），
+  // 不再由 saveSettings 串联——两个保存按钮各管各的：
+  //   「保存设置」只管风控/交易参数，「保存品种」只管品种列表。
+  // 此前 saveSettings 会偷偷调 saveCustomSymbols(true) 把品种表格也落库，
+  // 用户点「保存设置」却顺带改了品种列表，两个入口语义混淆。
 
   // 读取 + 验证（原有字段）
   var fields = [
@@ -953,80 +952,123 @@ function syncSymbolDatalist() {
   });
 }
 
+// ═══════════════════════════════════════════════════
+// 品种管理 — 单一保存入口（v5.6.14 交互收口）
+//
+// 设计原则：表格里的「添加 / 删除 / 行内编辑」都只改内存草稿
+// （_symbolDraft）+ 重渲染表格，【不写 localStorage、不同步 datalist】。
+// 唯一落库 + 同步 datalist 的入口是「保存品种」按钮（saveCustomSymbols）。
+// 这样「没保存就切走开仓计划页 → datalist 看不见新加的品种」是符合预期的
+// （没保存 = 不生效），而不是需要靠 addCustomSymbol 偷偷落库去「补偿」的 bug。
+// 上一版让 addCustomSymbol / removeCustomSymbol 立即 _safeSetSettings +
+// syncSymbolDatalist，等于绕过了「保存」语义——表格一改就生效，「保存品种」
+// 按钮形同虚设，两个保存入口（保存设置 / 保存品种）语义混淆。本版本收口。
+// ═══════════════════════════════════════════════════
+
+// 内存草稿：进设置页时从已保存的 customSymbols 深拷贝；所有 add/remove/edit
+// 只操作这份草稿 + 重渲染表格。保存时一次性提交。
+var _symbolDraft = null;
+
+function _symbolDraftInit() {
+  if (_symbolDraft) return _symbolDraft;
+  var settings = loadSettings();
+  var list = settings.customSymbols || [];
+  _symbolDraft = list.map(function(s) {
+    return { symbol: s.symbol || '', desc: s.desc || '' };
+  });
+  return _symbolDraft;
+}
+
 /**
- * 渲染品种管理区域（在设置页的交易参数卡片中）
+ * 渲染品种管理区域。数据源是 _symbolDraft（内存草稿），不是 loadSettings()。
+ * 草稿未初始化时先初始化（防止直接从别处调用 renderCustomSymbols 时拿到 undefined）。
+ * 进设置页时由调用方先调 _symbolDraftReset() 重置草稿，避免带出上一次未保存的编辑。
  */
+function _symbolDraftReset() {
+  _symbolDraft = null;
+}
 function renderCustomSymbols() {
   var container = document.getElementById('customSymbolsList');
   if (!container) return;
-  var symbols = loadSettings().customSymbols || [];
+  var symbols = _symbolDraftInit();
   var html = '<table class="custom-symbols-table"><thead><tr><th>品种</th><th>说明</th><th></th></tr></thead><tbody>';
   symbols.forEach(function(s, idx) {
-    html += '<tr><td><input type="text" class="cs-symbol" value="' + esc(s.symbol) + '" /></td>';
-    html += '<td><input type="text" class="cs-desc" value="' + esc(s.desc || '') + '" placeholder="如：比特币、以太坊..." /></td>';
-    html += '<td><button class="btn-remove btn-sm" onclick="removeCustomSymbol(' + idx + ')">&times;</button></td></tr>';
+    html += '<tr><td><input type="text" class="cs-symbol" data-symbol-idx="' + idx + '" value="' + esc(s.symbol) + '" /></td>';
+    html += '<td><input type="text" class="cs-desc" data-symbol-idx="' + idx + '" value="' + esc(s.desc || '') + '" placeholder="如：比特币、以太坊..." /></td>';
+    html += '<td><button class="btn-remove btn-sm" data-symbol-remove="' + idx + '" aria-label="删除该品种">&times;</button></td></tr>';
   });
   html += '</tbody></table>';
-  html += '<button class="btn btn-sm btn-outline" onclick="addCustomSymbol()" style="margin-top:8px;"><i class="fas fa-plus"></i> 添加品种</button>';
+  html += '<button class="btn btn-sm btn-outline" data-symbol-add><i class="fas fa-plus"></i> 添加品种</button>';
   container.innerHTML = html;
 }
 
-// esc() 不在此重复定义：constants.js 已提供全站唯一实现（含 ' → &#39;）。
-// 此前这里另有一份更弱的版本（缺单引号转义），而 settings.js 在加载顺序里靠后，
-// 把强版本全局覆盖掉了——于是所有 esc() 调用点都退化成弱转义。
-// 另外 ?? 与 || 的差别：数字 0 应显示为 "0" 而非空串。
+// 表格是 renderCustomSymbols 每次重建的静态 DOM，事件无法保留，
+// 用容器级事件委托（一次绑定，所有重渲染后仍有效）：
+//   - 行内 input → 同步进 _symbolDraft（仅内存，不落库）
+//   - 删除按钮 → splice 草稿 + 重渲染
+//   - 添加按钮 → push 空行 + 重渲染
+(function bindSymbolTableDelegation() {
+  var container = document.getElementById('customSymbolsList');
+  if (!container) return;
+  container.addEventListener('input', function(e) {
+    var t = e.target;
+    if (!t || !t.dataset || t.dataset.symbolIdx == null) return;
+    var idx = parseInt(t.dataset.symbolIdx, 10);
+    var draft = _symbolDraftInit();
+    if (!draft[idx]) return;
+    if (t.classList.contains('cs-symbol')) draft[idx].symbol = t.value;
+    else if (t.classList.contains('cs-desc')) draft[idx].desc = t.value;
+    // 仅改内存草稿，不写 localStorage、不动 datalist——保存语义收口到「保存品种」
+  });
+  container.addEventListener('click', function(e) {
+    var t = e.target;
+    if (!t) return;
+    var removeIdx = t.closest ? t.closest('[data-symbol-remove]') : null;
+    if (removeIdx) {
+      var i = parseInt(removeIdx.getAttribute('data-symbol-remove'), 10);
+      _symbolDraftInit().splice(i, 1);
+      renderCustomSymbols();
+      return;
+    }
+    if (t.closest && t.closest('[data-symbol-add]')) {
+      _symbolDraftInit().push({ symbol: '', desc: '' });
+      renderCustomSymbols();
+    }
+  });
+})();
 
-
+// 保留全局函数供 index.html 内联 onclick 兜底（renderCustomSymbols 重建后
+// 委托接管，这些函数实际不再被调用，但保留以防其它路径直接引用）。
 function addCustomSymbol() {
-  var settings = loadSettings();
-  if (!settings.customSymbols) settings.customSymbols = [];
-  settings.customSymbols.push({ symbol: '', desc: '' });
-  if (!_safeSetSettings(settings)) return;
-  _clearSettingsCache();
+  _symbolDraftInit().push({ symbol: '', desc: '' });
   renderCustomSymbols();
-  // P2 修复：立即同步开仓计划页的 datalist，不再要求用户手动点「保存品种」
-  // 才看到变化——表格已更新而下拉选项滞后是操作预期与实际行为的割裂。
-  syncSymbolDatalist();
 }
 
 function removeCustomSymbol(idx) {
-  var settings = loadSettings();
-  if (!settings.customSymbols) return;
-  settings.customSymbols.splice(idx, 1);
-  if (!_safeSetSettings(settings)) return;
-  _clearSettingsCache();
+  var draft = _symbolDraftInit();
+  if (draft[idx]) draft.splice(idx, 1);
   renderCustomSymbols();
-  syncSymbolDatalist();
 }
 
-// 返回值契约：true = 品种列表写入生效；false = 存储写入失败，调用方应中止后续保存。
-// 旧实现成功与失败都返回 undefined，saveSettings() 无从区分，配额耗尽时
-// 「品种列表」与「主设置」两处各弹一条错误，且用户会以为其余字段仍在保存中。
-// quiet=true 时抑制成功提示——被 saveSettings 串联调用时由下方「设置已保存」统一提示，
-// 避免两条成功 toast 叠加。
-//
-// P2 修复（v5.6.14）：saveSettings 串联调用前先读取表格 DOM 里的未保存行编辑，
-// 合并进 settings.customSymbols 再写入——此前 saveCustomSymbols(true) 直接以
-// localStorage 里的旧值覆盖，用户在品种表格改了内容但没点「保存品种」就点了
-// 「保存设置」时，改动被静默丢弃。现改为：表格 DOM 有内容时以 DOM 为准（与
-// 「保存品种」按钮同一口径），无内容时保持现有值。
-function saveCustomSymbols(quiet) {
-  var rows = document.querySelectorAll('#customSymbolsList .cs-symbol');
-  var descs = document.querySelectorAll('#customSymbolsList .cs-desc');
-  var settings = loadSettings();
-  // 表格渲染过（有行）才以 DOM 为准；未渲染（首次进入设置页前的调用）保留现有值
-  if (rows.length > 0) {
-    var symbols = [];
-    rows.forEach(function(inp, i) {
-      var sym = (inp.value || '').trim().toUpperCase();
-      var desc = (descs[i] && descs[i].value || '').trim();
-      if (sym) symbols.push({ symbol: sym, desc: desc });
-    });
-    settings.customSymbols = symbols;
+/**
+ * 品种列表唯一保存入口：提交 _symbolDraft → 写 localStorage → 清缓存 → 同步 datalist。
+ * 表格里的添加/删除/行内编辑只改内存草稿，不点这个按钮就不会落库。
+ * @returns {boolean} 写入成功 true；配额失败 false（调用方可中止后续保存）。
+ */
+function saveCustomSymbols() {
+  var draft = _symbolDraftInit();
+  // 过滤空品种名（只填了描述没填品种的残行不落库）
+  var symbols = [];
+  for (var i = 0; i < draft.length; i++) {
+    var sym = (draft[i].symbol || '').trim().toUpperCase();
+    if (sym) symbols.push({ symbol: sym, desc: (draft[i].desc || '').trim() });
   }
+  var settings = loadSettings();
+  settings.customSymbols = symbols;
   if (!_safeSetSettings(settings)) return false;
   _clearSettingsCache();
+  _symbolDraft = null;  // 清草稿，下次进设置页重新从落库值初始化
   syncSymbolDatalist();
-  if (!quiet) showToast('品种列表已保存', 'success');
+  showToast('品种列表已保存', 'success');
   return true;
 }

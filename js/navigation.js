@@ -207,8 +207,9 @@ function onViewActivated(viewName) {
     if (typeof destroyReviewCharts === 'function') destroyReviewCharts();
     if (typeof renderReview === 'function') renderReview();
   }
-  // 系统设置：渲染表单
+  // 系统设置：渲染表单。先重置品种草稿（防止带出上次未保存的编辑），再渲染。
   if (viewName === 'settings') {
+    if (typeof _symbolDraftReset === 'function') _symbolDraftReset();
     if (typeof renderSettings === 'function') {
       renderSettings();
     }
