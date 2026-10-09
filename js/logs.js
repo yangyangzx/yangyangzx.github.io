@@ -378,16 +378,22 @@ function confirmClose(idx) {
 function toggleBatchMode() {
   _batchMode = !_batchMode;
   _selectedIndices.clear();
+  _syncBatchModeUI();
+  renderLogs();
+}
+
+// P1 交互修复（v5.6.14）：batchMode 状态与 UI（按钮文案/操作栏/表头全选框可见性）
+// 的唯一同步点。toggleBatchMode / 勾选联动（_enterBatchModeIfIdle / 清空自动退出）
+// 都走这里，避免四处各改一半。
+function _syncBatchModeUI() {
   const btn = document.getElementById('batchBtn');
-  if (_batchMode) {
-    btn.innerHTML = '<i class="fas fa-times"></i> 退出批量';
-    btn.classList.add('active');
-  } else {
-    btn.innerHTML = '<i class="fas fa-tasks"></i> 批量操作';
-    btn.classList.remove('active');
+  if (btn) {
+    btn.innerHTML = _batchMode
+      ? '<i class="fas fa-times"></i> 退出批量'
+      : '<i class="fas fa-tasks"></i> 批量操作';
+    btn.classList.toggle('active', _batchMode);
   }
   updateBatchCount();
-  renderLogs();
 }
 
 function updateBatchCount() {
@@ -406,22 +412,50 @@ function updateBatchCount() {
   }
 }
 
+// 勾选任意行 / 表头全选时自动进入批量模式（用户勾选本身就是批量意图，
+// 原先还要先点「批量操作」按钮再勾选，交互割裂）。
+// 勾选路径幂等：已开则直接返回。
+function _enterBatchModeIfIdle() {
+  if (_batchMode) return false;
+  _batchMode = true;
+  _syncBatchModeUI();
+  renderLogs();
+  return true;
+}
+
 function handleBatchCheck(idx, checked) {
-  if (checked) _selectedIndices.add(idx);
-  else _selectedIndices.delete(idx);
+  if (checked) {
+    _selectedIndices.add(idx);
+    // 首次勾选自动进入批量模式
+    if (_enterBatchModeIfIdle()) return;
+  } else {
+    _selectedIndices.delete(idx);
+    // 全部清空（0 条）时自动退出批量模式，隐藏操作栏——用户已无批量意图
+    if (_selectedIndices.size === 0 && _batchMode) {
+      _batchMode = false;
+      _syncBatchModeUI();
+    }
+  }
   updateBatchCount();
 }
 
 function batchSelectAll(checked) {
+  if (checked) {
+    // 表头全选勾选也自动进入批量模式（与行勾选行为一致）
+    if (_enterBatchModeIfIdle()) return;
+  } else if (_batchMode) {
+    // 表头反选（取消全选）= 全部清空 → 自动退出批量模式
+    _batchMode = false;
+  }
   _selectedIndices.clear();
   const tbody = document.getElementById('logBody');
-  if (!tbody) { updateBatchCount(); return; }
+  if (!tbody) { _syncBatchModeUI(); return; }
   const cbs = tbody.querySelectorAll('.batch-checkbox[data-batch-idx]');
   cbs.forEach(function(cb) {
     cb.checked = checked;
     if (checked) _selectedIndices.add(parseInt(cb.dataset.batchIdx, 10));
   });
-  updateBatchCount();
+  _syncBatchModeUI();
 }
 
 function batchDelete() {

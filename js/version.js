@@ -339,5 +339,9 @@
 //        - P1：表格卡片化后展开按钮列残留空 ::before 行 + 无 data-label 的 td 不渲染占位
 //        - P1：#tableWrap min-height:120px 兜底超矮视口 + 卡片化 sticky 标签条
 //        - P2：超小屏汉堡按钮 40px + 预留收窄；touch-action 限定选择器豁免 canvas
+//        - P1：交易日志批量操作交互收口——勾选行 checkbox / 表头全选框时自动进入
+//          批量模式（原先要手动点「批量操作」按钮再勾选，交互割裂）；全部清空时
+//          自动退出。_syncBatchModeUI 收敛状态与 UI 的同步点，toggleBatchMode /
+//          handleBatchCheck / batchSelectAll 共用
 //        版本号 5.6.13 → 5.6.14，index.html 40 处 ?v= 同步
 var APP_VERSION = '5.6.14';
