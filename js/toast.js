@@ -123,12 +123,30 @@
     el.className = 'toast info';
     // 容器 #toastContainer 已挂 role="status" + aria-live="polite"，
     // 这里不再单独挂 role="alert"——两个朗读源会让读屏把同一条消息念两遍
-    el.innerHTML = '<span style="flex:1;">' + msg + '</span>' +
+    var duration = timeoutMs || TOAST_UNDO_DURATION;
+    var remainMs = duration;
+    var countdownEl;
+    el.innerHTML = '<span style="flex:1;">' + msg + ' <span class="toast-countdown" aria-hidden="true"></span></span>' +
       '<button class="toast-undo-btn" aria-label="撤销操作">撤销</button>';
+    countdownEl = el.querySelector('.toast-countdown');
+    // 每秒更新倒计时文案「N 秒后自动执行」；读屏靠容器 aria-live 拾取按钮与主文案，
+    // 数字 span 标 aria-hidden 避免每秒朗读干扰
+    var tick = function() {
+      if (!countdownEl) return;
+      var s = Math.max(1, Math.ceil(remainMs / 1000));
+      countdownEl.textContent = s + ' 秒后自动执行';
+    };
+    tick();
+    var countdownIv = setInterval(function() {
+      remainMs -= 1000;
+      tick();
+      if (remainMs <= 0) clearInterval(countdownIv);
+    }, 1000);
     var undoBtn = el.querySelector('.toast-undo-btn');
     if (undoBtn) {
       undoBtn.addEventListener('click', function(e) {
         e.stopPropagation();
+        clearInterval(countdownIv);
         _clearToastTimer(el);
         _dismissToast(el);
         window._undoToastEl = null;
@@ -137,19 +155,42 @@
     }
     container.appendChild(el);
     window._undoToastEl = el;
-    var duration = timeoutMs || TOAST_UNDO_DURATION;
     window._undoToastTimer = setTimeout(function() {
+      clearInterval(countdownIv);
       if (window._undoToastEl === el) { _dismissToast(el); window._undoToastEl = null; }
       window._undoToastTimer = null;
       if (onDismiss) onDismiss();
     }, duration);
     // pause-on-hover / pause-on-focus
-    el.addEventListener('mouseenter', function() { _clearToastTimer(el); });
-    el.addEventListener('focus', function() { _clearToastTimer(el); });
+    el.addEventListener('mouseenter', function() {
+      clearInterval(countdownIv);
+      _clearToastTimer(el);
+    });
+    el.addEventListener('focus', function() {
+      clearInterval(countdownIv);
+      _clearToastTimer(el);
+    });
     el.addEventListener('mouseleave', function() {
+      // 暂停恢复时重开倒计时 + 重开数字走秒
+      remainMs = Math.max(remainMs, 2000);
+      clearInterval(countdownIv);
+      countdownIv = setInterval(function() {
+        remainMs -= 1000;
+        tick();
+        if (remainMs <= 0) clearInterval(countdownIv);
+      }, 1000);
+      tick();
       _restartToastTimer(el, onDismiss, 2000);
     });
     el.addEventListener('blur', function() {
+      remainMs = Math.max(remainMs, 2000);
+      clearInterval(countdownIv);
+      countdownIv = setInterval(function() {
+        remainMs -= 1000;
+        tick();
+        if (remainMs <= 0) clearInterval(countdownIv);
+      }, 1000);
+      tick();
       _restartToastTimer(el, onDismiss, 2000);
     });
   };

@@ -323,3 +323,30 @@
   color: var(--color-primary-strong);
   border-color: var(--color-primary-border);
 }
+
+/* 撤销 toast 内的撤销按钮（v5.6.14 起带倒计时，按钮仍为强操作入口） */
+.toast .toast-undo-btn {
+  flex-shrink: 0;
+  margin-left: var(--space-md);
+  padding: 2px 10px;
+  font-size: var(--font-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-primary-strong);
+  background: var(--glass-bg-light);
+  border: 1px solid var(--color-primary-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+.toast .toast-undo-btn:hover {
+  background: var(--color-primary-bg);
+}
+
+/* 撤销 toast 倒计时数字（「N 秒后自动执行」）— 弱化为辅助信息，不抢主文案 */
+.toast .toast-countdown {
+  margin-left: 4px;
+  font-size: var(--font-xs);
+  font-weight: var(--font-weight-normal);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}

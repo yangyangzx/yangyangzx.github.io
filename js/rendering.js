@@ -102,11 +102,11 @@ function buildRowsHTML(dl) {
     // 见 logs.js / modals.js / utils.js（R 一律以 initialRiskAmount 为分母）。
     const riskBase = parseFloat(item.initialRiskAmount != null
       && !isNaN(parseFloat(item.initialRiskAmount)) ? item.initialRiskAmount : item.riskAmount);
-    const rVal = !isNaN(storedR) ? storedR
-      : (!isNaN(pnlVal) && Number.isFinite(riskBase) && riskBase > 0 ? pnlVal / riskBase : NaN);
     let pnlVal = parseFloat(item.pnlAmount);
     let pnlHtml = '<span class="pnl-none">—</span>';
     let rSubHtml = '';
+    const rVal = !isNaN(storedR) ? storedR
+      : (!isNaN(pnlVal) && Number.isFinite(riskBase) && riskBase > 0 ? pnlVal / riskBase : NaN);
     if (!isNaN(pnlVal)) {
       const cls = pnlVal >= 0 ? 'pnl-positive' : 'pnl-negative';
       const prefix = pnlVal >= 0 ? '+' : '';
