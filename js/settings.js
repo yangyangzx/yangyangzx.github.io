@@ -835,7 +835,42 @@ function exportSettings() {
 }
 
 /**
- * 从 JSON 文件导入设置（合并模式：保留现有值）
+ * 校验单个导入字段值。数值字段走 SETTINGS_VALIDATORS 范围检查（与 saveSettings 同口径，
+ * 但 saveSettings 的「拒绝整段保存」语义在这里换成「跳过该字段并收集警告」——
+ * 导入是恢复备份，部分字段越界时保留现有值比整批失败更合理；越界清单会提示给用户。
+ * 非数值字段（atrStopEnabled 布尔 / customStopLimit 对象 / customSymbols 数组）走各自形状检查。
+ * @returns {{ok: boolean, reason: string}}
+ */
+function _validateImportedField(key, val) {
+  var rule = SETTINGS_VALIDATORS[key];
+  if (rule && typeof val === 'number') {
+    if (!isFinite(val)) return { ok: false, reason: key + '=' + val + ' 不是有限数字' };
+    if (rule.integer && val % 1 !== 0) return { ok: false, reason: key + '=' + val + ' 需为整数' };
+    if (val < rule.min || val > rule.max) return { ok: false, reason: rule.label + ' ' + val + ' 超出范围 ' + rule.min + '~' + rule.max };
+    return { ok: true, reason: '' };
+  }
+  // 非数值字段按形状校验
+  if (key === 'atrStopEnabled') {
+    return (typeof val === 'boolean') ? { ok: true, reason: '' } : { ok: false, reason: 'atrStopEnabled 需为 true/false' };
+  }
+  if (key === 'customStopLimit') {
+    // 复用 saveSettings 同款的三重校验（白名单键 + 有限数字 + 区间），与 save 口径一致
+    var clean = validateCustomStopLimit(val);
+    return (clean !== null) ? { ok: true, reason: '' } : { ok: false, reason: 'customStopLimit 无效（需为对象，值在 0.5~50 之间）' };
+  }
+  // 其余键（customSymbols / 未登记的键）不做范围检查
+  return { ok: true, reason: '' };
+}
+
+/**
+ * 从 JSON 文件导入设置。
+ *
+ * 语义 = 恢复备份：导入值覆盖当前值（仅跳过显式 null）。
+ * v5.6.14 修复：覆盖前逐字段过 _validateImportedField（数值字段与 saveSettings 同口径
+ * 走 SETTINGS_VALIDATORS 范围检查），越界字段【跳过并保留现有值】而非静默落库——
+ * 此前导入 mmr=0.05（低于 min 0.1）会穿透 loadMmr 的 >0 守卫，杠杆上限膨胀 10 倍；
+ * riskPercent=15（max 10）直接放大单仓风险门。越界字段清单在 toast 里逐条列出。
+ * BOM 修复：走 stripBOM（日志导入已有，设置导入此前没有，记事本另存的 BOM JSON 直接解析失败）。
  */
 function importSettings() {
   var input = document.createElement('input');
@@ -847,31 +882,38 @@ function importSettings() {
     var reader = new FileReader();
     reader.onload = function(ev) {
       try {
-        var imported = JSON.parse(ev.target.result);
+        var imported = JSON.parse(stripBOM(ev.target.result));
         if (typeof imported !== 'object' || imported === null || Array.isArray(imported)) {
           showToast('文件格式不正确', 'error');
           return;
         }
-        // 合并：导入文件覆盖当前值（导入=恢复备份语义），仅跳过显式 null
-        // 修复（2026-09-07）：原 `!(k in current)` 恒为 false（loadSettings 已合并全部默认键），
-        // 导致导入的设置字段永不生效（只有 customSymbols 追加逻辑在跑）。
         var current = loadSettings();
         var keys = Object.keys(SETTINGS_DEFAULTS);
+        var skipped = [];
         for (var i = 0; i < keys.length; i++) {
           var k = keys[i];
-          if (imported[k] != null) {
-            current[k] = imported[k];
+          if (imported[k] == null) continue;  // 显式 null / 缺失：保留当前值
+          // 数值字段先归一（导入 JSON 里可能是字符串 "2.5"，parseFloat 还原；
+          // 与 _normalizeImportedValues 的导入归一口径一致，但只对设置字段生效）
+          var val = imported[k];
+          if (typeof val === 'string' && SETTINGS_VALIDATORS[k]) {
+            val = parseFloat(val);
+            if (isNaN(val)) { skipped.push(k + '（原值 "' + imported[k] + '" 不是数字）'); continue; }
           }
+          var check = _validateImportedField(k, val);
+          if (!check.ok) { skipped.push(check.reason); continue; }
+          current[k] = val;
         }
-        // 特殊处理 customSymbols（合并而非覆盖）
+        // 特殊处理 customSymbols（合并而非覆盖）：
+        // 导入文件里的品种追加到现有列表，已存在的 symbol 保留现有条目不动（desc 可能已被本地编辑）
         if (imported.customSymbols && Array.isArray(imported.customSymbols)) {
           var existingSyms = {};
           for (var j = 0; j < current.customSymbols.length; j++) {
             existingSyms[current.customSymbols[j].symbol] = true;
           }
           imported.customSymbols.forEach(function(s) {
-            if (!existingSyms[s.symbol]) {
-              current.customSymbols.push(s);
+            if (s && s.symbol && !existingSyms[s.symbol]) {
+              current.customSymbols.push({ symbol: String(s.symbol), desc: s.desc || '' });
             }
           });
         }
@@ -879,7 +921,12 @@ function importSettings() {
         _clearSettingsCache();
         renderSettings();
         if (typeof renderCustomSymbols === 'function') renderCustomSymbols();
-        showToast('设置已导入', 'success');
+        if (skipped.length > 0) {
+          showToast('设置已导入，但 ' + skipped.length + ' 个字段越界/无效被跳过（保留现有值）：'
+            + skipped.join('；'), 'warn');
+        } else {
+          showToast('设置已导入', 'success');
+        }
       } catch (err) {
         showToast('解析失败: ' + err.message, 'error');
       }
@@ -937,6 +984,9 @@ function addCustomSymbol() {
   if (!_safeSetSettings(settings)) return;
   _clearSettingsCache();
   renderCustomSymbols();
+  // P2 修复：立即同步开仓计划页的 datalist，不再要求用户手动点「保存品种」
+  // 才看到变化——表格已更新而下拉选项滞后是操作预期与实际行为的割裂。
+  syncSymbolDatalist();
 }
 
 function removeCustomSymbol(idx) {
@@ -946,6 +996,7 @@ function removeCustomSymbol(idx) {
   if (!_safeSetSettings(settings)) return;
   _clearSettingsCache();
   renderCustomSymbols();
+  syncSymbolDatalist();
 }
 
 // 返回值契约：true = 品种列表写入生效；false = 存储写入失败，调用方应中止后续保存。
@@ -953,17 +1004,26 @@ function removeCustomSymbol(idx) {
 // 「品种列表」与「主设置」两处各弹一条错误，且用户会以为其余字段仍在保存中。
 // quiet=true 时抑制成功提示——被 saveSettings 串联调用时由下方「设置已保存」统一提示，
 // 避免两条成功 toast 叠加。
+//
+// P2 修复（v5.6.14）：saveSettings 串联调用前先读取表格 DOM 里的未保存行编辑，
+// 合并进 settings.customSymbols 再写入——此前 saveCustomSymbols(true) 直接以
+// localStorage 里的旧值覆盖，用户在品种表格改了内容但没点「保存品种」就点了
+// 「保存设置」时，改动被静默丢弃。现改为：表格 DOM 有内容时以 DOM 为准（与
+// 「保存品种」按钮同一口径），无内容时保持现有值。
 function saveCustomSymbols(quiet) {
   var rows = document.querySelectorAll('#customSymbolsList .cs-symbol');
   var descs = document.querySelectorAll('#customSymbolsList .cs-desc');
-  var symbols = [];
-  rows.forEach(function(inp, i) {
-    var sym = (inp.value || '').trim().toUpperCase();
-    var desc = (descs[i] && descs[i].value || '').trim();
-    if (sym) symbols.push({ symbol: sym, desc: desc });
-  });
   var settings = loadSettings();
-  settings.customSymbols = symbols;
+  // 表格渲染过（有行）才以 DOM 为准；未渲染（首次进入设置页前的调用）保留现有值
+  if (rows.length > 0) {
+    var symbols = [];
+    rows.forEach(function(inp, i) {
+      var sym = (inp.value || '').trim().toUpperCase();
+      var desc = (descs[i] && descs[i].value || '').trim();
+      if (sym) symbols.push({ symbol: sym, desc: desc });
+    });
+    settings.customSymbols = symbols;
+  }
   if (!_safeSetSettings(settings)) return false;
   _clearSettingsCache();
   syncSymbolDatalist();
