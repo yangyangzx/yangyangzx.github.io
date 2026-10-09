@@ -135,6 +135,12 @@ html {
   --nav-recess:     oklch(0% 0 0 / 0.05);
   --nav-recess-highlight: oklch(100% 0 0 / 0.05);
 
+  /* 模块色亮度：与 --nav-hue 组合成图标/色标/选中态的唯一取色口。
+     两套主题各自取值，避免写死亮度导致浅色下过淡、深色下过暗。
+     暗底 72%：对 --nav-bg(18%) 七个色相实测 7.10~8.30:1（OKLCH→sRGB 换算），全部达标。
+     改色只改这里，不要在各处写死 oklch 亮度。 */
+  --nav-accent-l:   72%;
+
   /* ═══════════════════════════════════════
      命名过渡时长 — 替代硬编码 0.15s/0.2s/0.3s
      ═══════════════════════════════════════ */
@@ -369,6 +375,10 @@ html {
   --nav-btn-color:  oklch(99.60% 0.0028 91.5 / 0.75);
   --nav-recess:     oklch(0% 0 0 / 0.04);
   --nav-recess-highlight: oklch(100% 0 0 / 0.40);
+
+  /* 同 --nav-accent-l（暗底 72%）：浅底取 46%，对 --nav-bg(97.9%) 七个色相
+     实测 5.70~7.28:1（OKLCH→sRGB 换算），最低的 journal(hue 205) 也有 5.70:1 */
+  --nav-accent-l:   46%;
 
   --shadow-sm:  0 1px 3px oklch(0% 0 0 / 0.06);
   --shadow-md:  0 2px 8px oklch(0% 0 0 / 0.08), 0 1px 2px oklch(0% 0 0 / 0.04);

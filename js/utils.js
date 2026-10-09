@@ -918,7 +918,11 @@ window.isPartialClosed = util.isPartialClosed;
  * 清理指定页面的所有图表实例
  * @param {string} page - 页面标识符
  */
-ChartManager.cleanupPage = function(page) {
+// 用 window.ChartManager 而非裸标识符：const ChartManager 声明在上面的 IIFE 内部，
+// 块外裸写 ChartManager 只是「碰巧」能解析到 window.ChartManager 这个全局对象属性。
+// 这种隐式兜底正是本项目出过 P0 的写法（risk.js 曾用裸 util.isClosedTrade，
+// 生产环境只有 window.utils，权威分支从未执行）。显式取 window 属性，不靠兜底。
+window.ChartManager.cleanupPage = function(page) {
   if (!page || typeof page !== 'string') {
     console.error('ChartManager.cleanupPage: 无效的page参数');
     return;

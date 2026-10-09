@@ -6,6 +6,7 @@ node_modules/
 
 # 本地 AI 助手 / 编辑器配置
 .claude/
+.workbuddy/
 .hallmark
 .idea/
 .vscode/

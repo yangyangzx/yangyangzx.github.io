@@ -469,25 +469,52 @@
     var matched = 0;
     Array.prototype.forEach.call(opts, function(o) {
       var v = o.value;
+      // option[label] 是品种说明（系统设置→品种管理里填的 desc，如 BTC → 比特币）。
+      // 说明也参与过滤：只记得「比特币」记不清代码时照样能筛出选项。
+      var d = o.getAttribute('label') || '';
       var hit = q ? v.toLowerCase().indexOf(q) : 0;
-      if (hit === -1) return;
+      var hitD = (q && d) ? d.toLowerCase().indexOf(q) : -1;
+      if (hit === -1 && hitD === -1) return;
       matched++;
       var li = document.createElement('li');
       li.className = 'sl-combo-opt';
       li.id = 'sl-combo-opt-' + (++_comboSeq);
       li.setAttribute('role', 'option');
       li.setAttribute('data-value', v);
+
+      // 主文本（品种代码）
+      var main = document.createElement('span');
+      main.className = 'sl-combo-main';
       if (q && hit > -1) {
         // 命中片段高亮
-        li.appendChild(document.createTextNode(v.slice(0, hit)));
+        main.appendChild(document.createTextNode(v.slice(0, hit)));
         var mark = document.createElement('span');
         mark.className = 'sl-combo-hit';
         mark.textContent = v.slice(hit, hit + q.length);
-        li.appendChild(mark);
-        li.appendChild(document.createTextNode(v.slice(hit + q.length)));
+        main.appendChild(mark);
+        main.appendChild(document.createTextNode(v.slice(hit + q.length)));
       } else {
-        li.textContent = v;
+        main.textContent = v;
       }
+      li.appendChild(main);
+
+      // 次要文本（品种说明），右对齐弱化；命中时同样高亮
+      if (d) {
+        var sub = document.createElement('span');
+        sub.className = 'sl-combo-desc';
+        if (q && hitD > -1) {
+          sub.appendChild(document.createTextNode(d.slice(0, hitD)));
+          var mk2 = document.createElement('span');
+          mk2.className = 'sl-combo-hit';
+          mk2.textContent = d.slice(hitD, hitD + q.length);
+          sub.appendChild(mk2);
+          sub.appendChild(document.createTextNode(d.slice(hitD + q.length)));
+        } else {
+          sub.textContent = d;
+        }
+        li.appendChild(sub);
+      }
+
       list.appendChild(li);
       inst._lis.push(li);
     });

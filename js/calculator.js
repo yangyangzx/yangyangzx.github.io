@@ -152,7 +152,10 @@ function _calculateImpl() {
   setCalcDirty(false);
   _calculating = true;
   const symbolEl = document.getElementById('symbol');
-  const symbol = symbolEl ? symbolEl.value.trim() || 'N/A' : 'N/A';
+  // toUpperCase：输入框的 text-transform:uppercase 只是【视觉】大写，value 仍是用户
+  // 实际敲入的大小写。不归一的话手打 "btc" 存进日志，会与品种定义里的 "BTC" 在
+  // 品种集中度、筛选下拉、统计分析里裂成两个品种（定义保存时是 toUpperCase 的）。
+  const symbol = symbolEl ? (symbolEl.value.trim().toUpperCase() || 'N/A') : 'N/A';
   const entryPrice = getActiveEntryPrice();
   if (isNaN(entryPrice)) {
     setCalcDirty(true);
@@ -949,13 +952,19 @@ function _calculateImpl() {
 
   // ===== 三卡片：盈亏比 =====
   let rrCheckResult = null;
+  // minRR 必须在 if (targetRR !== null) 块之外声明。
+  // 下方「距目标」子块走的是 targetPct !== null，与 targetRR 是两个独立条件：
+  // 存在 targetPct 有值、targetRR 仍为 null 的路径（止损腿净额 netLoss ≤ 0 时 929 行
+  // 不给 targetRR 赋值，见 895 行初始化）。原先 const 写在块内，这条路径一进来
+  // 就在块外引用未声明的绑定 → ReferenceError: minRR is not defined，被外层 catch
+  // 吞成一句「请检查品种/价格输入后重试」，真实原因完全看不出来。
+  const minRR = (settings.minRRRatio != null && settings.minRRRatio > 0) ? settings.minRRRatio : 2;
   if (targetRR !== null) {
     rrD.textContent = targetRR.toFixed(2) + 'R';
     // 颜色分级与「开仓清单 RR 闸门」同源：达标（≥ minRRRatio）为绿、未达标但接近
     // （≥ 90% minRR）为琥珀、明显不足为红。既复用 rrMeetsMin() 的浮点容差口径，又保证
     // 「卡片颜色 / 告警文字 / 闸门结论」三者对同一 RR 数字给出同一档判断，不再出现
     // minRR=2.5 时 2.37 卡显琥珀、清单门却判未过的矛盾。
-    const minRR = (settings.minRRRatio != null && settings.minRRRatio > 0) ? settings.minRRRatio : 2;
     if (rrMeetsMin(targetRR, minRR)) {
       cardRR.className = 'result-card rr-green';
     } else if (targetRR >= minRR * 0.9) {
@@ -976,7 +985,11 @@ function _calculateImpl() {
     const distSign = direction === 'long' ? '+' : '';
     const distPct = targetPct; // long: 正数, short: 已是正绝对值
     // 与上面卡片色阶同源：达标绿、接近琥珀、明显不足红，避免「距目标」子块与卡片颜色矛盾。
-    const distClass = rrMeetsMin(targetRR, minRR) ? 'green' : (targetRR >= minRR * 0.9 ? 'neutral' : 'red');
+    // targetRR 为 null 时必须走中性灰：直接代进 rrMeetsMin 会把 null 当 0 算，
+    // 结果恒为「明显不足」的红色——一个还没算出盈亏比的距离被判成不合格。
+    const distClass = targetRR === null
+      ? 'neutral'
+      : (rrMeetsMin(targetRR, minRR) ? 'green' : (targetRR >= minRR * 0.9 ? 'neutral' : 'red'));
     targetDistD.textContent = '距目标 ' + distSign + distPct.toFixed(1) + '%';
     targetDistD.className = 'result-card-sub target-dist ' + distClass;
     targetDistD.style.display = 'block';
@@ -1821,12 +1834,9 @@ function getActiveEntryPrice() {
 // ==================== 重置表单 ====================
 function resetForm() {
   var _settings = loadSettings();
-  // 从设置读取默认品种，优先取第一个自定义品种，否则用 BTC
-  var _symDefault = 'BTC';
-  try {
-    var _symList = _settings.customSymbols;
-    if (_symList && _symList.length > 0 && _symList[0].symbol) _symDefault = _symList[0].symbol;
-  } catch(e) { console.error('[resetForm]', e); }
+  // 默认品种取品种定义首项（settings.customSymbols），与 syncSettingsToForm 同源；
+  // 无任何定义时回退 BTC（HTML 里的兜底值）。
+  var _symDefault = (typeof getDefaultSymbol === 'function') ? (getDefaultSymbol() || 'BTC') : 'BTC';
   document.getElementById('symbol').value = _symDefault;
   document.getElementById('entryPrice').value = '';
   // 从设置读取默认本金，否则用 1000
@@ -2016,6 +2026,14 @@ function syncSettingsToForm() {
   // ATR 启用状态同步（HTML 中 id="formAtrStopEnabled"）
   var atrEnableEl = document.getElementById('formAtrStopEnabled');
   if (atrEnableEl) atrEnableEl.checked = settings.atrStopEnabled === true;
+  // 品种：index.html 里 #symbol 的 value 写死 "BTC"，与设置脱节——设置页把首项换成
+  // 别的品种后，首屏输入框仍是 BTC（本金/风险/杠杆都有同步，唯独品种漏了）。
+  // 与 resetForm 同一口径：取品种定义的首项；无定义时保留 HTML 的兜底值。
+  var symEl = document.getElementById('symbol');
+  if (symEl && typeof getDefaultSymbol === 'function') {
+    var _defSym = getDefaultSymbol();
+    if (_defSym) symEl.value = _defSym;
+  }
 }
 
 /**

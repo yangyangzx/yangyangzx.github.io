@@ -312,9 +312,14 @@ select.sl-native {
   right: 0;
 }
 
+/* 主文本 + 可选说明：说明来自 option[label]（品种管理里填的 desc）。
+   没有 label 的 datalist（如 strategyFramework）只有一个 .sl-combo-main，
+   space-between 下仍左对齐，视觉不变。 */
 .sl-combo-opt {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   padding: 8px 10px;
   border-radius: var(--radius-sm);
   font-size: var(--font-sm);
@@ -324,6 +329,25 @@ select.sl-native {
   overflow: hidden;
   text-overflow: ellipsis;
   transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+.sl-combo-main {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-weight: var(--font-weight-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 说明右对齐、低对比：它是辅助识别用，不能跟代码争视觉重心 */
+.sl-combo-desc {
+  flex: 0 1 auto;
+  min-width: 0;
+  text-align: right;
+  font-size: var(--font-xs);
+  color: var(--color-text-subtle);
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .sl-combo-opt.sl-active {

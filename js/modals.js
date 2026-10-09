@@ -248,6 +248,18 @@ function openEditModal(idx) {
       '</div></div>';
   }
 
+  // 编辑弹窗品种候选：与开仓计划同源（系统设置 → 品种管理）。
+  // 此前这里是裸文本框，改品种只能手打——手打 "btc" 与记录里的 "BTC" 会在
+  // 统计/筛选里裂成两个品种。带候选后仍可自由输入，只是给了正确拼写。
+  // 每次打开弹窗即时生成，不依赖 #symbolDatalist 的同步时机。
+  let emSymbolOptions = '';
+  if (typeof getDefinedSymbols === 'function') {
+    getDefinedSymbols().forEach(function(s) {
+      emSymbolOptions += '<option value="' + esc(s.symbol) + '"' +
+        (s.desc ? ' label="' + esc(s.desc) + '"' : '') + '></option>';
+    });
+  }
+
   modal.innerHTML = '<div class="modal-content">' +
     '<div class="modal-header"><h3>编辑日志</h3><button class="modal-close" onclick="closeEditModal()">✕</button></div>' +
     '<div class="modal-tabs">' +
@@ -257,7 +269,7 @@ function openEditModal(idx) {
     '</div>' +
     '<div class="modal-body">' +
       '<div class="modal-tab-panel active" id="emTab0">' +
-        '<div class="fp"><label>品种</label><input type="text" id="emSymbol" value="' + esc(item.symbol || '') + '" /></div>' +
+        '<div class="fp"><label>品种</label><input type="text" id="emSymbol" list="emSymbolList" value="' + esc(item.symbol || '') + '" /><datalist id="emSymbolList">' + emSymbolOptions + '</datalist></div>' +
         '<div class="fp"><label>方向</label><select id="emDirection"><option value="long"' + (item.direction === 'long' ? ' selected' : '') + '>做多</option><option value="short"' + (item.direction === 'short' ? ' selected' : '') + '>做空</option></select></div>' +
         '<div class="fp"><label>订单类型</label><select id="emOrderType"><option value="market"' + (item.orderType === 'market' ? ' selected' : '') + '>市价单</option><option value="limitBuy"' + (item.orderType === 'limitBuy' ? ' selected' : '') + '>Buy Limit</option><option value="stopBuy"' + (item.orderType === 'stopBuy' ? ' selected' : '') + '>Buy Stop</option><option value="limitSell"' + (item.orderType === 'limitSell' ? ' selected' : '') + '>Sell Limit</option><option value="stopSell"' + (item.orderType === 'stopSell' ? ' selected' : '') + '>Sell Stop</option><option value="stopLimit"' + (item.orderType === 'stopLimit' ? ' selected' : '') + '>Stop Limit</option><option value="trailingStop"' + (item.orderType === 'trailingStop' ? ' selected' : '') + '>Trailing Stop</option></select></div>' +
         '<div class="fp"><label>止损类型</label><select id="emStopType"><option value="stop-market"' + ((item.stopType || 'stop-market') === 'stop-market' ? ' selected' : '') + '>市价止损 (Stop-Market)</option><option value="stop-limit"' + (item.stopType === 'stop-limit' ? ' selected' : '') + '>限价止损 (Stop-Limit)</option></select></div>' +
@@ -831,7 +843,9 @@ function saveEditLog(idx, _raceConfirmed) {
     showToast(msg, level || 'warn');
     return false;
   }
-  v = gv('emSymbol'); if (v !== undefined) item.symbol = v;
+  // 品种归一（trim + 大写）：与品种管理保存口径一致（saveCustomSymbols 同规则）。
+  // 编辑时手打 "btc" 会与既有 "BTC" 在统计/筛选里裂成两个品种，这里统一。
+  v = gv('emSymbol'); if (v !== undefined) item.symbol = String(v).trim().toUpperCase();
   v = gv('emDirection'); if (v !== undefined) item.direction = v;
   v = gv('emOrderType'); if (v !== undefined) item.orderType = v;
   v = gv('emStopType'); if (v !== undefined) item.stopType = v;
@@ -1432,13 +1446,30 @@ function emSwitchTab(tabIndex) {
 
 // ==================== 过滤下拉填充 ====================
 function populateFilterOptions() {
-  // 品种
+  // 品种：候选 = 品种管理定义 ∪ 日志里出现过的值，两者都要。
+  //   · 只取 logs（原实现）：设置里新增但还没交易过的品种在筛选器里永远选不到；
+  //   · 只取定义：会漏掉历史日志里的临时品种（当初手打、没加进设置列表的）。
+  // 排序：定义在前且保持设置页顺序（用户自己排的优先级），日志独有的按字母追加在后。
   var selSym = document.getElementById('fltSymbol');
   if (selSym) {
     var curVal = selSym.value;
     var symbols = [];
-    for (var i = 0; i < logs.length; i++) { if (logs[i].symbol) symbols.push(logs[i].symbol); }
-    symbols = Array.from(new Set(symbols)).sort();
+    var _seenSym = {};
+    if (typeof getDefinedSymbols === 'function') {
+      getDefinedSymbols().forEach(function(s) {
+        if (_seenSym[s.symbol]) return;
+        _seenSym[s.symbol] = true;
+        symbols.push(s.symbol);
+      });
+    }
+    var _fromLogs = [];
+    for (var i = 0; i < logs.length; i++) { if (logs[i].symbol) _fromLogs.push(logs[i].symbol); }
+    _fromLogs.sort();
+    for (var j = 0; j < _fromLogs.length; j++) {
+      if (_seenSym[_fromLogs[j]]) continue;
+      _seenSym[_fromLogs[j]] = true;
+      symbols.push(_fromLogs[j]);
+    }
     selSym.innerHTML = '<option value="">全部品种</option>';
     symbols.forEach(function(s) {
       var opt = document.createElement('option');

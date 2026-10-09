@@ -993,16 +993,64 @@ function importSettings() {
 // ==================== 品种管理 ====================
 
 /**
- * 将 settings.customSymbols 同步到 input#symbol 的 datalist
+ * 品种定义的唯一权威来源：系统设置 → 品种管理（settings.customSymbols）。
+ *
+ * 所有需要「品种候选」的入口（开仓计划录入、日志筛选、编辑弹窗）都必须从这里取，
+ * 不得各自另写一份聚合逻辑——此前 #fltSymbol 只从 logs 聚合、#emSymbol 干脆没有
+ * 候选，导致「设置里定义了但还没交易过的品种」在这些入口里永远选不到，设置页的
+ * 品种管理形同只对开仓计划生效。
+ *
+ * 这里额外做两件 saveCustomSymbols 没做的事：大小写归一（保存时只 trim+toUpperCase
+ * 了单行，导入合并路径可能混进小写）与按代码去重（先出现的胜出，与设置页顺序一致）。
+ *
+ * @returns {Array<{symbol:string, desc:string}>} 已过滤空代码、已去重；设置损坏时返回 []
+ */
+function getDefinedSymbols() {
+  var raw = [];
+  try {
+    var s = loadSettings();
+    if (s && s.customSymbols && s.customSymbols.length) raw = s.customSymbols;
+  } catch (e) {
+    // 设置读取失败（JSON 损坏 / 隐私模式）：降级为无预设。
+    // 各入口都允许自由输入，缺候选不会阻断录入，只是没有建议。
+    return [];
+  }
+  var seen = {}, out = [];
+  for (var i = 0; i < raw.length; i++) {
+    var item = raw[i] || {};
+    var sym = String(item.symbol || '').trim().toUpperCase();
+    if (!sym || seen[sym]) continue;
+    seen[sym] = true;
+    out.push({ symbol: sym, desc: String(item.desc || '').trim() });
+  }
+  return out;
+}
+
+/**
+ * 取品种定义的默认选中项（设置里第一个）。无定义时返回 null，由调用方决定兜底值——
+ * 不要让每个调用方各自写死 'BTC'（index.html 里 #symbol 的 value 就是这么来的，
+ * 与设置脱节：设置里第一个品种改了，首屏输入框仍是旧值）。
+ * @returns {string|null}
+ */
+function getDefaultSymbol() {
+  var list = getDefinedSymbols();
+  return list.length ? list[0].symbol : null;
+}
+
+/**
+ * 将品种定义同步到 #symbolDatalist。
+ * option.label 带上说明（desc），SelectUI.combobox 展开时显示为次要文字——
+ * 此前 desc 只在设置页表格里可见，录入侧完全没消费，等于白填。
  */
 function syncSymbolDatalist() {
   var dl = document.getElementById('symbolDatalist');
   if (!dl) return;
-  var symbols = loadSettings().customSymbols || [];
+  var symbols = getDefinedSymbols();
   dl.innerHTML = '';
   symbols.forEach(function(s) {
     var opt = document.createElement('option');
     opt.value = s.symbol;
+    if (s.desc) opt.setAttribute('label', s.desc);
     dl.appendChild(opt);
   });
 }

@@ -29,27 +29,27 @@
 </div>
 <div id="out">加载中…</div>
 
-<script src="../js/chart-guard.js?v=5.6.14"></script>
-<script src="../js/constants.js?v=5.6.14"></script>
-<script src="../js/utils.js?v=5.6.14"></script>
-<script src="../js/storage.js?v=5.6.14"></script>
-<script src="../js/slippage.js?v=5.6.14"></script>
-<script src="../js/skills-integration.js?v=5.6.14"></script>
-<script src="../js/calc-visuals.js?v=5.6.14"></script>
-<script src="../js/calculation-ui.js?v=5.6.14"></script>
-<script src="../js/calculator.js?v=5.6.14"></script>
-<script src="../js/risk.js?v=5.6.14"></script>
-<script src="../js/planner.js?v=5.6.14"></script>
-<script src="../js/discipline-led.js?v=5.6.14"></script>
-<script src="../js/settings.js?v=5.6.14"></script>
-<script src="../js/io.js?v=5.6.14"></script>
-<script src="../js/logs.js?v=5.6.14"></script>
-<script src="../js/modals.js?v=5.6.14"></script>
+<script src="../js/chart-guard.js?v=5.6.17"></script>
+<script src="../js/constants.js?v=5.6.17"></script>
+<script src="../js/utils.js?v=5.6.17"></script>
+<script src="../js/storage.js?v=5.6.17"></script>
+<script src="../js/slippage.js?v=5.6.17"></script>
+<script src="../js/skills-integration.js?v=5.6.17"></script>
+<script src="../js/calc-visuals.js?v=5.6.17"></script>
+<script src="../js/calculation-ui.js?v=5.6.17"></script>
+<script src="../js/calculator.js?v=5.6.17"></script>
+<script src="../js/risk.js?v=5.6.17"></script>
+<script src="../js/planner.js?v=5.6.17"></script>
+<script src="../js/discipline-led.js?v=5.6.17"></script>
+<script src="../js/settings.js?v=5.6.17"></script>
+<script src="../js/io.js?v=5.6.17"></script>
+<script src="../js/logs.js?v=5.6.17"></script>
+<script src="../js/modals.js?v=5.6.17"></script>
 <!-- version.js 刻意放在最后：它无依赖也无副作用，但第 30.8 组要读 APP_VERSION 做
      版本一致性校验。此前这个页面从没加载过 version.js——一旦有断言直接引用
      APP_VERSION，整个测试套件会因 ReferenceError 在 runAll 里炸掉，
      结果是 total=0（全部断言都没跑），比一条失败更隐蔽。 -->
-<script src="../js/version.js?v=5.6.14"></script>
+<script src="../js/version.js?v=5.6.17"></script>
 <script>
 (function() {
   // ---- 环境 mock（与生产隔离） ----
@@ -2311,7 +2311,7 @@
     // 权威下结论不一致」的又一形式。这里的字面量是刻意的绊线：升版必须顺手改它，否则会红。
     (function () {
       h += T('APP_VERSION 已定义为字符串', typeof APP_VERSION === 'string' && APP_VERSION.length > 0);
-      h += T('APP_VERSION 为本次发布的 5.6.14（升版时同步改这行）', APP_VERSION === '5.6.14');
+      h += T('APP_VERSION 为本次发布的 5.6.17（升版时同步改这行）', APP_VERSION === '5.6.17');
       var vs = [];
       for (var i = 0; i < document.scripts.length; i++) {
         var s = document.scripts[i].getAttribute('src') || '';
@@ -2355,7 +2355,7 @@
     // 30.10 入场理由判定：下拉第一项原先直接是「趋势突破」，浏览器会把 reasonSelect.value
     // 静默设成它，getReason() 永远非空 → checkReason 恒为 PASS（一个永不失败的闸门项），
     // 而字段标签却写着「选填」；同时每笔没选理由的交易在复盘里被统计成「趋势突破」。
-    // v5.6.14 加了显式空选项后「没选」就是空串，判定必须把空串与占位文案都当未选择，
+    // v5.6.17 加了显式空选项后「没选」就是空串，判定必须把空串与占位文案都当未选择，
     // 并覆盖编辑弹窗的多选数组形态。
     (function () {
       h += T('空串视为未选择', isEntryReasonChosen('') === false);
@@ -2372,7 +2372,7 @@
       h += T('多选数组混有有效项即通过', isEntryReasonChosen(['', '  ', '均线信号']) === true);
     })();
 
-// 31. 移动端适配回归（v5.6.14）：
+// 31. 移动端适配回归（v5.6.17）：
     // 本测试页不链接应用 CSS（独立 DOM），在探针运行前把 base.css 的
     // .form-section-content 相关规则以 <style> 注入，再校验展开/折叠态的
     // max-height 计算值——这是 P0 修复的根因层（base 态 max-height:0 压制展开态）。
@@ -2417,6 +2417,74 @@
 
       probeWrap.remove();
       st.remove();
+    })();
+
+    h += group('32. 品种定义单一数据源（设置 → 品种管理 → 录入/筛选入口）');
+    (function () {
+      // 品种定义过去只对开仓计划生效：筛选下拉只从 logs 聚合、编辑弹窗干脆没有候选，
+      // 于是「设置里加了但还没交易过的品种」在这两处永远选不到。本组锁住契约：
+      // 所有品种入口都读 getDefinedSymbols()，且口径一致（大写 / trim / 去重）。
+      var _origSettings = null;
+      try { _origSettings = localStorage.getItem('trade_settings_v1'); } catch (e) {}
+      function _setSym(list) {
+        localStorage.setItem('trade_settings_v1', JSON.stringify({ customSymbols: list }));
+        _clearSettingsCache();
+      }
+
+      // ---- 1. 归一与去重 ----
+      _setSym([
+        { symbol: 'btc',  desc: '比特币' },
+        { symbol: ' ETH ', desc: '以太坊' },
+        { symbol: 'BTC',  desc: '重复项应被丢弃' },
+        { symbol: '',     desc: '空代码应被丢弃' },
+        { symbol: 'GOLD', desc: '' }
+      ]);
+      var defs = getDefinedSymbols();
+      h += T('小写归一为大写', defs[0] && defs[0].symbol === 'BTC');
+      h += T('前后空格被 trim', defs[1] && defs[1].symbol === 'ETH');
+      h += T('重复代码去重且先出现者胜', defs.length === 3 && defs[0].desc === '比特币');
+      h += T('空代码被过滤', defs.filter(function (d) { return !d.symbol; }).length === 0);
+      h += T('无说明时 desc 为空串', defs[2] && defs[2].symbol === 'GOLD' && defs[2].desc === '');
+      h += T('getDefaultSymbol 取定义首项', getDefaultSymbol() === 'BTC');
+
+      _setSym([]);
+      h += T('无定义时 getDefinedSymbols 为 []', getDefinedSymbols().length === 0);
+      h += T('无定义时 getDefaultSymbol 为 null', getDefaultSymbol() === null);
+
+      // ---- 2. datalist 同步（代码 + 说明）----
+      _setSym([{ symbol: 'BTC', desc: '比特币' }, { symbol: 'GOLD', desc: '黄金' }]);
+      var dlHost = document.createElement('div');
+      var dl = document.createElement('datalist');
+      dl.id = 'symbolDatalist';
+      dlHost.appendChild(dl);
+      document.body.appendChild(dlHost);
+      syncSymbolDatalist();
+      var opts = dl.querySelectorAll('option');
+      h += T('datalist 按定义顺序生成', opts.length === 2 && opts[0].value === 'BTC' && opts[1].value === 'GOLD');
+      h += T('datalist 携带说明（option[label]）', opts[0].getAttribute('label') === '比特币');
+
+      // ---- 3. 筛选下拉：定义项 ∪ 日志项，定义优先 ----
+      var selHost = document.createElement('div');
+      var sel = document.createElement('select');
+      sel.id = 'fltSymbol';
+      selHost.appendChild(sel);
+      document.body.appendChild(selHost);
+      var _origLogs = window.logs;
+      window.logs = [{ id: 'sym_x1', symbol: 'ETH', direction: 'long', entryPrice: 1, time: new Date().toISOString() }];
+      populateFilterOptions();
+      var vals = Array.prototype.map.call(sel.querySelectorAll('option'), function (o) { return o.value; });
+      h += T('筛选含设置定义项（GOLD 未交易过也必须可选）', vals.indexOf('GOLD') >= 0);
+      h += T('筛选仍含日志独有项（ETH 不在定义里）', vals.indexOf('ETH') >= 0);
+      h += T('定义项排在日志独有项之前', vals.indexOf('GOLD') < vals.indexOf('ETH'));
+      h += T('首项为「全部品种」空值', vals[0] === '');
+      window.logs = _origLogs;
+
+      dlHost.remove();
+      selHost.remove();
+      // 还原设置（本组是最后一组，仍显式还原，便于将来在后面继续插组）
+      if (_origSettings != null) { localStorage.setItem('trade_settings_v1', _origSettings); }
+      else { try { localStorage.removeItem('trade_settings_v1'); } catch (e) {} }
+      _clearSettingsCache();
     })();
 
     document.getElementById('out').innerHTML = h;

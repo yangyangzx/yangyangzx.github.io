@@ -344,4 +344,61 @@
 //          自动退出。_syncBatchModeUI 收敛状态与 UI 的同步点，toggleBatchMode /
 //          handleBatchCheck / batchSelectAll 共用
 //        版本号 5.6.13 → 5.6.14，index.html 40 处 ?v= 同步
-var APP_VERSION = '5.6.14';
+// 5.6.15：侧边栏导航视觉收口（layout.css / variables.css / index.html / version.js）
+//        - 选中态三套色归一：原「文字 --color-primary-strong(248 蓝) + 边框写死 hue 150(绿)
+//          + 扫光/辉光走 --nav-hue」三处各说各话，静态观感是蓝字配绿边。现文字/图标/
+//          边框/色标全部由 --nav-hue × --nav-accent-l 派生，一个模块一套色。
+//        - 新增 --nav-accent-l（暗底 72% / 浅底 46%）：色相亮度此前在 layout.css 里写死
+//          58%，无法同时满足两套主题对比度。现七个色相实测浅底 5.70~7.28:1、
+//          暗底 7.10~8.30:1（OKLCH→sRGB 换算），全部达标。
+//        - 右侧 8px 辉光圆点 → 3×18 色标细条：圆点被读作未读/故障指示灯，且孤悬右缘；
+//          细条与图标同色后才构成「图标—文字—色标」的完整色锚。
+//        - 图标由中性灰改着本模块色相（原色锚只落在一个点上，等于没有）。
+//        - 头部：logo 换 assets/icon-192.png（原 img/logo.png 803KB 缩到 48px 糊成噪点）、
+//          48→40px；标题 15→14px、字距归零，副标题 11→10px、字距 0.5→0.2px。
+//          原尺寸下 8 个汉字在 200px 栏里被 overflow 裁掉右缘。
+//        - 侧栏版本号改为 version.js 注入：HTML 里硬编码 v5.6.2 已落后 12 个小版本。
+//        版本号 5.6.14 → 5.6.15，index.html 45 处 ?v= + run-tests.html 21 处 ?v= 同步
+// 5.6.16：修复「minRR is not defined」运行时崩溃（calculator.js / utils.js）
+//        - P0：minRR 以 const 声明在 if (targetRR !== null) 块内，却在块外的「距目标」
+//          子块被引用。targetPct 与 targetRR 是两个独立条件——止损腿净额 netLoss ≤ 0
+//          时 targetRR 保持 null 而 targetPct 已有值，一进这条路径就抛
+//          ReferenceError，被 calculate() 的 catch 吞成「请检查品种/价格输入后重试」，
+//          真实原因完全不可见。minRR 提到块外声明。
+//        - 顺带修口径：距目标子块在 targetRR 为 null 时直接代进 rrMeetsMin，null 被
+//          当 0 算，恒定判红——「还没算出盈亏比」被显示成「盈亏比不合格」。现走中性灰。
+//        - utils.js：ChartManager 定义在 IIFE 内，cleanupPage 却在 IIFE 外用裸标识符
+//          挂载（靠 window.ChartManager 的全局对象属性隐式兜底才没崩）。改显式
+//          window.ChartManager，不靠兜底——本项目 risk.js 的裸 util 曾因此出过 P0。
+//        - 沉淀检查方法：eslint 临时启用 no-undef 全量扫，可一次性找出这类
+//          「块内 const 被块外引用」问题（见 CLAUDE.md 常用命令）。
+//        版本号 5.6.15 → 5.6.16
+
+// v5.6.17 — 品种定义单一数据源：系统设置 → 品种管理 → 所有品种入口
+//        - 新增 getDefinedSymbols() / getDefaultSymbol()（settings.js）：品种定义的唯一
+//          权威来源，做大写归一 + 按代码去重 + 过滤空代码。此前各入口各写一份：
+//          #fltSymbol 只从 logs 聚合、#emSymbol 干脆没有候选，于是「设置里加了但还没
+//          交易过的品种」在这两处永远选不到，品种管理实际只对开仓计划生效。
+//        - 筛选下拉改为「定义 ∪ 日志」，定义按设置页顺序在前，日志独有项按字母追加
+//          在后（只取定义会漏掉历史日志里手打过的临时品种）。
+//        - 编辑弹窗品种加候选（内联 datalist，与开仓计划同源），保存时 trim + 大写归一。
+//        - desc（说明）此前只在设置页表格里可见、录入侧完全没消费：现写入
+//          option[label]，combobox 展开时显示为右对齐次要文字，且参与输入过滤
+//          （记不清代码时打「比特币」也能筛出 BTC）。
+//        - calculator.js：#symbol 的 value 只 trim 未大写化，而输入框的
+//          text-transform:uppercase 只是视觉大写——手打 "btc" 存进日志会与定义里的
+//          "BTC" 在集中度/筛选/统计里裂成两个品种。现与定义口径一致（toUpperCase）。
+//        - 首屏品种默认值改由设置定义派生（syncSettingsToForm），此前 index.html 里
+//          写死 "BTC"，本金/风险/杠杆都有同步却漏了品种。
+//        - 新增测试第 32 组（14 条断言）：归一/去重/datalist/筛选并集，共 611 条。
+//        版本号 5.6.16 → 5.6.17
+var APP_VERSION = '5.6.17';
+
+// 侧栏底部版本号由此注入（index.html 的 #navVersion 留空）。
+// 此前 HTML 里硬编码 v5.6.2，版本已到 5.6.14 仍显示旧号——版本号同步清单里
+// 唯一一处「改了没人发现」的地方。version.js 是最后加载的脚本，DOM 此刻已就绪；
+// 仍判空以防将来挪动加载顺序或该节点被移除。
+(function () {
+  var el = document.getElementById('navVersion');
+  if (el) { el.textContent = 'v' + APP_VERSION; }
+})();
