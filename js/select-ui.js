@@ -217,6 +217,7 @@
     inst.wrap.classList.add('open');
     inst.btn.setAttribute('aria-expanded', 'true');
     _clampListHoriz(inst);
+    _clampListVertical(inst, inst.btn);
     // 光标定位到当前选中项（或第一项）
     var cur = inst.nativeSel.selectedIndex;
     var pos = 0;
@@ -229,6 +230,33 @@
 
   // 列表宽度自适应（width:max-content）后可能比触发器宽：若因此溢出视口右缘，
   // 改为右对齐展开。必须在 hidden=false 之后实测（此时才有布局尺寸）。
+  //
+  // 纵向：原实现只处理右缘，列表恒定向下展开（top:calc(100% + 6px)），
+  // 而 max-height 是写死的 280px —— 触发器贴近视口下缘时列表会溢出视口，
+  // 实测末尾选项落在 y=766..794 而视口高仅 613，**既点不到也键盘滚不到**
+  // （overflow-y:auto 只在列表自身范围内滚动，列表整体在视口外时无效）。
+  // 这里补：下方放不下就翻到上方，且两者都放不下时按可用高度收缩。
+  function _clampListVertical(inst, anchorEl) {
+    var list = inst.list;
+    inst.wrap.classList.remove('sl-flip-up');
+    list.style.maxHeight = '';
+
+    var vh = window.innerHeight;
+    var below = vh - anchorEl.getBoundingClientRect().bottom - 14;
+    var above = anchorEl.getBoundingClientRect().top - 14;
+    var natural = list.scrollHeight;
+    var want = natural + 12;   // +padding，避免末项贴边
+
+    if (below >= Math.min(want, 120) || below >= above) {
+      // 下方够用（或下方虽小但比上方大）→保持向下，仅在必要时按下方空间收缩
+      if (want > below) list.style.maxHeight = Math.max(96, below) + 'px';
+      return;
+    }
+    // 下方不够且上方更宽裕 → 向上翻转；上方仍不足则按上方空间收缩
+    inst.wrap.classList.add('sl-flip-up');
+    if (want > above) list.style.maxHeight = Math.max(96, above) + 'px';
+  }
+
   function _clampListHoriz(inst) {
     inst.wrap.classList.remove('sl-flip-right');  // 先复位再实测，避免上次状态干扰测量
     var listRect = inst.list.getBoundingClientRect();
@@ -246,6 +274,9 @@
     inst.activeIdx = -1;
     Array.prototype.forEach.call(inst.list.querySelectorAll('.sl-select-opt'),
       function(li) { li.classList.remove('sl-active'); });
+    // 复位纵向钳制留下的内联 maxHeight / 翻转类，否则下次展开会带着上次的收缩高度
+    inst.list.style.maxHeight = '';
+    inst.wrap.classList.remove('sl-flip-up');
   }
 
   function _closeAll() {
@@ -433,13 +464,21 @@
   }
 
   function _comboOpen(inst) {
-    if (inst.open) { _renderCombo(inst); return; }
+    if (inst.open) {
+      _renderCombo(inst);
+      // 已展开时的输入过滤：选项数变了，纵向翻转/收缩要跟着重算，
+      // 否则「先展开(12项→翻到上方) 再输入筛成2项」会留一个多余的向上翻转。
+      _clampListVertical(inst, inst.input);
+      return;
+    }
     _closeAll();
     inst.open = true;
     inst.list.hidden = false;
     _renderCombo(inst);
     inst.activeIdx = -1;
     _comboClamp(inst);
+    // 过滤后选项数会变，纵向可用高度要按当次内容重算（复用 select 的纵向钳制）
+    _clampListVertical(inst, inst.input);
   }
 
   function _comboClose(inst) {
@@ -448,6 +487,9 @@
     inst.list.hidden = true;
     inst.activeIdx = -1;
     inst.input.setAttribute('aria-expanded', 'false');
+    // 复位纵向钳制留下的内联 maxHeight，否则下次展开会带着上次的收缩高度
+    inst.list.style.maxHeight = '';
+    inst.wrap.classList.remove('sl-flip-up');
   }
 
   // 右缘防溢出：与 _clampListHoriz 同思路，先复位再实测

@@ -187,6 +187,15 @@ select.sl-native {
   right: 0;
 }
 
+/* 下缘防溢出（纵向）：触发器贴近视口底部时列表无处展开，改为向上翻转。
+   原实现只有右缘处理，列表恒向下展开 + 固定max-height:280px，
+   实测末项会落到 y=766 而视口高613 —— 点不到、键盘也滚不到。
+   收缩高度由 JS 按上下可用空间写内联 max-height，这里只负责方向。 */
+.sl-select.sl-flip-up .sl-select-list {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
+
 .sl-select-opt {
   display: flex;
   align-items: center;
@@ -310,6 +319,12 @@ select.sl-native {
 .sl-combo.sl-flip-right .sl-combo-list {
   left: auto;
   right: 0;
+}
+
+/* 下缘防溢出（纵向）：与 .sl-select.sl-flip-up 同理，向上翻转 */
+.sl-combo.sl-flip-up .sl-combo-list {
+  top: auto;
+  bottom: calc(100% + 6px);
 }
 
 /* 主文本 + 可选说明：说明来自 option[label]（品种管理里填的 desc）。
