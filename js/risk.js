@@ -201,7 +201,12 @@ function renderDailyLoss(closedOverride) {
   }
 
   var dailyLossSettings = loadSettings();
-  var dailyLossPct = dailyLossSettings.dailyLossLimit;
+  // 必须兜底：dailyLossLimit 为 null/NaN 时 dailyLossLimit 得 NaN，
+  // 下方 `(todayLoss / dailyLossLimit) * 100` 与 `todayLoss > dailyLossLimit`
+  // 对 NaN 全为 false → 日亏损超限提示永久静默（熔断却仍在 skills-integration 生效，
+  // 两个面板对同一配置给出相反结论）。与 skills-integration.js 的 `|| 5` 口径对齐。
+  var dailyLossPct = Number(dailyLossSettings && dailyLossSettings.dailyLossLimit);
+  if (!isFinite(dailyLossPct) || dailyLossPct <= 0) dailyLossPct = 5;
   var capital = getAccountCapital();
   var capitalKnown = (capital != null && capital > 0);
   var dailyLossLimit = capitalKnown ? capital * (dailyLossPct / 100) : 0;

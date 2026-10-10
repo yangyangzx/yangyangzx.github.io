@@ -519,17 +519,41 @@
     });
 
     var _initCap = 0;
+    // accountBalance 是否被判定为「已含历史盈亏的当前净值」（见下方注释）
+    var _balanceIsCurrentEquity = false;
     if (opts.purePnl) {
       _initCap = 0;
     } else {
-      // BUG#7 修复：优先使用设置中的账户余额作为权益曲线起点，避免首笔日志 capital 快照偏移导致曲线失真
-      var bal = (settingsOverride && settingsOverride.accountBalance > 0) ? settingsOverride.accountBalance : 0;
-      if (!bal) {
-        try { var _s = loadSettings(); if (_s && _s.accountBalance > 0) bal = _s.accountBalance; } catch(e) { console.error('[utils]', e); }
+      // P0 修复（2026-10-10 深度审计）：原实现把 settings.accountBalance 当作曲线
+      // 「起点」并再叠加全部历史 pnlAmount，但该字段的语义是「当前账户余额」，
+      // 用户会在净值变化后同步更新它——同一笔盈亏于是被算两次。
+      // 实测：初始 10000、赚 3000、余额更新为 13000 → 曲线终点算成 16000；
+      // 亏损场景更严重，真实回撤 0% 却报 42.86%，会误触回撤熔断拦住用户。
+      //
+      // 之前尝试用「bal与 初始本金+累计盈亏 的差值」启发式反推，结果两种解释
+      // 都可能成立（无法从数值区分「初始本金」与「当前净值」），必然误判其一——
+      // 数值启发式在此不可用，改为取**无歧义的权威来源**：
+      //
+      //   每条日志的 capital 是「开仓那一刻的账户快照」，故**最早一条**的 capital
+      //   即初始本金。据此起点 + 累加全部已实现盈亏，天然不存在重复计入，
+      //   也不受用户是否更新账户余额影响。
+      //   settings.accountBalance 仅在无日志时作为唯一可用来源。
+      //
+      // 代价：若用户故意把 accountBalance 设为一个与日志快照不同的「基准本金」
+      // （如刻意只算最近一段行情），该基准不再影响曲线。
+      var _firstCap = 0;
+      if (sorted.length > 0) {
+        var _c0 = Number(sorted[0].capital);
+        if (Number.isFinite(_c0) && _c0 > 0) _firstCap = _c0;
       }
-      if (bal > 0) _initCap = bal;
-      else if (sorted.length > 0 && sorted[0].capital != null && !isNaN(sorted[0].capital) && sorted[0].capital > 0) {
-        _initCap = sorted[0].capital;
+      if (_firstCap > 0) {
+        _initCap = _firstCap;
+      } else {
+        var bal = (settingsOverride && settingsOverride.accountBalance > 0) ? settingsOverride.accountBalance : 0;
+        if (!bal) {
+          try { var _s = loadSettings(); if (_s && _s.accountBalance > 0) bal = _s.accountBalance; } catch(e) { console.error('[utils]', e); }
+        }
+        _initCap = bal;   // 无日志：没有快照可用，只能用它作为起点
       }
     }
 
@@ -553,6 +577,7 @@
       initCap: _initCap,
       peakVal: peakVal,
       maxDDPercent: maxDD,
+      balanceIsCurrentEquity: _balanceIsCurrentEquity,
       finalEq: cum,
       totalPnl: totalPnl
     };

@@ -529,8 +529,17 @@ function downloadBackup() {
 }
 
 function updateBackupTime() {
+  // 槽位上限必须读 settings.backupCount，不能写死 10：
+  //   - 写死 10 时，用户把份数调成 3，第 4~10 槽若存着调小之前的旧数据，
+  //     会被当成最新备份显示出来（显示一个早已被轮转掉的时间）；
+  //   - 调大到 20 时，第 11~20 槽永远扫不到，「上次备份」永远停在旧时间。
+  // 这正是「参数化了却在别处写死同一常量」的典型漏改（与 5.6.19 修的
+  // calc-visuals 刻度常量同类）。
+  var _maxSlots = (typeof loadSettings === 'function')
+    ? (parseInt(loadSettings().backupCount, 10) || 10)
+    : 10;
   let latest = null, latestTime = '';
-  for (let i = 0; i < 10; i++) {  // M1: 支持 10 份轮转备份
+  for (let i = 0; i < _maxSlots; i++) {
     const raw = localStorage.getItem('trade_backup_auto_' + i);
     if (raw) {
       try {

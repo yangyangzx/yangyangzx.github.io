@@ -43,22 +43,22 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <script src="js/chart-guard.js?v=5.6.17"></script>
-  <link rel="stylesheet" href="css/variables.css?v=5.6.17">
-  <link rel="stylesheet" href="css/base.css?v=5.6.17">
-  <link rel="stylesheet" href="css/calculator.css?v=5.6.17">
-  <link rel="stylesheet" href="css/table.css?v=5.6.17">
-  <link rel="stylesheet" href="css/modals.css?v=5.6.17">
-  <link rel="stylesheet" href="css/select-ui.css?v=5.6.17">
-  <link rel="stylesheet" href="css/responsive.css?v=5.6.17">
-  <link rel="stylesheet" href="css/layout.css?v=5.6.17">
-  <link rel="stylesheet" href="css/dashboard.css?v=5.6.17">
-  <link rel="stylesheet" href="css/planner.css?v=5.6.17">
-  <link rel="stylesheet" href="css/discipline-led.css?v=5.6.17">
-  <link rel="stylesheet" href="css/risk.css?v=5.6.17">
-  <link rel="stylesheet" href="css/analytics.css?v=5.6.17">
-  <link rel="stylesheet" href="css/review.css?v=5.6.17">
-  <link rel="stylesheet" href="css/settings.css?v=5.6.17">
+  <script src="js/chart-guard.js?v=5.6.23"></script>
+  <link rel="stylesheet" href="css/variables.css?v=5.6.23">
+  <link rel="stylesheet" href="css/base.css?v=5.6.23">
+  <link rel="stylesheet" href="css/calculator.css?v=5.6.23">
+  <link rel="stylesheet" href="css/table.css?v=5.6.23">
+  <link rel="stylesheet" href="css/modals.css?v=5.6.23">
+  <link rel="stylesheet" href="css/select-ui.css?v=5.6.23">
+  <link rel="stylesheet" href="css/responsive.css?v=5.6.23">
+  <link rel="stylesheet" href="css/layout.css?v=5.6.23">
+  <link rel="stylesheet" href="css/dashboard.css?v=5.6.23">
+  <link rel="stylesheet" href="css/planner.css?v=5.6.23">
+  <link rel="stylesheet" href="css/discipline-led.css?v=5.6.23">
+  <link rel="stylesheet" href="css/risk.css?v=5.6.23">
+  <link rel="stylesheet" href="css/analytics.css?v=5.6.23">
+  <link rel="stylesheet" href="css/review.css?v=5.6.23">
+  <link rel="stylesheet" href="css/settings.css?v=5.6.23">
 </head>
 <body>
 <nav id="mainNav" role="navigation" aria-label="主导航">
@@ -598,8 +598,11 @@
                   </div>
                   <div class="vv-gauge">
                     <div class="vv-g-markers">
-                      <span class="vv-g-mark" id="gMarkSoft">80%</span>
-                      <span class="vv-g-mark vv-g-mark-agg" id="gMarkAgg">90%</span>
+                      <!-- 初始文本只为首屏占位；每次「计算仓位」后由 calc-visuals.renderMargin
+                           按settings.marginUsageLimitPct / aggregateMarginLimitPct 重写。
+                           上限已参数化，这里写死会在用户改设置后短暂误导。 -->
+                      <span class="vv-g-mark" id="gMarkSoft">单笔 —</span>
+                      <span class="vv-g-mark vv-g-mark-agg" id="gMarkAgg">—</span>
                     </div>
                     <div class="vv-g-track" id="marginTrack">
                       <div class="vv-g-fill vv-g-fill-ok" id="marginFill">
@@ -674,7 +677,7 @@
             </div>
             <div class="check-item" id="checkMargin">
               <span class="check-icon skipped">—</span>
-              <span class="check-label">保证金 ≤ 本金 80%</span>
+              <span class="check-label" data-default="保证金 ≤ 可用本金上限">保证金 ≤ 可用本金上限</span>
               <span class="check-note"></span>
             </div>
             <div class="check-item" id="checkReason">
@@ -722,31 +725,13 @@
           </div>
         </div>
 
-        <!-- 盈亏比反推卡片 -->
-        <div class="card" id="rrReverseCard">
-          <div class="card-header">盈亏比反推</div>
-          <div class="form-row">
-            <label>期望盈亏比（含费净 RR）</label>
-            <input type="number" id="desiredRR" step="0.1" min="0.5" value="2" placeholder="如 2">
-          </div>
-          <div class="form-row">
-            <label>推算目标价</label>
-            <input type="text" id="reverseTP" readonly placeholder="输入期望盈亏比后自动计算">
-          </div>
-          <div class="form-row">
-            <label>推算止损价</label>
-            <input type="text" id="reverseSL" readonly placeholder="输入目标价后反向推算">
-          </div>
-          <div style="font-size:var(--font-xs);color:var(--color-text-muted);line-height:1.5;">
-            按含往返手续费的净盈亏比求解，回填后与「盈亏比」卡片口径一致。
-          </div>
-          <div style="display:flex;gap:var(--space-sm);">
-            <button class="btn btn-sm" onclick="calcReverseTP()">反推目标价</button>
-            <button class="btn btn-sm btn-outline" onclick="calcReverseSL()">反推止损价</button>
-          </div>
-        </div>
-
         <!-- 多止盈位卡片 -->
+        <!-- 盈亏比反推卡片已于 v5.6.23 移除：它的两个输出 #reverseTP / #reverseSL 是只读
+             展示框，算完不会写回 #targetPrice / #stopLoss，也不喂给下面的多止盈位规划
+             ——想用得手动抄数字。而三档止盈由 autoCalcMultiTP 按设置里的 tpRRs 自动
+             求解（每次「计算仓位」后刷新），含费净 RR 各档直接显示，反推面板对它而言
+             是重复入口。求解内核 solveTPForRR 仍在用（autoCalcMultiTP 依赖它），
+             calcReverseTP / calcReverseSL 保留为测试入口。 -->
         <div class="card" id="multiTPCard">
           <div class="card-header">多止盈位规划</div>
           <div id="multiTPList">
@@ -1287,6 +1272,70 @@
             <input type="number" id="setDailyTradeMax" min="5" max="30" step="1" value="8">
             <span class="setting-hint">达到此笔数后将触发频率警告</span>
           </div>
+          <div class="setting-row">
+            <label>多止盈位1 (R:R)</label>
+            <input type="number" id="setTpRR1" min="0.1" max="20" step="0.1" value="1.5">
+          </div>
+          <div class="setting-row">
+            <label>多止盈位2 (R:R)</label>
+            <input type="number" id="setTpRR2" min="0.1" max="20" step="0.1" value="2">
+          </div>
+          <div class="setting-row">
+            <label>多止盈位3 (R:R)</label>
+            <input type="number" id="setTpRR3" min="0.1" max="20" step="0.1" value="3">
+          </div>
+          <div class="setting-row">
+            <label>凯利风险上限 (%)</label>
+            <input type="number" id="setKellyRiskLimitPct" min="1" max="20" step="0.5" value="5">
+            <span class="setting-hint">凯利建议仓位的单笔风险上限，独立于「单笔风险比例」闸门</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 仓位与费用上限（2026-10-10 参数化：原先为代码内硬编码） -->
+      <div class="card">
+        <div class="card-header">仓位与费用上限</div>
+        <div class="settings-form">
+          <div class="setting-row">
+            <label>单笔保证金上限 (%)</label>
+            <input type="number" id="setMarginUsageLimitPct" min="20" max="100" step="1" value="80">
+            <span class="setting-hint">单笔保证金占「可用本金」的上限（可用本金 = 本金扣除已有持仓占用）</span>
+          </div>
+          <div class="setting-row">
+            <label>总保证金上限 (%)</label>
+            <input type="number" id="setAggregateMarginLimitPct" min="30" max="100" step="1" value="90">
+            <span class="setting-hint">所有持仓（含本次）保证金合计占本金的上限</span>
+          </div>
+          <div class="setting-row">
+            <label>最小止损距离 (%)</label>
+            <input type="number" id="setMinStopDistancePct" min="0.01" max="5" step="0.01" value="0.1">
+            <span class="setting-hint">止损距离低于入场价的此比例时杠杆仓会被硬阻断（现货仅提示）</span>
+          </div>
+          <div class="setting-row">
+            <label>连亏降仓笔数</label>
+            <input type="number" id="setLossStreakDerisk" min="2" max="10" step="1" value="2">
+            <span class="setting-hint">连亏达到此笔数后缩减新仓仓位（按下方系数），仍可开仓</span>
+          </div>
+          <div class="setting-row">
+            <label>连亏熔断笔数</label>
+            <input type="number" id="setLossStreakBlock" min="2" max="20" step="1" value="3">
+            <span class="setting-hint">连亏达到此笔数后当日禁止开仓。须大于降仓笔数，否则降仓永远不会生效</span>
+          </div>
+          <div class="setting-row">
+            <label>连亏降仓系数</label>
+            <input type="number" id="setLossStreakDeriskFactor" min="0.1" max="1" step="0.05" value="0.8">
+            <span class="setting-hint">触发降仓后仓位与风险额的乘数（0.8 = 缩减 20%）</span>
+          </div>
+          <div class="setting-row">
+            <label>限价单手续费率</label>
+            <input type="number" id="setFeeRateLimit" min="0" max="1" step="0.001" value="0.04">
+            <span class="setting-hint">未填手续费时的回落值（小数，0.04 = 4‰）</span>
+          </div>
+          <div class="setting-row">
+            <label>市价单手续费率</label>
+            <input type="number" id="setFeeRateMarket" min="0" max="1" step="0.001" value="0.08">
+            <span class="setting-hint">未填手续费时的回落值（小数，0.08 = 8‰）</span>
+          </div>
         </div>
       </div>
       
@@ -1328,6 +1377,14 @@
             <span>导入日志</span>
             <button class="btn btn-outline btn-sm" onclick="importLogs()">导入 JSON/CSV</button>
           </div>
+          <div class="setting-row">
+            <span>从自动备份恢复</span>
+            <button class="btn btn-outline btn-sm" id="restoreBackupBtn" onclick="openRestoreBackupDialog()"><i class="fas fa-clock-rotate-left"></i> 选择备份…</button>
+          </div>
+          <p style="font-size:var(--font-xs);color:var(--color-text-muted);margin-top:var(--space-sm);">
+            自动备份在每次保存日志时轮转写入浏览器本地（份数见「交易参数 → 备份份数」）。
+            恢复会用所选备份<b>覆盖</b>当前日志；覆盖前会自动把现有日志另存为「恢复前备份」。
+          </p>
           <div class="setting-row setting-row-sep">
             <span>重置设置为默认值</span>
             <button class="btn btn-outline btn-sm" onclick="resetSettings()">重置</button>
@@ -1359,33 +1416,33 @@
 
 </main>
 
-  <script src="js/constants.js?v=5.6.17"></script>
-  <script src="js/utils.js?v=5.6.17"></script>
-  <script src="js/select-ui.js?v=5.6.17"></script>
-  <script src="js/toast.js?v=5.6.17"></script>
-  <script src="js/slippage.js?v=5.6.17"></script>
-  <script src="js/storage.js?v=5.6.17"></script>
-  <script src="js/skills-integration.js?v=5.6.17"></script>
-  <script src="js/calc-visuals.js?v=5.6.17"></script>
-  <script src="js/calculation-ui.js?v=5.6.17"></script>
-  <script src="js/calculator.js?v=5.6.17"></script>
-  <script src="js/logs.js?v=5.6.17"></script>
-  <script src="js/rendering.js?v=5.6.17"></script>
-  <script src="js/stats.js?v=5.6.17"></script>
-  <script src="js/modals.js?v=5.6.17"></script>
-  <script src="js/navigation.js?v=5.6.17"></script>
-  <script src="js/dashboard.js?v=5.6.17"></script>
-  <script src="js/planner.js?v=5.6.17"></script>
-  <script src="js/discipline-led.js?v=5.6.17"></script>
-  <script src="js/settings.js?v=5.6.17"></script>
-  <script src="js/risk.js?v=5.6.17"></script>
-  <script src="js/chart-factory.js?v=5.6.17"></script>
-  <script src="js/analytics.js?v=5.6.17"></script>
-  <script src="js/review.js?v=5.6.17"></script>
-  <script src="js/io.js?v=5.6.17"></script>
-  <script src="js/dom-cache.js?v=5.6.17"></script>
-  <script src="js/app.js?v=5.6.17"></script>
-<script src="js/version.js?v=5.6.17"></script>
+  <script src="js/constants.js?v=5.6.23"></script>
+  <script src="js/utils.js?v=5.6.23"></script>
+  <script src="js/select-ui.js?v=5.6.23"></script>
+  <script src="js/toast.js?v=5.6.23"></script>
+  <script src="js/slippage.js?v=5.6.23"></script>
+  <script src="js/storage.js?v=5.6.23"></script>
+  <script src="js/skills-integration.js?v=5.6.23"></script>
+  <script src="js/calc-visuals.js?v=5.6.23"></script>
+  <script src="js/calculation-ui.js?v=5.6.23"></script>
+  <script src="js/calculator.js?v=5.6.23"></script>
+  <script src="js/logs.js?v=5.6.23"></script>
+  <script src="js/rendering.js?v=5.6.23"></script>
+  <script src="js/stats.js?v=5.6.23"></script>
+  <script src="js/modals.js?v=5.6.23"></script>
+  <script src="js/navigation.js?v=5.6.23"></script>
+  <script src="js/dashboard.js?v=5.6.23"></script>
+  <script src="js/planner.js?v=5.6.23"></script>
+  <script src="js/discipline-led.js?v=5.6.23"></script>
+  <script src="js/settings.js?v=5.6.23"></script>
+  <script src="js/risk.js?v=5.6.23"></script>
+  <script src="js/chart-factory.js?v=5.6.23"></script>
+  <script src="js/analytics.js?v=5.6.23"></script>
+  <script src="js/review.js?v=5.6.23"></script>
+  <script src="js/io.js?v=5.6.23"></script>
+  <script src="js/dom-cache.js?v=5.6.23"></script>
+  <script src="js/app.js?v=5.6.23"></script>
+<script src="js/version.js?v=5.6.23"></script>
 
   <!-- 样式见 css/modals.css #toastContainer（原为内联，z-index 硬编码 400 低于弹窗遮罩 500 导致提示被盖住） -->
   <div id="toastContainer" role="status" aria-live="polite"></div>

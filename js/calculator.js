@@ -106,6 +106,54 @@ function getProvisionalStopLoss(entryPrice, direction, symbol, settings) {
   };
 }
 
+// ===== 参数化风控阈值的读取入口（唯一权威，2026-10-10）=====
+// 这些阈值原先以字面量散落在本文件各处（0.8 / 0.9 / 3 / 0.001 / 0.04 / 0.08），
+// 用户在设置页无从调整；其中 80% / 90% 是最靠近资金的两道闸门，反而比集中度 30% 更不可配。
+// 现统一走 loadSettings()，默认值仅在此处与 SETTINGS_DEFAULTS 各写一份（本处是读侧兜底，
+// 用于测试页未加载 settings.js 的场景），且与原字面量一致——历史行为不变。
+// 所有读取都过_numSetting()：localStorage 被手改或导入的脏值（NaN / 字符串 / 越界）
+// 一律回退默认，绝不让脏值穿过闸门——原硬编码写法天然免疫这类污染，改读设置后必须补上。
+//
+// P0 修复（2026-10-10 深度审计）：原实现只判 isFinite，与上方注释「越界一律回退默认」
+// 的承诺不符。区间校验只在 saveSettings 保存路径，localStorage 被手改或备份导入的
+// 越界值会原样穿过闸门。实测后果：marginUsageLimitPct 被改成 150 时
+// marginLimitPos = availableCapital × leverage × 1.5 > maxPos，而第②层交易所上限
+// 被 `if (!cappedByMargin && ...)` 跳过 → 交易所上限被突破 50%。
+// 现按 SETTINGS_VALIDATORS 的 min/max 钳制；越界一律回退 fallback（不静默钳到边界，
+// 因为「150%」不是用户可能想要的合法值，回退默认值更安全且可预期）。
+function _numSetting(key, fallback) {
+  var v = null;
+  try {
+    if (typeof loadSettings === 'function') {
+      var s = loadSettings();
+      if (s) v = Number(s[key]);
+    }
+  } catch (e) { v = null; }
+  if (typeof v !== 'number' || !isFinite(v)) return fallback;
+  // 区间钳制：SETTINGS_VALIDATORS 是保存路径与读侧共用的唯一权威（settings.js）。
+  // 读不到该表（测试页未加载 settings.js）时只保留有限性检查。
+  var rule = (typeof SETTINGS_VALIDATORS !== 'undefined') ? SETTINGS_VALIDATORS[key] : null;
+  if (rule && typeof rule.min === 'number' && typeof rule.max === 'number') {
+    if (v < rule.min || v > rule.max) return fallback;
+  }
+  return v;
+}
+
+function _getMarginUsageLimitPct() { return _numSetting('marginUsageLimitPct', 80); }
+function _getAggregateMarginLimitPct() { return _numSetting('aggregateMarginLimitPct', 90); }
+function _getLossStreakDeriskThreshold() { return _numSetting('lossStreakDerisk', 2); }
+// 熔断线与降仓线必须分开（2026-10-10 深度审计）：共用一个阈值时
+// `streak >= 阈值` 先被熔断拦下，降仓分支在自动模式下永远不可达。
+function _getLossStreakBlockThreshold() { return _numSetting('lossStreakBlock', 3); }
+function _getLossStreakDeriskFactor() { return _numSetting('lossStreakDeriskFactor', 0.8); }
+function _getKellyRiskLimitPct() { return _numSetting('kellyRiskLimitPct', 5); }
+function _getMinStopDistancePct() { return _numSetting('minStopDistancePct', 0.1); }
+function _getDefaultFeeRate(orderType) {
+  return orderType === 'limit'
+    ? _numSetting('feeRateLimit', 0.04)
+    : _numSetting('feeRateMarket', 0.08);
+}
+
 // P0 FIX（2026-09-23 开仓逻辑审计）：原 calculate() 主体 ~900 行无 try/finally，
 // _calculating 在 :102 置真后仅由函数尾部 :972 复位，任何运行时异常（典型：
 // slippage.js applyAdversePrice 对 SHIB 等未映射低价品种 throw「滑点后的成交价必须大于 0」）
@@ -201,6 +249,9 @@ function _calculateImpl() {
 
   // ===== Skills 融合：ATR 动态止损 =====
   let atrStopMode = false;
+  // 2026-10-10：ATR 被分批独立止损顶替时的留痕标志（见下方冲突分支）。
+  // 与 atrStopMode 严格区分：前者是「ATR 生效了」，后者是「ATR 曾输入但未生效」。
+  let atrSuppressedByWeighted = false;
   const atrValue = parseFloat(document.getElementById('atrValue').value);
   var settings = loadSettings();
   // P0-7 FIX: 表单开关应完全覆盖全局设置，而非 OR 短路
@@ -249,6 +300,34 @@ function _calculateImpl() {
       dailyLossCheck
     );
   }
+  // ===== P0 修复（2026-10-10）：账户回撤熔断 =====
+  // settings.maxDrawdownAlert 此前只在risk.js 的卡片着色里被读，开仓链路从不消费，
+  // 用户调它对开仓结果零影响（系统事实上没有回撤熔断）。现补上这道闸门。
+  // 口径统一走 getCurrentDrawdown()（与风控中心卡片同源），避免两处结论不一致。
+  var _dd = getCurrentDrawdown();
+  // P0 修复（2026-10-10 深度审计）：数据取不到时原实现静默放行（fail-open），
+  // 回撤恒为 0。改为 fail-closed——无法确认回撤就不允许开仓。
+  if (_dd.readFailed) {
+    _calcCleanup();
+    return renderHardBlock(
+      'drawdown-unavailable',
+      '回撤状态不可用',
+      '无法读取历史平仓记录以计算账户回撤，为安全起见已阻止本次开仓。请刷新页面重试；若持续出现，请检查日志数据是否完整。',
+      _dd
+    );
+  }
+  if (_dd.blocked) {
+    _calcCleanup();
+    return renderHardBlock(
+      'drawdown-limit',
+      '账户回撤熔断',
+      '当前回撤 ' + _dd.drawdownPct.toFixed(2) + '%（净值 ' + _dd.equity.toFixed(2)
+        + ' / 峰值 ' + _dd.peak.toFixed(2) + ' USDT），已超过最大回撤告警 '
+        + _dd.thresholdPct + '%。建议暂停交易、复盘后再开新仓。',
+      _dd
+    );
+  }
+
   // ===== P0-01：交易频率检查 =====
   var freqCheck = checkDailyTradeFrequency();
   if (freqCheck.blocked) {
@@ -331,15 +410,36 @@ function _calculateImpl() {
   // （calculator.js 在 stats.js 之前加载，但 _calculateImpl 是运行时调用，届时已定义。）
   (function() {
     var currentStreak = 0;
+    var _streakKnown = false;   // 区分「真的0 笔」与「取不到」
     if (typeof _getTodayLossStreak === 'function') {
-      try { currentStreak = _getTodayLossStreak().streak || 0; } catch (e) { console.error('[calculate] 连亏熔断计数失败:', e); }
+      try {
+        var _sr = _getTodayLossStreak();
+        currentStreak = (_sr && _sr.streak) || 0;
+        _streakKnown = true;
+      } catch (e) {
+        // P0 修复（2026-10-10 深度审计）：原实现 catch 里只 console.error，
+        // streak 停在 0 → 连亏熔断整道闸门**静默失效**（fail-open），
+        // 而这是风控链上最不该放行的一类异常（连亏时恰恰最需要拦住）。
+        // 现改为 fail-closed：取不到连亏数就不允许开仓，让用户看到明确原因。
+        console.error('[calculate] 连亏熔断计数失败:', e);
+        _calcCleanup();
+        return renderHardBlock(
+          'loss-streak-unavailable',
+          '连亏状态不可用',
+          '无法读取当日连亏记录（数据异常），为安全起见已阻止本次开仓。请刷新页面重试；若持续出现，请检查日志数据。',
+          { streak: null }
+        );
+      }
+    } else {
+      // 函数不存在（测试页只加载部分模块）——不阻断，避免测试环境无法计算
+      _streakKnown = true;
     }
-    if (currentStreak >= 3) {
+    if (_streakKnown && currentStreak >= _getLossStreakBlockThreshold()) {
       _calcCleanup();
       return renderHardBlock(
         'loss-streak-limit',
         '连续亏损熔断',
-        '当日已连续亏损 ' + currentStreak + ' 笔；冷却期结束前不可建立新计划。',
+        '当日已连续亏损 ' + currentStreak + ' 笔（阈值 ' + _getLossStreakBlockThreshold() + ' 笔）；冷却期结束前不可建立新计划。',
         { streak: currentStreak }
       );
     }
@@ -371,6 +471,10 @@ function _calculateImpl() {
       document.getElementById('riskHint').textContent = '= ' + fmtMoney(riskAmount, 2) + ' USDT (' + p.toFixed(1) + '% 本金)';
     } else {
       showCalcError('风险比例无效', '请输入有效的亏损比例（0.5%-10%）');
+      // P0 修复（2026-10-10 深度审计）：漏调 _calcCleanup() → _calculating 永真 →
+      // app.js 的按钮守卫与 markCalculationDirty() 双双永久短路，
+      // 「计算仓位」按钮此后完全无响应，只能刷新页面。
+      _calcCleanup();
       return;
     }
   } else {
@@ -382,6 +486,7 @@ function _calculateImpl() {
       document.getElementById('riskHint').textContent = '= ' + fmtMoney(riskAmount, 2) + ' USDT (最大亏损)';
     } else {
       showCalcError('风险金额无效', '请输入正数作为固定风险金额');
+      _calcCleanup();   // 同上：P0 漏调
       return;
     }
   }
@@ -392,19 +497,20 @@ function _calculateImpl() {
   const plannedRiskAmount = riskAmount;
 
   // P0-4 FIX: 硬上限保护——表单值不允许绕过系统设置的风险比例上限
-  try {
-    var _sysSettings = loadSettings();
-    var _sysMaxRiskPct = (_sysSettings && _sysSettings.riskPercent) ? (_sysSettings.riskPercent / 100) : 0.10;
-    if (riskPercent > _sysMaxRiskPct) {
-      _calcCleanup();
-      return renderHardBlock(
-        'single-risk-exceeds-limit',
-        '单笔风险超出系统上限',
-        '当前风险 ' + (riskPercent * 100).toFixed(1) + '% 超过系统设置上限 ' + _sysSettings.riskPercent + '%，不允许开仓。请降低风险比例或调整系统设置。',
-        { riskPercent: riskPercent, maxRiskPercent: _sysMaxRiskPct }
-      );
-    }
-  } catch(e) { /* 读取设置失败则跳过硬上限检查 */ }
+  // P0 修复（2026-10-10 深度审计）：原实现 `catch(e) {}` 是fail-open——
+  // loadSettings() 抛错（隐私模式/存储被禁用）时整道单笔风险上限闸门直接失效放行，
+  // 与 _numSetting 存在的意义（就是为防这个）自相矛盾。改为 fail-closed：
+  // 读不到设置时按默认值 2% 判定，宁可拦得严，不可放得松。
+  var _sysMaxRiskPct = _numSetting('riskPercent', 2) / 100;
+  if (riskPercent > _sysMaxRiskPct) {
+    _calcCleanup();
+    return renderHardBlock(
+      'single-risk-exceeds-limit',
+      '单笔风险超出系统上限',
+      '当前风险 ' + (riskPercent * 100).toFixed(1) + '% 超过系统设置上限 ' + (_sysMaxRiskPct * 100).toFixed(1) + '%，不允许开仓。请降低风险比例或调整系统设置。',
+      { riskPercent: riskPercent, maxRiskPercent: _sysMaxRiskPct }
+    );
+  }
 
   // ===== Skills 融合：凯利公式计算（额外显示） =====
   let kellyHTML = '';
@@ -489,14 +595,14 @@ function _calculateImpl() {
     }
     // 凯利驱动的风险同样受系统单笔风险上限约束（与手动输入同权，P0-4 语义）
     try {
-      var _sysS2 = loadSettings();
-      var _sysMax2 = (_sysS2 && _sysS2.riskPercent) ? (_sysS2.riskPercent / 100) : 0.10;
+      var _sysMax2Pct = _numSetting('riskPercent', 2);
+      var _sysMax2 = _sysMax2Pct / 100;
       if (riskPercent > _sysMax2) {
         _calcCleanup();
         return renderHardBlock(
           'kelly-exceeds-limit',
           '凯利风险超出系统上限',
-          '半凯利风险 ' + (riskPercent * 100).toFixed(1) + '% 超过系统设置上限 ' + _sysS2.riskPercent + '%，不允许开仓。请在系统设置中提高上限或关闭凯利驱动。',
+          '半凯利风险 ' + (riskPercent * 100).toFixed(1) + '% 超过系统设置上限 ' + _sysMax2Pct + '%，不允许开仓。请在系统设置中提高上限或关闭凯利驱动。',
           { riskPercent: riskPercent, maxRiskPercent: _sysMax2 }
         );
       }
@@ -559,6 +665,11 @@ function _calculateImpl() {
     // A 优化：ATR 与分批独立止损冲突时显示明确提示，而非静默跳过
     rw = '<span class="warning-tag alert"><i class="fas fa-exclamation-triangle"></i> ATR 动态止损与分批独立止损不可同时使用，已优先使用分批止损计算。</span>';
     atrStopMode = false;
+    // 2026-10-10：atrStopMode 归false 是正确的（ATR 确实未参与最终计算），
+    // 但 saveLog 靠 `calc.atrStopMode ? calc.atrValue : null` 落库，于是用户填的
+    // ATR 值凭空消失——复盘时看不出"曾输入过 ATR、但被分批止损顶替"，
+    // 留下的是「ATR = null」这种看不出意图的记录。用独立字段留痕，不改 atrStopMode 语义。
+    atrSuppressedByWeighted = true;
     // P1 FIX（2026-09-23 开仓逻辑审计）：仓位规模已改用加权分批止损距离，但 stopLoss
     // 仍停留在上方 ATR 分支写入的值，随后被 setCalc() 持久化并供给强平检查与止损腿滑点
     // —— 仓位规模与止损风险从此按两个不同口径计算。这里按方向还原与 stopDistance
@@ -585,16 +696,36 @@ function _calculateImpl() {
   }
   if (!valid) { showCalcError(err, ''); _calcCleanup(); return; }  // P2 FIX：见上，避免残留上次组合风险行
 
-  // 零止损距离硬阻断（止损距离 < 入场价 0.1%）：仓位会被放大到危险值，不允许继续计算
-  if (stopDistance < effectiveEntryPrice * 0.001) {
-    var _sdPct = (stopDistance / effectiveEntryPrice * 100).toFixed(3);
-    _calcCleanup();
-    return renderHardBlock(
-      'stop-distance-too-tight',
-      '止损距离过近',
-      '止损距离仅 ' + _sdPct + '%（入场价 × 0.1%），仓位会被放大到不可控规模。请增大止损距离或降低风险比例后重新计算。',
-      { stopDistance: stopDistance, entryPrice: effectiveEntryPrice, stopPct: _sdPct }
-    );
+  // 零止损距离硬阻断（止损距离 < 入场价 0.1%）：仓位会被放大到危险值，不允许继续计算。
+  // P1 修复（2026-10-10）：阻断只对杠杆合约成立，现货（leverage=0）不再拦。
+  // 仓位公式 positionSize = 风险额 × 入场价 / 止损距离，止损距离趋零时名义仓位按
+  // 1/止损距离 放大——这句话里真正危险的是【保证金】：合约保证金 = 仓位/杠杆，
+  // 而强平价离入场价只有 1/杠杆 的距离，窄止损叠高杠杆几乎必然先被强平，
+  // 单笔 80% 与聚合 90% 两道上限只能把仓位压回额度，压不掉「开仓即被打掉」这个事实。
+  // 现货没有保证金放大也没有强平：仓位上限就是可用本金（maxPos = availableCapital × 1），
+  // 下方交易所上限与 90% 聚合上限会把超限部分截断，风险额按截断后仓位回算，
+  // 实际风险只会【小于】计划风险——不存在失控，硬阻断却把一笔合法的小风险现货交易
+  // （如 0.064% 止损 + 1% 计划风险 → 实际风险 0.058%）挡在门外。
+  var _tightStopPct = stopDistance / effectiveEntryPrice * 100;
+  var _spotTightMsg = '';
+  if (stopDistance < effectiveEntryPrice * (_getMinStopDistancePct() / 100)) {
+    if (leverage > 0) {
+      var _sdPct = _tightStopPct.toFixed(3);
+      var _sdLimit = _getMinStopDistancePct();
+      _calcCleanup();
+      return renderHardBlock(
+        'stop-distance-too-tight',
+        '止损距离过近',
+        '止损距离仅 ' + _sdPct + '%（入场价 × ' + _sdLimit + '%），仓位会被放大到不可控规模。请增大止损距离或降低风险比例后重新计算。',
+        { stopDistance: stopDistance, entryPrice: effectiveEntryPrice, stopPct: _sdPct }
+      );
+    }
+    // 现货：不阻断，只说明「理论仓位会被压到多少、实际风险变成多少」。
+    // 截断发生在下方两道上限里，届时 capMsg 会再报一次具体数值，这里提前定性。
+    _spotTightMsg = '<div class="warning-tag" style="margin-top:6px;"><i class="fas fa-info-circle"></i> '
+      + '现货（0x）止损距离仅 ' + _tightStopPct.toFixed(3) + '%：理论仓位 '
+      + fmtMoney(positionSize, 2) + ' USDT 已远超可用本金，将按可用本金与 ' + _getAggregateMarginLimitPct() + '% 聚合上限自动截断，'
+      + '截断后实际风险低于计划的 ' + fmtMoney(riskAmount, 2) + ' USDT。现货无强平，故不阻断。</div>';
   }
 
   // ===== 仓位硬上限：所有未平仓日志的保证金均须相加 =====
@@ -629,47 +760,53 @@ function _calculateImpl() {
   const maxPos = availableCapital * Math.max(leverage, 1);
   var cappedByMargin = false, capMsg = '';
 
-  // 保证金 80% 硬上限（仅杠杆合约）：margin = positionSize / leverage ≤ availableCapital * 0.8
-  // 设计依据：单笔保证金不超过可用本金 80%，在相同风险下最大化保证金以获取高收益。
+  // 保证金硬上限（仅杠杆合约）：margin = positionSize / leverage ≤ availableCapital × marginUsageLimitPct
+  // 设计依据：单笔保证金不超过可用本金的一定比例，在相同风险下最大化保证金以获取高收益。
   // 注意分母是 availableCapital（本金扣掉已有持仓保证金 + 滑点 + 手续费），不是 capital：
-  // 文案必须写「可用本金 80%」并附带「占本金 X%」，写「80% 本金」会让同一行两个百分比分母不同。
+  // 文案必须写「可用本金X%」并附带「占本金 Y%」，两个百分比分母不同。
+  // 上限比例取自 settings.marginUsageLimitPct（原为硬编码 0.8，2026-10-10 参数化）。
   if (leverage > 0) {
-    const marginLimitPos = availableCapital * leverage * 0.8;
+    var _marginCapPct = _getMarginUsageLimitPct();
+    const marginLimitPos = availableCapital * leverage * (_marginCapPct / 100);
     if (positionSize > marginLimitPos) {
       const origMargin = positionSize / leverage;
       riskAmount = marginLimitPos * stopDistance / effectiveEntryPrice;
       riskPercent = riskAmount / capital;
-      capMsg = '<span class="warning-tag alert"><i class="fas fa-shield-alt"></i> 保证金触及 80% 上限：原需 ' + origMargin.toFixed(2) + ' USDT（' + (origMargin / capital * 100).toFixed(1) + '% 本金），已截断至 ' + (marginLimitPos / leverage).toFixed(2) + ' USDT（可用本金 80%，占本金 ' + (marginLimitPos / leverage / capital * 100).toFixed(1) + '%）。实际风险额 ' + riskAmount.toFixed(2) + ' USDT。建议放宽止损距离或降低风险比例。</span>';
+      capMsg = '<span class="warning-tag alert"><i class="fas fa-shield-alt"></i> 保证金触及 ' + _marginCapPct + '% 上限：原需' + origMargin.toFixed(2) + ' USDT（' + (origMargin / capital * 100).toFixed(1) + '% 本金），已截断至 ' + (marginLimitPos / leverage).toFixed(2) + ' USDT（可用本金 ' + _marginCapPct + '%，占本金' + (marginLimitPos / leverage / capital * 100).toFixed(1) + '%）。实际风险额 ' + riskAmount.toFixed(2) + ' USDT。建议放宽止损距离或降低风险比例。</span>';
       positionSize = marginLimitPos;
       cappedByMargin = true;
     }
   }
 
   // 交易所仓位硬上限（兜底，仅当保证金上限未触发时检查）
+  // 现货（leverage=0）时 maxPos = 可用本金 × 1，文案不能显示「× 1x」——现货没有倍数，
+  // 显示 1x 会让用户以为自己开了合约。
   if (!cappedByMargin && positionSize > maxPos) {
     cappedByMargin = true;
-    capMsg = '<span class="warning-tag alert"><i class="fas fa-ban"></i> 仓位已触达交易所上限：计算仓位 ' + positionSize.toFixed(2) + ' 超过最大可开仓位 ' + maxPos.toFixed(2) + '（可用本金 ' + availableCapital.toFixed(2) + ' × ' + (leverage || 1) + 'x），已强制截断。请放宽止损距离或降低风险额。</span>';
+    var _capLevTxt = leverage > 0 ? (' × ' + leverage + 'x') : '（现货，无杠杆）';
+    capMsg = '<span class="warning-tag alert"><i class="fas fa-ban"></i> 仓位已触达交易所上限：计算仓位 ' + positionSize.toFixed(2) + ' 超过最大可开仓位 ' + maxPos.toFixed(2) + '（可用本金 ' + availableCapital.toFixed(2) + _capLevTxt + '），已强制截断。请放宽止损距离或降低风险额。</span>';
     riskAmount = maxPos * stopDistance / effectiveEntryPrice;
     riskPercent = riskAmount / capital;
     positionSize = maxPos;
   }
 
-  // ===== 多品种聚合上限：总保证金（已有 + 新开）≤ 本金 × 90% =====
+  // ===== 多品种聚合上限：总保证金（已有 + 新开）≤ 本金 × aggregateMarginLimitPct =====
   // 现货（leverage=0）时保证金 = positionSize，需同样纳入聚合上限检查
   var newMarginForAggregate = leverage > 0 ? (positionSize / leverage) : positionSize;
   var totalMarginForAggregate = usedMargin + newMarginForAggregate;
-  var aggregateLimit = capital * 0.9;
+  var _aggCapPct = _getAggregateMarginLimitPct();
+  var aggregateLimit = capital * (_aggCapPct / 100);
   if (totalMarginForAggregate > aggregateLimit) {
     var maxNewMarginAgg = aggregateLimit - usedMargin;
     if (maxNewMarginAgg > 0) {
       var aggCappedPos = leverage > 0 ? (maxNewMarginAgg * leverage) : maxNewMarginAgg;
       riskAmount = aggCappedPos * stopDistance / effectiveEntryPrice;
       riskPercent = riskAmount / capital;
-      capMsg = (capMsg ? capMsg + ' ' : '') + '<span class="warning-tag alert"><i class="fas fa-layer-group"></i> 总保证金触及 90% 聚合上限：已有 ' + usedMargin.toFixed(2) + ' + 新增 ' + newMarginForAggregate.toFixed(2) + ' = ' + totalMarginForAggregate.toFixed(2) + ' USDT（' + (totalMarginForAggregate / capital * 100).toFixed(1) + '% 本金），已截断新仓位保证金至 ' + maxNewMarginAgg.toFixed(2) + ' USDT。</span>';
+      capMsg = (capMsg ? capMsg + ' ' : '') + '<span class="warning-tag alert"><i class="fas fa-layer-group"></i> 总保证金触及 ' + _aggCapPct + '% 聚合上限：已有 ' + usedMargin.toFixed(2) + ' + 新增 ' + newMarginForAggregate.toFixed(2) + ' = ' + totalMarginForAggregate.toFixed(2) + ' USDT（' + (totalMarginForAggregate / capital * 100).toFixed(1) + '% 本金），已截断新仓位保证金至 ' + maxNewMarginAgg.toFixed(2) + ' USDT。</span>';
       positionSize = aggCappedPos;
       cappedByMargin = true;
     } else {
-      capMsg = (capMsg ? capMsg + ' ' : '') + '<span class="warning-tag alert"><i class="fas fa-layer-group"></i> 总保证金已达 90% 聚合上限：已有持仓已占用 ' + usedMargin.toFixed(2) + ' USDT（' + (usedMargin / capital * 100).toFixed(1) + '% 本金），无法再开新仓。请平仓后重试。</span>';
+      capMsg = (capMsg ? capMsg + ' ' : '') + '<span class="warning-tag alert"><i class="fas fa-layer-group"></i> 总保证金已达 ' + _aggCapPct + '% 聚合上限：已有持仓已占用 ' + usedMargin.toFixed(2) + ' USDT（' + (usedMargin / capital * 100).toFixed(1) + '% 本金），无法再开新仓。请平仓后重试。</span>';
       positionSize = 0;
       cappedByMargin = true;
     }
@@ -741,13 +878,32 @@ function _calculateImpl() {
 
   // 统一仓位管线：先应用连亏系数，再应用集中度上限；所有后续显示和保存均读取同一结果。
   let effLev = leverage > 0 ? leverage : 1;
-  let lossStreakFactor = lossStreak >= 3 ? 0.8 : 1;
-  let adjPos = positionSize * lossStreakFactor;
-  if (lossStreakFactor < 1) {
-    riskAmount = riskAmount * lossStreakFactor;
-    riskPercent = riskAmount / capital;
+  // 连亏降仓是否实际发生（供结果文案/快照区分「未降仓」与「阈值未达」）
+  let lossStreakDerisked = false;
+  // 连亏降仓：阈值与系数均取自设置（原为硬编码 3 笔 / 0.8，2026-10-10 参数化）
+  //
+  // P0 修复（2026-10-10 开仓逻辑深度审计）：原实现把降仓结果只写进 adjPos，
+  // 让 positionSize 与 adjPos 从此分叉，下游 :884 又用**硬编码 3** 判定取哪一个——
+  // 参数化阈值调到 2 时，:828 已按 0.8 打了折（riskAmount 同步下调），
+  // 而 :884 的 `lossStreak >= 3` 为假取了未打折的 positionSize，
+  // 于是「计划风险 200 / 落库风险 160 / 落库仓位 9951」三者互相矛盾，
+  // positionSize × 止损距离算出的真实敞口(199) 与 riskAmount(160) 差 25%，
+  // 风控被静默绕过且日志存下两个互相打架的数字。
+  //
+  // 修法：降仓直接作用于 positionSize 本身，不再另存 adjPos。
+  // 下游所有截断层（集中度/心态）与最终取值都用同一个变量，
+  // 「仓位 × 止损距离 = riskAmount」这一恒等式在每一步都成立。
+  if (lossStreak >= _getLossStreakDeriskThreshold()) {
+    const _deriskFactor = _getLossStreakDeriskFactor();
+    if (_deriskFactor < 1) {
+      positionSize = positionSize * _deriskFactor;
+      riskAmount = riskAmount * _deriskFactor;
+      riskPercent = riskAmount / capital;
+      lossStreakDerisked = true;
+    }
   }
-  let finalPosBeforeMindset = adjPos;
+  // 集中度/心态的截断目标都以此为基准（等同旧 finalPosBeforeMindset）
+  let finalPosBeforeMindset = positionSize;
 
   // ===== Skills 融合：品种集中度检查 =====
   var concentrationCheck = checkSymbolConcentration(symbol, finalPosBeforeMindset, leverage, capital, openPositions);
@@ -758,11 +914,14 @@ function _calculateImpl() {
       return renderHardBlock('symbol-concentration-limit', '品种集中度超限', concentrationCheck.warning || '该品种已无可用集中度额度，不能建立新计划。', concentrationCheck);
     }
     if (allowedFinalPos < finalPosBeforeMindset) {
-      var concentrationRatio = allowedFinalPos / finalPosBeforeMindset;
-      positionSize = positionSize * concentrationRatio;
-      adjPos = adjPos * concentrationRatio;
-      finalPosBeforeMindset = adjPos;
-      riskAmount = riskAmount * concentrationRatio;
+      // P0 修复：旧实现按 adjPos 的比例去缩放未打折的 positionSize，
+      // 而 adjPos = positionSize × F（F<1），导致 positionSize 被放大到上限的 1/F 倍——
+      // 集中度上限 5% 实测算出 6.25%，突破 25%，该闸门形同虚设。
+      // 现在两者已是同一个变量，直接按目标值赋值即可，不必再算比例。
+      positionSize = allowedFinalPos;
+      finalPosBeforeMindset = allowedFinalPos;
+      // riskAmount 按新的 positionSize 回算（而不是乘比例），保证恒等式成立
+      riskAmount = allowedFinalPos * stopDistance / effectiveEntryPrice;
       riskPercent = riskAmount / capital;
       cappedByMargin = true;
       // 口径 FIX：截断后重新生成提示，避免"结果卡显示截断后保证金 100、提示却写截断前 20%"的自相矛盾。
@@ -790,14 +949,15 @@ function _calculateImpl() {
   }
   if (mindsetAdjust.adjustment < 1) {
     positionSize = positionSize * mindsetAdjust.adjustment;
-    adjPos = adjPos * mindsetAdjust.adjustment;
     riskAmount = riskAmount * mindsetAdjust.adjustment;
     riskPercent = riskAmount / capital;
   }
 
   // 统一有效仓位和风险：展示层和日志层使用同一数值
-  // adjPos = 连亏打折后的仓位；当 lossStreak<3 时 adjPos === positionSize
-  const effectivePositionSize = lossStreak >= 3 ? adjPos : positionSize;
+  // P0 修复：原为 `lossStreak >= 3 ? adjPos : positionSize`——硬编码 3 与参数化阈值
+  // _getLossStreakDeriskThreshold() 不一致，且 adjPos 已随集中度/心态截断同步移除。
+  // 连亏降仓现在直接改写 positionSize 本身，这里无需再选择分支。
+  const effectivePositionSize = positionSize;
   const effectiveRiskAmount = effectivePositionSize * stopDistance / effectiveEntryPrice;
   const effectiveRiskPercent = effectiveRiskAmount / capital;
   const effectiveMargin = effectivePositionSize / effLev;
@@ -823,14 +983,21 @@ function _calculateImpl() {
   }
 
   let adjMsg = '';
-  if (lossStreak >= 3) {
-    // 显示实际调整后的仓位（可能同时受连亏和心态双重调整）
-    const adjLabel = adjPos !== positionSize
-      ? '降低至 80% × ' + mindsetAdjust.adjustment * 100 + '% = ' + (adjPos / positionSize * 100).toFixed(0) + '% 基准仓位'
-      : '降低至 80%';
-    adjMsg = '连续亏损 ' + lossStreak + ' 笔，建议仓位' + adjLabel + ' (≈' + adjPos.toFixed(2) + ' USDT)';
-  } else if (lossStreak >= 2) {
-    adjMsg = '连续亏损 ' + lossStreak + ' 笔，注意风险控制';
+  // P0 修复：原为 `if (lossStreak >= 3)` + 硬编码 "降低至 80%" + 引用已移除的 adjPos
+  // （adjPos 随本轮修复删除，此处会抛 ReferenceError 被 calculate() 的 catch 吞成
+  // 「计算失败」，用户在降仓场景下根本看不到结果）。阈值与系数一律读设置。
+  const _deriskThreshold = _getLossStreakDeriskThreshold();
+  if (lossStreak >= _deriskThreshold) {
+    // 仓位已被上面按系数打折，直接报打折后的实际仓位与折算比例，不写死系数。
+    const _f = _getLossStreakDeriskFactor();
+    const _finalFactor = _f * mindsetAdjust.adjustment;
+    adjMsg = '连续亏损 ' + lossStreak + ' 笔（阈值 ' + _deriskThreshold + '），'
+      + '仓位已自动降至基准的 ' + (_finalFactor * 100).toFixed(0) + '%'
+      + '（连亏降仓 ' + (_f * 100).toFixed(0) + '%'
+      + (mindsetAdjust.adjustment < 1 ? ' × 心态 ' + (mindsetAdjust.adjustment * 100).toFixed(0) + '%' : '')
+      + '，≈ ' + effectivePositionSize.toFixed(2) + ' USDT）';
+  } else if (lossStreak >= _deriskThreshold - 1) {
+    adjMsg = '连续亏损 ' + lossStreak + ' 笔，注意风险控制（再亏 ' + (_deriskThreshold - lossStreak) + ' 笔将自动降仓）';
   }
   const stopPct = stopDistance / effectiveEntryPrice * 100;
 
@@ -857,7 +1024,8 @@ function _calculateImpl() {
 
   // ===== P0-05：手续费与双侧 tick 滑点（供 targetRR 使用） =====
   let feeRate = parseFloat(document.getElementById('feeRate').value) || 0;
-  if (feeRate <= 0) feeRate = orderType === 'limit' ? 0.04 : 0.08;
+  // 费率回落取自设置（原为硬编码 0.04 / 0.08，2026-10-10 参数化）
+  if (feeRate <= 0) feeRate = _getDefaultFeeRate(orderType);
 
   const quantity = effectivePositionSize / effectiveEntryPrice;
   // P2 FIX：止损腿原复用入场腿的 ticks（planSlippageInput 按 #orderType 解析），
@@ -1124,6 +1292,8 @@ function _calculateImpl() {
   if (cappedByLiquidation) wh = liqMsg + (wh ? '<br>' + wh : '');
   if (cappedByMargin) wh = capMsg + (wh ? '<br>' + wh : '');
   if (adjMsg) wh += '<div class="warning-tag" style="margin-top:6px;">' + adjMsg + '</div>';
+  // 现货窄止损提示（不阻断，见上方 P1 修复）：放在保证金提示之后，避免被 capMsg 冲掉
+  if (_spotTightMsg) wh += _spotTightMsg;
   if (!cappedByMargin && effectiveMargin > capital) {
     const needLeverage = effectivePositionSize /  capital;
     wh += '<div class="warning-tag alert" style="margin-top:6px;"><i class="fas fa-exclamation-triangle"></i> 保证金不足: 需 ' + fmtMoney(effectiveMargin, 2) + ' USDT，本金仅 ' + fmtMoney(capital, 2) + ' USDT。建议提高杠杆至 ≥ ' + needLeverage.toFixed(1) + 'x，或降低风险额 / 收紧止损</div>';
@@ -1157,6 +1327,10 @@ function _calculateImpl() {
     stopDistance: stopDistance,
     stopPct: stopPct,
     liquidationPrice: liquidationPrice,
+    // mmr 本身随强平价一起快照（2026-10-10）：只有强平价而没有当时的 mmr，
+    // 事后无法判断这个价是「参数算出来的」还是「参数被改过之后重算的」——
+    // 而 mmr 是设置页里随时可改的字段，事后改它会让全部历史强平距离指标漂移。
+    mmrUsed: (typeof loadMmr === 'function') ? loadMmr() : null,
     cappedByLiquidation: cappedByLiquidation,
     // v5.6.3：原先只暴露 cappedByLiquidation，保证金 80%/聚合 90%/交易所上限/集中度
     // 任一截断都只写进了 capMsg 提示，清单想报告「计划风险 2% 实际只落到 0.5%」也拿不到标志
@@ -1167,6 +1341,14 @@ function _calculateImpl() {
     // 拿 realizedPnl/initialRiskAmount 去比 targetRR 会让完美执行恒显 +7.9%（口径差，
     // 非执行差）。这里把净目标盈利一并暴露，落库为 plannedNetProfit。
     targetNetProfit: (rrAmounts && targetRR != null) ? rrAmounts.netProfit : null,
+    // 含费净 RR 的三段金额（2026-10-10 补落库）。此前它们只作为参数传给
+    // renderCalcVisuals（:1272-1274），从未进入 setCalc 快照，于是日志里查无此值——
+    // 事后无法还原「当时这个 RR 是含费净口径还是按价格距离算的」，
+    // 也无法核对费率/滑点设置变更对 RR 的影响。targetNetProfit 只落了分子，
+    // 分母 netLoss 缺失 → 连「目标 RR 要求的最小盈利」都无法复算。
+    rrGrossProfit: rrAmounts ? rrAmounts.grossProfit : null,
+    rrNetProfit: rrAmounts ? rrAmounts.netProfit : null,
+    rrNetLoss: rrAmounts ? rrAmounts.netLoss : null,
     targetPct: targetPct,
     reason: getReason(),
     signals: getSignals(),
@@ -1187,6 +1369,12 @@ function _calculateImpl() {
     atrStopMode: atrStopMode,
     atrValue: atrStopMode ? atrValue : null,                 // ATR 增强：供 saveLog 持久化
     atrMultiplier: atrStopMode ? atrMultiplier : null,       // ATR 增强：供 saveLog 持久化
+    // 2026-10-10：ATR 曾输入但被分批止损顶替时，保留原始输入供事后复盘。
+    // atrValue/atrMultiplier 此时是 null（atrStopMode 语义要求），
+    // 只靠这两个字段复盘看不出「填过 ATR」，故单列留痕字段。
+    atrSuppressedByWeighted: atrSuppressedByWeighted,
+    atrInputValue: atrSuppressedByWeighted && !isNaN(atrValue) ? atrValue : null,
+    atrInputMultiplier: atrSuppressedByWeighted && atrMultiplier != null ? atrMultiplier : null,
     mindsetScore: mindsetScore,
     kellyData: kellyData,
     // 暴露分批明细供 saveSplit 使用（独立止损需逐笔保存）
@@ -1504,6 +1692,21 @@ function saveLog() {
     positionSize: parseFloat(calc.positionSize.toFixed(2)),
     leverage: calc.leverage,
     riskAmount: parseFloat(calc.riskAmount.toFixed(2)),
+    // 1R 基准开仓即锁定（2026-10-10 修复）。
+    // 全站 R 倍数都以 initialRiskAmount 为分母（rendering / modals / logs / stats 一致），
+    // 但开仓保存时此前不写这个字段，只有 logs.js:240 在**平仓时**才用 riskAmount 回填。
+    // 后果：刚开仓、尚未平仓的记录 initialRiskAmount 为 null → R 倍数算出 NaN，
+    // 而复盘中心/统计/详情都用它作分母，展示会是 NaN 或退化成 riskAmount。
+    // 开仓这一刻 riskAmount 就是 1R 的值（此后会被部分平仓按比例缩减，故须在此刻锁定）。
+    initialRiskAmount: parseFloat(calc.riskAmount.toFixed(2)),
+    // 含费净 RR 的三段金额（calc 快照上就叫 rrGrossProfit / rrNetProfit / rrNetLoss）。
+    // 此前它们只作为参数传给 renderCalcVisuals，从未进入 setCalc，日志里查无此值——
+    // 事后无法还原「当时这个 RR 是含费净口径还是按价格距离算的」，
+    // 也无法核对费率/滑点变更对 RR 的影响（原只落了分子 targetNetProfit，
+    // 分母 netLoss 缺失，连「目标 RR 要求的最小盈利」都复算不出来）。
+    rrGrossProfit: calc.rrGrossProfit != null ? parseFloat(calc.rrGrossProfit.toFixed(8)) : null,
+    rrNetProfit: calc.rrNetProfit != null ? parseFloat(calc.rrNetProfit.toFixed(8)) : null,
+    rrNetLoss: calc.rrNetLoss != null ? parseFloat(calc.rrNetLoss.toFixed(8)) : null,
     plannedRiskAmount: calc.plannedRiskAmount != null ? parseFloat(calc.plannedRiskAmount.toFixed(2)) : null,   // 计划风险（用户设定）
     plannedRiskPercent: calc.plannedRiskPercent != null ? parseFloat((calc.plannedRiskPercent * 100).toFixed(2)) : null, // 计划风险 %（如 2）
     actualMargin: calc.actualMargin != null ? parseFloat(calc.actualMargin.toFixed(2)) : null,
@@ -1561,6 +1764,11 @@ function saveLog() {
     atrStopMode: calc.atrStopMode || false,                        // A 修复：持久化 ATR 止损使用状态
     atrValue: calc.atrStopMode ? (isNaN(calc.atrValue) ? null : calc.atrValue) : null,          // ATR 增强：持久化 ATR 值
     atrMultiplier: calc.atrStopMode ? (calc.atrMultiplier != null ? calc.atrMultiplier : null) : null, // ATR 增强：持久化 ATR 倍数
+    // 2026-10-10：ATR 被分批止损顶替时的留痕（见 setCalc 注释）。
+    atrSuppressedByWeighted: calc.atrSuppressedByWeighted || false,
+    atrInputValue: calc.atrSuppressedByWeighted ? (calc.atrInputValue != null ? calc.atrInputValue : null) : null,
+    atrInputMultiplier: calc.atrSuppressedByWeighted ? (calc.atrInputMultiplier != null ? calc.atrInputMultiplier : null) : null,
+    settingsSnapshot: captureSettingsSnapshot(),  // 2026-10-10：落库判定用的风控阈值，供事后复盘还原
     checklistResults: checklistResults  // ✅ 新增：持久化检查结果至日志
   };
   logs.push(entry);
@@ -1576,6 +1784,41 @@ function saveLog() {
   if (typeof renderDashboard === 'function') renderDashboard();
   showToast('日志已保存', 'success');
   return true;
+}
+
+/**
+ * 采集本次计算所依据的风控阈值快照（2026-10-10 新增）。
+ *
+ * 为什么必须落库：日志此前只存计算结果，不存判定用的阈值，于是事后复盘无法还原
+ * 「当时为什么被拦下」。最典型的是 mmr——用户事后在设置里改一下，全部历史交易的
+ * 强平距离指标都会漂移，而旧日志里没有任何它当时的值可比对。checklistResults 虽然
+ * 记了闸门结论（pass/fail），但只有结论没有阈值：`checkRR:'pass'` 不记录当时
+ * minRRRatio 是 2 还是 4。
+ *
+ * 只收「会改变判定结果」的字段，且全部经 _numSetting 清洗（脏值回落默认值），
+ * 保证快照本身可安全用于历史重算。
+ */
+function captureSettingsSnapshot() {
+  var s = {};
+  try { s = (typeof loadSettings === 'function') ? loadSettings() : {}; } catch (e) { s = {}; }
+  return {
+    riskPercent: _numSetting('riskPercent', 2),
+    mmr: (typeof loadMmr === 'function') ? loadMmr() : _numSetting('mmr', 0.5) / 100,
+    customStopLimit: (s && s.customStopLimit) ? JSON.parse(JSON.stringify(s.customStopLimit)) : {},
+    heatHardMax: (typeof getHeatHardMax === 'function') ? getHeatHardMax() : 6,
+    singleSymbolMaxPct: _numSetting('singleSymbolMaxPct', 30),
+    minRRRatio: _numSetting('minRRRatio', 2),
+    dailyLossLimit: _numSetting('dailyLossLimit', 5),
+    dailyTradeMax: _numSetting('dailyTradeMax', 8),
+    maxDrawdownAlert: _numSetting('maxDrawdownAlert', 20),
+    mindsetMinScore: _numSetting('mindsetMinScore', 3),
+    marginUsageLimitPct: _getMarginUsageLimitPct(),
+    aggregateMarginLimitPct: _getAggregateMarginLimitPct(),
+    lossStreakDerisk: _getLossStreakDeriskThreshold(),
+    lossStreakBlock: _getLossStreakBlockThreshold(),
+    lossStreakDeriskFactor: _getLossStreakDeriskFactor(),
+    provisionalStopPct: (s && s.provisionalStopPct != null) ? s.provisionalStopPct : null
+  };
 }
 
 // ==================== 分批建仓 ====================
@@ -1845,8 +2088,10 @@ function resetForm() {
   var _riskPct = _settings.riskPercent || 2;
   document.getElementById('riskInput').value = _riskPct + '%';
   document.getElementById('riskHint').textContent = '';
-  // 从设置读取默认杠杆，否则用 0（现货）
-  var _lev = _settings.defaultLeverage || 0;
+  // 从设置读取默认杠杆，否则用 10（原为 `|| 0`，与 planner.js:1072 的 `!= null`→10 冲突：
+  // 两条初始化路径给出不同值，用户看到的杠杆取决于哪个函数后执行；且 0 = 现货，
+  // 静默把合约用户变成现货是危险方向的fallback）
+  var _lev = _numSetting('defaultLeverage', 10);
   document.getElementById('leverage').value = String(_lev);
   document.getElementById('direction').value = 'long';
   // 同步订单类型标签为做多版本
@@ -2019,7 +2264,7 @@ function syncSettingsToForm() {
   var riskEl = document.getElementById('riskInput');
   if (riskEl) riskEl.value = (settings.riskPercent || 2) + '%';
   var levEl = document.getElementById('leverage');
-  if (levEl) levEl.value = String(settings.defaultLeverage || 0);
+  if (levEl) levEl.value = String(_numSetting('defaultLeverage', 10));
   // ATR 默认倍数同步
   var atrMultEl = document.getElementById('atrMultiplier');
   if (atrMultEl) atrMultEl.value = settings.atrDefaultMultiplier != null ? settings.atrDefaultMultiplier : 2;
@@ -2083,11 +2328,13 @@ function applyKellyRisk() {
     var stopLoss = null;
 
     // 优先使用 ATR 止损（仅当 ATR 自动模式已启用——尊重表单开关，与 calculate() 主逻辑口径一致）
+    // 口径与 calculate() 保持一致：表单开关完全覆盖设置（P0-7），不是 || 短路，
+    // 否则用户显式关闭 ATR 后这里仍会被 settings.atrStopEnabled=true 打开。
     var atrValue = parseFloat(document.getElementById('atrValue').value);
     var settings = loadSettings();
     const atrMultiplier = parseFloat(document.getElementById('atrMultiplier').value) || settings.atrDefaultMultiplier || 2;
     var formAtrOn = document.getElementById('formAtrStopEnabled');
-    var atrOn = (formAtrOn && formAtrOn.checked) || (settings.atrStopEnabled === true);
+    var atrOn = formAtrOn ? formAtrOn.checked : (settings.atrStopEnabled === true);
     if (atrOn && !isNaN(atrValue) && atrValue > 0 && typeof calcATRStop === 'function') {
       var atrResult = calcATRStop(entryPrice, atrValue, atrMultiplier, direction);
       if (atrResult && atrResult.stopPrice > 0) {
@@ -2101,10 +2348,15 @@ function applyKellyRisk() {
       if (!isNaN(kellyAvgLoss) && kellyAvgLoss > 0) {
         // 用平均亏损占入场价的比例作为止损距离基准
         var slPct = kellyAvgLoss / entryPrice;
-        // 确保止损距离合理（不小于 minStopPct，不超过 maxStopPct）
-        var isEth = (calc && calc.symbol && calc.symbol.toUpperCase() === 'ETH');
-        var minStopPct = isEth ? 0.003 : 0.005;
-        var maxStopPct = isEth ? 0.02 : 0.03;
+        // 止损区间必须走 getStopLimitPct()（唯一权威，读 settings.customStopLimit）。
+        // 原实现在此写死 ETH 0.3%~2% / 其余 0.5%~3%，是同一概念的第三份副本且完全
+        // 绕过了用户的 customStopLimit：设置里把 BTC 上限改成 1.5%，这里仍按 3%
+        // 生成止损，随后又被 calculate() 的 custom-stop-limit-exceeded 闸门拦下——
+        // 用户看到的是「点了应用半凯利却被系统阻断」，且阻断原因与自己填的设置矛盾。
+        var maxStopPct = getStopLimitPct(calc ? calc.symbol : '') / 100;
+        // 下限保留内置的 0.3%/0.5%（止损过窄会让仓位爆炸，与设置无关），
+        // 上限改由设置决定。getStopLimitPct 已保证返回正数。
+        var minStopPct = (calc && calc.symbol && calc.symbol.toUpperCase() === 'ETH') ? 0.003 : 0.005;
         slPct = Math.max(minStopPct, Math.min(maxStopPct, slPct));
         stopLoss = direction === 'long'
           ? entryPrice * (1 - slPct)

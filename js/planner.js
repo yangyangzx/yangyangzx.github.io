@@ -133,6 +133,10 @@ function solveSLForRR(u, rr, tp, direction) {
 /**
  * 读取当前入场价、止损价、方向，根据期望盈亏比反推目标价
  * 反推值回填后，盈亏比卡片应显示 requested RR（含费口径）。
+ *
+ * v5.6.18：界面上的「盈亏比反推」卡片已移除（与多止盈位规划重复，且两个输出框只读、
+ * 不会写回 #targetPrice / #stopLoss）。本函数与 calcReverseSL 保留：它们是
+ * solveTPForRR / solveSLForRR 的对外入口，测试第 27 组仍按这两条路径断言含费口径。
  */
 function calcReverseTP() {
   if (getCalcDirty()) { showToast('计算器参数已变更，请先点击「计算仓位」更新结果', 'warn'); return; }
@@ -760,21 +764,30 @@ function updateChecklist() {
     return { result: passed, message: '盈亏比 ' + calc.targetRR.toFixed(2) + ':1 ' + (passed ? '达标' : '偏低') };
   });
 
-  // 3. 保证金占本金 ≤ 80%
-  // 80% 是 calculator.js 的**截断**边界而非阻断，截断后 actualMargin 恰好等于 80% 本金，
-  // 所以 `ratio <= 0.8` 恒为真。改为报告「是否被截断过」，标志需从 calc 读取
-  // （原先 cappedByMargin 没有暴露到 calc 对象，清单想报也拿不到）。
+  // 3. 保证金占本金 ≤ 阈值
+  // 上限值取自设置（marginUsageLimitPct / aggregateMarginLimitPct，原为硬编码 80% / 90%），
+  // 用户改设置后本行文案必须跟着变，不能与 _calculateImpl 的实际截断阈值脱节——
+  // 否则会显示「≤ 80%」而代码按 60% 截断，用户看到的承诺与真实风控不一致。
   updateCheckItemWithResult('checkMargin', function() {
     if (!calc || calc.actualMargin == null || calc.capital == null || calc.capital <= 0) return null;
+    var _muPct = (typeof _getMarginUsageLimitPct === 'function') ? _getMarginUsageLimitPct() : 80;
+    var _agPct = (typeof _getAggregateMarginLimitPct === 'function') ? _getAggregateMarginLimitPct() : 90;
     var ratio = calc.actualMargin / calc.capital;
+    // P0 修复（2026-10-10 深度审计）：现货（leverage=0）不走单笔保证金上限
+    // （calculator.js 的 `if (leverage > 0)`），只受聚合上限与交易所上限约束。
+    // 原实现在此无条件宣称「≤ 80%」并判 PASS，于是现货占用 90% 时会显示
+    // 「保证金占比 90.0% ≤ 80%」这种自相矛盾却判通过的行——虚假的安全承诺。
+    // 现按实际适用的那套上限表述，聚合上限为唯一相关阈值。
+    var _isSpot = !(calc.leverage > 0);
+    var _limitPct = _isSpot ? _agPct : _muPct;
     if (calc.cappedByMargin) {
       return {
         result: false,
         level: 'warn',
-        message: '保证金占比 ' + (ratio * 100).toFixed(1) + '%，仓位已被保证金 80%/聚合 90%/交易所上限/集中度上限截断'
+        message: '保证金占比 ' + (ratio * 100).toFixed(1) + '%，仓位已被' + (_isSpot ? '聚合 ' + _agPct + '%/交易所上限' : '保证金 ' + _muPct + '%/聚合 ' + _agPct + '%/交易所上限/集中度上限') + '截断'
       };
     }
-    return { result: true, message: '保证金占比 ' + (ratio * 100).toFixed(1) + '% ≤ 80%' };
+    return { result: true, message: '保证金占比 ' + (ratio * 100).toFixed(1) + '% ≤ ' + _limitPct + '%' + (_isSpot ? '（现货按聚合上限）' : '') };
   });
 
   // 4. 入场理由已明确选择
@@ -1042,18 +1055,29 @@ function refreshChecklistLabels() {
     try {
       if (typeof getStopLimitPct === 'function') {
         var _symEl = document.getElementById('symbol');
-        var _sym = (_symEl && _symEl.value) ? _symEl.value : 'BTC';
+        // 不写死 'BTC'（CLAUDE.md 明确禁止）：品种取不到时用 getDefaultSymbol()，
+        // 它返回品种定义首项；再兜底才用 'BTC'。写死会让「设置里第一个品种改成
+        // ETH、而 BTC 止损上限不同」时，本行显示 BTC 的上限而实际按 ETH 判定。
+        var _sym = (_symEl && _symEl.value) ? _symEl.value
+          : ((typeof getDefaultSymbol === 'function') ? getDefaultSymbol() : 'BTC');
         hardBlockTxt = '止损距离 ≤ ' + getStopLimitPct(_sym) + '% · ';
       }
     } catch(e) { /* 品种读不到时略过这一节，不影响其余规则展示 */ }
+    // 单笔风险上限显示：必须与 calculator.js 闸门用同一个值，否则「说明文案」与「实际阻断门」
+    // 会给出不同数字（此前本行|| 10、calculator 硬阻断 fallback 0.10、设置默认 2，
+    // 三处口径不一致，用户看到的承诺和真实风控对不上）。统一经_numSetting 读取，
+    // fallback 与 SETTINGS_DEFAULTS.riskPercent = 2 一致。
+    var _riskPctTxt = (typeof _numSetting === 'function') ? _numSetting('riskPercent', 2) : (settings.riskPercent || 2);
     atrNote.textContent = '当前生效规则：' +
       (atrOn ? 'ATR 动态止损 ×' + atrMult.toFixed(1) + ' · ' : '') +
       '盈亏比 ≥ ' + (settings.minRRRatio || 2) + ':1 · ' +
       '心态评分 ≥ ' + (settings.mindsetMinScore || 3) + '（2 分自动降仓 50%）' +
-      ' · 单笔风险 ≤ ' + (settings.riskPercent || 10) + '% · ' +
+      ' · 单笔风险 ≤ ' + _riskPctTxt + '% · ' +
       hardBlockTxt +
-      '组合总风险含本仓 ≤ ' + getHeatHardMax() + '% · 单品种占比 ≤ ' + (settings.singleSymbolMaxPct || 30) + '%；' +
-      '以上任一项超限一律禁止开仓（不占清单行，触发时不产生计算结果）。';
+      '组合总风险含本仓 ≤ ' + getHeatHardMax() + '% · 单品种占比 ≤ ' + (settings.singleSymbolMaxPct || 30) + '%' +
+      ' · 账户回撤 ≤ ' + _numSetting('maxDrawdownAlert', 20) + '%' +
+      (typeof _getMarginUsageLimitPct === 'function' ? ' · 单笔保证金 ≤ ' + _getMarginUsageLimitPct() + '%' : '') +
+      '；以上任一项超限一律禁止开仓（不占清单行，触发时不产生计算结果）。';
     atrNote.style.display = 'block';
   } catch(e) { console.error('[planner] refreshChecklistLabels atrNote error:', e); }
 }

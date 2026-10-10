@@ -1302,6 +1302,13 @@ function doSaveSplit(calc, count) {
     positionSize: parseFloat(pos.toFixed(2)),
     leverage: calc.leverage,
     riskAmount: parseFloat(risk.toFixed(2)),
+    // 1R 基准开仓即锁定 + 含费净 RR 落库（2026-10-10），与 saveLog 同源同字段集。
+    // 缺 initialRiskAmount 会让分批记录的 R 倍数为 NaN（该字段是全站 R 的分母）；
+    // 缺 rrAmounts 则复盘无法还原含费净口径。
+    initialRiskAmount: parseFloat(calc.riskAmount != null ? Number(calc.riskAmount).toFixed(2) : risk.toFixed(2)),
+    rrGrossProfit: calc.rrGrossProfit != null ? parseFloat(calc.rrGrossProfit.toFixed(8)) : null,
+    rrNetProfit: calc.rrNetProfit != null ? parseFloat(calc.rrNetProfit.toFixed(8)) : null,
+    rrNetLoss: calc.rrNetLoss != null ? parseFloat(calc.rrNetLoss.toFixed(8)) : null,
     // 拆分保存字段完整性 FIX：与 saveLog 保持同一字段集，避免分析模块缺失
     plannedRiskAmount: calc.plannedRiskAmount != null ? parseFloat(calc.plannedRiskAmount.toFixed(2)) : null,
     plannedRiskPercent: calc.plannedRiskPercent != null ? parseFloat((calc.plannedRiskPercent * 100).toFixed(2)) : null,
@@ -1347,6 +1354,10 @@ function doSaveSplit(calc, count) {
     groupLabel: groupLabel,
     splitEntries: [],  // F4: 记录分批明细
     checklistResults: calc.checklistResults ? JSON.parse(JSON.stringify(calc.checklistResults)) : {},
+    // 2026-10-10：与 saveLog 同源落库风控阈值快照，字段集必须保持一致，
+    // 否则「单笔保存」与「分批保存」产出的日志无法互相复盘。
+    settingsSnapshot: (typeof captureSettingsSnapshot === 'function')
+      ? captureSettingsSnapshot() : (calc.settingsSnapshot ? JSON.parse(JSON.stringify(calc.settingsSnapshot)) : {}),
   });
 
   const splitEntries = [];

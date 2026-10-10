@@ -1,4 +1,126 @@
 // 应用版本 - 每次更新后递增，用于缓存清除
+// 5.6.23：开仓计划保存链路实测补漏（前几轮只测了计算链路，保存/读取是盲区）
+//   P0 开仓保存时不落initialRiskAmount，导致 R 倍数为 NaN：
+//        全站 R 倍数都以 initialRiskAmount 为分母（rendering / modals / logs / stats 一致），
+//        但该字段此前只有 logs.js:240 在**平仓时**才用 riskAmount 回填——
+//        刚开仓、尚未平仓的记录为 null → 复盘/统计/详情里的 R 显示 NaN。
+//        开仓这一刻 riskAmount 就是 1R 的值（此后被部分平仓按比例缩减，故须此刻锁定）。
+//        saveLog 与 doSaveSplit 均已补（2026-10-10 实测：修复后 R=1.00 而非 NaN）。
+//   P1 含费净 RR 三段金额从未落库：rrGrossProfit / rrNetProfit / rrNetLoss
+//        只作为参数传给 renderCalcVisuals，从未进入 setCalc 快照。原只落了分子
+//        targetNetProfit，分母 netLoss 缺失 → 事后既无法还原 RR 是含费口径还是价格距离口径，
+//        也无法复算「目标 RR 要求的最小盈利」。已补落库 + CSV 导入导出三列
+//        （实测：日志值重算 RR=2.645 与 targetRR 完全一致）。
+//   核实无误（实测非推断）：清单 fail-closed 正常（checkRR fail 时拒绝保存且日志不被污染）、
+//        脏标记正常（真实 input 事件下 dirty=true、保存按钮禁用、拒绝保存过期计算）、
+//        「pos×止损% 与 riskAmount 差 0.5%」**不是缺陷**——日志存未含滑点的价格快照，
+//        riskAmount 按含滑点的 effectiveEntryPrice(1000.1) 算，用后者重算完全吻合(2000.00)。
+// 5.6.22：自动备份补齐读取入口 + 交易参数核实后的补漏
+//   P0 自动备份此前**只写不读**（2026-10-10 实测确认）：storage.js 每次 saveLogs 都往
+//        trade_backup_auto_0..N 写快照，但全站没有任何从这些快照恢复的入口，
+//        「备份份数」设置只是个看不见摸不着的计数器——误删日志后只能靠自己曾导出过的文件，
+//        而数据明明就在浏览器里。现补：
+//          settings.listAutoBackups()      —— 列出本地备份（按时间倒序，遵守 backupCount）
+//          settings.restoreFromAutoBackup() —— 恢复，覆盖前自动另存「恢复前备份」
+//          settings.openRestoreBackupDialog() —— 入口（设置 → 数据管理 → 从自动备份恢复）
+//        实测：3 条日志误删后成功找回，内容完整、恢复前的空日志已另存。
+//   P1 logs.js updateBackupTime 硬编码 `for (i < 10)` 扫槽位，与 settings.backupCount 脱节：
+//        份数调小会把已被轮转掉的旧槽当最新备份显示；调大则永远扫不到后段槽位。
+//        改为读设置（与 5.6.19 修的 calc-visuals 刻度常量同类漏改）。
+//   P2 calc 快照补 mmrUsed：此前只落 liquidationPrice 而无当时的 mmr，
+//        而 mmr 是设置页随时可改的字段，事后改它会让全部历史强平距离指标漂移、无从追溯。
+//   核实结论（实测，非推断）——交易参数三项均真实生效：
+//        mmr → 强平价 0.5%=909.64 / 1%=919.28 / 2%=938.87（随参数单调变化）；
+//        defaultLeverage → 首屏 #leverage 表单值（经 syncSettingsToForm 回同步）；
+//        autoBackup=false → 连续保存 5 次产生 0 个备份槽（确认真停止）；
+//        backupCount=3/5/10 → 实际轮转槽位恰为 3/5/10 份（超出的覆盖而非新增）。
+// 5.6.21：权益曲线口径修正（回撤/净值全线）+ planner 品种兜底
+//   P0 utils.calcEquityCurve 把 settings.accountBalance 当曲线「起点」又叠加全部历史
+//        pnlAmount，同一笔盈亏被算两次。该字段语义是「当前账户余额」，用户会在净值变化后
+//        更新它。实测：本金 10000 亏 6000、余额仍填 10000 → 回撤算成 10.8%（真实 60%）；
+//        余额按净值更新为 13000（只赚过 3000）→ 净值算成 16000。
+//        数值启发式（「与初始本金+累计盈亏的差值」反推）**不可用**——从数值无法区分
+//        「初始本金」与「当前净值」，两种解释都成立，实测两种启发式各错一半。
+//        改用无歧义权威来源：日志每笔的 capital 是开仓时的账户快照，
+//        **最早一条的 capital 即初始本金**；settings.accountBalance 仅在无日志时兜底。
+//        现两种余额填法结果完全一致，不再受用户是否更新余额影响。
+//   P1 planner.js 的规则说明不再硬编码 'BTC'（违反 CLAUDE.md），
+//        改用 getDefaultSymbol()（品种定义首项）兜底。
+//   ⚠️ 行为变更：真实回撤比此前算出的值大（此前重复计入被抵消、失真偏低）。
+//        若发现回撤熔断突然变严，属修复生效而非新bug——历史上真实 60% 的回撤
+//        只被算成 10.8%，等于熔断长期形同虚设。
+// 5.6.20：开仓计划计算逻辑深度审计全量修复（含行为变更；两处 P0 系 5.6.19 引入的回归）
+//   P0-A 降仓阈值参数化不一致导致落库自相矛盾（**5.6.19 的回归**）：
+//        :828 按 _getLossStreakDeriskThreshold() 判定降仓并下调 riskAmount，
+//        而 :884 用硬编码 3 决定取 adjPos 还是 positionSize。阈值设为 2、streak=2 时：
+//        riskAmount 已打 0.8 折而 positionSize 未打折，实测「计划风险 200 /
+//        落库风险 160 / 落库仓位 9951」互相打架，真实敞口 199 与记录风险额 160 差 25%，
+//        风控被静默绕过。修法：降仓直接改写 positionSize，删除 adjPos（分叉是根源）。
+//   P0-B 集中度截断量纲错位（与 P0-A 同源，修好 P0-A 后连带消除）：
+//        原按 adjPos 的比例缩放 positionSize，而 adjPos = positionSize × F(F<1)，
+//        positionSize 被放大到上限的 1/F 倍——集中度 5% 实测算出 6.25%，突破 25%。
+//        修法：直接 positionSize = allowedFinalPos，不算比例。
+//   P0-C _calcCleanup() 两处漏调（风险比例/金额非法分支）：
+//        _calculating 永真 → app.js 按钮守卫与 markCalculationDirty 双双永久短路，
+//        「计算仓位」按钮此后完全无响应。触发值：设置里 riskPercent 填 3.5/4.5/5.5/6.5/
+//        7.5/8.5/9.5（#riskInput 的 option 只有 0.5% 整数步进，赋值 3.5% 时 select.value 变空串）。
+//   P0-D 闸门 fail-open 改 fail-closed：single-risk-exceeds-limit 去掉 catch 空实现
+//        （存储不可用时整道失效放行）；连亏熔断取数失败显式阻断（loss-streak-unavailable）；
+//        回撤取数失败阻断（drawdown-unavailable），getCurrentDrawdown 透出 readFailed。
+//   P0-E _numSetting 兑现「越界回退默认」的注释承诺：补 SETTINGS_VALIDATORS 区间钳制。
+//        原只有 isFinite，marginUsageLimitPct=150 会使 marginLimitPos > maxPos，
+//        而第②层被 if (!cappedByMargin) 跳过 → 交易所上限被突破 50%。
+//   P0-F 现货清单虚假承诺：checkMargin 在 leverage=0 时仍宣称「≤ 80%」并判 PASS，
+//        实测出现「保证金占比 90.0% ≤ 80%」且通过。现按现货/合约分别表述。
+//   P1 回撤口径统一：getCurrentDrawdown 原为单条件（比例），risk.js 卡片是双条件
+//        （比例 OR 绝对额）→ 出现「风控中心红色告警、开仓却放行」。现两边都取双条件。
+//   P1 连亏熔断线与降仓线拆分（新增 settings.lossStreakBlock 默认 3，降仓线默认 2）：
+//        原共用一个阈值，自动模式下 streak >= 阈值先被熔断拦下，降仓分支永远不可达，
+//        UI 文案承诺的「>=3 笔自动降仓」是假的。
+//   P1 脏值守卫：singleSymbolMaxPct / dailyLossLimit / dailyTradeMax 三处
+//        `|| 默认值` 改为 Number + isFinite（非空字符串是 truthy，会原样穿过 ||）。
+//   新增 verify_invariants.js：648 组参数组合 × 2207 条守恒断言，核心不变量
+//        riskAmount === positionSize × stopDistance / entryPrice。
+//        已用「注入 1.25 倍超限」反向验证脚本敏感度（立刻抓出 204 条）。
+// 5.6.19：设置参数 → 开仓计算链路审计全量修复（含行为变更）
+//        [同日追加] calc-visuals 保证金刻度参数化收尾：
+//          该文件原把 0.5/0.8/0.9 写成 var 字面量，注释还标注「改这三处时必须同步
+//          calculator.js」；calculator.js 侧同日参数化后它没跟上——用户把上限调成 60%
+//          时截断按 60% 执行、刻度线仍画在 80%。现改为 marginSoftCap()/marginAggCap()
+//          经 loadSettings 读取，导出对象用 getter 保持 MARGIN_SOFT_CAP/MARGIN_AGG_CAP
+//          契约不变（测试第 27 组读它们）。index.html 的首屏静态文本一并改为占位符。
+//        [同日追加] 修复上面改动遗留的 MARGIN_SOFT_CAP 残余引用：抛错发生在工厂执行期，
+//          root.CalcVisuals 从未被赋值，整个结果可视化模块（盈亏比图 + 保证金图）消失，
+//          而 renderCalcVisuals 的 try/catch 把它吞成一行 console.error，
+//          页面上只表现为「两张图不见了」。verify_param_fix.js 第 11 组钉住此点。
+//        P0 补齐回撤熔断：settings.maxDrawdownAlert 此前只在 risk.js 卡片着色里被读，
+//          开仓链路零消费，系统事实上没有回撤熔断（调 20%→5% 开仓结果纹丝不动）。
+//          新增 skills-integration.getCurrentDrawdown()（唯一权威，权益曲线口径与
+//          risk.js 回撤卡片同源）+ calculator 闸门 drawdown-limit。
+//        P1 硬编码阈值参数化（新增 8 个设置项，默认值与原字面量一致，行为不变）：
+//          marginUsageLimitPct 80（calculator:656 原 *0.8）、
+//          aggregateMarginLimitPct 90（:683 原 *0.9）、
+//          lossStreakDerisk 3 + lossStreakDeriskFactor 0.8（:337/:766）、kellyRiskLimitPct 5
+//          （skills-integration:213 原 0.05）、feeRateLimit 0.04 / feeRateMarket 0.08（:882）、
+//          minStopDistancePct 0.1（:600 原 0.001）。此前最靠近资金的两道闸门反而不可配。
+//        P1 保存设置后回同步开仓表单：saveSettings 末尾补调 syncSettingsToForm() +
+//          refreshChecklistLabels()。此前二者唯一调用点在 DOMContentLoaded，
+//          accountBalance/riskPercent/defaultLeverage/atrStopEnabled 保存后不刷新页面不生效，
+//          calculator:209 的 settings.atrStopEnabled 分支也因此是死分支。
+//        P1 fallback 统一：riskPercent 四份不同兜底（0.10 / 2 / 2 / 10）统一为 2；
+//          defaultLeverage 的 || 0（0=现货，危险方向）统一为 10；
+//          risk.js dailyLossLimit 补兜底（NaN 会让日亏损超限提示永久静默）。
+//        P1 applyKellyRisk 止损区间改走 getStopLimitPct()：原写死 ETH 0.3~2%/其余 0.5~3%，
+//          完全绕过 customStopLimit，用户改设置后此路径生成的止损反被 :870 拦下。
+//        P1 组合热量硬上限与警告上限解耦：getHeatHardMax 只读 riskHeatMax，
+//          新增 getHeatWarnMax 读 heatWarnMax。原 Math.min(riskHeatMax, portfolioHeatMax)
+//          使 portfolioHeatMax 在多数取值下无效果，且硬上限被警告值牵制。
+//        P1 storage.js 备份轮转改走 loadSettings()：原为全仓唯一裸读 localStorage 的点，
+//          硬编码 key 字符串且绕过 SETTINGS_DEFAULTS 合并。
+//        P1 tpRRs 补UI 输入框：planner.js 早已读取该设置，但设置页无任何输入框，只能导入 JSON。
+//        P2 开仓计划落库 settingsSnapshot（14 项阈值快照）+ atrSuppressedByWeighted/
+//          atrInputValue/atrInputMultiplier：此前只存结果不存阈值，事后改 mmr 会让全部历史
+//          强平距离指标漂移；ATR 被分批止损顶替时用户填的值会凭空消失。
 // 5.6：UI/UX 审计全量修复（toast 层级、弹窗 a11y、原生对话框替换、指标说明可达性、
 //      信息架构去重与命名统一、内联样式 token 化）
 // 5.6.1：编辑簿记一致性收口（新增 utils.syncCloseBookkeeping，保证
@@ -392,7 +514,24 @@
 //          写死 "BTC"，本金/风险/杠杆都有同步却漏了品种。
 //        - 新增测试第 32 组（14 条断言）：归一/去重/datalist/筛选并集，共 611 条。
 //        版本号 5.6.16 → 5.6.17
-var APP_VERSION = '5.6.17';
+// v5.6.23 — 现货窄止损不再硬阻断 + 移除「盈亏比反推」面板
+//        - P1 现货（杠杆 0x）被「止损距离过近」硬阻断拦下：该阻断的判据
+//          stopDistance < 入场价 × 0.1% 不看杠杆，对合约成立（保证金按 1/止损距离 放大，
+//          且强平价距入场价仅 1/杠杆，窄止损叠高杠杆几乎必然先被强平），对现货不成立——
+//          现货仓位上限就是可用本金，超限由交易所上限与 90% 聚合上限截断，风险额按截断
+//          后仓位回算，实际风险只会【小于】计划风险（0.064% 止损 + 1% 计划风险 →
+//          实际 0.058%）。结果是把一笔合法的小风险现货交易挡在门外，且提示里
+//          「仓位会被放大到不可控规模」在现货下是错的。现改为：杠杆 > 0 才硬阻断，
+//          现货只给提示（理论仓位会被压到多少、实际风险变成多少）。
+//        - 附带：交易所上限的截断文案在现货下写「可用本金 × 1x」，现货没有倍数，
+//          会让用户以为自己开了合约；改「（现货，无杠杆）」。
+//        - 移除「盈亏比反推」卡片：#reverseTP / #reverseSL 是只读展示框，算完既不写回
+//          #targetPrice / #stopLoss，也不喂给多止盈位规划（三档由 autoCalcMultiTP 按
+//          settings.tpRRs 在每次计算后自动求解并直接显示各档含费净 RR），想用得手动
+//          抄数字——是与多止盈位规划重复的死胡同。求解内核 solveTPForRR 仍在用；
+//          calcReverseTP / calcReverseSL 保留为测试入口（第 27 组）。
+//        版本号 5.6.17 → 5.6.23
+var APP_VERSION = '5.6.23';
 
 // 侧栏底部版本号由此注入（index.html 的 #navVersion 留空）。
 // 此前 HTML 里硬编码 v5.6.2，版本已到 5.6.14 仍显示旧号——版本号同步清单里

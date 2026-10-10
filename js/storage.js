@@ -380,11 +380,12 @@ function saveLogs(skipBackup) {
   if (skipBackup) return true;
 
   try {
-    var autoSettings = null;
-    var rawSettings = localStorage.getItem('trade_settings_v1');
-    if (rawSettings) autoSettings = JSON.parse(rawSettings);
+    //走 loadSettings() 而非裸读 localStorage：原实现硬编码 key字符串
+    //（与 settings.js 的 SETTINGS_KEY 重复，改 key 即失效），且绕过 SETTINGS_DEFAULTS
+    // 合并与缓存失效机制，与全站其他 30+ 个读取点口径不一致。
+    var autoSettings = (typeof loadSettings === 'function') ? loadSettings() : null;
     var autoBackupEnabled = autoSettings ? autoSettings.autoBackup !== false : true;
-    var backupCount = autoSettings ? (autoSettings.backupCount || 10) : 10;
+    var backupCount = autoSettings ? (Number(autoSettings.backupCount) || 10) : 10;
     if (autoBackupEnabled) {
       _autoBackupIndex = (_autoBackupIndex + 1) % backupCount;
       // ADR-3 FIX: 使用明确前缀 trade_backup_auto，避免与 emergency_backup_ 混淆

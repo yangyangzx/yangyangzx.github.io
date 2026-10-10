@@ -111,21 +111,132 @@ function calcPortfolioHeat(pendingRiskAmount, pendingSymbol, capitalOverride) {
 }
 
 /**
+ * 当前账户回撤（唯一权威实现）—— 2026-10-10 新增。
+ *
+ * 此前 settings.maxDrawdownAlert 的全仓唯一消费点是 risk.js 的卡片着色，
+ * 开仓链路（calculator.js / planner.js）一次都没读过它：用户把回撤告警从 20% 调到 5%，
+ * 开仓结果与阻断结论纹丝不动，系统事实上不存在回撤熔断。本函数补上这个闸门的数据源。
+ *
+ * 口径必须与 risk.js 的回撤卡片一致，否则会出现「风控中心显示安全、开仓却提示超限」
+ * 这类自相矛盾。故权益曲线一律走 window.utils.calcEquityCurve（统计/分析/仪表盘同源），
+ * 兜底路径也与 risk.js 逐行对齐（balanceAdjustment 存取款 + 已实现盈亏累加）。
+ *
+ * @returns {{drawdownPct:number, drawdownAmount:number, peak:number, equity:number,
+ *            capitalKnown:boolean, thresholdPct:number, blocked:boolean}}
+ */
+function getCurrentDrawdown() {
+  var out = { drawdownPct: 0, drawdownAmount: 0, peak: 0, equity: 0,
+              capitalKnown: false, thresholdPct: 20, blocked: false };
+  var settings = {};
+  try { settings = (typeof loadSettings === 'function') ? loadSettings() : {}; } catch (e) { settings = {}; }
+
+  var threshold = Number(settings && settings.maxDrawdownAlert);
+  out.thresholdPct = (isFinite(threshold) && threshold > 0) ? threshold : 20;
+
+  var closed = [];
+  // 必须用 getClosedSorted()（risk.js 的权威已平仓取数），它已完成
+  // isClosedTrade 过滤 + pnlAmount 有效性过滤 + 按平仓时间排序。
+  // 不要用 getAllLogs()：全站不存在该函数，用了会让日志永远取不到、
+  // 回撤恒为 0，熔断闸门变成永不触发的死代码。
+  // 取数失败时 out.readFailed = true，由调用方决定 fail-closed（见 :181 注释）。
+  var _readFailed = false;
+  try {
+    if (typeof getClosedSorted === 'function') closed = getClosedSorted() || [];
+    else _readFailed = true;
+  } catch (e) { closed = []; _readFailed = true; }
+  if (!closed.length) {
+    // 兜底：test/run-tests.html 可能只加载部分模块，直接从未过滤的 logs 数组取
+    try {
+      if (typeof logs !== 'undefined' && logs && logs.length && window.utils
+          && typeof window.utils.isClosedTrade === 'function') {
+        closed = logs.filter(window.utils.isClosedTrade);
+        _readFailed = false;   // 兜底路径取到了数据
+      }
+    } catch (e2) { closed = []; }
+  }
+
+  var capital = 0, equity = 0, peak = 0;
+  var curve = null;
+  try {
+    if (window.utils && typeof window.utils.calcEquityCurve === 'function') {
+      curve = window.utils.calcEquityCurve(closed, settings, {});
+    }
+  } catch (e) { curve = null; }
+
+  if (curve && curve.data && curve.data.length > 0) {
+    capital = curve.initCap;
+    equity = curve.finalEq;
+    peak = curve.peakVal;
+  } else {
+    try { if (settings && Number(settings.accountBalance) > 0) capital = Number(settings.accountBalance); } catch (e) {}
+    if (capital <= 0 && closed.length > 0 && Number(closed[0].capital) > 0) {
+      capital = Number(closed[0].capital);
+    }
+    equity = capital;
+    peak = capital;
+    for (var i = 0; i < closed.length; i++) {
+      var adj = Number(closed[i].balanceAdjustment);
+      if (isFinite(adj) && adj !== 0) equity += adj;
+      equity += parseFloat(closed[i].pnlAmount) || 0;
+      if (equity > peak) peak = equity;
+    }
+  }
+
+  out.peak = peak;
+  out.equity = equity;
+  out.capitalKnown = (capital > 0);
+  // P0 修复（2026-10-10 深度审计）：回撤闸门此前是 fail-open——
+  // getClosedSorted / calcEquityCurve 抛错都被吞成空数据，于是 peak = equity = capital、
+  // drawdownPct = 0 → 「从未熔断」。而这只在数据真正损坏时才发生，恰恰是最该拦住的时候。
+  // 现把失败状态透出，由 calculator 的闸门按 fail-closed 处理（用户会看到明确提示）。
+  out.readFailed = _readFailed;
+  out.drawdownAmount = peak - equity;
+  out.drawdownPct = peak > 0 ? (out.drawdownAmount / peak) * 100 : 0;
+  // 无本金基准（从未设置账户余额且无日志）时不阻断：此时回撤比例无意义，
+  // 与 risk.js「capitalKnown 才判超限」的口径一致，避免新用户一开仓就被无依据拦死。
+  //
+  // P0 修复（2026-10-10 深度审计）：原为单条件 drawdownPct > threshold，
+  // 而 risk.js 的回撤卡片用的是双条件（比例 OR 绝对额）。两者不一致时会出现
+  // 「风控中心红色告警『超过最大回撤警戒线』、点计算却放行」的自相矛盾
+  // （accountBalance 小于历史峰值时绝对额条件更早触发）。此处取双条件与 risk.js 对齐，
+  // 且方向是 fail-closed——宁可拦得严，不可两个面板结论相反。
+  out.warnThreshold = out.capitalKnown ? capital * (out.thresholdPct / 100) : Infinity;
+  out.blocked = out.capitalKnown
+    && (out.drawdownPct > out.thresholdPct || out.drawdownAmount > out.warnThreshold);
+  return out;
+}
+
+/**
  * 组合热量硬上限（%）——唯一权威实现。
  *
- * P1 修复：原先只有 skills-integration.js 的
- *   `heat >= settings.portfolioHeatMax || heat >= riskHeatMax * 0.8`
- * 一处会读 portfolioHeatMax，而第二个子句（默认 6%×0.8=4.8%）总先命中，
- * 于是用户在设置页把「组合热量上限」从 8% 改成任何值都不影响任何判定——死配置项。
- * 现在两个上限取较严者作为硬上限，闸门/清单/风险面板全部经此读取，
- * 且默认 riskHeatMax=6 < portfolioHeatMax=8 时结果仍为 6%，历史行为不变。
+ * 2026-10-10 修正：原实现返回 Math.min(riskHeatMax, portfolioHeatMax)，
+ * 默认 riskHeatMax=6 < portfolioHeatMax=8，于是用户把「组合热量警告上限」调到 6 以上
+ * （合法区间 5~20）的任何值都不产生任何效果——设置项在多数取值下形同虚设，
+ * 且代码里根本没有 portfolioHeatMax 的独立警告判定分支，UI 描述「超过此值时发出警告」与实现不符。
+ *
+ * 现拆成两个语义清晰的权威入口：
+ *   getHeatHardMax()   —— 硬熔断阈值，唯一来源 riskHeatMax；
+ *   getHeatWarnMax()  —— 警告阈值，唯一来源 heatWarnMax（缺省沿用旧的 portfolioHeatMax）。
+ *
+ * 2026-10-10 二次修正：硬熔断最初写成 Math.min(riskHeatMax, heatWarnMax)，
+ * 于是默认 riskHeatMax=6 / heatWarnMax=8 时硬熔断恒为 6——用户把 riskHeatMax
+ * 调到 15 也上不去，因为警告上限（默认 8，默认比riskHeatMax 大）
+ * 把它又拉了回来。两项既然语义分离（一个熔断一个警告），
+ * 硬熔断就不该再受警告值牵制，只读 riskHeatMax。
  */
 function getHeatHardMax() {
   var settings = loadSettings();
   var a = parseFloat(settings.riskHeatMax);
-  var b = parseFloat(settings.portfolioHeatMax);
-  if (Number.isFinite(a) && a > 0) return b > 0 ? Math.min(a, b) : a;
+  if (isFinite(a) && a > 0) return a;
+  // riskHeatMax 缺失/非法时才退回旧的「取较严者」口径，保住历史行为
+  var b = parseFloat(settings.heatWarnMax != null ? settings.heatWarnMax : settings.portfolioHeatMax);
   return (b > 0) ? b : 6;
+}
+
+function getHeatWarnMax() {
+  var settings = loadSettings();
+  var w = parseFloat(settings.heatWarnMax != null ? settings.heatWarnMax : settings.portfolioHeatMax);
+  return (w > 0) ? w : 8;
 }
 
 /**
@@ -210,7 +321,11 @@ function calcKelly(winRate, avgWin, avgLoss, accountSize, halfKelly, leverage, b
   // Math.max(0.5,...) 抬到 0.5% 而实际执行 0.25%，卡片显示是实际的 2 倍。
   // 现改为：风险比例上限固定 5%；杠杆敞口由下游的保证金/组合热量/单品种占比
   // 三道硬上限独立约束，不再在这里被折叠进风险比例。
-  var riskLimit = 0.05;
+  // 风险比例上限取自 settings.kellyRiskLimitPct（原硬编码 5%，2026-10-10 参数化）。
+  // 注意与 settings.riskPercent（单笔上限，闸门用）是两个独立参数：前者约束凯利建议值本身，
+  // 后者在 calculator.js:397/493 把最终风险比例拦在系统上限内，两者叠加生效。
+  var riskLimit = (typeof _getKellyRiskLimitPct === 'function' ? _getKellyRiskLimitPct() : 5) / 100;
+  if (!(riskLimit > 0 && riskLimit <= 1)) riskLimit = 0.05;
 
   var kellyCapped = kellyPct > riskLimit;
   var halfKellyCapped = halfKellyPct > riskLimit;
@@ -307,7 +422,11 @@ function checkSymbolConcentration(symbol, positionSize, leverage, capital, openP
   var maxPct = 30;
   try {
     var settings = loadSettings();
-    maxPct = settings.singleSymbolMaxPct || 30;
+    // P0 修复（2026-10-10 深度审计）：原为 `settings.singleSymbolMaxPct || 30`——
+    // 非空字符串（如 "abc"）是truthy，会原样穿过||，使下方 totalMargin > NaN 恒false
+    // 判pass，集中度闸门静默失效。改走与 risk.js 一致的 Number + isFinite 守卫。
+    var _m = Number(settings && settings.singleSymbolMaxPct);
+    maxPct = (isFinite(_m) && _m > 0) ? _m : 30;
   } catch(e) { console.error('[concentration]', e); }
 
   // 集中度衡量的是“当前未平仓风险敞口”；已平仓交易不应持续占用保证金额度。
@@ -373,7 +492,8 @@ function checkDailyLossLimit(capitalOverride) {
   // 口径统一：优先用调用方传入的表单本金（与本次计算的风险预算分母一致），
   // 未传入（风控中心/定时巡检等场景）时回退到 settings.accountBalance。
   var capital = (capitalOverride != null && capitalOverride > 0) ? capitalOverride : getAccountCapital();
-  var dailyLossPct = settings.dailyLossLimit || 5;
+  var dailyLossPct = Number(settings.dailyLossLimit);
+  if (!isFinite(dailyLossPct) || dailyLossPct <= 0) dailyLossPct = 5;
   var dailyLossLimit = capital > 0 ? capital * (dailyLossPct / 100) : Infinity;
 
   // BUG#5 修复：严格小于才阻断；恰好等于上限时允许继续交易
@@ -444,7 +564,8 @@ function checkDailyTradeFrequency() {
   }
 
   var settings = loadSettings();
-  var maxCount = settings.dailyTradeMax || 8;
+  var maxCount = Number(settings.dailyTradeMax);
+  if (!isFinite(maxCount) || maxCount <= 0) maxCount = 8;
   var blocked = todayCount >= maxCount;
   var suggestion = blocked
     ? '今日已开仓 ' + todayCount + ' 笔，达到上限 ' + maxCount + ' 笔，建议停止交易'

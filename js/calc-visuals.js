@@ -27,12 +27,29 @@
   // 抛 ReferenceError（被 _calculateImpl 的 try/catch 吞掉，面板静默只剩结果卡片）。
   var root = (typeof globalThis !== 'undefined') ? globalThis : window;
 
-  // 保证金刻度边界。权威实现在 calculator.js：单笔 80%（availableCapital*leverage*0.8）
-  // 与聚合 90%（capital*0.9）。这里是纯展示刻度——参与不了截断计算，只负责把刻度线
-  // 画在正确位置。改这三处时必须同步：calculator.js 两处字面量 + 本文件。
+  // 保证金刻度边界 —— 2026-10-10 起改为从设置读取，不再写死。
+  //
+  // 此前这里是 0.5 / 0.8 / 0.9 三个字面量，注释还特意标注「改这三处时必须同步
+  // calculator.js 两处字面量」——但calculator.js 侧的80% / 90% 已于同日参数化为
+  // settings.marginUsageLimitPct / aggregateMarginLimitPct，本文件没跟上：
+  // 用户把上限调成 60% 后，截断按 60% 执行，而刻度线仍画在 80%。
+  // 展示与判定对不上，用户看到的线不是真正卡住他的那道。
+  //
+  // 三者都经根对象的读取口取，calc-visuals 不直接依赖 calculator.js 的私有 helper，
+  // 只认 loadSettings + 取值兜底；读不到时回退原字面量，保持离线/测试页行为不变。
   var MARGIN_WARN = 0.5;
-  var MARGIN_SOFT_CAP = 0.8;
-  var MARGIN_AGG_CAP = 0.9;
+  function _settingPct(key, fallback) {
+    var v = NaN;
+    try {
+      if (typeof root.loadSettings === 'function') {
+        var s = root.loadSettings();
+        if (s) v = Number(s[key]);
+      }
+    } catch (e) { v = NaN; }
+    return (typeof v === 'number' && isFinite(v) && v > 0) ? v / 100 : fallback;
+  }
+  function marginSoftCap() { return _settingPct('marginUsageLimitPct', 0.8); }
+  function marginAggCap() { return _settingPct('aggregateMarginLimitPct', 0.9); }
 
   // 条宽小于该比例时不再放内嵌 R 倍数标签：文字会溢出到条外，不如留在下方金额行读
   var MIN_INLINE_FRAC = 12;
@@ -215,8 +232,8 @@
 
     var total = thisM + usedM;
     var ratio = capital > 0 ? total / capital : 0;
-    var tier = ratio > MARGIN_AGG_CAP ? 'danger'
-      : (ratio > MARGIN_SOFT_CAP ? 'warn'
+    var tier = ratio > marginAggCap() ? 'danger'
+      : (ratio > marginSoftCap() ? 'warn'
         : (ratio > MARGIN_WARN ? 'primary' : 'ok'));
 
     var softOn = Number(d.leverage) > 0;
@@ -235,7 +252,7 @@
       tier: tier,
       // 单笔保证金上限在「占本金」轴上的真实位置
       softOn: softOn,
-      posCapPct: softOn && capital > 0 ? (MARGIN_SOFT_CAP * avail / capital * 100) : 0,
+      posCapPct: softOn && capital > 0 ? (marginSoftCap() * avail / capital * 100) : 0,
       // 本仓保证金占可用本金的比例——这才是单笔 80% 上限真正比较的量
       posUtilPct: avail > 0 ? thisM / avail * 100 : (thisM > 0 ? 100 : 0),
       overCapital: total > capital,
@@ -375,14 +392,15 @@
     var usedSeg = byId('marginFillUsed');
     if (usedSeg) usedSeg.style.flexBasis = m.usedShare.toFixed(2) + '%';
 
-    // 刻度线位置由常量 + 已算好的 availableCapital 驱动，HTML 里不写死数字。
-    // 聚合 90% 是固定值；单笔 80% 随已有持仓左移（它是「可用本金 × 80%」，不是
-    // 「本金 × 80%」）。现货没有这道上限，整条刻度隐藏。
+    // 刻度线位置由设置值 + 已算好的 availableCapital 驱动，HTML 里不写死数字。
+    // 聚合上限固定读设置；单笔上限随已有持仓左移（它是「可用本金 × N%」，不是
+    // 「本金 × N%」）。现货没有这道上限，整条刻度隐藏。
     var mkSoft = byId('gMarkSoft'), tickSoft = byId('gTickSoft');
     var mkAgg = byId('gMarkAgg'), tickAgg = byId('gTickAgg');
+    var aggCap = marginAggCap();
     // 保留两位有效精度但去掉尾随零：默认态正好是 '80%'，非整数仍是 '56%' / '54.4%'
     var softLeft = (Math.round(m.posCapPct * 100) / 100) + '%';
-    var aggLeft = (MARGIN_AGG_CAP * 100) + '%';
+    var aggLeft = (Math.round(aggCap * 10000) / 100) + '%';
     var softHidden = m.softOn ? '' : 'none';
     if (mkSoft) {
       mkSoft.style.left = softLeft;
@@ -392,7 +410,7 @@
     if (mkAgg) mkAgg.style.left = aggLeft;
     if (tickSoft) { tickSoft.style.left = softLeft; tickSoft.style.display = softHidden; }
     if (tickAgg) tickAgg.style.left = aggLeft;
-    if (mkAgg) mkAgg.textContent = Math.round(MARGIN_AGG_CAP * 100) + '%';
+    if (mkAgg) mkAgg.textContent = (Math.round(aggCap * 10000) / 100) + '%';
 
     var scaleLabel = byId('marginScaleLabel');
     if (scaleLabel) scaleLabel.textContent = '本金 ' + fmtAmt(m.capital, 0) + ' U';
@@ -455,8 +473,13 @@
 
   return {
     MARGIN_WARN: MARGIN_WARN,
-    MARGIN_SOFT_CAP: MARGIN_SOFT_CAP,
-    MARGIN_AGG_CAP: MARGIN_AGG_CAP,
+    // 用 getter 而非快照值：这两个上限已参数化，测试与外部读取时拿到的必须
+    // 是当前设置，而不是模块加载那一刻的字面量。原实现返回的是 var 快照，
+    // 参数化后常量已删除，这里必须改成即时求值。
+    get MARGIN_SOFT_CAP() { return marginSoftCap(); },
+    get MARGIN_AGG_CAP() { return marginAggCap(); },
+    marginSoftCap: marginSoftCap,
+    marginAggCap: marginAggCap,
     MIN_INLINE_FRAC: MIN_INLINE_FRAC,
     fmtPrice: fmtPrice,
     fmtAmt: fmtAmt,

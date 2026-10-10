@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目性质
 
-TradingDiscipline：纯前端交易风控/复盘终端（**v5.6.17**），无任何构建工具。原生 JS（IIFE + 全局函数）+ CSS（OKLCH 变量），数据全部存 localStorage，完全离线。`index.html` 直接可运行，但推荐用本地 HTTP 服务器打开（file:// 下 PWA manifest / 部分浏览器行为受限）：
+TradingDiscipline：纯前端交易风控/复盘终端（**v5.6.23**），无任何构建工具。原生 JS（IIFE + 全局函数）+ CSS（OKLCH 变量），数据全部存 localStorage，完全离线。`index.html` 直接可运行，但推荐用本地 HTTP 服务器打开（file:// 下 PWA manifest / 部分浏览器行为受限）：
 
 ```bash
 python3 -m http.server 8000   # 然后开 http://localhost:8000
@@ -18,7 +18,7 @@ python3 -m http.server 8000   # 然后开 http://localhost:8000
 node --check js/<file>.js          # 改完 JS 先语法检查
 npx eslint js/**/*.js              # Lint（注意：.eslintrc.json 未启用 no-undef，见下）
 # 浏览器内回归：打开 test/run-tests.html 自动跑全部断言（打开即跑，611 条 T() 断言）
-# 改完前端后强刷：URL 追加 ?cb=<时间戳> 避开缓存（index.html 里 script 已带 ?v=5.6.17，改 CSS 时同样需要）
+# 改完前端后强刷：URL 追加 ?cb=<时间戳> 避开缓存（index.html 里 script 已带 ?v=5.6.23，改 CSS 时同样需要）
 ```
 
 **块作用域泄漏必查**（`.eslintrc.json` 没开 `no-undef`，所以常规 lint 查不出这类崩溃）：
@@ -53,9 +53,48 @@ risk → chart-factory → analytics → review → io → dom-cache → app →
 
 **全局挂载约定**：各模块通过 `window.utils` / 全局函数暴露。`js/utils.js` 末尾执行 `window.utils = util` 并补了一个全局别名。⚠️ 历史坑（v5.2 P0）：`js/risk.js` 曾用裸标识符 `util.isClosedTrade` 调用，而生产环境只有 `window.utils`——权威分支从未执行，被 `test/run-tests.html` 内的局部 `var util = window.utils` 掩盖。改动跨模块调用时务必确认用的是 `window.utils`（或文件内已确认的全局别名），不要用裸 `util`。
 
-**开仓计算管线**（`js/calculator.js`，2205 行，核心）：滑点 → 止损距离 → 风险金额（凯利可驱动）→ 名义仓位 → 保证金 → 逐层硬上限截断 → 强平校验 → 组合热量熔断。所有提示与结果卡片统一使用**截断后**数值。
+**开仓计算管线**（`js/calculator.js`，2200+ 行，核心）。真实顺序是**闸门前置 + 逐层截断**，不是一条直线：
 
-**权威实现（单一事实来源）**：已平仓判定（`isClosedTrade`，部分平仓中间态不算已平仓）、胜率分母（保本计入）、强平价公式、本地日期（`toLocalDateStr`）、当日连亏（`_getTodayLossStreak`）、热量上限（`getHeatHardMax`）、品种止损上限（`getStopLimitPct`）、分批上下限（`MIN_SPLITS`/`MAX_SPLITS`）、**品种定义（`getDefinedSymbols`）**——全站只改 `js/utils.js` / `js/risk.js` / `js/skills-integration.js` / `js/calculator.js` / `js/settings.js` 里的唯一实现，不要在 dashboard/stats/review 等处复制逻辑。
+```
+读表单 → 滑点 → ATR/临时止损 → 【闸门】日亏损 → 交易频率 → 组合热量(预估) → 连亏
+→ 风险金额(凯利可驱动) → 【闸门】单笔风险上限 → 凯利覆写 →【闸门】凯利上限
+→ 名义仓位 →【闸门】最小止损距离 → 累计已有保证金 → 截断①保证金80% ②交易所上限
+→ 截断③聚合90% →【闸门】额度耗尽 →【闸门】强平校验 → 截断④连亏系数
+→ 截断⑤品种集中度 → 截断⑥心态评分 → 组合热量复核 →【闸门】品种止损上限
+→ 手续费+双侧滑点 → 渲染卡片 → 落快照 → 检查清单
+```
+
+要点：熔断闸门**前后夹击**而非末端单点（日亏损/频率/热量/连亏在风险金额算出之前执行，组合热量在截断后再复核一次）；强平校验之后还有三道截断（连亏/集中度/心态）。2026-10-10 起新增第8 道闸门 `drawdown-limit`（回撤熔断）。所有提示与结果卡片统一使用**截断后**数值。
+
+**权威实现（单一事实来源）**：已平仓判定（`isClosedTrade`，部分平仓中间态不算已平仓）、胜率分母（保本计入）、强平价公式、本地日期（`toLocalDateStr`）、当日连亏（`_getTodayLossStreak`）、热量上限（`getHeatHardMax` 熔断 / `getHeatWarnMax` 警告，**两个语义已分离，不要再合并**）、品种止损上限（`getStopLimitPct`）、分批上下限（`MIN_SPLITS`/`MAX_SPLITS`）、**品种定义（`getDefinedSymbols`）**、**参数化风控阈值（`calculator.js` 的 `_numSetting` + `_getMarginUsageLimitPct`/`_getAggregateMarginLimitPct`/`_getLossStreakDeriskThreshold`/`_getLossStreakDeriskFactor`/`_getKellyRiskLimitPct`/`_getMinStopDistancePct`/`_getDefaultFeeRate`）**——全站只改`js/utils.js` / `js/risk.js` / `js/skills-integration.js` / `js/calculator.js` / `js/settings.js` 里的唯一实现，不要在 dashboard/stats/review 等处复制逻辑。
+
+⚠️ **风控阈值不得写死**（2026-10-10 审计教训）：审计发现 80%/90% 保证金上限、连亏 3 笔/0.8 系数、凯利 5% 上限、手续费 0.04/0.08、最小止损距离 0.1% 全部是字面量，用户无法配置——其中最靠近资金的两道闸门反而比集中度 30% 更不可配。现已全部参数化并落入 `SETTINGS_DEFAULTS`。新增风控阈值时必须：① 加进 `SETTINGS_DEFAULTS` + `SETTINGS_VALIDATORS`；② 加进 `saveSettings` 的 `fields` 数组（复用区间/整数校验）与 `renderSettings`；③ 加进 `_SETTINGS_FIELD_IDS`（否则改了不提示"未保存修改"）；④ 在 `index.html` 加输入框。读取一律经 `_numSetting` 兜底——localStorage 被手改或导入的脏值（NaN/字符串/越界）不得穿过闸门，原硬编码写法天然免疫这类污染，改读设置后必须补上（`_numSetting` 已按 `SETTINGS_VALIDATORS` 做区间钳制，越界回退默认而非静默钳到边界）。
+
+⚠️ **改阈值必须连「所有比较点」一起改**（2026-10-10 P0 回归的教训）：v5.6.19 把连亏降仓阈值参数化时只改了判定处 `lossStreak >= _getLossStreakDeriskThreshold()`，漏了取值处 `lossStreak >= 3 ? adjPos : positionSize` —— 结果 riskAmount 按新阈值打了折、positionSize 却按旧判定没折，落库两个字段互相矛盾，真实敞口比记录的风险额高 25%，**风控被静默绕过且日志存下打架的数字**。同类漏改还有 `calc-visuals.js` 的刻度常量、`planner.js` 的清单文案、`index.html` 的表单提示。改任何阈值时检索确认全部出现点：用 Grep 工具搜字段名，**不要用 `grep` 命令 + 管道，实践中多次返回空结果误报「无残留」**。
+
+⚠️ **仓位/风险额必须满足守恒恒等式**：`riskAmount === positionSize × stopDistance / entryPrice`。每改一个截断层都要让这个等式继续成立。多层降仓（连亏系数、集中度、心态）**不要再引入 `adjPos` 之类的第二份仓位变量**——两个变量必然分叉，下游取哪个都会出 P0。回归用 `node verify_invariants.js`（648 组参数组合 × 2207 条守恒断言 + 脏值防护 + 熔断/降仓线解耦），改完计算逻辑必跑。
+
+⚠️ **闸门必须 fail-closed**：取数异常（`getClosedSorted` / `loadSettings` / `_getTodayLossStreak` 抛错）时静默放行，等于在最需要拦截的时刻失效。禁止 `catch(e){}` 空实现后继续计算，应显式阻断并给出可读原因。已修：`single-risk-exceeds-limit`（原 catch 放行）、连亏熔断（新增 `loss-streak-unavailable`）、回撤熔断（新增 `drawdown-unavailable`，由 `getCurrentDrawdown().readFailed` 驱动）。
+
+⚠️ **每条早退路径都要 `_calcCleanup()`**：它复位 `_calculating`，漏调会让「计算仓位」按钮永久失效（`app.js` 按钮守卫 + `markCalculationDirty` 双双短路，只能刷新页面）。v5.6.19 漏了两处（风险比例/金额非法分支），已修。
+
+⚠️ **改完必须跑三套校验，且校验本身要有反向用例**（2026-10-10 血泪教训）：
+
+```bash
+node verify_invariants.js    # 648 组参数组合 × 2207 条守恒断言（计算结果自洽）
+node verify_param_fix.js     # 31 项参数真实生效
+node verify_sideeffects.js   # 47 项防「过度修复」
+```
+
+v5.6.19 引入两个 P0 时前两套都是全绿的 —— 它们只证明**计算自洽**，证明不了**新加的闸门不会误拦正常用户**、**新增的钳制不会误伤合法设置**。第三套专门补这个洞。
+
+⚠️ **写断言必须包含「该失败时确实失败」的反向用例**（今天已栽三次）：
+- 只写「不该发生什么」的断言，对「闸门被架空/被旁路」这类退化**完全免疫**——
+  曾把单笔风险上限放大 5 倍注入，45 项断言仍全绿，因为用例恰好填 10% 风险、放宽后也不拦，断言天然避开了注入点。
+- **注入点必须选正常路径必经之处**：改 `getHeatWarnMax` 的兜底默认值全绿，
+  因为 `loadSettings` 会合并 `SETTINGS_DEFAULTS` 使该分支平时走不到。
+
+验证脚本有效性的唯一办法是**注入一个确定的错误看它是否报警**，改完脚本务必做这一步。
 
 **品种定义单一数据源**（`js/settings.js`，v5.6.17 收口）：系统设置 → 品种管理（`settings.customSymbols`）是品种候选的唯一来源。所有需要品种候选的入口——开仓计划录入 `#symbol`、日志筛选 `#fltSymbol`、编辑弹窗 `#emSymbol`——都必须调 `getDefinedSymbols()`，**不得各自从 `logs` 聚合或写死列表**（前者会让「设置里加了但还没交易过的品种」永远选不到，后者与设置脱节）。口径统一在 `getDefinedSymbols()` 里：代码 `trim().toUpperCase()`、按代码去重、丢弃空代码；`desc` 写进 `option[label]`，combobox 显示为右对齐次要文字并参与输入过滤。筛选器可以是「定义 ∪ 日志」并集（定义项在前），但定义项必须在列。默认选中值取 `getDefaultSymbol()`（定义首项），不要在 HTML 或各模块里写死 `'BTC'`。
 
@@ -66,7 +105,7 @@ risk → chart-factory → analytics → review → io → dom-cache → app →
 - `trade_settings_v1`：设置对象
 - `trade_backup_auto_index`：自动备份轮转（默认保留 10 份）
 
-**检查清单闸门**（`js/planner.js`）：12 项开仓前检查，`updateChecklistSummary` 汇总结论行，`focusChecklistFailures` 在保存被 `assertSavableCalculation`（`js/calculator.js`）拒绝时定位失败项。清单结果缺失/空对象时 **fail-closed 直接拒绝保存**。
+**检查清单闸门**（`js/planner.js`）：**5 项**开仓前检查（`checkRiskPct`/`checkRR`/`checkMargin`/`checkReason`/`checkMindset`），`updateChecklistSummary` 汇总结论行，`focusChecklistFailures` 在保存被 `assertSavableCalculation`（`js/calculator.js`）拒绝时定位失败项。清单结果缺失/空对象时 **fail-closed 直接拒绝保存**。清单只收「计算能独立完成判定」的项——上游硬阻断覆盖的条件触发时不产生计算结果，清单行会每笔恒绿，属纯噪音（v5.6.9 已删 7 项，UI 文案与 `planner.js:634/881` 均按实际条目数动态生成）。清单规则说明文字内嵌阈值，一律经 `_numSetting` / `getHeatHardMax` / `getStopLimitPct` 读取，**不得写死数字**（否则用户改设置后文案与实际风控不一致）。
 
 ## 版本号必须四处同步
 
@@ -74,7 +113,7 @@ risk → chart-factory → analytics → review → io → dom-cache → app →
 
 | # | 位置 | 形式 |
 |---|------|------|
-| 1 | `js/version.js` | `var APP_VERSION = '5.6.17';` |
+| 1 | `js/version.js` | `var APP_VERSION = '5.6.23';` |
 | 2 | `index.html` | 28 处 `?v=` + 15 处 CSS `?v=` |
 | 3 | `test/run-tests.html` | 17 处 `../js/*.js?v=`（漏改 → 测试跑的是旧代码，绿得毫无意义） |
 | 4 | `js/version.js` 顶部 changelog | 追加本次变更说明 |

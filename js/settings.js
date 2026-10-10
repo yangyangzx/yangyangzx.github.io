@@ -22,11 +22,24 @@ var SETTINGS_DEFAULTS = {
   // Skills 融合新增配置
   atrStopEnabled: false,     // ATR 动态止损开关
   atrDefaultMultiplier: 2,   // ATR 默认倍数
-  portfolioHeatMax: 8,       // 组合热量最大百分比 (默认 8%)
+  portfolioHeatMax: 8,       // 组合热量警告上限 (%) —— 语义已与硬熔断分离（见 skills-integration.getHeatWarnMax）
+  heatWarnMax: 8,            // 组合热量警告上限（%），portfolioHeatMax 的语义化别名，优先于它被读
   minRRRatio: 2,             // 最低盈亏比 (默认 2:1)
   singleSymbolMaxPct: 30,    // 单品种最大占比 (%) —— 用户自定 30%
   dailyTradeMax: 8,          // 每日建议最大交易笔数
   riskHeatMax: 6,              // 组合热量安全上限 (%)
+  // 以下 8 项为 2026-10-10 参数化审计新增：原先这些阈值直接写死在calculator.js /
+  // skills-integration.js 里，用户无法配置（其中 80% / 90% 是最靠近资金的两道闸门，
+  // 反而比集中度 30% 更不可配）。默认值与原硬编码字面量完全一致，历史行为不变。
+  marginUsageLimitPct: 80,     // 单笔保证金占可用本金上限 (%) —— 原 calculator.js:656 硬编码 0.8
+  aggregateMarginLimitPct: 90, // 总保证金占本金上限 (%) —— 原 calculator.js:683 硬编码 0.9
+  lossStreakDerisk: 2,       // 连亏达此笔数开始缩减仓位（原硬编码 3，2026-10-10 参数化）
+  lossStreakBlock: 3,        // 连亏达此笔数完全禁止开仓（原硬编码 3，熔断线须 > 降仓线）
+  lossStreakDeriskFactor: 0.8, // 连亏降仓系数（乘仓位）—— 原 calculator.js:766 硬编码 0.8
+  kellyRiskLimitPct: 5,        // 凯利风险比例上限 (%) —— 原 skills-integration.js:213 硬编码 0.05
+  feeRateLimit: 0.04,          // 限价单手续费率（小数）—— 原 calculator.js:882 硬编码 0.04
+  feeRateMarket: 0.08,         // 市价单手续费率（小数）—— 原 calculator.js:882 硬编码 0.08
+  minStopDistancePct: 0.1,     // 最小止损距离占入场价 (%) —— 原 calculator.js:600 硬编码 0.001
   tpRRs: [1.5, 2.0, 3.0],      // P2-7 FIX：多止盈位默认盈亏比（planner 真正读取，可被用户设置覆盖）
   customSymbols: [             // 新增：自定义品种列表 [{symbol, desc}]
     { symbol: 'BTC', desc: '比特币' },
@@ -52,7 +65,25 @@ var SETTINGS_VALIDATORS = {
   minRRRatio:      { min: 1,     max: 5,         label: '最低盈亏比' },
   singleSymbolMaxPct: { min: 5, max: 50,        label: '单品种最大占比' },
   dailyTradeMax:   { min: 5,     max: 30,        label: '日最大交易笔数', integer: true },
-  riskHeatMax:     { min: 3,     max: 15,        label: '组合热量安全上限' }
+  riskHeatMax:     { min: 3,     max: 15,        label: '组合热量安全上限' },
+  // 参数化审计新增字段的区间。上下界依据：
+  // 保证金 80%/聚合 90% —— 100% 会让两道闸门形同虚设（下限取 20/30 保证仍能收紧）；
+  // 凯利上限 5% —— 超过 100% 即为负期望下仍重仓，不允许；
+  // 费率 —— 交易所常见量级，留到 1%（小数）足够覆盖极端场所；
+  // 最小止损距离 0.1% —— 低于此值仓位按 1/距离 爆炸式放大。
+  marginUsageLimitPct: { min: 20, max: 100, label: '单笔保证金上限' },
+  aggregateMarginLimitPct: { min: 30, max: 100, label: '总保证金上限' },
+  // 连亏降仓笔数与熔断笔数拆成两项（原共用 lossStreakDerisk，2026-10-10 深度审计修正）：
+  // 熔断是「完全禁止开仓」，降仓是「缩减仓位后仍可开」。共用一个阈值时二者恒同时触发，
+  // 自动模式下 `streak >= 阈值` 先被熔断拦下，降仓分支永远不可达——设置项形同虚设，
+  // 而 UI 文案承诺「>=3 笔自动降低仓位」。拆分后降仓线必须 < 熔断线，降仓才有意义。
+  lossStreakDerisk: { min: 2,  max: 10,  label: '连亏降仓笔数', integer: true },
+  lossStreakBlock: { min: 2, max: 20, label: '连亏熔断笔数', integer: true },
+  lossStreakDeriskFactor: { min: 0.1, max: 1, label: '连亏降仓系数' },
+  kellyRiskLimitPct: { min: 1,  max: 20,       label: '凯利风险上限' },
+  feeRateLimit:  { min: 0,    max: 1,         label: '限价单手续费率' },
+  feeRateMarket: { min: 0,    max: 1,         label: '市价单手续费率' },
+  minStopDistancePct: { min: 0.01, max: 5,     label: '最小止损距离' }
   // customStopLimit、mindsetMinScore、provisionalStopPct 不在上方 fields 循环里校验，
   // 原因各不相同，见 saveSettings() 内各段注释
 };
@@ -206,6 +237,26 @@ function renderSettings() {
   if (el) el.value = settings.customStopLimit && Object.keys(settings.customStopLimit).length > 0
     ? JSON.stringify(settings.customStopLimit)
     : '';
+
+  // 参数化审计新增字段：全部走 loadSettings 合并后的值，不写行内默认值——
+  // 默认值的唯一权威是 SETTINGS_DEFAULTS，此处再写一份必然与它漂移。
+  var _pKeys = [
+    'marginUsageLimitPct', 'aggregateMarginLimitPct', 'lossStreakDerisk', 'lossStreakBlock',
+    'lossStreakDeriskFactor', 'kellyRiskLimitPct', 'feeRateLimit',
+    'feeRateMarket', 'minStopDistancePct'
+  ];
+  for (var _pi = 0; _pi < _pKeys.length; _pi++) {
+    var _pe = document.getElementById('set' + _pKeys[_pi].charAt(0).toUpperCase() + _pKeys[_pi].slice(1));
+    if (_pe) _pe.value = settings[_pKeys[_pi]];
+  }
+
+  // 多止盈位盈亏比：此前 planner.js 读settings.tpRRs，但设置页没有任何输入框，
+  // 用户无法修改（只能导入 JSON 覆盖），属"有读取点但UI 不可达"。此处补三个输入框。
+  var _tp = (settings.tpRRs && settings.tpRRs.length >= 3) ? settings.tpRRs : SETTINGS_DEFAULTS.tpRRs;
+  for (var _ti = 0; _ti < 3; _ti++) {
+    var _te = document.getElementById('setTpRR' + (_ti + 1));
+    if (_te) _te.value = _tp[_ti];
+  }
 }
 
 /**
@@ -220,7 +271,13 @@ var _SETTINGS_FIELD_IDS = [
   'setMaxDrawdownAlert', 'setDefaultLeverage', 'setMmr', 'setBackupCount',
   'setMindsetMinScore', 'setAtrStopEnabled', 'setAtrMultiplier', 'setPortfolioHeatMax',
   'setRiskHeatMax', 'setMinRRRatio', 'setSingleSymbolMaxPct', 'setDailyTradeMax',
-  'setCustomStopLimit', 'setAutoBackup'
+  'setCustomStopLimit', 'setAutoBackup',
+  // 参数化审计新增字段 + tpRRs（三档），必须全部进脏检查快照，
+  // 否则改了不提示"未保存修改"，用户以为已保存。
+  'setMarginUsageLimitPct', 'setAggregateMarginLimitPct', 'setLossStreakDerisk',
+  'setLossStreakDeriskFactor', 'setLossStreakBlock', 'setKellyRiskLimitPct', 'setFeeRateLimit',
+  'setFeeRateMarket', 'setMinStopDistancePct',
+  'setTpRR1', 'setTpRR2', 'setTpRR3'
 ];
 var _settingsSnapshot = null;
 
@@ -289,7 +346,17 @@ function saveSettings() {
     { key: 'riskHeatMax',          id: 'setRiskHeatMax',          parser: parseFloat },
     { key: 'minRRRatio',           id: 'setMinRRRatio',           parser: parseFloat },
     { key: 'singleSymbolMaxPct',   id: 'setSingleSymbolMaxPct',   parser: parseFloat },
-    { key: 'dailyTradeMax',        id: 'setDailyTradeMax',        parser: parseFloat }
+    { key: 'dailyTradeMax',        id: 'setDailyTradeMax',        parser: parseFloat },
+    // 参数化审计新增：原为 calculator.js / skills-integration.js 里的硬编码字面量
+    { key: 'marginUsageLimitPct',  id: 'setMarginUsageLimitPct',  parser: parseFloat },
+    { key: 'aggregateMarginLimitPct', id: 'setAggregateMarginLimitPct', parser: parseFloat },
+    { key: 'lossStreakDerisk',     id: 'setLossStreakDerisk',     parser: parseFloat },
+    { key: 'lossStreakBlock',       id: 'setLossStreakBlock',       parser: parseFloat },
+    { key: 'lossStreakDeriskFactor', id: 'setLossStreakDeriskFactor', parser: parseFloat },
+    { key: 'kellyRiskLimitPct',    id: 'setKellyRiskLimitPct',    parser: parseFloat },
+    { key: 'feeRateLimit',         id: 'setFeeRateLimit',         parser: parseFloat },
+    { key: 'feeRateMarket',        id: 'setFeeRateMarket',        parser: parseFloat },
+    { key: 'minStopDistancePct',   id: 'setMinStopDistancePct',   parser: parseFloat }
   ];
 
   for (var i = 0; i < fields.length; i++) {
@@ -389,18 +456,89 @@ function saveSettings() {
     settings.autoBackup = autoBackupEl.checked;
   }
 
+  // 多止盈位盈亏比（3 档）：此前 planner.js:302 读 settings.tpRRs，但设置页没有输入框，
+  // 该值只能靠 importSettings 写入——有读取点却 UI 不可达。补保存后即与另外两档
+  // planner.js 的口径一致（必须是 3 个 0 < v <= 20 的数字，否则该档回落 1.5）。
+  var _tpVals = [];
+  for (var _si = 1; _si <= 3; _si++) {
+    var _sEl = document.getElementById('setTpRR' + _si);
+    if (!_sEl) return;                    // 元素缺失即中止，绝不半保存
+    var _sNum = parseFloat(_sEl.value);
+    if (isNaN(_sNum) || _sNum <= 0 || _sNum > 20) {
+      showToast('多止盈位' + _si + ' 盈亏比需在 0 ~ 20 之间的正数', 'error');
+      return;
+    }
+    _tpVals.push(_sNum);
+  }
+  settings.tpRRs = _tpVals;
+
   // 配额不足时不得误报"设置已保存"；失败则保留内存中的设置对象，避免表单输入被回滚
   if (!_safeSetSettings(settings)) return;
   _clearSettingsCache();
 
-  // 同步全局变量（如果有的话）
-  if (typeof _autoBackupIndex !== 'undefined') {
-    // 不直接修改 _autoBackupIndex（它由 storage.js 维护）
-    // 但可以通过设置的 backupCount 影响后续轮转逻辑
-  }
-
   showToast('设置已保存', 'success');
   _refreshSettingsSnapshot();
+
+  // 回同步到开仓计算表单（P0：原实现缺此步）。
+  // syncSettingsToForm()此前唯一调用点是 app.js 的 DOMContentLoaded，于是
+  // accountBalance / riskPercent / defaultLeverage / atrStopEnabled / atrDefaultMultiplier
+  // 在设置页保存后，开仓表单控件仍显示改动前的旧值——用户看到"已保存"却要刷新页面才生效，
+  // calculator.js:209 的 settings.atrStopEnabled 分支也因此成了永不执行的死分支。
+  // 必须在清缓存之后调用，否则它读到的还是旧设置。
+  if (typeof syncSettingsToForm === 'function') syncSettingsToForm();
+  // 清单上的阈值说明文字同样内嵌了设置值（如「单笔风险 ≤ x%」），一并刷新
+  if (typeof refreshChecklistLabels === 'function') refreshChecklistLabels();
+}
+
+/**
+ * 从自动备份恢复的选择对话框（入口按钮调用）。
+ *
+ * 用统一的 window.confirmDialog，而不是原生 confirm()——恢复是破坏性操作，
+ * 必须像 clearLogs 一样先说明影响范围并用危险色确认钮。
+ *
+ * 备份通常只有几份，列表本身就短，故直接把「最近一份」作为默认恢复目标
+ * （对话框确认按钮即执行），其余备份通过提示列出时间供用户改用「立即备份」
+ * 导出文件后再精确恢复。全站没有输入式对话框（confirmDialog 不支持输入），
+ * 不为此新增一套UI 基建。
+ */
+function openRestoreBackupDialog() {
+  if (typeof window.confirmDialog !== 'function') {
+    showToast('对话框组件未加载，请刷新页面重试', 'error');
+    return;
+  }
+  var list = listAutoBackups();
+  if (!list.length) {
+    window.confirmDialog({
+      title: '没有可用的自动备份',
+      message: '本地还没有自动备份副本。\n\n自动备份在每次保存日志时轮转写入，'
+        + '份数由「交易参数 → 备份份数」决定（当前 '
+        + (typeof loadSettings === 'function' ? loadSettings().backupCount : 10) + ' 份）。\n'
+        + '如果刚开启该功能，请先保存一笔日志。',
+      confirmText: '知道了',
+      alertOnly: true
+    });
+    return;
+  }
+
+  var newest = list[0];
+  var others = list.slice(1).map(function (b) {
+    return '· ' + b.time.replace('T', ' ').slice(0, 19) + '（' + b.count + ' 条）';
+  });
+
+  window.confirmDialog({
+    title: '从自动备份恢复',
+    message: '将用最近一份备份恢复日志：\n\n'
+      + newest.time.replace('T', ' ').slice(0, 19) + '（' + newest.count + ' 条）\n\n'
+      + '当前 ' + logs.length + ' 条日志会被覆盖。覆盖前会自动把当前日志另存为'
+      + '「恢复前备份」，误操作后还能再恢复回来。\n\n'
+      + (others.length ? '更早的备份（共 ' + (list.length - 1) + ' 份）：\n' + others.join('\n') + '\n\n' : '')
+      + '若需要更早的某一份，请先用「立即备份」导出当前数据，再从导出文件精确恢复。',
+    confirmText: '恢复最近一份',
+    danger: true
+  }).then(function (ok) {
+    if (!ok) return;
+    restoreFromAutoBackup(newest.slot);
+  });
 }
 
 // ==================== 数据管理 ====================
@@ -488,7 +626,9 @@ function parseCSVImport(csvText) {
     '已实现盈亏':'realizedPnl','累计手续费':'realizedFee','已平仓比例%':'closedRatio','初始风险':'initialRiskAmount',
     '初始仓位':'initialPositionSize','平仓明细':'closes','部分平仓':'isPartial',
     '盘中动作':'actions','止损轨迹':'stopHistory',
-    '目标盈亏比':'targetRR','计划净盈利':'plannedNetProfit'
+    '目标盈亏比':'targetRR','计划净盈利':'plannedNetProfit',
+    // 含费净 RR 的三段金额（2026-10-10）。缺列时复盘无法还原 RR 是含费口径还是价格距离口径。
+    '毛利盈利':'rrGrossProfit','净盈利':'rrNetProfit','净亏损':'rrNetLoss'
   };
   var CSV_ARRAY_FIELDS = ['signals','lossReason','emotions','reason'];
   // actions/stopHistory 与 closes 同为 JSON 列：导出时序列化，导入时还原成数组。
@@ -496,7 +636,7 @@ function parseCSVImport(csvText) {
   var CSV_JSON_FIELDS = ['actions','splitEntries','closes','stopHistory'];
   // targetRR / plannedNetProfit 必须入表：stats.js 的「盈亏比偏差」靠这对字段比对，
   // 缺列时它们退成 undefined 被整笔排除，指标样本量静默缩小（导出→导入一轮后全丢）。
-  var CSV_NUM_FIELDS = ['entryPrice','stopLoss','targetPrice','positionSize','leverage','riskAmount','capital','fee','slippageCost','closePrice','pnlAmount','mae','mfe','lowPrice','highPrice','rMultiple','pnlPercent','holdDuration','realizedPnl','realizedFee','closedRatio','initialRiskAmount','initialPositionSize','targetRR','plannedNetProfit'];
+  var CSV_NUM_FIELDS = ['entryPrice','stopLoss','targetPrice','positionSize','leverage','riskAmount','capital','fee','slippageCost','closePrice','pnlAmount','mae','mfe','lowPrice','highPrice','rMultiple','pnlPercent','holdDuration','realizedPnl','realizedFee','closedRatio','initialRiskAmount','initialPositionSize','targetRR','plannedNetProfit','rrGrossProfit','rrNetProfit','rrNetLoss'];
   var CSV_INT_FIELDS = ['mindsetScore','executionScore'];
 
   var headers = lines[0];
@@ -652,6 +792,60 @@ function _commitImportedLogs(newLogs) {
 }
 
 /**
+ * 列出本地的自动备份（供「从备份恢复」选择）。
+ *
+ * 背景（2026-10-10）：自动备份此前**只写不读**——storage.js 每次 saveLogs 都往
+ * trade_backup_auto_0..N 写快照，但全站没有任何从这些快照恢复的入口，
+ * 「备份份数」设置只是个看不见摸不着的计数器，用户误删日志后只能靠
+ * 自己曾经导出过的文件。而这份数据明明就在浏览器里。
+ *
+ * @returns {Array<{slot:number,time:string,count:number}>} 按时间倒序
+ */
+function listAutoBackups() {
+  var out = [];
+  var max = (typeof loadSettings === 'function') ? (parseInt(loadSettings().backupCount, 10) || 10) : 10;
+  for (var i = 0; i < max; i++) {
+    var raw = null;
+    try { raw = localStorage.getItem('trade_backup_auto_' + i); } catch (e) { continue; }
+    if (!raw) continue;
+    try {
+      var obj = JSON.parse(raw);
+      if (obj && Array.isArray(obj.data)) {
+        out.push({ slot: i, time: obj.time || '', count: obj.data.length });
+      }
+    } catch (e) { /* 单个槽位损坏不应影响其余槽位 */ }
+  }
+  out.sort(function (a, b) { return a.time < b.time ? 1 : (a.time > b.time ? -1 : 0); });
+  return out;
+}
+
+/**
+ * 从指定槽位的自动备份恢复（覆盖当前日志，属破坏性操作，调用方须先确认）。
+ * @param {number} slot
+ * @returns {boolean} 是否恢复成功
+ */
+function restoreFromAutoBackup(slot) {
+  var raw = null;
+  try { raw = localStorage.getItem('trade_backup_auto_' + slot); } catch (e) { raw = null; }
+  if (!raw) { showToast('该备份槽位为空', 'error'); return false; }
+  var obj;
+  try { obj = JSON.parse(raw); } catch (e) { showToast('备份数据已损坏，无法恢复', 'error'); return false; }
+  if (!obj || !Array.isArray(obj.data)) { showToast('备份数据格式异常，无法恢复', 'error'); return false; }
+
+  // 先给现有日志留一份备份，避免「用旧备份覆盖新日志」后又不可逆地丢失
+  var before = logs.slice();
+  try { localStorage.setItem('trade_pre_restore_backup', JSON.stringify({ time: new Date().toISOString(), data: before })); } catch (e) {}
+
+  logs = obj.data;
+  saveLogs();
+  showToast('已从备份恢复 ' + obj.data.length + ' 条日志（原日志已另存为恢复前备份）', 'success');
+  if (typeof renderLogs === 'function') renderLogs();
+  if (typeof renderDashboard === 'function') renderDashboard();
+  renderSettings();
+  return true;
+}
+
+/**
  * 去重键。_logFingerprint 把 id 放在第一分量，所以「导入时才补了 id 的记录」一旦换上新 id，
  * 完整指纹就和现有记录永远对不上——同一份没有 ID 列的旧版导出重复导入两次会产生两条记录。
  * 这里同时给出带 id 与去 id 两种键：带 id 的键负责不误合并不同记录，去 id 的键负责认出
@@ -668,7 +862,7 @@ function _logKeys(item) {
 }
 
 // 导入时统一归一化的数值字段（JSON 里可能是字符串或 NaN/Infinity；CSV 解析已给数字，重复归一无害）
-var IMPORT_NUM_FIELDS = ['entryPrice','stopLoss','targetPrice','positionSize','leverage','riskAmount','capital','fee','slippageCost','closePrice','pnlAmount','mae','mfe','lowPrice','highPrice','rMultiple','pnlPercent','holdDuration','effectiveEntryPrice','stopType','atrStopMode','calculationVersion','grossPnlAmount','actualCloseFee','actualExitLegacySlippageCost','realizedPnl','realizedFee','closedRatio','initialRiskAmount','initialPositionSize','targetRR','plannedNetProfit'];
+var IMPORT_NUM_FIELDS = ['entryPrice','stopLoss','targetPrice','positionSize','leverage','riskAmount','capital','fee','slippageCost','closePrice','pnlAmount','mae','mfe','lowPrice','highPrice','rMultiple','pnlPercent','holdDuration','effectiveEntryPrice','stopType','atrStopMode','calculationVersion','grossPnlAmount','actualCloseFee','actualExitLegacySlippageCost','realizedPnl','realizedFee','closedRatio','initialRiskAmount','initialPositionSize','targetRR','plannedNetProfit','rrGrossProfit','rrNetProfit','rrNetLoss'];
 
 /**
  * 数值字段归一化：必须在结构校验之前跑，否则 validateFields 会把 JSON 里的 '100'
