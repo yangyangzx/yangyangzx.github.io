@@ -1,4 +1,105 @@
 // 应用版本 - 每次更新后递增，用于缓存清除
+// 5.6.25 补充：开仓计划模块计算逻辑一致性核查（用户第二轮审查请求）
+//   核查范围：_calculateImpl 全链路 + planner.js 清单项 + 凯利/心态/连亏截断
+//   + RR 三处同档 + 脏值防护 + 守恒恒等式。共 28 项实证断言全绿。
+//   发现并修复 1 处文案 bug：凯利截断提示「已截断至 5%」与「超出 5% 上限」
+//   两处写死 5%，但 kellyRiskLimitPct 已参数化——用户把它调到 3% 后
+//   提示仍写 5%。calculator.js:546（结果卡 kellyCappedMsg）与 :2455
+//   （凯利侧边栏 kellyWarning）两处改为读 _getKellyRiskLimitPct() 实际值。
+//   skills-integration.js JSDoc 中「已截断到 5%」两处同步更新。
+//
+// 5.6.25：全站同类反模式整改（审计日志模块时发现的系统性问题，4 类共 10 处）
+//   背景：v5.6.24 修完日志模块 4 个 P0 后复盘发现，它们不是孤立 bug，
+//   而是四种可复制反模式的重演。本轮把同类问题在全站收口。
+//
+//   1) 索引型状态未随 logs 变更重置（危害最大：会写错交易记录）
+//      新增两个权威入口（js/utils.js）：
+//        resetAllIndexState()          —— 全清，适用于整体替换/批量删除/清空/撤销
+//        remapIndexStateAfterSplice()  —— 下标平移，适用于单条删除
+//      （删一条不该清掉用户对其余行的勾选，故单条删除用平移而非清空。）
+//      接入 7 条改写 logs 的路径，其中 3 条此前完整度为 0/7：
+//        覆盖导入 settings.js _commitImportedLogs —— 后果：勾选 L0/L1 → 覆盖导入 →
+//          点批量删除 → 删掉用户从未勾选的记录；
+//        备份恢复 settings.js restoreFromAutoBackup；
+//        多标签页同步 storage.js（两处，经 _safeRenderAfterStorageChange）。
+//      另修：批量删除漏 _expandedRows（该清的没清、撤销回调里反而清了它）；
+//      单条删除补齐 openClosePanelIdx / actionPanelIdx / _closePriceEdited ——
+//      此前面板会无声漂移到相邻记录，用户点「确认平仓」会平掉他没打开的那笔。
+//      ⚠️ 踩坑：_safeRenderAfterStorageChange 同时是每次 saveLogs() 的收尾，
+//      在那里无条件重置会把刚 remap 好的状态立刻清空（verify_logs_fixed F1 组全红
+//      才发现）。已改为由调用方显式传 { externalReplace: true }，并加防回归断言。
+//
+//   2) 死配置：组合热量警告上限设置项形同虚设
+//      getHeatWarnMax() 定义完整、设置页有输入框（可调 5~20%），但**零消费方**——
+//      真正生效的是 5 处硬编码 maxHeat * 0.8。用户在设置页改这个值对任何 UI 数字
+//      与阻断行为零影响。根因：v5.6.19 把硬熔断从 getHeatWarnMax 拆到 getHeatHardMax 时，
+//      警告侧被顺手换成了硬编码系数，旧 bug 以新形式复现。
+//      已把 skills-integration / risk ×2 / dashboard ×2 五处全部改读 getHeatWarnMax，
+//      并把提示文案改为显示实际警告线（原文案只显示硬上限，用户无从判断）。
+//      注意：skills-integration.js:469 的 `maxPct * 0.8` 是**品种集中度**的「接近上限」
+//      提示档，刻意保留——设置里只有 singleSymbolMaxPct 一个值，没有对应警告线，
+//      且 getHeatWarnMax 是组合热量专用。两者不要混为一谈（已加注释说明）。
+//
+//   3) 权威函数的多份副本（每处都是「修了权威、漏了副本」的重演）
+//      手续费率：planner.js:66 / modals.js:1284 写死 0.04/0.08，绕过 feeRate 设置 →
+//        用户改费率后，反推目标价算出的 RR 与计算器不一致、分批快照落库费用污染成本侵蚀。
+//        两处改走 _getDefaultFeeRate。
+//      单品种集中度：risk.js 卡片只判 != null、planner.js 文案仍是 `|| 30` 原型，
+//        与权威的 Number+isFinite 守卫三处结论可互相矛盾。新增
+//        getSymbolConcentrationMaxPct() 为唯一读取入口，三处统一。
+//      回撤阈值：risk.js renderDrawdown 直接用 ddSettings.maxDrawdownAlert 无守卫——
+//        null 时 `> null` 恒真（有一点回撤就红色告警），"abc"/NaN 时恒 false（永不告警），
+//        而开仓闸门消费的 getCurrentDrawdown 有守卫会回退 20 → 同一份数据下
+//        「风控中心显示安全」与「点计算却放行」互相矛盾。已补同样的守卫。
+//
+//   4) 结构性预防（写进 CLAUDE.md，两条强制检查项）
+//      ① 新增/修改权威函数后必须 grep 全部旧调用点并确认零遗漏
+//         （统计调用数必须剔除注释行——注释里带 () 会被误判为调用）；
+//      ② logs 任何变更后必须走统一状态重置入口，禁止手写逐项清理。
+//      CLAUDE.md 已附「四个已发生案例」对照表，说明这不是谨慎而是已被四次实证的流程缺口。
+//
+//   验证：新增 verify_reset_fix.js（29 断言，含 saveLogs 不得清状态的防回归组）、
+//        verify_config_fix.js（17 断言，验证设置项真实生效：同一 heat 下警告线 5 触发、
+//        警告线 20 不触发）。既有 verify_logs_fixed 24 / smoke 15 全绿，
+//        三套老校验 invariants 2207 / param_fix 31 / sideeffects 47 全通过。
+// 5.6.24：交易日志模块全量审计修复（4 个 P0 + 4 个中危，全部 jsdom 实证）
+//   P0 编辑已平仓记录的 PnL 被系统静默改写（数据可信度问题，危害最大）：
+//        modals.js 打开弹窗时先按设计置 _emPnlManual=true（已平仓且有 PnL 值即保护），
+//        随后又用「DOM 值 vs 存储值比对」把同一标志覆写成 false，把设计意图完整抵消。
+//        后果：用户改平仓价触发 emRecalc 重算，PnL 被覆盖（实测 120→130 时 66.60 变 2.60），
+//        而「手动」标签永不显示，用户无从察觉。已删除覆写逻辑并让标签随保护状态点亮。
+//   P0 orderType 选项与主数据模型不一致，限价单被静默改成市价单：
+//        主模型（#orderType / ORDER_TYPES_LONG/SHORT）是 market/limit/stop 三值，
+//        calculator.js 直接把该值落库、_getDefaultFeeRate 还按 'limit' 取费率；
+//        而编辑弹窗只列旧扩展值（limitBuy/stopBuy/…）。于是 orderType='limit' 的日志
+//        打开弹窗后 select 匹配不到任何 option，浏览器回落到首项 'market'——
+//        不改任何字段直接保存即完成静默改单。已改为三值 + 旧值原样回显。
+//   P0 单条删除后批量选中索引错位，会删掉用户没勾的行：
+//        toast.js 单条删除分支 logs.splice(idx,1) 后未重映射 _selectedIndices/_expandedRows
+//        （批量删除与清空两条路径都清空了，唯独单条这条漏了），splice 使其后索引整体前移一位，
+//        选中集仍按旧索引记账 → 随后的 batchDelete 命中用户根本没勾的行。
+//        已按「快照后重建」重映射（Set.forEach 会遍历迭代期间新增的条目，
+//        边删边 add 会连锁前移，必须先快照）；_expandedRows 以 let 声明不挂 window，用裸标识符引用。
+//   P0 分批改非分批后 positionSize 未清零，已平仓记录仍带剩余敞口：
+//        syncCloseBookkeeping 只把 closedRatio 置 100，不碰 positionSize（logs.js:303 收尾会置 0），
+//        CSV 仓位列与实际不符。补零必须放在 saveEditLog 中分批链收尾结算【之后】——
+//        :1080 以 positionSize>0 作为累加最后一腿的守卫，提前清零会让整段已实现盈亏被跳过。
+//   中危 isClosedTrade 的错误兜底从 3 处扩到 7 处（!!closeType 恰好把分批中间态判成已平仓，
+//        正是该函数当初要修的 bug）。新增 utils.isClosed 作为唯一 fail-closed 入口：
+//        utils 缺失时判「未平仓」并告警一次（少算可退回持仓监控，多算会虚高胜率并漏触发连亏降仓）。
+//   中危 脏检查名单漏 emStopType / emPartialRatio：二者都是可保存字段，
+//        只改止损类型后 _editDirty 仍为 false → 关闭时不提示、静默丢改动。
+//        修复时把 emCheckDirty 与 captureInit 两份 ids 列表一并补齐并加注释约束二者必须逐字一致。
+//   中危 lossReason 用 if(item.lossReason) 判真，空数组 [] 为 truthy 会渲染空容器
+//        （同行 emotions 已带 .length 判定）。已补 .length。
+//   中危 4 处统计 tooltip 与实现口径不符，且 openStatTip 会把静态 data-tip 与运行时 title
+//        拼接展示 → 同一屏出现两个互相矛盾的公式：
+//        夏普写 √252 而 utils.dailySharpe 实际 365（低估 16.9%）；目标达成率分母写「已平仓数」
+//        实为「有计划目标值的子集」；目标 R 偏差实为「Σ已实现净盈亏÷Σ计划净盈亏」而非 R 相除；
+//        MFE/MAE 实为逐笔比值均值而非「平均MFE÷平均MAE」。已全部按代码口径改写。
+//   文案 index.html 统计概览折叠标题写「16 项指标」，实测 18 项，已同步。
+//   验证：新增 verify_logs_fixed.js（24 项断言，含反向用例证明断言能咬住目标路径）。
+//        既有三套校验全绿：verify_invariants 2207 / verify_param_fix 31 / verify_sideeffects 47。
 // 5.6.23：开仓计划保存链路实测补漏（前几轮只测了计算链路，保存/读取是盲区）
 //   P0 开仓保存时不落initialRiskAmount，导致 R 倍数为 NaN：
 //        全站 R 倍数都以 initialRiskAmount 为分母（rendering / modals / logs / stats 一致），
@@ -531,7 +632,7 @@
 //          抄数字——是与多止盈位规划重复的死胡同。求解内核 solveTPForRR 仍在用；
 //          calcReverseTP / calcReverseSL 保留为测试入口（第 27 组）。
 //        版本号 5.6.17 → 5.6.23
-var APP_VERSION = '5.6.23';
+var APP_VERSION = '5.6.25';
 
 // 侧栏底部版本号由此注入（index.html 的 #navVersion 留空）。
 // 此前 HTML 里硬编码 v5.6.2，版本已到 5.6.14 仍显示旧号——版本号同步清单里

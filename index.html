@@ -43,22 +43,22 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <script src="js/chart-guard.js?v=5.6.23"></script>
-  <link rel="stylesheet" href="css/variables.css?v=5.6.23">
-  <link rel="stylesheet" href="css/base.css?v=5.6.23">
-  <link rel="stylesheet" href="css/calculator.css?v=5.6.23">
-  <link rel="stylesheet" href="css/table.css?v=5.6.23">
-  <link rel="stylesheet" href="css/modals.css?v=5.6.23">
-  <link rel="stylesheet" href="css/select-ui.css?v=5.6.23">
-  <link rel="stylesheet" href="css/responsive.css?v=5.6.23">
-  <link rel="stylesheet" href="css/layout.css?v=5.6.23">
-  <link rel="stylesheet" href="css/dashboard.css?v=5.6.23">
-  <link rel="stylesheet" href="css/planner.css?v=5.6.23">
-  <link rel="stylesheet" href="css/discipline-led.css?v=5.6.23">
-  <link rel="stylesheet" href="css/risk.css?v=5.6.23">
-  <link rel="stylesheet" href="css/analytics.css?v=5.6.23">
-  <link rel="stylesheet" href="css/review.css?v=5.6.23">
-  <link rel="stylesheet" href="css/settings.css?v=5.6.23">
+  <script src="js/chart-guard.js?v=5.6.25"></script>
+  <link rel="stylesheet" href="css/variables.css?v=5.6.25">
+  <link rel="stylesheet" href="css/base.css?v=5.6.25">
+  <link rel="stylesheet" href="css/calculator.css?v=5.6.25">
+  <link rel="stylesheet" href="css/table.css?v=5.6.25">
+  <link rel="stylesheet" href="css/modals.css?v=5.6.25">
+  <link rel="stylesheet" href="css/select-ui.css?v=5.6.25">
+  <link rel="stylesheet" href="css/responsive.css?v=5.6.25">
+  <link rel="stylesheet" href="css/layout.css?v=5.6.25">
+  <link rel="stylesheet" href="css/dashboard.css?v=5.6.25">
+  <link rel="stylesheet" href="css/planner.css?v=5.6.25">
+  <link rel="stylesheet" href="css/discipline-led.css?v=5.6.25">
+  <link rel="stylesheet" href="css/risk.css?v=5.6.25">
+  <link rel="stylesheet" href="css/analytics.css?v=5.6.25">
+  <link rel="stylesheet" href="css/review.css?v=5.6.25">
+  <link rel="stylesheet" href="css/settings.css?v=5.6.25">
 </head>
 <body>
 <nav id="mainNav" role="navigation" aria-label="主导航">
@@ -795,7 +795,7 @@
     <button type="button" class="collapse-toggle" id="journalStatsToggle"
             aria-expanded="false" aria-controls="journalStatsBlock">
       <i class="fas fa-chevron-right" aria-hidden="true"></i> 统计概览
-      <span class="collapse-toggle-hint">16 项指标 · 权益峰值回撤 · 订单类型明细</span>
+      <span class="collapse-toggle-hint">18 项指标 · 权益峰值回撤 · 订单类型明细</span>
     </button>
     <div id="journalStatsBlock" hidden>
     <div class="stats-panel" id="statsPanel" style="display:none;">
@@ -811,18 +811,18 @@
       <div class="stat-item"><span class="stat-label">利润因子</span><span class="stat-value" id="statProfitFactor">—</span><button type="button" class="stat-info" data-tip="计算公式：总盈利÷总亏损的绝对值。参考价值：每亏1元能赚多少。>1.5合格，>2优秀，<1策略无效。" aria-label="查看该指标的计算公式与参考价值" aria-expanded="false" aria-haspopup="true"><i class="fas fa-circle-info" aria-hidden="true"></i></button></div>
       <div class="stat-item"><span class="stat-label">最大回撤</span><span class="stat-value" id="statMaxDD">—</span><button type="button" class="stat-info" data-tip="计算公式：权益从峰值到谷底的最大跌幅百分比。参考价值：决定仓位大小和心态承受力。>30%需要降低仓位或暂停交易。" aria-label="查看该指标的计算公式与参考价值" aria-expanded="false" aria-haspopup="true"><i class="fas fa-circle-info" aria-hidden="true"></i></button></div>
       <div class="stat-item"><span class="stat-label">年化收益</span><span class="stat-value" id="statAnnReturn">—</span><button type="button" class="stat-info" data-tip="计算公式：总盈亏按首末平仓时间跨度年化（不足 1 天按 1 天计）。参考价值：评估策略年化回报能力，样本跨度过短时参考性有限。" aria-label="查看该指标的计算公式与参考价值" aria-expanded="false" aria-haspopup="true"><i class="fas fa-circle-info" aria-hidden="true"></i></button></div>
-      <div class="stat-item"><span class="stat-label">夏普比率(日)</span><span class="stat-value" id="statSharpe">—</span><button type="button" class="stat-info" data-tip="计算公式：按平仓日聚合日盈亏，夏普=日均盈亏÷日盈亏标准差×√252（无风险利率取 0）。参考价值：衡量每承担一单位波动获得的超额回报，>1 合格。" aria-label="查看该指标的计算公式与参考价值" aria-expanded="false" aria-haspopup="true"><i class="fas fa-circle-info" aria-hidden="true"></i></button></div>
+      <div class="stat-item"><span class="stat-label">夏普比率(日)</span><span class="stat-value" id="statSharpe">—</span><button type="button" class="stat-info" data-tip="计算公式：按平仓日聚合日盈亏，夏普=日均盈亏÷日盈亏标准差×√365（无风险利率取 0，365 天年化，与 utils.dailySharpe 的 annualDays 默认值一致）。参考价值：衡量每承担一单位波动获得的超额回报，>1 合格。" aria-label="查看该指标的计算公式与参考价值" aria-expanded="false" aria-haspopup="true"><i class="fas fa-circle-info" aria-hidden="true"></i></button></div>
       <div class="stat-item"><span class="stat-label">成本侵蚀</span><span class="stat-value" id="statCostDrag">—</span><button type="button" class="stat-info" data-tip="计算公式：Σ手续费÷Σ(盈利+亏损绝对值)×100%。参考价值：成本侵蚀越高，策略对滑点/手续费越敏感，应降低频率或提高单笔目标。" aria-label="查看该指标的计算公式与参考价值" aria-expanded="false" aria-haspopup="true"><i class="fas fa-circle-info" aria-hidden="true"></i></button></div>
       <div class="stat-group-divider"></div>
       <!-- 质量指标 -->
-      <div class="stat-item"><span class="stat-label">目标达成率</span><span class="stat-value" id="statTargetRate">—</span><button type="button" class="stat-info" data-tip="计算公式：达成目标收益的笔数÷已平仓数×100%。参考价值：反映纪律执行而非盈利能力。偏低说明止盈目标设置不切实际。" aria-label="查看该指标的计算公式与参考价值" aria-expanded="false" aria-haspopup="true"><i class="fas fa-circle-info" aria-hidden="true"></i></button></div>
+      <div class="stat-item"><span class="stat-label">目标达成率</span><span class="stat-value" id="statTargetRate">—</span><button type="button" class="stat-info" data-tip="计算公式：达成目标收益的笔数÷【有计划目标值的已平仓笔数】×100%（分母是子集，不是全部已平仓数）。参考价值：反映纪律执行而非盈利能力。偏低说明止盈目标设置不切实际。" aria-label="查看该指标的计算公式与参考价值" aria-expanded="false" aria-haspopup="true"><i class="fas fa-circle-info" aria-hidden="true"></i></button></div>
       <div class="stat-item"><span class="stat-label">平均实现 R</span><span class="stat-value" id="statAvgRR">—</span><button type="button" class="stat-info" data-tip="计算公式：Σ(已实现 R 倍数)÷有 R 记录的已平仓数，包含盈利、亏损与保本交易。参考价值：衡量每笔交易实际兑现的平均风险回报。" aria-label="查看该指标的计算公式与参考价值" aria-expanded="false" aria-haspopup="true"><i class="fas fa-circle-info" aria-hidden="true"></i></button></div>
-      <div class="stat-item"><span class="stat-label">目标 R 偏差</span><span class="stat-value" id="statRRBias">—</span><button type="button" class="stat-info" data-tip="计算公式：平均值[(实际实现 R÷计划目标 R)−1]×100%，仅统计有有效目标 R 的已平仓交易。0%表示平均达到目标，负值表示未达到目标，正值表示超额完成。" aria-label="查看该指标的计算公式与参考价值" aria-expanded="false" aria-haspopup="true"><i class="fas fa-circle-info" aria-hidden="true"></i></button></div>
+      <div class="stat-item"><span class="stat-label">目标 R 偏差</span><span class="stat-value" id="statRRBias">—</span><button type="button" class="stat-info" data-tip="计算公式：Σ已实现净盈亏÷Σ计划净盈亏（含费口径，不含滑点以外成本）。注意这不是「实际 R ÷ 目标 R」——后者分母一个含费、一个纯毛利，完美执行也会先天偏正。参考价值：0 表示平均刚好达到计划，正值超额、负值未达。" aria-label="查看该指标的计算公式与参考价值" aria-expanded="false" aria-haspopup="true"><i class="fas fa-circle-info" aria-hidden="true"></i></button></div>
       <div class="stat-item"><span class="stat-label">均持仓时长</span><span class="stat-value" id="statAvgHold">—</span><button type="button" class="stat-info" data-tip="计算公式：所有已平仓持仓时长的平均值。参考价值：验证策略节奏。分钟级=短线，2小时以上=中长线，需与策略设计匹配。" aria-label="查看该指标的计算公式与参考价值" aria-expanded="false" aria-haspopup="true"><i class="fas fa-circle-info" aria-hidden="true"></i></button></div>
       <div class="stat-group-divider"></div>
       <div class="stat-item"><span class="stat-label">均 MAE（亏损单）</span><span class="stat-value" id="statAvgMAE">—</span><button type="button" class="stat-info" data-tip="计算公式：仅亏损单的MAE平均值。参考价值：亏损单最大浮亏均值。过大说明不止损或止损过宽，需收紧风控参数。" aria-label="查看该指标的计算公式与参考价值" aria-expanded="false" aria-haspopup="true"><i class="fas fa-circle-info" aria-hidden="true"></i></button></div>
       <div class="stat-item"><span class="stat-label">均 MFE</span><span class="stat-value" id="statAvgMFE">—</span><button type="button" class="stat-info" data-tip="计算公式：所有已平仓单的MFE平均值。参考价值：持仓期间最大浮盈均值。若远大于平均盈亏，说明止盈太慢、利润回吐严重。" aria-label="查看该指标的计算公式与参考价值" aria-expanded="false" aria-haspopup="true"><i class="fas fa-circle-info" aria-hidden="true"></i></button></div>
-      <div class="stat-item"><span class="stat-label">MFE/MAE</span><span class="stat-value" id="statMAEMFE">—</span><button type="button" class="stat-info" data-tip="计算公式：平均MFE÷平均MAE（亏损单）。参考价值：持仓管理效率。>2说明趋势看对但拿不住，<1说明风险管控差需优化。" aria-label="查看该指标的计算公式与参考价值" aria-expanded="false" aria-haspopup="true"><i class="fas fa-circle-info" aria-hidden="true"></i></button></div>
+      <div class="stat-item"><span class="stat-label">MFE/MAE</span><span class="stat-value" id="statMAEMFE">—</span><button type="button" class="stat-info" data-tip="计算公式：各笔 MFE÷|MAE| 的比值【逐笔计算后再取算术平均】（亏损单；MAE 为 0 的极值单已剔除）。不是「平均 MFE ÷ 平均 MAE」——后者会被少数极端单主导。参考价值：持仓管理效率。≥1.5 显示为绿色，低于则提示风险管控需优化。" aria-label="查看该指标的计算公式与参考价值" aria-expanded="false" aria-haspopup="true"><i class="fas fa-circle-info" aria-hidden="true"></i></button></div>
     </div>
 
     <!-- 权益概览（数字）
@@ -1416,33 +1416,33 @@
 
 </main>
 
-  <script src="js/constants.js?v=5.6.23"></script>
-  <script src="js/utils.js?v=5.6.23"></script>
-  <script src="js/select-ui.js?v=5.6.23"></script>
-  <script src="js/toast.js?v=5.6.23"></script>
-  <script src="js/slippage.js?v=5.6.23"></script>
-  <script src="js/storage.js?v=5.6.23"></script>
-  <script src="js/skills-integration.js?v=5.6.23"></script>
-  <script src="js/calc-visuals.js?v=5.6.23"></script>
-  <script src="js/calculation-ui.js?v=5.6.23"></script>
-  <script src="js/calculator.js?v=5.6.23"></script>
-  <script src="js/logs.js?v=5.6.23"></script>
-  <script src="js/rendering.js?v=5.6.23"></script>
-  <script src="js/stats.js?v=5.6.23"></script>
-  <script src="js/modals.js?v=5.6.23"></script>
-  <script src="js/navigation.js?v=5.6.23"></script>
-  <script src="js/dashboard.js?v=5.6.23"></script>
-  <script src="js/planner.js?v=5.6.23"></script>
-  <script src="js/discipline-led.js?v=5.6.23"></script>
-  <script src="js/settings.js?v=5.6.23"></script>
-  <script src="js/risk.js?v=5.6.23"></script>
-  <script src="js/chart-factory.js?v=5.6.23"></script>
-  <script src="js/analytics.js?v=5.6.23"></script>
-  <script src="js/review.js?v=5.6.23"></script>
-  <script src="js/io.js?v=5.6.23"></script>
-  <script src="js/dom-cache.js?v=5.6.23"></script>
-  <script src="js/app.js?v=5.6.23"></script>
-<script src="js/version.js?v=5.6.23"></script>
+  <script src="js/constants.js?v=5.6.25"></script>
+  <script src="js/utils.js?v=5.6.25"></script>
+  <script src="js/select-ui.js?v=5.6.25"></script>
+  <script src="js/toast.js?v=5.6.25"></script>
+  <script src="js/slippage.js?v=5.6.25"></script>
+  <script src="js/storage.js?v=5.6.25"></script>
+  <script src="js/skills-integration.js?v=5.6.25"></script>
+  <script src="js/calc-visuals.js?v=5.6.25"></script>
+  <script src="js/calculation-ui.js?v=5.6.25"></script>
+  <script src="js/calculator.js?v=5.6.25"></script>
+  <script src="js/logs.js?v=5.6.25"></script>
+  <script src="js/rendering.js?v=5.6.25"></script>
+  <script src="js/stats.js?v=5.6.25"></script>
+  <script src="js/modals.js?v=5.6.25"></script>
+  <script src="js/navigation.js?v=5.6.25"></script>
+  <script src="js/dashboard.js?v=5.6.25"></script>
+  <script src="js/planner.js?v=5.6.25"></script>
+  <script src="js/discipline-led.js?v=5.6.25"></script>
+  <script src="js/settings.js?v=5.6.25"></script>
+  <script src="js/risk.js?v=5.6.25"></script>
+  <script src="js/chart-factory.js?v=5.6.25"></script>
+  <script src="js/analytics.js?v=5.6.25"></script>
+  <script src="js/review.js?v=5.6.25"></script>
+  <script src="js/io.js?v=5.6.25"></script>
+  <script src="js/dom-cache.js?v=5.6.25"></script>
+  <script src="js/app.js?v=5.6.25"></script>
+<script src="js/version.js?v=5.6.25"></script>
 
   <!-- 样式见 css/modals.css #toastContainer（原为内联，z-index 硬编码 400 低于弹窗遮罩 500 导致提示被盖住） -->
   <div id="toastContainer" role="status" aria-live="polite"></div>

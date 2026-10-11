@@ -36,9 +36,8 @@ function buildRowsHTML(dl) {
     var item = entry.item;
     var realIdx = entry.origIdx;
     // P0-1 FIX：状态显示与全局 isClosedTrade 语义一致（部分平仓中间态显示为"持仓"）
-    var isClosed = (typeof window.utils !== 'undefined' && typeof window.utils.isClosedTrade === 'function')
-      ? window.utils.isClosedTrade(item)
-      : !!(item.closeType && item.closeType !== '');
+    // 经 utils.isClosed 走 fail-closed 唯一入口，不再就地写 !!closeType 兜底
+    var isClosed = window.utils.isClosed(item);
     var isExpanded = _expandedRows.has(realIdx);
 
     const dir    = item.direction === 'long' ? '多' : '空';
@@ -169,7 +168,10 @@ function buildRowsHTML(dl) {
       '<td class="num" data-label="\u5e73\u4ed3\u4ef7">' + (item.closePrice != null ? item.closePrice : '—') + '</td>' +
       '<td data-label="\u76c8\u4e8f"><span class="pnl-cell">' + pnlHtml + rSubHtml + '</span>' +
         (item.executionScore != null ? '<span class="exec-badge exec-' + item.executionScore + '">执行 ' + item.executionScore + '/3</span>' : '') +
-        (item.lossReason ? '<div class="loss-reason-tags">' + (Array.isArray(item.lossReason) ? item.lossReason : [item.lossReason]).map(function(r) { return '<span class="loss-reason-tag">' + esc(r) + '</span>'; }).join('') + '</div>' : '') +
+        // 判真必须带 length：空数组 [] 在 JS 中是 truthy，只判 item.lossReason 会为
+        // 「没有勾选任何亏损原因」的记录渲染出一个空的 loss-reason-tags 容器（同行 172 的
+        // emotions 就带了 .length 判定）。旧数据与 CSV 导入都可能产生空数组。
+        (item.lossReason && item.lossReason.length ? '<div class="loss-reason-tags">' + (Array.isArray(item.lossReason) ? item.lossReason : [item.lossReason]).map(function(r) { return '<span class="loss-reason-tag">' + esc(r) + '</span>'; }).join('') + '</div>' : '') +
         (item.emotions && item.emotions.length ? '<div class="emotion-tags">' + item.emotions.map(function(e) { return '<span class="emotion-tag">' + esc(e) + '</span>'; }).join('') + '</div>' : '') +
       '</td>' +
       '<td data-label="\u64cd\u4f5c" class="action-col">' + actionHtml + '</td>' +

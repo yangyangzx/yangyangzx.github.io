@@ -63,7 +63,10 @@ function getTPUnits(requireStop) {
   }
   if (!(parseFloat(feeRatePct) > 0)) {
     feeRatePct = _formNumber('feeRate');
-    if (!(parseFloat(feeRatePct) > 0)) feeRatePct = (_formText('orderType') === 'limit') ? 0.04 : 0.08;
+    // 兜底走权威 _getDefaultFeeRate（读 feeRateLimit/feeRateMarket 设置），
+    // 不再写死 0.04/0.08 —— 否则用户改手续费率后，反推目标价/止损算出的 RR
+    // 会按旧费率计算，与计算器卡片显示的 RR 不一致。
+    if (!(parseFloat(feeRatePct) > 0)) feeRatePct = _getDefaultFeeRate(_formText('orderType'));
   }
   if (!(ep > 0) || (direction !== 'long' && direction !== 'short')) return null;
   // NaN 归一成 0：止损价没填时 sd 保持 NaN，返回 0 比让调用方拿到 NaN 更稳
@@ -1074,7 +1077,7 @@ function refreshChecklistLabels() {
       '心态评分 ≥ ' + (settings.mindsetMinScore || 3) + '（2 分自动降仓 50%）' +
       ' · 单笔风险 ≤ ' + _riskPctTxt + '% · ' +
       hardBlockTxt +
-      '组合总风险含本仓 ≤ ' + getHeatHardMax() + '% · 单品种占比 ≤ ' + (settings.singleSymbolMaxPct || 30) + '%' +
+      '组合总风险含本仓 ≤ ' + getHeatHardMax() + '% · 单品种占比 ≤ ' + getSymbolConcentrationMaxPct() + '%' +
       ' · 账户回撤 ≤ ' + _numSetting('maxDrawdownAlert', 20) + '%' +
       (typeof _getMarginUsageLimitPct === 'function' ? ' · 单笔保证金 ≤ ' + _getMarginUsageLimitPct() + '%' : '') +
       '；以上任一项超限一律禁止开仓（不占清单行，触发时不产生计算结果）。';

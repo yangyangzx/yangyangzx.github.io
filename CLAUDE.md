@@ -72,7 +72,25 @@ risk → chart-factory → analytics → review → io → dom-cache → app →
 
 ⚠️ **改阈值必须连「所有比较点」一起改**（2026-10-10 P0 回归的教训）：v5.6.19 把连亏降仓阈值参数化时只改了判定处 `lossStreak >= _getLossStreakDeriskThreshold()`，漏了取值处 `lossStreak >= 3 ? adjPos : positionSize` —— 结果 riskAmount 按新阈值打了折、positionSize 却按旧判定没折，落库两个字段互相矛盾，真实敞口比记录的风险额高 25%，**风控被静默绕过且日志存下打架的数字**。同类漏改还有 `calc-visuals.js` 的刻度常量、`planner.js` 的清单文案、`index.html` 的表单提示。改任何阈值时检索确认全部出现点：用 Grep 工具搜字段名，**不要用 `grep` 命令 + 管道，实践中多次返回空结果误报「无残留」**。
 
-⚠️ **仓位/风险额必须满足守恒恒等式**：`riskAmount === positionSize × stopDistance / entryPrice`。每改一个截断层都要让这个等式继续成立。多层降仓（连亏系数、集中度、心态）**不要再引入 `adjPos` 之类的第二份仓位变量**——两个变量必然分叉，下游取哪个都会出 P0。回归用 `node verify_invariants.js`（648 组参数组合 × 2207 条守恒断言 + 脏值防护 + 熔断/降仓线解耦），改完计算逻辑必跑。
+⚠️ **新增/修改权威函数后，必须 grep 全部旧调用点并确认零遗漏**（2026-10-11 审计教训）。这不是谨慎，是**已被四次实证的流程缺口**——每次「建好权威实现」都靠人工逐文件 review 收口，于是同一个错误反复重演：
+
+| 权威函数 | 建好后发生了什么 |
+|---|---|
+| `isClosedTrade` | 3 处消费方各写 `? ... : !!closeType` 兜底，兜底语义与权威**相反**（部分平仓中间态被判已平仓）→ v5.6.24 收口为 `utils.isClosed` fail-closed 唯一入口 |
+| `getHeatHardMax`（拆硬熔断） | 硬熔断解耦了，警告侧却被换成 5 处硬编码 `maxHeat * 0.8`，`getHeatWarnMax()` 成了**零消费方的死函数**——设置页「组合热量警告上限」可调 5~20% 却毫无作用 → v5.6.24 接上 |
+| `checkSymbolConcentration`（修 `\|\| 30`） | 只修了这一个函数，`risk.js` 卡片与 `planner.js` 文案各留一份，`planner.js:1080` 甚至仍是 `settings.singleSymbolMaxPct \|\| 30` 原型 → v5.6.24 收口为 `getSymbolConcentrationMaxPct()` |
+| `MIN_SPLITS/MAX_SPLITS`（提为模块级常量） | 同文件渲染层 `:1896/:1899/:1919` 仍是字面量 `2/3` → 仍是隐患 |
+
+**检查清单**：① 新函数名 grep 全仓，确认**每个**出现点都是调用而非注释；② 确认没有第二处手写近似逻辑；③ 若函数读设置，确认兜底分支与权威**同向**（宁可判更严格）。统计调用数时**必须剔除注释行**——`getHeatWarnMax` 的注释里带 `()` 会被正则误判为调用。
+
+⚠️ **`logs` 数组任何变更后，必须重置索引型状态**（2026-10-11 审计教训）。有一批模块级状态是用**数组下标**记住「当前操作哪一行」的：`openClosePanelIdx` / `actionPanelIdx` / _selectedIndices / `_expandedRows` / `_pendingDeleteIndices` / `_closePriceEdited`，外加 `_batchMode`。只要 `logs` 发生 splice 或被整体替换，这些下标全部失真。
+
+- **统一入口**：`utils.resetAllIndexState()`（全清，适用于整体替换/批量删除/清空/撤销）与 `utils.remapIndexStateAfterSplice(idx)`（下标平移，适用于单条删除——删一条不该清掉用户对其余行的勾选）。**禁止再手写逐项清理**。
+- **已接入的 7 条路径**：单条删除（toast.js）、批量删除 / 清空 / 批量撤销（logs.js）、覆盖导入 / 追加导入 / 备份恢复（settings.js）、多标签页同步（storage.js，仅这两处传 `externalReplace`）。
+- ⚠️ **`_safeRenderAfterStorageChange` 是每次 `saveLogs()` 的收尾**，在那里无条件重置会把刚 remap 好的状态立刻清空（v5.6.24 实际发生过，`test/verify_logs_fixed.js` F1 组全红才暴露）。重置必须由调用方显式传 `{externalReplace:true}`。
+- **危害不是「显示错位」而是「写错记录」**：用户展开 A 的平仓面板 → 删除上方一行 → 面板无声漂移到 B → 点「确认平仓」会平掉 B。
+
+⚠️ **仓位/风险额必须满足守恒恒等式**：`riskAmount === positionSize × stopDistance / entryPrice`。每改一个截断层都要让这个等式继续成立。多层降仓（连亏系数、集中度、心态）**不要再引入 `adjPos` 之类的第二份仓位变量**——两个变量必然分叉，下游取哪个都会出 P0。回归用 `node test/verify_invariants.js`（648 组参数组合 × 2207 条守恒断言 + 脏值防护 + 熔断/降仓线解耦），改完计算逻辑必跑。
 
 ⚠️ **闸门必须 fail-closed**：取数异常（`getClosedSorted` / `loadSettings` / `_getTodayLossStreak` 抛错）时静默放行，等于在最需要拦截的时刻失效。禁止 `catch(e){}` 空实现后继续计算，应显式阻断并给出可读原因。已修：`single-risk-exceeds-limit`（原 catch 放行）、连亏熔断（新增 `loss-streak-unavailable`）、回撤熔断（新增 `drawdown-unavailable`，由 `getCurrentDrawdown().readFailed` 驱动）。
 
@@ -81,9 +99,9 @@ risk → chart-factory → analytics → review → io → dom-cache → app →
 ⚠️ **改完必须跑三套校验，且校验本身要有反向用例**（2026-10-10 血泪教训）：
 
 ```bash
-node verify_invariants.js    # 648 组参数组合 × 2207 条守恒断言（计算结果自洽）
-node verify_param_fix.js     # 31 项参数真实生效
-node verify_sideeffects.js   # 47 项防「过度修复」
+node test/verify_invariants.js    # 648 组参数组合 × 2207 条守恒断言（计算结果自洽）
+node test/verify_param_fix.js     # 31 项参数真实生效
+node test/verify_sideeffects.js   # 47 项防「过度修复」
 ```
 
 v5.6.19 引入两个 P0 时前两套都是全绿的 —— 它们只证明**计算自洽**，证明不了**新加的闸门不会误拦正常用户**、**新增的钳制不会误伤合法设置**。第三套专门补这个洞。

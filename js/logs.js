@@ -476,10 +476,10 @@ function batchDelete() {
     logs.splice(sorted[i], 1);
   }
   
-  _selectedIndices.clear();
-  _batchMode = false;
-  openClosePanelIdx = -1;
-  actionPanelIdx = -1;
+  // 批量删除是一次性移除多行，所有按下标记账的状态一律作废（无法逐条重映射）。
+  // 此前这条路径漏了 _expandedRows：展开的详情行索引仍指向删除后的其他记录，
+  // 而撤销回调里反而清了它——「该清的没清、不该清的清了」的错配。
+  if (typeof window.resetAllIndexState === 'function') window.resetAllIndexState();
   const btn = document.getElementById('batchBtn');
   if (btn) {
     btn.innerHTML = '<i class="fas fa-tasks"></i> 批量操作';
@@ -494,14 +494,9 @@ function batchDelete() {
     var newLogs = [...logs, ..._pendingDelete.logs];
     newLogs.sort(function(a, b) { return new Date(b.time) - new Date(a.time); });
     logs = newLogs;
-    if (window._pendingDeleteIndices) window._pendingDeleteIndices.clear();
+    // 恢复后 logs 被重新排序，下标全部改变 → 统一重置（权威入口）
+    if (typeof window.resetAllIndexState === 'function') window.resetAllIndexState();
     _pendingDelete = null;
-    // 恢复后重置展开状态和面板索引，避免索引错位
-    _expandedRows.clear();
-    openClosePanelIdx = -1;
-    actionPanelIdx = -1;
-    // 日志顺序已重排，清除平仓面板"用户手动编辑价"标记（以旧索引为键，恢复后索引错位）
-    for (var k in _closePriceEdited) delete _closePriceEdited[k];
     renderLogs();
   }, function() {
     _commitPendingDelete();
@@ -572,22 +567,17 @@ function clearLogs() {
     if (!ok) return;
     var backup = JSON.parse(JSON.stringify(logs));   // 深拷贝，供撤销还原
     logs = [];
-    openClosePanelIdx = -1;
-    actionPanelIdx = -1;
-    // P1: 清空日志同时清空平仓面板类型/价格缓存
-    _closePanelType = '';
-    _closePanelPrice = '';
-    // P2 修复：清空后同步重置索引依赖型全局状态，避免后续操作引用过期索引
-    if (typeof _expandedRows !== 'undefined') _expandedRows.clear();
-    for (var _k in _closePriceEdited) delete _closePriceEdited[_k];
-    _batchMode = false;
-    if (window._selectedIndices) window._selectedIndices.clear();
+    // 索引依赖型全局状态统一重置（展开行/勾选/批量模式/平仓面板与手动改价标记）
+    if (typeof window.resetAllIndexState === 'function') window.resetAllIndexState();
     if (typeof saveLogs === 'function') saveLogs();
     if (typeof renderLogs === 'function') renderLogs();
     if (typeof renderDashboard === 'function') renderDashboard();
 
     showUndoToast('已清空 ' + clearedCount + ' 条日志，点击撤销（5秒）', function() {
       logs = backup;
+      // 恢复后统一重置：清空时虽已重置过一次，但用户在 5 秒窗口内可能又
+      // 勾选/展开了新状态，撤销把它们套到恢复后的数组上同样是错位的。
+      if (typeof window.resetAllIndexState === 'function') window.resetAllIndexState();
       if (typeof saveLogs === 'function') saveLogs(true);
       if (typeof renderLogs === 'function') renderLogs();
       if (typeof renderDashboard === 'function') renderDashboard();
@@ -602,14 +592,11 @@ function _filterMatch(l) {
   if (f.symbol && l.symbol !== f.symbol) return false;
   if (f.strategy && (l.strategyFramework || '') !== f.strategy) return false;
   // P0-1 FIX：状态筛选与全局 isClosedTrade 语义一致（部分平仓中间态归入"持仓中"）
+  // 经 utils.isClosed 走 fail-closed 唯一入口，不再就地写 !!closeType 兜底
   if (f.status === 'open') {
-    if (typeof window.utils !== 'undefined' && typeof window.utils.isClosedTrade === 'function') {
-      if (window.utils.isClosedTrade(l)) return false;
-    } else if (l.closeType && l.closeType !== '') { return false; }
+    if (window.utils.isClosed(l)) return false;
   } else if (f.status === 'closed') {
-    if (typeof window.utils !== 'undefined' && typeof window.utils.isClosedTrade === 'function') {
-      if (!window.utils.isClosedTrade(l)) return false;
-    } else if (!l.closeType || l.closeType === '') { return false; }
+    if (!window.utils.isClosed(l)) return false;
   }
   if (f.pnl === 'profit') { var v = parseFloat(l.pnlAmount); if (isNaN(v) || v <= 0) return false; }
   else if (f.pnl === 'loss') { var v = parseFloat(l.pnlAmount); if (isNaN(v) || v >= 0) return false; }
@@ -621,8 +608,7 @@ function _filterMatch(l) {
     else if (f.time === 'last30') { since = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000); }
     if (since) {
       // P2-1 FIX：时间筛选与统计口径统一——已平仓记录按平仓时间，未平仓记录按开仓时间
-      var isClosedT = (typeof window.utils !== 'undefined' && typeof window.utils.isClosedTrade === 'function')
-        ? window.utils.isClosedTrade(l) : false;
+      var isClosedT = window.utils.isClosed(l);
       var useTime = isClosedT ? (l.closeTime || l.time) : l.time;
       var t = new Date(useTime);
       if (t < since) return false;

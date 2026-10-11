@@ -35,7 +35,7 @@ function makeStorage() {
 (async () => {
   const vc = new VirtualConsole();
   vc.on('jsdomError', () => {});
-  const dom = await JSDOM.fromFile(path.join(__dirname, 'index.html'), {
+  const dom = await JSDOM.fromFile(path.join(__dirname,'..','index.html'), {
     runScripts: 'dangerously',
     resources: new LocalOnlyLoader(),
     pretendToBeVisual: true,

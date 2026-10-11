@@ -44,8 +44,21 @@
 
     // Single deletion format
     var idx = window._pendingDelete.idx;
+    var didSplice = false;
     if (window.logs && idx >= 0 && idx < window.logs.length) {
       window.logs.splice(idx, 1);
+      didSplice = true;
+    }
+    // P0 修复：索引型状态必须跟随 splice 重映射。
+    // 批量删除（:34）与清空（logs.js）都做了处理，唯独单条删除漏了——splice 让 idx
+    // 之后的索引整体前移一位，而按旧下标记账的状态全部失真。两个后果：
+    //   ① _selectedIndices 偏移 → 随后点「批量删除」会删掉用户根本没勾的行；
+    //   ② openClosePanelIdx 偏移 → 面板无声漂移到另一行，用户点「确认平仓」
+    //      会平掉一笔他从未打开的交易（写错记录，比显示错位更严重）。
+    // 语义是「重映射」而非「清空」：删一条不影响其余勾选/展开状态。
+    // 实现收敛到 utils.remapIndexStateAfterSplice（唯一权威，含快照重建与面板下标平移）。
+    if (didSplice && typeof window.remapIndexStateAfterSplice === 'function') {
+      window.remapIndexStateAfterSplice(idx);
     }
     if (window._pendingDeleteIndices) window._pendingDeleteIndices.clear();
     window._pendingDelete = null;

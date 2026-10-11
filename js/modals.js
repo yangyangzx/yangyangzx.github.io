@@ -271,7 +271,28 @@ function openEditModal(idx) {
       '<div class="modal-tab-panel active" id="emTab0">' +
         '<div class="fp"><label>品种</label><input type="text" id="emSymbol" list="emSymbolList" value="' + esc(item.symbol || '') + '" /><datalist id="emSymbolList">' + emSymbolOptions + '</datalist></div>' +
         '<div class="fp"><label>方向</label><select id="emDirection"><option value="long"' + (item.direction === 'long' ? ' selected' : '') + '>做多</option><option value="short"' + (item.direction === 'short' ? ' selected' : '') + '>做空</option></select></div>' +
-        '<div class="fp"><label>订单类型</label><select id="emOrderType"><option value="market"' + (item.orderType === 'market' ? ' selected' : '') + '>市价单</option><option value="limitBuy"' + (item.orderType === 'limitBuy' ? ' selected' : '') + '>Buy Limit</option><option value="stopBuy"' + (item.orderType === 'stopBuy' ? ' selected' : '') + '>Buy Stop</option><option value="limitSell"' + (item.orderType === 'limitSell' ? ' selected' : '') + '>Sell Limit</option><option value="stopSell"' + (item.orderType === 'stopSell' ? ' selected' : '') + '>Sell Stop</option><option value="stopLimit"' + (item.orderType === 'stopLimit' ? ' selected' : '') + '>Stop Limit</option><option value="trailingStop"' + (item.orderType === 'trailingStop' ? ' selected' : '') + '>Trailing Stop</option></select></div>' +
+        '<div class="fp"><label>订单类型</label><select id="emOrderType">' + (function(){
+          // 选项必须与主数据模型一致：#orderType（index.html）与 ORDER_TYPES_LONG/SHORT 都用
+          // market/limit/stop 三值，calculator.js:232 直接把该值落库、_getDefaultFeeRate 还按
+          // 'limit' 分支取手续费率。此前这里只列旧扩展值（limitBuy/stopBuy/…），于是
+          // orderType='limit' 的日志打开弹窗后 select 匹配不到任何 option，浏览器回落到首项
+          // 'market'，用户不改任何字段直接保存就把限价单静默改成了市价单。
+          var THREE = ORDER_TYPES_LONG || ['market','limit','stop'];
+          var LEGACY = ['limitBuy','stopBuy','limitSell','stopSell','stopLimit','trailingStop'];
+          var isShort = item.direction === 'short';
+          var lbl = { market:'市价单', limit: isShort ? 'Sell Limit 限价单' : 'Buy Limit 限价单',
+                      stop:  isShort ? 'Sell Stop 止损单'  : 'Buy Stop 止损单' };
+          var opts = THREE.map(function(v){
+            return '<option value="' + v + '"' + (item.orderType === v ? ' selected' : '') + '>' + (lbl[v] || v) + '</option>';
+          }).join('');
+          // 历史数据可能仍是旧扩展值：补一个同名 option 原样回显，
+          // 否则保存即被改写（这正是本修复要消灭的静默改单）
+          if (item.orderType && THREE.indexOf(item.orderType) < 0 && LEGACY.indexOf(item.orderType) >= 0) {
+            opts += '<option value="' + item.orderType + '" selected>' +
+                    (ORDER_TYPE_LABELS[item.orderType] || item.orderType) + '（旧值）</option>';
+          }
+          return opts;
+        })() + '</select></div>' +
         '<div class="fp"><label>止损类型</label><select id="emStopType"><option value="stop-market"' + ((item.stopType || 'stop-market') === 'stop-market' ? ' selected' : '') + '>市价止损 (Stop-Market)</option><option value="stop-limit"' + (item.stopType === 'stop-limit' ? ' selected' : '') + '>限价止损 (Stop-Limit)</option></select></div>' +
         '<div class="fp"><label>入场价</label><input type="number" id="emEntryPrice" step="0.00001" value="' + (item.entryPrice ?? '') + '" /></div>' +
         '<div class="fp"><label>止损价</label><input type="number" id="emStopLoss" step="0.00001" value="' + (item.stopLoss ?? '') + '" /><span id="emStopDistPreview" style="display:none;font-size:11px;color:var(--color-text-muted);margin-top:2px;"></span></div>' +
@@ -366,16 +387,23 @@ function openEditModal(idx) {
   // ===== 未保存修改标志 & 字段联动重算 =====
   window._editDirty = false;
   var _pnlHasValue = item.closeType && item.closeType !== '' && item.pnlAmount != null && !isNaN(parseFloat(item.pnlAmount));
-  window._emPnlManual = _pnlHasValue;  // 已平仓且 PnL 已有值 → 禁止自动重算覆盖
+  // 已平仓且 PnL 有值 → 视为权威值，emRecalc 不再自动覆写。
+  // 「手动」标签同步点亮：用户能看见这个数字不会再被系统改写。
+  window._emPnlManual = _pnlHasValue;
+  var _pnlManualTag = document.getElementById('emPnlManualTag');
+  if (_pnlManualTag) _pnlManualTag.style.display = _pnlHasValue ? 'inline' : 'none';
 
   // Diff-based dirty detection: store initial values from DOM
   // 捕获动作见下方 emRecalc(item) 之后——必须在 emRecalc 之后捕获，因为 emRecalc 会覆写 PnL/R 字段
 
   // Check dirty before close
   window.emCheckDirty = function() {
-    const ids = ['emSymbol','emDirection','emOrderType','emEntryPrice','emStopLoss','emTargetPrice',
+    // emStopType 必须在内：它是可保存字段（:851 附近写回 item.stopType），
+    // 此前只漏在这里 → 用户改了止损类型，关闭弹窗时不提示「放弃未保存修改」，
+    // 改动被静默丢弃。（emPartialRatio 同理：分批比例可保存却不在名单里。）
+    const ids = ['emSymbol','emDirection','emOrderType','emStopType','emEntryPrice','emStopLoss','emTargetPrice',
       'emPositionSize','emLeverage','emRiskAmount','emStrategyFramework','emStrategyPattern',
-      'emCloseType','emClosePrice','emRMultiple','emPnlAmount','emPnlPercent','emFee','emSlippageCost',
+      'emCloseType','emClosePrice','emPartialRatio','emRMultiple','emPnlAmount','emPnlPercent','emFee','emSlippageCost',
       'emCloseNote','emSession','emMarketCondition','emExitReason','emLowPrice','emHighPrice'];
     for (var i = 0; i < ids.length; i++) {
       var el = document.getElementById(ids[i]);
@@ -425,9 +453,11 @@ function openEditModal(idx) {
   // emRecalc 覆写前的空值，emCheckDirty 会把自动填充误判为"用户修改"，取消时误报未保存）
   const _emInitValues = {};
   (function captureInit() {
-    const ids = ['emSymbol','emDirection','emOrderType','emEntryPrice','emStopLoss','emTargetPrice',
+    // 必须与 emCheckDirty 的 ids 列表逐字一致，否则某个字段「改了检测不到」或
+    // 「没改却误报未保存」。emStopType / emPartialRatio 曾只出现在保存侧。
+    const ids = ['emSymbol','emDirection','emOrderType','emStopType','emEntryPrice','emStopLoss','emTargetPrice',
       'emPositionSize','emLeverage','emRiskAmount','emStrategyFramework','emStrategyPattern',
-      'emCloseType','emClosePrice','emRMultiple','emPnlAmount','emPnlPercent','emFee','emSlippageCost',
+      'emCloseType','emClosePrice','emPartialRatio','emRMultiple','emPnlAmount','emPnlPercent','emFee','emSlippageCost',
       'emCloseNote','emSession','emMarketCondition','emExitReason','emLowPrice','emHighPrice'];
     ids.forEach(function(id) {
       const el = document.getElementById(id);
@@ -454,20 +484,6 @@ function openEditModal(idx) {
       const arr = []; cbs.forEach(function(cb) { arr.push(cb.checked ? cb.value : ''); }); return arr.join(',');
     })();
   })();
-  // 检测 PnL 是否被手动覆盖：比较 DOM 中的值与自动计算值
-  // 如果用户之前手动填过 PnL/R，emRecalc 会覆盖 DOM，需要恢复用户的值
-  var _pnlWasManual = false;
-  if (item.closeType) {
-    const domPnlAmt = document.getElementById('emPnlAmount')?.value;
-    const domRMult = document.getElementById('emRMultiple')?.value;
-    if ((domPnlAmt !== undefined && domPnlAmt !== '' && item.pnlAmount != null && String(parseFloat(domPnlAmt)) !== String(item.pnlAmount)) ||
-        (domRMult !== undefined && domRMult !== '' && item.rMultiple != null && String(domRMult).replace(/R/g,'') !== String(item.rMultiple))) {
-      _pnlWasManual = true;
-    }
-  }
-  window._emPnlManual = _pnlWasManual;
-  var manualTag = document.getElementById('emPnlManualTag');
-  if (manualTag) manualTag.style.display = _pnlWasManual ? 'inline' : 'none';
   // 初始化所有 checkbox-group 的视觉状态
   updateCheckboxStyle();
 }
@@ -1173,6 +1189,20 @@ function saveEditLog(idx, _raceConfirmed) {
     }
   } catch(e) { /* 校验异常不阻断保存 */ }
 
+  // P0 修复：分批改非分批后补零 positionSize（对齐 logs.js:303 confirmClose 收尾口径）。
+  // syncCloseBookkeeping 只把 closedRatio 置 100，却不动 positionSize，于是「已平仓」记录
+  // 带着剩余敞口：CSV 仓位列与实际不符，getOpenPositions 也不再把它算进持仓（差值凭空消失）。
+  // 位置必须在上面的分批链收尾结算【之后】置零——:1080 用 positionSize > 0 作为累加最后一腿的
+  // 守卫，提前清零会让整段已实现盈亏被跳过（这正是该处注释所述的「少记 79%」退化）。
+  // 只在「非分批 + 已平仓」时清零：分批中间态的剩余仓位是真实敞口，必须保留。
+  if (item.closeType && item.closeType !== 'partialTP' && item.closeType !== 'reducePosition') {
+    var _psBefore = parseFloat(item.positionSize);
+    if (isFinite(_psBefore) && _psBefore !== 0) {
+      item.positionSize = 0;
+      delete item.partialRatio;
+    }
+  }
+
   if (!saveLogs()) {
     Object.assign(item, beforeEdit);
     if (typeof renderLogs === 'function') renderLogs();
@@ -1251,7 +1281,10 @@ function doSaveSplit(calc, count) {
   const groupId = Date.now().toString(36) + Math.random().toString(36).substring(2);
   const splitPos = parseFloat((calc.positionSize / count).toFixed(2));
   const remainderPos = parseFloat((calc.positionSize - splitPos * (count - 1)).toFixed(2));
-  const feeRate = Number(calc.feeRate) || (calc.orderType === 'limit' ? 0.04 : 0.08);
+  // 兜底走权威 _getDefaultFeeRate（读 feeRateLimit/feeRateMarket 设置），
+  // 不再写死 0.04/0.08 —— 否则用户改手续费率后，分批快照的 item.fee
+  // 会按旧费率落库，污染「成本侵蚀」等指标。
+  const feeRate = Number(calc.feeRate) || _getDefaultFeeRate(calc.orderType);
   const slippageBase = calc.slippage.planning || calc.slippage.atStop;
 
   function createSnapshot(pos, expectedExitPrice) {

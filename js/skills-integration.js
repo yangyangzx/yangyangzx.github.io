@@ -94,8 +94,12 @@ function calcPortfolioHeat(pendingRiskAmount, pendingSymbol, capitalOverride) {
     blocked = true;
     warning = '组合总风险已达 ' + heat.toFixed(1) + '%（已持仓 ' + existingHeat.toFixed(1)
       + '% + 本仓 ' + planPct.toFixed(1) + '%），超过上限 ' + maxHeat + '%。建议减仓后再开新仓。';
-  } else if (heat >= maxHeat * 0.8) {
-    warning = '组合总风险 ' + heat.toFixed(1) + '% 接近上限 (' + maxHeat + '%)，注意控制新开仓风险。';
+  } else if (heat >= getHeatWarnMax()) {
+    // 警告阈值读设置（getHeatWarnMax），不再用 maxHeat * 0.8 硬编码：
+    // 那样「组合热量警告上限」设置项改了也没有任何效果（用户可调 5~20%，
+    // 而实际生效的永远是硬上限×0.8）。硬上限仍用 getHeatHardMax，两者语义已分离。
+    warning = '组合总风险 ' + heat.toFixed(1) + '% 已达警告线 ' + getHeatWarnMax()
+      + '%（安全上限 ' + maxHeat + '%），注意控制新开仓风险。';
   }
 
   return {
@@ -276,8 +280,8 @@ function getStopLimitPct(symbol) {
  * @returns {KellyResult|null} 凯利计算结果，策略期望为负时返回 null
  * 
  * @typedef {Object} KellyResult
- * @property {number} kellyPct - 完整凯利比例（已截断到 5%/杠杆上限）
- * @property {number} halfKellyPct - 半凯利比例（已截断到 5%/杠杆上限）
+ * @property {number} kellyPct - 完整凯利比例（已截断到 settings.kellyRiskLimitPct，默认 5%）
+ * @property {number} halfKellyPct - 半凯利比例（已截断到 settings.kellyRiskLimitPct，默认 5%）
  * @property {number} kellyRiskAmount - 完整凯利建议风险金额 = accountSize × kellyPct（USDT）
  * @property {number} halfKellyRiskAmount - 半凯利建议风险金额 = accountSize × halfKellyPct（USDT）
  * @property {number} expectancy - 每笔交易的期望收益（USDT）
@@ -406,6 +410,26 @@ function checkRRRequirement(targetRR, minRR) {
 }
 
 /**
+ * 单品种集中度上限（%）—— 唯一权威读取入口。
+ *
+ * 为什么必须走 Number + isFinite：`settings.singleSymbolMaxPct || 30` 这种写法下，
+ * 非空字符串（"abc"）是 truthy 会原样穿过 ||，使下游 `pct > "abc"` 恒 false，
+ * 集中度闸门静默失效（2026-10-10 审计修过一次，但只修了 checkSymbolConcentration；
+ * risk.js 卡片与 planner.js 文案各自又写了一份，三处结论可以互相矛盾）。
+ * 越界/脏值一律回退 30，而不是静默钳到边界。
+ */
+function getSymbolConcentrationMaxPct() {
+  try {
+    var s = loadSettings();
+    var m = Number(s && s.singleSymbolMaxPct);
+    return (isFinite(m) && m > 0) ? m : 30;
+  } catch (e) {
+    console.error('[getSymbolConcentrationMaxPct]', e);
+    return 30;
+  }
+}
+
+/**
  * 检查品种集中度
  * @param {string} symbol - 品种
  * @param {number} positionSize - 新仓位大小
@@ -417,17 +441,9 @@ function checkRRRequirement(targetRR, minRR) {
  */
 function checkSymbolConcentration(symbol, positionSize, leverage, capital, openPositions) {
   if (!capital || capital <= 0) {
-    return { pass: true, currentPct: 0, maxPct: 30, usedMargin: 0, allowedMargin: 0, allowedNewMargin: 0, warning: null };
+    return { pass: true, currentPct: 0, maxPct: getSymbolConcentrationMaxPct(), usedMargin: 0, allowedMargin: 0, allowedNewMargin: 0, warning: null };
   }
-  var maxPct = 30;
-  try {
-    var settings = loadSettings();
-    // P0 修复（2026-10-10 深度审计）：原为 `settings.singleSymbolMaxPct || 30`——
-    // 非空字符串（如 "abc"）是truthy，会原样穿过||，使下方 totalMargin > NaN 恒false
-    // 判pass，集中度闸门静默失效。改走与 risk.js 一致的 Number + isFinite 守卫。
-    var _m = Number(settings && settings.singleSymbolMaxPct);
-    maxPct = (isFinite(_m) && _m > 0) ? _m : 30;
-  } catch(e) { console.error('[concentration]', e); }
+  var maxPct = getSymbolConcentrationMaxPct();
 
   // 集中度衡量的是“当前未平仓风险敞口”；已平仓交易不应持续占用保证金额度。
   var usedMargin = 0;
@@ -451,6 +467,9 @@ function checkSymbolConcentration(symbol, positionSize, leverage, capital, openP
   if (totalMargin > allowedMargin) {
     warning = symbol + ' 保证金占比 ' + pct.toFixed(1) + '% 超过上限 ' + maxPct + '%，新增仓位最多还可使用 ' + allowedNewMargin.toFixed(2) + ' USDT 保证金';
   } else if (pct >= maxPct * 0.8) {
+    // 「接近上限」提示档：这里刻意保留 0.8 系数——它是集中度自己的预警节奏，
+    // 不是可配置项（设置里只有 singleSymbolMaxPct 一个上限，没有对应警告线）。
+    // 组合热量的警告线已参数化为 getHeatWarnMax，两者不要混为一谈。
     warning = symbol + ' 保证金占比 ' + pct.toFixed(1) + '% 接近上限 ' + maxPct + '%';
   }
   return {

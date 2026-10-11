@@ -785,6 +785,12 @@ function _commitImportedLogs(newLogs) {
   logs = newLogs;
   saveLogs();
   showToast('已导入 ' + newLogs.length + ' 条日志', 'success');
+  // P0 修复：覆盖导入整体替换了 logs，全部按旧下标记账的状态当场失效。
+  // 此前这条路径一个索引状态都没清（同文件的追加导入 :962 清了三个），
+  // 后果与「删除后索引错位」同类且更易触发：用户勾选 L0/L1 → 覆盖导入 →
+  // 点「批量删除」→ 删掉新数据里用户从未勾选的记录；展开的详情行与
+  // 打开的平仓面板同样漂移到不相干的记录上，点确认会写错记录。
+  if (typeof window.resetAllIndexState === 'function') window.resetAllIndexState();
   if (typeof renderLogs === 'function') renderLogs();
   renderSettings();
   // P0-6: 导入后刷新仪表盘
@@ -839,6 +845,9 @@ function restoreFromAutoBackup(slot) {
   logs = obj.data;
   saveLogs();
   showToast('已从备份恢复 ' + obj.data.length + ' 条日志（原日志已另存为恢复前备份）', 'success');
+  // P0 修复：恢复同样整体替换 logs，索引型状态全部失效（与覆盖导入同类）。
+  // 用户确认文案已声明「未保存的界面状态会丢失」，但代码此前一个都没重置。
+  if (typeof window.resetAllIndexState === 'function') window.resetAllIndexState();
   if (typeof renderLogs === 'function') renderLogs();
   if (typeof renderDashboard === 'function') renderDashboard();
   renderSettings();
@@ -958,10 +967,10 @@ function _commitAppendedLogs(candidates) {
     return;
   }
   showToast('成功导入 ' + candidates.length + ' 条记录', 'success');
-  // 导入后同步刷新日志表，并清空索引依赖型状态，避免索引错位
-  if (window._pendingDeleteIndices) window._pendingDeleteIndices.clear();
-  if (typeof _expandedRows !== 'undefined') _expandedRows.clear();
-  if (typeof _closePriceEdited !== 'undefined') { for (var _ik in _closePriceEdited) delete _closePriceEdited[_ik]; }
+  // 导入后同步刷新日志表，并重置全部索引依赖型状态。
+  // 追加导入不改变已有记录的下标，但新增行会占用新下标，且批量模式/面板状态
+  // 仍可能指向导入前的选择——统一走权威重置，避免各路径各清一部分。
+  if (typeof window.resetAllIndexState === 'function') window.resetAllIndexState();
   if (typeof renderLogs === 'function') renderLogs();
   // P0-6: 导入后刷新仪表盘
   if (typeof renderDashboard === 'function') renderDashboard();

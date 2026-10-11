@@ -543,7 +543,11 @@ function _calculateImpl() {
         };
         var kellyCappedMsg = '';
         if (kellyResult.kellyCapped || kellyResult.halfKellyCapped) {
-          kellyCappedMsg = '<span class="kelly-capped-tip"><i class="fas fa-info-circle"></i> 已截断至 5%</span>';
+          // 上限已参数化（settings.kellyRiskLimitPct，原硬编码 5%）：提示必须报当前实际
+          // 生效的上限值，不能写死「5%」——用户把它调成 3% 后看到「已截断至 5%」
+          // 会误以为还有余量（5% < 3% 是假矛盾，但「截断值」本身就错了）。
+          var _kellyCapNow = (typeof _getKellyRiskLimitPct === 'function') ? _getKellyRiskLimitPct() : 5;
+          kellyCappedMsg = '<span class="kelly-capped-tip"><i class="fas fa-info-circle"></i> 已截断至 ' + _kellyCapNow + '%（系统凯利上限）</span>';
         }
         kellyHTML = '<span class="kelly-result-text">半凯利风险 <strong>' + (kellyResult.halfKellyPct * 100).toFixed(2) + '%</strong> = ' + kellyRisk.toFixed(2) + ' USDT</span>' + kellyCappedMsg + '<span class="kelly-expectancy">期望 ' + kellyResult.expectancy.toFixed(2) + '</span><button type="button" class="kelly-apply-btn" onclick="applyKellyRisk()"><i class="fas fa-bolt"></i> 应用</button>';
       } else if (kellyResult && kellyResult.kellyPct <= 0) {
@@ -2448,7 +2452,9 @@ function updateKellySidebar() {
   if (warnEl) {
     if (data.kellyCapped || data.halfKellyCapped) {
       warnEl.style.display = '';
-      warnEl.innerHTML = '<span class="kelly-card-warning-text"><i class="fas fa-exclamation-triangle"></i> 原始凯利超出 5% 上限，已截断</span>';
+      // 凯利上限已参数化（settings.kellyRiskLimitPct），文案必须报实际生效值，不能写死 5%
+      var _kellyCapSide = (typeof _getKellyRiskLimitPct === 'function') ? _getKellyRiskLimitPct() : 5;
+      warnEl.innerHTML = '<span class="kelly-card-warning-text"><i class="fas fa-exclamation-triangle"></i> 原始凯利超出 ' + _kellyCapSide + '% 上限，已截断</span>';
       // 截断与样本不足是两类独立信息，可同时显示
       if (data.sampleWarning) {
         warnEl.innerHTML += '<span class="kelly-card-warning-text" style="margin-top:4px;"><i class="fas fa-info-circle"></i> 样本仅 ' + data.sampleCount + ' 笔，凯利参考性有限</span>';

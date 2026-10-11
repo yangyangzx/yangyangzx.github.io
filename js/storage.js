@@ -218,7 +218,14 @@ function _logFingerprint(item) {
     item && item.direction, item && item.entryPrice, item && item.positionSize].join('|');
 }
 
-function _safeRenderAfterStorageChange() {
+function _safeRenderAfterStorageChange(opts) {
+  // ⚠️ 只有「logs 被外部整体替换」时才重置索引状态，必须由调用方显式传 {externalReplace:true}。
+  // 本函数同时是每次 saveLogs() 的收尾（storage.js:375），若无条件重置，
+  // 就会在单条删除的 remap 之后立刻把刚重映射好的状态又清空——
+  // 表现为「勾选/展开状态莫名消失」。多标签页同步的两处调用才传该标记。
+  if (opts && opts.externalReplace && typeof window.resetAllIndexState === 'function') {
+    window.resetAllIndexState();
+  }
   if (typeof renderLogs === 'function') renderLogs();
   if (typeof updateLastUpdate === 'function') updateLastUpdate();
   if (typeof populateFilterOptions === 'function') populateFilterOptions();
@@ -314,7 +321,7 @@ function loadLogs() {
         // 改用应用内对话框，保持非阻塞。
         if (typeof window.confirmDialog !== 'function') {
           logs = remoteLogs;
-          _safeRenderAfterStorageChange();
+          _safeRenderAfterStorageChange({ externalReplace: true });
           if (typeof showToast === 'function') showToast('已同步为最新数据', 'info');
           return;
         }
@@ -326,7 +333,7 @@ function loadLogs() {
         }).then(function(ok) {
           if (!ok) return;
           logs = remoteLogs;
-          _safeRenderAfterStorageChange();
+          _safeRenderAfterStorageChange({ externalReplace: true });
           if (typeof showToast === 'function') showToast('已同步为最新数据', 'info');
         });
       } catch (e2) { console.error('多标签页日志同步失败:', e2); }

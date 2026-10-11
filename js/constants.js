@@ -208,10 +208,7 @@ function getTickSize(symbol, price) {
 // 伪造别名，掩盖了这一点。dashboard/logs/planner 等模块用的是正确的 window.utils 形式。
 // 此处收口为单一入口，禁止各处自行改写判定。
 function isTradeStillOpen(item) {
-  if (typeof window.utils !== 'undefined' && typeof window.utils.isClosedTrade === 'function') {
-    return !window.utils.isClosedTrade(item);
-  }
-  return !item.closeType || item.closeType === '';
+  return !window.utils.isClosed(item);
 }
 
 // ======== 计算配置常量 ========

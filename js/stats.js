@@ -436,9 +436,7 @@ function _getTodayLossStreak() {
   // 先筛选当日已平仓，再按 closeTime 升序排序确保时间顺序正确
   // P0-1 FIX：统一使用 utils.isClosedTrade（部分平仓中间态不计入"已平仓"当日统计）
   var todayClosed = logs.filter(function(l) {
-    var isClosed = (typeof window.utils !== 'undefined' && typeof window.utils.isClosedTrade === 'function')
-      ? window.utils.isClosedTrade(l)
-      : (l.closeType && l.closeType !== '');
+    var isClosed = window.utils.isClosed(l);
     return isClosed && _getTradeDate(l) === todayStr;
   });
   todayClosed.sort(function(a, b) {

@@ -47,12 +47,10 @@ function getClosedSorted() {
   if (window.utils && typeof window.utils.getClosedSorted === 'function') {
     return window.utils.getClosedSorted();
   }
-  // 兜底（正常不会走到）：与 utils 实现一致的判定
+  // 兜底（正常不会走到）：经 utils.isClosed 统一 fail-closed 判定
   var closed = [];
   for (var i = 0; i < logs.length; i++) {
-    var isClosedNow = (window.utils && typeof window.utils.isClosedTrade === 'function')
-      ? window.utils.isClosedTrade(logs[i])
-      : !!(logs[i].closeType && logs[i].closeType !== '');
+    var isClosedNow = window.utils.isClosed(logs[i]);
     if (!isClosedNow || logs[i].pnlAmount == null || isNaN(parseFloat(logs[i].pnlAmount))) continue;
     var item = Object.assign({}, logs[i]);
     item.pnlAmount = parseFloat(item.pnlAmount);
@@ -287,7 +285,15 @@ function renderDrawdown(closedOverride) {
 
   var drawdownAmount = peak - equity;
   var drawdownPct = peak > 0 ? (drawdownAmount / peak) * 100 : 0;
-  var maxDrawdownAlert = ddSettings.maxDrawdownAlert;
+  // 阈值必须走权威守卫：直接用 ddSettings.maxDrawdownAlert 时，脏值会翻转判定方向——
+  //   null  → `drawdownPct > null` 即 `> 0` 恒真，只要有一点回撤就红色告警；
+  //   "abc"/NaN → 比较恒 false，永不告警。
+  // 而 skills-integration.getCurrentDrawdown（开仓闸门消费）有守卫会回退 20，
+  // 于是同一份数据下「风控中心显示安全」与「点计算却放行」互相矛盾。
+  var maxDrawdownAlert = (function(){
+    var v = Number(ddSettings && ddSettings.maxDrawdownAlert);
+    return (isFinite(v) && v > 0) ? v : 20;
+  })();
   var capitalKnown = (capital > 0);
   var warnThreshold = capitalKnown ? capital * (maxDrawdownAlert / 100) : Infinity;
   var ddClass = 'risk-safe';
@@ -477,12 +483,10 @@ function renderConcentration(closedOverride) {
   var html = '';
 
   // 品种集中度表格
-  // 阈值读设置 singleSymbolMaxPct（用户可自定，如 30%）；警示档 = 上限，危险档 = 上限×1.67（保持原 50/30 比例感）
-  var maxPctSetting = 30;
-  try {
-    var _concSettings = loadSettings();
-    if (_concSettings && _concSettings.singleSymbolMaxPct != null) maxPctSetting = _concSettings.singleSymbolMaxPct;
-  } catch(e) { /* 默认 30 */ }
+  // 阈值经 getSymbolConcentrationMaxPct() 读取（唯一权威，Number+isFinite 守卫）。
+  // 此前就地 `!= null` 判断：脏值 "abc" 会原样穿过，使 `r.pct > dangerPct` 恒 false，
+  // 集中度告警永不触发——与闸门曾修过的 `|| 30` 是同一个 bug 的另一个副本。
+  var maxPctSetting = getSymbolConcentrationMaxPct();
   var dangerPct = maxPctSetting * 1.67;
   html += '<div class="risk-concentration-wrap"><table class="risk-liq-table risk-conc-table" style="margin-bottom:16px;"><thead><tr><th>品种</th><th>保证金(USDT)</th><th>占本金%</th><th>持仓笔数</th></tr></thead><tbody>';
   if (symbolRows.length === 0) {
@@ -626,11 +630,14 @@ function renderPortfolioHeat(closedOverride) {
 
   var heat = heatCheck.heat || 0;
   var isBlocked = heatCheck.blocked;
-  var fillClass = isBlocked ? 'danger' : (heat >= maxHeat * 0.8 ? 'warn' : 'safe');
+  // 警告线读设置（getHeatWarnMax），与 calcPortfolioHeat 的闸门判定同源。
+  // 此前这里写死 maxHeat * 0.8，导致「组合热量警告上限」设置项对本卡片零影响。
+  var heatWarn = getHeatWarnMax();
+  var fillClass = isBlocked ? 'danger' : (heat >= heatWarn ? 'warn' : 'safe');
   var heatPct = Math.min(heat / (maxHeat * 1.5) * 100, 100);
 
-  var html = '<div class="risk-alert-row"><span class="risk-stat-label">当前组合热量</span><span class="risk-stat-value ' + (isBlocked ? 'risk-danger' : (heat > maxHeat * 0.8 ? 'risk-warn' : 'risk-safe')) + '">' + heat.toFixed(1) + '%</span></div>';
-  html += '<div class="risk-alert-row"><span class="risk-sub">安全上限 ' + maxHeat + '%（已开持仓风险之和占本金，不含待开仓位）</span></div>';
+  var html = '<div class="risk-alert-row"><span class="risk-stat-label">当前组合热量</span><span class="risk-stat-value ' + (isBlocked ? 'risk-danger' : (heat > heatWarn ? 'risk-warn' : 'risk-safe')) + '">' + heat.toFixed(1) + '%</span></div>';
+  html += '<div class="risk-alert-row"><span class="risk-sub">安全上限 ' + maxHeat + '% · 警告线 ' + heatWarn + '%（已开持仓风险之和占本金，不含待开仓位）</span></div>';
   html += '<div class="risk-progress-wrap"><span style="font-size:12px;color:var(--color-text-muted);">' + (isBlocked ? '热量超限，禁止开新仓' : '热量 ' + heat.toFixed(1) + '% / 上限 ' + maxHeat + '%（' + heatPct.toFixed(0) + '%）') + '</span>';
   html += '<div class="risk-progress-bar"><div class="risk-progress-fill ' + fillClass + '" style="width:' + heatPct + '%;"></div></div></div>';
 

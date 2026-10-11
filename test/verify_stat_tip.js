@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const { JSDOM } = require('jsdom');
 
-const ROOT = __dirname;
+const ROOT=path.join(__dirname,'..');
 const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 
 // 反向用例开关：REGRESSION=bad-read|bad-hover 时注入原缺陷

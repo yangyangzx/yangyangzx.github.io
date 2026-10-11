@@ -16,11 +16,7 @@ function getClosedLogs() {
 function _getOpenLogs() {
   var result = [];
   for (var i = 0; i < logs.length; i++) {
-    if (typeof window.utils !== 'undefined' && typeof window.utils.isClosedTrade === 'function') {
-      if (!window.utils.isClosedTrade(logs[i])) result.push(logs[i]);
-    } else {
-      if (!logs[i].closeType || logs[i].closeType === '') result.push(logs[i]);
-    }
+    if (!window.utils.isClosed(logs[i])) result.push(logs[i]);
   }
   return result;
 }
@@ -245,10 +241,12 @@ function _renderRiskExposure() {
   var riskNum = (totalRisk > 0 && capital > 0) ? (totalRisk / capital) * 100 : 0;
   var riskPctDisplay = (totalRisk > 0 && capital > 0) ? riskNum.toFixed(1) : '—';
   var heatMax = 6;
+  var heatWarn = getHeatWarnMax ? getHeatWarnMax() : 6;
   try {
     if (typeof getHeatHardMax === 'function') heatMax = getHeatHardMax();
+    if (typeof getHeatWarnMax === 'function') heatWarn = getHeatWarnMax();
   } catch(e) {}
-  var riskCls = riskNum >= heatMax ? 'danger' : (riskNum >= heatMax * 0.8 ? 'warn' : '');
+  var riskCls = riskNum >= heatMax ? 'danger' : (riskNum >= heatWarn ? 'warn' : '');
 
   rowsEl.innerHTML =
     '<div class="dash-risk-row">' +
@@ -270,7 +268,7 @@ function _renderRiskExposure() {
 
   var card = document.getElementById('dashRiskExposure');
   card.className = card.className.replace(/\bstatus-\w+/g, '');
-  card.classList.add(riskNum >= heatMax ? 'status-negative' : (riskNum >= heatMax * 0.8 ? 'status-warning' : 'status-positive'));
+  card.classList.add(riskNum >= heatMax ? 'status-negative' : (riskNum >= heatWarn ? 'status-warning' : 'status-positive'));
 }
 
 // ==================== 卡片 4：连亏计数 ====================

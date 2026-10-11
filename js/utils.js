@@ -28,6 +28,112 @@
   };
 
   /**
+   * 已平仓判定的唯一调用入口（fail-closed 包装）。
+   *
+   * 为什么需要它：消费方曾各自写 `window.utils.isClosedTrade ? ... : !!item.closeType`
+   * 作为兜底，而该兜底的语义与权威实现【相反】——它把 partialTP/reducePosition 中间态
+   * 判为「已平仓」，正是 isClosedTrade 当初要修的那个 bug。兜底只在 utils 未加载时触发，
+   * 却是全站最需要判定正确的时刻（统计、筛选、徽章三处同时翻转）。
+   *
+   * 失败方向选择：utils 缺失时判「未平仓」。宁可少算一笔已平仓（该笔退回持仓监控、
+   * 不进胜率/连亏），也不能多算——多算会凭空抬高胜率并漏触发连亏降仓。
+   * 一次告警即可，不必每次调用都刷屏。
+   */
+  /**
+   * 重置全部「按 logs 下标记账」的模块级状态。
+   *
+   * 为什么需要它：日志列表有一批状态是用**数组下标**记住「当前操作的是哪一行」——
+   * openClosePanelIdx / actionPanelIdx / _selectedIndices / _expandedRows /
+   * _pendingDeleteIndices / _closePriceEdited，外加 _batchMode 这个模式开关。
+   * 只要 logs 发生 splice（删除）或被整体替换（导入 / 备份恢复 / 多标签页同步），
+   * 这些下标就全部失真。此前 7 条改写 logs 的路径里只有 clearLogs 一条做全了，
+   * 其余各清各的（单条删除漏 3 项、批量删除漏 1 项、导入/恢复/同步一条都没清）。
+   *
+   * 典型后果不是「显示错位」而是**写错记录**：用户展开 A 的平仓面板，删除上方一行后
+   * 面板无声漂移到 B，此时点「确认平仓」会把 B 平掉。
+   *
+   * 全部用 typeof 守卫：run-tests.html 只加载 17 个 js，不含 rendering.js，
+   * 此时 _expandedRows 根本不存在（顶层 let 不挂 window，裸引用会 ReferenceError）。
+   */
+  util.resetAllIndexState = function() {
+    if (typeof _expandedRows !== 'undefined' && _expandedRows && _expandedRows.clear) _expandedRows.clear();
+    if (typeof _selectedIndices !== 'undefined' && _selectedIndices && _selectedIndices.clear) _selectedIndices.clear();
+    if (window._pendingDeleteIndices && window._pendingDeleteIndices.clear) window._pendingDeleteIndices.clear();
+    if (typeof openClosePanelIdx !== 'undefined') openClosePanelIdx = -1;
+    if (typeof actionPanelIdx !== 'undefined') actionPanelIdx = -1;
+    if (typeof _batchMode !== 'undefined') _batchMode = false;
+    // _closePriceEdited 是以「旧下标」为键的对象：整体重置后所有键都指向别的记录，
+    // 残留会让 rendering.js:608 把错误的行判定为「用户手动改过价」而跳过止损价自动填充。
+    if (typeof _closePriceEdited !== 'undefined') {
+      for (var k in _closePriceEdited) delete _closePriceEdited[k];
+    }
+    // 平仓面板的类型/价格缓存同样绑下标
+    if (typeof _closePanelType !== 'undefined') _closePanelType = '';
+    if (typeof _closePanelPrice !== 'undefined') _closePanelPrice = '';
+  };
+
+  /**
+   * logs 被 splice 删除一条后，把上述状态按「下标前移」重映射。
+   *
+   * 与 resetAllIndexState 的区别：删除一条并不代表用户放弃了对其他行的选择
+   * （勾选、展开状态应保留），所以这里平移下标而不是清空。传入被删行的旧下标。
+   *
+   * 必须「先快照再重建」：Set.forEach 会遍历迭代期间新增的条目，
+   * 边 delete 边 add 会让新值再次被访问并连锁前移（6→5→4…直到被误当脏值丢弃）。
+   */
+  util.remapIndexStateAfterSplice = function(removedIdx) {
+    var idx = parseInt(removedIdx, 10);
+    if (isNaN(idx) || idx < 0) return;
+    var shiftSet = function(set) {
+      if (!set || typeof set.forEach !== 'function') return;
+      var snapshot = [];
+      set.forEach(function(v) { snapshot.push(v); });
+      set.clear();
+      snapshot.forEach(function(v) {
+        var n = parseInt(v, 10);
+        if (isNaN(n)) return;              // 非数字键直接丢弃
+        if (n === idx) return;            // 被删行本身
+        set.add(n > idx ? n - 1 : n);     // 高于删除点的整体前移一位
+      });
+    };
+    shiftSet(typeof _selectedIndices !== 'undefined' ? _selectedIndices : null);
+    shiftSet(typeof _expandedRows !== 'undefined' ? _expandedRows : null);
+
+    // 单值型下标：被删行 → 无面板；高于删除点 → 前移；低于删除点 → 不变
+    var shiftOne = function(cur) {
+      if (typeof cur !== 'number' || cur < 0) return cur;
+      if (cur === idx) return -1;
+      return cur > idx ? cur - 1 : cur;
+    };
+    if (typeof openClosePanelIdx !== 'undefined') openClosePanelIdx = shiftOne(openClosePanelIdx);
+    if (typeof actionPanelIdx !== 'undefined') actionPanelIdx = shiftOne(actionPanelIdx);
+
+    // 对象键同样平移，否则「手动改过价」标记会落到别的记录上
+    if (typeof _closePriceEdited !== 'undefined') {
+      var moved = {};
+      for (var old in _closePriceEdited) {
+        var n2 = parseInt(old, 10);
+        if (isNaN(n2) || n2 === idx) continue;
+        moved[n2 > idx ? n2 - 1 : n2] = _closePriceEdited[old];
+      }
+      for (var k2 in _closePriceEdited) delete _closePriceEdited[k2];
+      for (var k3 in moved) _closePriceEdited[k3] = moved[k3];
+    }
+    if (window._pendingDeleteIndices && window._pendingDeleteIndices.clear) {
+      window._pendingDeleteIndices.clear();
+    }
+  };
+
+  util.isClosed = function(item) {
+    if (typeof util.isClosedTrade === 'function') return util.isClosedTrade(item);
+    if (!util._isClosedWarned) {
+      util._isClosedWarned = true;
+      console.error('[utils] isClosedTrade 不可用，已平仓判定一律按「未平仓」处理（统计将偏低）');
+    }
+    return false;
+  };
+
+  /**
    * P0-1 判定：是否为"部分平仓"中间态（有剩余仓位在持仓监控中）
    * @param {Object} item 日志对象
    * @returns {boolean}
@@ -936,6 +1042,10 @@ window.ChartManager = ChartManager; // 暴露给全局使用
 window.getClosedSorted = util.getClosedSorted;
 window.isClosedTrade = util.isClosedTrade;
 window.isPartialClosed = util.isPartialClosed;
+// 索引型状态的唯一重置/重映射入口。挂全局别名是为了让 storage/settings/toast 等
+// 模块不必写 `window.utils.` 前缀（跨模块裸标识符是本项目出过 P0 的坑）。
+window.resetAllIndexState = util.resetAllIndexState;
+window.remapIndexStateAfterSplice = util.remapIndexStateAfterSplice;
 })();
 
 // ======== Chart.js 页面级清理方法 ========
