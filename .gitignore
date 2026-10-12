@@ -26,3 +26,6 @@ trade_logs_backup_*.json
 # 构建产物（当前纯静态，无构建步骤，预留）
 dist/
 build/
+
+# 图表输出（archify skill 生成）
+.archify/

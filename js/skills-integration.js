@@ -56,11 +56,14 @@ window.positionCurrentRisk = positionCurrentRisk;
 function calcPortfolioHeat(pendingRiskAmount, pendingSymbol, capitalOverride) {
   var openPositions = getOpenPositions();
   // 表单本金可用时优先用它：本仓风险就是按表单本金算出来的，两者必须同一分母，
-  // 否则求和口径自相矛盾。账户余额未设置时 getAccountCapital() 为 null，heat 恒为 0，
-  // 等于热量检查永久失效。
+  // 否则求和口径自相矛盾。
   var capital = (capitalOverride != null && capitalOverride > 0) ? capitalOverride : getAccountCapital();
   if (!capital || capital <= 0) {
-    return { heat: 0, existingHeat: 0, existingRisk: 0, planRisk: 0, planPct: 0, details: [], warning: null, blocked: false };
+    // P0 修复（2026-10-12）：原返回 heat=0, blocked=false 是 fail-open——
+    // 账户余额未设时组合热量监控永久失效，与开仓闸门「取数异常必须 fail-closed」原则矛盾。
+    // 加 readFailed 标记，消费方（开仓闸门 / 风控中心）据此区分「热量为 0」与「无法计算」。
+    // risk.js 卡片已按 !capital 走空态文案，不受影响；开仓链路传入表单 capital>0，恒走下方正常分支。
+    return { heat: 0, existingHeat: 0, existingRisk: 0, planRisk: 0, planPct: 0, details: [], warning: null, blocked: false, readFailed: true };
   }
 
   var totalRisk = 0;
@@ -110,7 +113,8 @@ function calcPortfolioHeat(pendingRiskAmount, pendingSymbol, capitalOverride) {
     planPct: planPct,
     details: details,
     warning: warning,
-    blocked: blocked
+    blocked: blocked,
+    readFailed: false
   };
 }
 

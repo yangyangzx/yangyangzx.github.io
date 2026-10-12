@@ -1,4 +1,27 @@
 // 应用版本 - 每次更新后递增，用于缓存清除
+// 5.6.26：开仓管线 4 处 fail-open 闸门收口（系统性缺陷：静默放行而非静默失败）
+//   背景：对全系统做潜在逻辑 bug 分析后，确认 4 处「闸门取数异常时静默放行」
+//   与 CLAUDE.md「闸门必须 fail-closed」原则直接矛盾，集中收口。
+//
+//   F1 calculator.js 凯利驱动单笔风险上限闸门：原 `catch(e){/*忽略*/}` 空实现——
+//      _numSetting 抛错时整道闸门静默放行，凯利驱动可绕过系统单笔风险上限。
+//      改为 fail-closed：异常时按默认 2% 判定阻断，提示「系统设置读取失败」。
+//   F2 calculator.js 凯利覆写 #riskInput（select 仅 0.5% 步进）：round 后的 UI 显示值
+//      与实际参与计算的 riskPercent（未 round 精确值）分叉，快照存精确值、UI 显 round 值，
+//      用户看到「1%」实际跑 0.7%。riskHint 文案改为明示「按此精确值计算」。
+//   F3 calculator.js assertSavableCalculation 一致性比对 catch：原空实现吞掉整个比对块
+//      的任意异常（如旧快照缺字段导致 numDiff 收 undefined），保存闸门按旧快照放行。
+//      改为 fail-closed：异常时 console.error + 返回 ok:false「参数一致性校验异常」。
+//   F4 skills-integration.js calcPortfolioHeat：账户余额未设（capital 未知）时原返回
+//      heat=0/blocked=false，组合热量监控永久失效。加 readFailed 双向标记
+//      （正常分支 readFailed:false，未知分支 readFailed:true），消费方据此区分
+//      「热量为 0」与「无法计算」。开仓链路传表单 capital>0 恒走正常分支，不受影响；
+//      risk.js 卡片已按 !capital 走空态文案，亦不受影响。
+//
+//   校验：node --check 通过；test/verify_invariants.js 2207/0、verify_param_fix.js 31/0、
+//   verify_sideeffects.js 47/0 全绿；F3 反向用例（注入缺字段快照）确认异常路径
+//   由 fail-closed 拦下而非静默吞掉。
+//
 // 5.6.25 补充：开仓计划模块计算逻辑一致性核查（用户第二轮审查请求）
 //   核查范围：_calculateImpl 全链路 + planner.js 清单项 + 凯利/心态/连亏截断
 //   + RR 三处同档 + 脏值防护 + 守恒恒等式。共 28 项实证断言全绿。
@@ -632,7 +655,7 @@
 //          抄数字——是与多止盈位规划重复的死胡同。求解内核 solveTPForRR 仍在用；
 //          calcReverseTP / calcReverseSL 保留为测试入口（第 27 组）。
 //        版本号 5.6.17 → 5.6.23
-var APP_VERSION = '5.6.25';
+var APP_VERSION = '5.6.26';
 
 // 侧栏底部版本号由此注入（index.html 的 #navVersion 留空）。
 // 此前 HTML 里硬编码 v5.6.2，版本已到 5.6.14 仍显示旧号——版本号同步清单里
