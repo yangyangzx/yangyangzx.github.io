@@ -1245,11 +1245,15 @@ function saveSplit() {
   // 创建内嵌 prompt 替代原生 prompt
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
+  // 分批建仓面板已打开时，默认拆分数 = 面板批次数（此时才按各批 alloc 比例切仓）；
+  // 用户仍手填其它数字时退化为等分（见 doSaveSplit 的 hasAlloc 判定）。
+  const _defCount = (calc._splitBatches && calc._splitBatches.length >= 2 && calc._splitBatches.length <= 10)
+    ? calc._splitBatches.length : 2;
   overlay.innerHTML = '<div class="modal-content" style="max-width:400px;">' +
     '<div class="modal-header"><h3>拆分保存</h3><button class="modal-close" onclick="closeModalOverlay(this.closest(\'.modal-overlay\'))">✕</button></div>' +
     '<div class="modal-body">' +
       '<div class="fp"><label>拆分为几笔？</label>' +
-      '<input type="number" id="splitCountInput" min="2" max="10" value="2" />' +
+      '<input type="number" id="splitCountInput" min="2" max="10" value="' + _defCount + '" />' +
       '</div></div>' +
     '<div class="modal-footer">' +
       '<button class="btn btn-primary" id="splitConfirmBtn">确定</button>' +
@@ -1279,13 +1283,54 @@ function doSaveSplit(calc, count) {
     return false;
   }
   const groupId = Date.now().toString(36) + Math.random().toString(36).substring(2);
-  const splitPos = parseFloat((calc.positionSize / count).toFixed(2));
-  const remainderPos = parseFloat((calc.positionSize - splitPos * (count - 1)).toFixed(2));
   // 兜底走权威 _getDefaultFeeRate（读 feeRateLimit/feeRateMarket 设置），
   // 不再写死 0.04/0.08 —— 否则用户改手续费率后，分批快照的 item.fee
   // 会按旧费率落库，污染「成本侵蚀」等指标。
   const feeRate = Number(calc.feeRate) || _getDefaultFeeRate(calc.orderType);
   const slippageBase = calc.slippage.planning || calc.slippage.atStop;
+  // 读取分批独立止损信息（由 calculate() 写入 calc._splitBatches）
+  const splitBatches = calc._splitBatches || [];
+
+  // ===== 批次占比 → 仓位分配（2026-10-12 修复）=====
+  // 原实现在任何情况下都按 calc.positionSize/count 等分 N 笔，但 splitEntries.alloc
+  // 却写 UI 分批面板里的各批占比（如 60/40）——「记录的占比」与「实际切出的仓位」
+  // 两个权威自相矛盾：读端（编辑弹窗 e.alloc + 风险中心按 positionSize 加权）各算
+  // 各话。现改为按 splitBatches 的实际占比切总仓位，占比缺失/批次与 count 不匹配
+  // 时退化为等分——退化路径与旧行为一致，只有「面板明确填了 alloc」时才走比例切。
+  // 末笔补余数保证 Σ(pos) === calc.positionSize（守恒，避免两位小数截断后总和漂移）。
+  const hasAlloc = splitBatches.length === count &&
+    splitBatches.every(function(b) { return b.alloc !== '' && b.alloc != null &&
+      !isNaN(parseFloat(b.alloc)) && parseFloat(b.alloc) > 0; });
+  var positions, batchAllocs;
+  if (hasAlloc) {
+    var _allocs = splitBatches.map(function(b) { return parseFloat(b.alloc); });
+    var _allocSum = _allocs.reduce(function(s, x) { return s + x; }, 0);
+    // 归一化后的占比（alloc 总和 ≠100 时自动归到 100），仓位与 batchAllocs 同用这一份，
+    // 保证「记录的占比」与「实际切出的仓位」始终同源——若各算各话，70/70 会出现
+    // position 按 70/30 切而 batchAllocs 记 50/50 的新矛盾。
+    var _normPcts = _allocs.map(function(a) { return a / _allocSum * 100; });
+    var _basePos = calc.positionSize / 100;  // 每 1% 占比对应的 USDT
+    positions = []; batchAllocs = [];
+    var _used = 0;
+    for (var _ai = 0; _ai < count; _ai++) {
+      var _p = (_ai === count - 1)
+        ? calc.positionSize - _used                 // 末笔取余数，Σ 精确守恒
+        : Math.round(_normPcts[_ai] * _basePos * 100) / 100;
+      _used += _p;
+      positions.push(parseFloat(_p.toFixed(2)));
+      batchAllocs.push(parseFloat(_normPcts[_ai].toFixed(1)));
+    }
+  } else {
+    // 等分（旧行为，含 calc.positionSize 缺省为 0 时的除零守卫由下方 hasAlloc 之外的
+    // 独立判断统一在循环内兜底；count 已限 2~10）
+    var _each = parseFloat((calc.positionSize / count).toFixed(2));
+    positions = []; batchAllocs = [];
+    for (var _ei = 0; _ei < count; _ei++) {
+      var _ep = (_ei === count - 1) ? parseFloat((calc.positionSize - _each * (count - 1)).toFixed(2)) : _each;
+      positions.push(_ep);
+      batchAllocs.push(parseFloat((100 / count).toFixed(1)));
+    }
+  }
 
   function createSnapshot(pos, expectedExitPrice) {
     if (!Number.isFinite(Number(expectedExitPrice)) || Number(expectedExitPrice) <= 0) return null;
@@ -1315,8 +1360,7 @@ function doSaveSplit(calc, count) {
   }
 
   const now = new Date();
-  // 读取分批独立止损信息（由 calculate() 写入 calc._splitBatches）
-  const splitBatches = calc._splitBatches || [];
+  // splitBatches / hasIndepSL 已在上方「批次占比 → 仓位分配」处声明（循环需要共用）
   const hasIndepSL = splitBatches.length >= 2 && splitBatches.some(function(b) {
     return b.stopLoss && !isNaN(parseFloat(b.stopLoss));
   });
@@ -1396,25 +1440,32 @@ function doSaveSplit(calc, count) {
   const splitEntries = [];
   let _stopBadCount = 0;  // P2 FIX：止损方向与仓位方向相反的批次计数
   for (let i = 0; i < count; i++) {
-    const isLast = (i === count - 1);
-    const pos = isLast ? remainderPos : splitPos;
-    // 分批模式下优先使用独立止损价，未设置则回退全局
+    const pos = positions[i];
+    // 分批模式下优先使用独立止损价，未设置则回退全局。
+    // 2026-10-12：独立止损方向与开仓方向相反时（如做多却填了高于入场价的止损），
+    // 主计算路径按 calculator.js skippedCount 的口径**跳过该批、不计入加权止损距离**。
+    // 保存路径必须对称：该批不用独立止损价（回退全局 calc.stopLoss）、风险回退均分，
+    // 并记 _stopBadCount 供保存后 toast。原实现在此对 saveLog 路径不校验、doSaveSplit
+    // 路径却照算 batchRisk 落库——同一份 _splitBatches 在两个权威下结论相反。
     var batchStopLoss = null;
-    if (hasIndepSL && splitBatches[i] && splitBatches[i].stopLoss && !isNaN(parseFloat(splitBatches[i].stopLoss))) {
-      batchStopLoss = parseFloat(splitBatches[i].stopLoss);
+    var _indepSL = splitBatches[i] && splitBatches[i].stopLoss && !isNaN(parseFloat(splitBatches[i].stopLoss));
+    if (hasIndepSL && _indepSL) {
+      var _candSL = parseFloat(splitBatches[i].stopLoss);
+      var _effEntryD = calc.effectiveEntryPrice || calc.entryPrice;
+      var _dirOk = (calc.direction === 'short') ? (_candSL > _effEntryD) : (_candSL < _effEntryD);
+      if (_dirOk) batchStopLoss = _candSL;
+      else _stopBadCount++;   // 方向非法 → 回退全局止损，下方 _stopDirOk 判定自然失效
     }
     const costs = createBatchCosts(pos, batchStopLoss);
-    // 等风险公式 FIX：每笔风险按该笔实际止损距离重算（含批次独立止损），
+    // 每笔风险按该笔实际止损距离重算（含批次独立止损），
     // 与主计算器 positionSize × |entry − stopLoss| / entry 口径一致；
-    // 无独立止损时自动退化为 calc.riskAmount / count 均分。
+    // 无独立止损 / 方向非法时退化为 calc.riskAmount / count 均分（与仓位切分对称）。
     const effEntry = calc.effectiveEntryPrice || calc.entryPrice;
     // P2 FIX（2026-09-23 开仓逻辑审计）：原 Math.abs 吞掉方向，止损设在错误侧也照样算出
-    // "有效"风险额并落库（例如做多却填了高于入场价的止损价）。主计算器的分批路径已按方向
-    // 跳过非法批次（calculator.js skippedCount），此处对称校验：非法批次回退等分风险。
-    var _stopDirOk = false;
+    // "有效"风险额并落库。主计算器分批路径已按方向跳过非法批次，此处对称校验。
+    var _stopDirOk = true;
     if (costs.stopLoss != null && effEntry > 0) {
       _stopDirOk = (calc.direction === 'short') ? (costs.stopLoss > effEntry) : (costs.stopLoss < effEntry);
-      if (!_stopDirOk) _stopBadCount++;
     }
     const batchRisk = (_stopDirOk && effEntry > 0)
       ? pos * Math.abs(effEntry - costs.stopLoss) / effEntry
@@ -1424,20 +1475,21 @@ function doSaveSplit(calc, count) {
     const entry = makeEntry(pos, costs, risk, label, i);
     // P1 FIX（2026-09-23 开仓逻辑审计）：补 price / alloc——读取端（编辑弹窗明细表）
     // 按 e.price、e.alloc、e.stopLoss、se.weightedEntry 读取，原写入形状缺前两者。
+    // 2026-10-12：alloc 改用本笔实际占比 batchAllocs[i]（比例路径=归一化后的 alloc，
+    // 等分路径=100/count），与 positionSize 同源；不再直接读 UI 面板 alloc（两者可能矛盾）。
     var _b = splitBatches[i];
     var _bPrice = (_b && !isNaN(parseFloat(_b.price))) ? parseFloat(_b.price) : (calc.entryPrice || null);
-    var _bAlloc = (_b && !isNaN(parseFloat(_b.alloc))) ? parseFloat(_b.alloc) : (100 / count);
     splitEntries.push({
       index: i + 1,
       price: _bPrice,
-      alloc: _bAlloc,
+      alloc: batchAllocs[i],
       positionSize: parseFloat(pos.toFixed(2)),
       fee: parseFloat(costs.fee.toFixed(8)),
       slippageCost: parseFloat(costs.slippage.planning.totalCost.toFixed(8)),
       slippage: costs.slippage,
       riskAmount: parseFloat(risk.toFixed(2)),
       label: label,
-      stopLoss: costs.stopLoss,  // 记录每笔实际使用的止损价
+      stopLoss: costs.stopLoss,  // 记录每笔实际使用的止损价（含方向非法时的全局回退）
     });
     logs.push(entry);
   }
@@ -1466,7 +1518,7 @@ function doSaveSplit(calc, count) {
   if (_stopBadCount > 0) {
     showToast('分批建仓有 ' + _stopBadCount + ' 批止损价与'
       + (calc.direction === 'short' ? '做空' : '做多')
-      + '方向相反，该批已按等分风险保存，请检查止损价设置。', 'warn');
+      + '方向相反，该批已回退到全局止损价、按本批实际仓位计风险，请检查止损价设置。', 'warn');
   }
   openClosePanelIdx = -1;
   actionPanelIdx = -1;

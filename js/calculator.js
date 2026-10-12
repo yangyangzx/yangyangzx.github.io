@@ -1945,12 +1945,29 @@ function onSplitChange() {
   calculate();
 }
 function autoCompleteAlloc() {
-  if (_splitBatches.length < 3) return; // BUG#1: 仅 3 批模式自动补足，2 批模式让用户自行填写
+  // 提示（全批次判满且总和 ≠100）：原先 2 批模式直接 return，提示分支永不执行——
+  // 2 批填 70/70（=140）时「比例总和须为 100%」的红字从不出现。现把提示逻辑提到
+  // 长度分支之前，对所有批次数生效。
   const filledCount = _splitBatches.filter(function(b) { return b.alloc !== '' && !isNaN(parseFloat(b.alloc)); }).length;
+  const hint = document.getElementById('splitAllocHint');
+  if (hint) {
+    const totalAll = _splitBatches.reduce(function(s, b) {
+      return s + (b.alloc !== '' && !isNaN(parseFloat(b.alloc)) ? parseFloat(b.alloc) : 0);
+    }, 0);
+    if (totalAll !== 100 && filledCount === _splitBatches.length) {
+      hint.classList.add('show');
+    } else {
+      hint.classList.remove('show');
+    }
+  }
+  // 自动补全：仅 3+ 批（保持旧「BUG#1」行为，2 批由用户自行决定比例）。
+  // 加权入场价与主计算器均按 Σ(dist·alloc)/Σ(alloc) 归一，2 批 fill-sum ≠100 时
+  // 权重比例不变（70/70 ≡ 1/2,1/2），故不强制改写用户输入的 alloc——改它反而会
+  // 让 UI 显示值偏离用户所填，引入新的口径矛盾。提示已足以让用户自行修正。
+  if (_splitBatches.length < 3) return;
   const totalFilled = _splitBatches.reduce(function(s, b) {
     return s + (b.alloc !== '' && !isNaN(parseFloat(b.alloc)) ? parseFloat(b.alloc) : 0);
   }, 0);
-  const hint = document.getElementById('splitAllocHint');
   if (filledCount >= _splitBatches.length - 1 && totalFilled <= 100) {
     // Auto-fill last empty
     for (let i = 0; i < _splitBatches.length; i++) {
@@ -1961,17 +1978,6 @@ function autoCompleteAlloc() {
         if (el) el.value = autoVal;
         break;
       }
-    }
-  }
-  // Show hint
-  if (hint) {
-    const total = _splitBatches.reduce(function(s, b) {
-      return s + (b.alloc !== '' && !isNaN(parseFloat(b.alloc)) ? parseFloat(b.alloc) : 0);
-    }, 0);
-    if (total !== 100 && filledCount === _splitBatches.length) {
-      hint.classList.add('show');
-    } else {
-      hint.classList.remove('show');
     }
   }
 }
@@ -2085,14 +2091,29 @@ function updateSplitButtons() {
 }
 function getSplitEntries() {
   if (!_splitMode || _splitBatches.length < 2) return null;
+  // 2026-10-12：部分批次无效不再整体丢弃（原 :2091 一旦任一批 price/alloc 非法即
+  // return null，5 批里 4 批合法、1 批 alloc 空 → 合法的 4 批明细含独立止损价全丢）。
+  // 现逐批容错：只落合法批次，缺失字段的批次跳过。加权入场价仍用全量
+  // computeWeightedEntry()（其自身已按 ∃price∧∃alloc 过滤，口径一致）。
+  // 与 doSaveSplit 的独立止损方向校验对称：saveLog 也必须在明细里暴露「方向非法的
+  // 批次」，否则用户走单条保存（而非拆分保存）时坏批次原样落库、事后无从知晓。
   const entries = [];
   for (const b of _splitBatches) {
     const price = parseFloat(b.price), alloc = parseFloat(b.alloc);
-    if (isNaN(price) || isNaN(alloc) || price <= 0 || alloc <= 0) return null;
+    if (isNaN(price) || price <= 0 || isNaN(alloc) || alloc <= 0) continue;
     entries.push({ price: price, alloc: alloc, stopLoss: b.stopLoss ? parseFloat(b.stopLoss) : null });
   }
   const weighted = computeWeightedEntry();
   if (entries.length < 2 || weighted === null) return null;
+  // alloc 归一化（总和 ≠100 时按实际权重折算，与主计算器的加权止损距离公式同口径——
+  // Σ(dist·alloc)/Σ(alloc)，分母自动消掉 ≠100）：落库的 alloc 是「占整笔的百分比」，
+  // 若用户 2 批填 70/70 直接落 70/70，读端（编辑弹窗占比列）会误读为「合计 140%」。
+  var _allocSum = entries.reduce(function(s, e) { return s + e.alloc; }, 0);
+  if (_allocSum > 0 && Math.abs(_allocSum - 100) > 1e-9) {
+    for (var _ni = 0; _ni < entries.length; _ni++) {
+      entries[_ni].alloc = parseFloat((entries[_ni].alloc / _allocSum * 100).toFixed(1));
+    }
+  }
   return { entries: entries, weightedEntry: parseFloat(weighted.toFixed(5)) };
 }
 function getActiveEntryPrice() {

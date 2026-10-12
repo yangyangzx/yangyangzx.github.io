@@ -29,27 +29,27 @@
 </div>
 <div id="out">加载中…</div>
 
-<script src="../js/chart-guard.js?v=5.6.26"></script>
-<script src="../js/constants.js?v=5.6.26"></script>
-<script src="../js/utils.js?v=5.6.26"></script>
-<script src="../js/storage.js?v=5.6.26"></script>
-<script src="../js/slippage.js?v=5.6.26"></script>
-<script src="../js/skills-integration.js?v=5.6.26"></script>
-<script src="../js/calc-visuals.js?v=5.6.26"></script>
-<script src="../js/calculation-ui.js?v=5.6.26"></script>
-<script src="../js/calculator.js?v=5.6.26"></script>
-<script src="../js/risk.js?v=5.6.26"></script>
-<script src="../js/planner.js?v=5.6.26"></script>
-<script src="../js/discipline-led.js?v=5.6.26"></script>
-<script src="../js/settings.js?v=5.6.26"></script>
-<script src="../js/io.js?v=5.6.26"></script>
-<script src="../js/logs.js?v=5.6.26"></script>
-<script src="../js/modals.js?v=5.6.26"></script>
+<script src="../js/chart-guard.js?v=5.6.27"></script>
+<script src="../js/constants.js?v=5.6.27"></script>
+<script src="../js/utils.js?v=5.6.27"></script>
+<script src="../js/storage.js?v=5.6.27"></script>
+<script src="../js/slippage.js?v=5.6.27"></script>
+<script src="../js/skills-integration.js?v=5.6.27"></script>
+<script src="../js/calc-visuals.js?v=5.6.27"></script>
+<script src="../js/calculation-ui.js?v=5.6.27"></script>
+<script src="../js/calculator.js?v=5.6.27"></script>
+<script src="../js/risk.js?v=5.6.27"></script>
+<script src="../js/planner.js?v=5.6.27"></script>
+<script src="../js/discipline-led.js?v=5.6.27"></script>
+<script src="../js/settings.js?v=5.6.27"></script>
+<script src="../js/io.js?v=5.6.27"></script>
+<script src="../js/logs.js?v=5.6.27"></script>
+<script src="../js/modals.js?v=5.6.27"></script>
 <!-- version.js 刻意放在最后：它无依赖也无副作用，但第 30.8 组要读 APP_VERSION 做
      版本一致性校验。此前这个页面从没加载过 version.js——一旦有断言直接引用
      APP_VERSION，整个测试套件会因 ReferenceError 在 runAll 里炸掉，
      结果是 total=0（全部断言都没跑），比一条失败更隐蔽。 -->
-<script src="../js/version.js?v=5.6.26"></script>
+<script src="../js/version.js?v=5.6.27"></script>
 <script>
 (function() {
   // ---- 环境 mock（与生产隔离） ----
@@ -57,6 +57,13 @@
   window.renderLogs = function() {};
   window.renderDashboard = function() {};
   window._activeFilters = null;
+  // jsdom 未实现 scrollIntoView / requestAnimationFrame（MDN 标准 API，生产浏览器原生存在）。
+  // 缺桩时 onSplitChange → calculate() 成功路径末尾（calculator.js:1418）会抛
+  // "resultBox.scrollIntoView is not a function"，静默中断后续 UI 更新，
+  // 且被 calculate() 外层 catch 吞成一句无关提示——jsdom 驱动真实交互路径时表现为假红。
+  try { if (typeof HTMLElement !== 'undefined' && !HTMLElement.prototype.scrollIntoView) HTMLElement.prototype.scrollIntoView = function() {}; } catch(e) {}
+  try { if (typeof Element !== 'undefined' && !Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = function() {}; } catch(e) {}
+  if (typeof window.requestAnimationFrame !== 'function') window.requestAnimationFrame = function(cb) { return setTimeout(cb, 16); };
   var store = {};
   // 自洽内存存储：getItem/setItem/removeItem/key/length 全部读同一份 store，
   // 避免 preCheckStorageCapacity 里 localStorage.length 读到宿主真实存储而让结果随环境漂移。
@@ -2313,7 +2320,7 @@
     // 权威下结论不一致」的又一形式。这里的字面量是刻意的绊线：升版必须顺手改它，否则会红。
     (function () {
       h += T('APP_VERSION 已定义为字符串', typeof APP_VERSION === 'string' && APP_VERSION.length > 0);
-      h += T('APP_VERSION 为本次发布的 5.6.26（升版时同步改这行）', APP_VERSION === '5.6.26');
+      h += T('APP_VERSION 为本次发布的 5.6.27（升版时同步改这行）', APP_VERSION === '5.6.27');
       var vs = [];
       for (var i = 0; i < document.scripts.length; i++) {
         var s = document.scripts[i].getAttribute('src') || '';
@@ -2372,6 +2379,127 @@
       h += T('多选数组全空视为未选择', isEntryReasonChosen([]) === false);
       h += T('多选数组只有空串视为未选择', isEntryReasonChosen(['', '   ']) === false);
       h += T('多选数组混有有效项即通过', isEntryReasonChosen(['', '  ', '均线信号']) === true);
+    })();
+
+    // 30.11 分批建仓明细的三处口径收口（v5.6.27）：
+    // ① getSplitEntries 部分批次无效不再整体丢弃（原任一批 price/alloc 非法即 null）；
+    // ② alloc 总和 ≠100 时落库前归一（70/70 → 50/50），与主计算器加权止损距离同口径；
+    // ③ doSaveSplit 按批次 alloc 比例切总仓位（而非恒定等分），且批次独立止损方向非法时
+    //    回退全局止损价 + 风险均分（与 calculator.js skippedCount 的主计算口径对称）。
+    //    原实现：doSaveSplit 永远等分、splitEntries.alloc 却写 UI 面板里的 60/40，
+    //    「记录的占比」与「实际切出的仓位」两个权威互相矛盾。
+    (function () {
+      // ---- ① + ② getSplitEntries ----
+      var savedMode = _splitMode, savedBatches = _splitBatches.slice();
+      _splitMode = true;
+
+      // 全合法 50/30/20：原样落库
+      _splitBatches = [
+        { price: '50000', alloc: '50', stopLoss: '' },
+        { price: '51000', alloc: '30', stopLoss: '' },
+        { price: '52000', alloc: '20', stopLoss: '' }
+      ];
+      var r3 = getSplitEntries();
+      h += T('getSplitEntries 全合法三批：落 3 条',
+        r3 && r3.entries.length === 3 && r3.entries[0].alloc === 50 && r3.entries[1].alloc === 30 && r3.entries[2].alloc === 20);
+      // 50/30/20 加权入场价 = Σ(price·alloc)/Σ(alloc) = 50700（computeWeightedEntry 同口径）
+      h += T('getSplitEntries 三批加权入场价 = 50700',
+        r3 && Math.abs(r3.weightedEntry - 50700) < 1e-3, '得 ' + (r3 && r3.weightedEntry));
+
+      // 70/70（总和 140）：归一化到 50/50
+      _splitBatches = [
+        { price: '50000', alloc: '70', stopLoss: '' },
+        { price: '51000', alloc: '70', stopLoss: '' }
+      ];
+      var rNorm = getSplitEntries();
+      h += T('getSplitEntries 70/70 归一化为 50/50（不写 140% 的假占比）',
+        rNorm && rNorm.entries.length === 2 && rNorm.entries[0].alloc === 50 && rNorm.entries[1].alloc === 50,
+        JSON.stringify(rNorm && rNorm.entries.map(function(e){return e.alloc;})));
+
+      // 部分批次无效：batch1 alloc 空，保留合法 batch0/2，不再整体 null
+      _splitBatches = [
+        { price: '50000', alloc: '60', stopLoss: '49000' },
+        { price: '51000', alloc: '',    stopLoss: '50000' },
+        { price: '52000', alloc: '40', stopLoss: '' }
+      ];
+      var rPart = getSplitEntries();
+      h += T('getSplitEntries 部分批次无效：保留 2 条合法批次（原为整体 null）',
+        rPart && rPart.entries.length === 2 && rPart.entries[0].price === 50000 && rPart.entries[1].price === 52000);
+      h += T('getSplitEntries 部分批次：合法批次保留独立止损价',
+        rPart && rPart.entries[0].stopLoss === 49000 && rPart.entries[1].stopLoss === null);
+      // 反向用例（该失败时确实失败）：全部批次无效 → 仍应 null（不能放行空明细）
+      _splitBatches = [
+        { price: '', alloc: '', stopLoss: '' },
+        { price: '', alloc: '', stopLoss: '' }
+      ];
+      h += T('getSplitEntries 全部批次无效：返回 null（反向）', getSplitEntries() === null);
+      // 单批：不足 2 批 → null
+      _splitBatches = [{ price: '50000', alloc: '100', stopLoss: '' }];
+      h += T('getSplitEntries 仅 1 批：返回 null（反向）', getSplitEntries() === null);
+      _splitMode = savedMode; _splitBatches = savedBatches;
+
+      // ---- ③ doSaveSplit：按 alloc 比例切仓 + 方向非法批次回退 ----
+      // 造一个可保存的 calc 快照（绕过 assertSavableCalculation，直接喂 doSaveSplit）。
+      // 60/40 切总仓位 1000 → 600/400；末批方向非法（long 却填 51000 高于入场价 50000）。
+      // makeEntry 读若干表单 DOM（orderType/stopType/reason/mindset），本测试页无真实表单，
+      // 临时挂最小 stub，跑完移除——不改动生产 makeEntry 的 DOM 契约（真实应用这些 id 恒在）。
+      var _stubHost = document.createElement('div');
+      var _stubIds = {};
+      ['orderType','stopType','reasonSelect','reasonCustom','mindsetScore','tradeSession','marketCondition','strategyFramework','strategyPattern'].forEach(function(id){
+        var inp = document.createElement(id === 'orderType' || id === 'stopType' ? 'select' : 'input');
+        inp.id = id; inp.value = ''; _stubHost.appendChild(inp); _stubIds[id] = inp;
+      });
+      document.body.appendChild(_stubHost);
+      var savedLogs = logs.slice();
+      var calc = {
+        entryPrice: 50000, effectiveEntryPrice: 50000, stopLoss: 49000,
+        direction: 'long', orderType: 'market', stopType: 'stop-market',
+        positionSize: 1000, riskAmount: 100, feeRate: 0.08, targetPrice: 52000,
+        symbol: 'BTC', leverage: 10, capital: 10000,
+        plannedRiskAmount: 100, plannedRiskPercent: 0.01, actualMargin: 100,
+        kellyData: null, atrStopMode: false, atrValue: null, atrMultiplier: null,
+        atrSuppressedByWeighted: false,
+        targetRR: 1.9, targetNetProfit: 95,
+        rrGrossProfit: 200, rrNetProfit: 95, rrNetLoss: 50,
+        slippage: {
+          planning: { effectiveEntryPrice: 50000, effectiveExitPrice: 49000, totalCost: 0, tickSize: 0.1, entryTicks: 0, exitTicks: 0, source: 'default' },
+          atStop:   { effectiveEntryPrice: 50000, effectiveExitPrice: 49000, totalCost: 0, tickSize: 0.1, entryTicks: 0, exitTicks: 0, source: 'default' },
+          atTarget: null
+        },
+        _splitBatches: [
+          { price: '50000', alloc: '60', stopLoss: '' },
+          { price: '51000', alloc: '40', stopLoss: '51000' }   // 方向非法：long 但止损高于入场价
+        ]
+      };
+      var before = logs.length;
+      var ok = doSaveSplit(calc, 2);
+      var newLogs = logs.slice(before);
+      h += T('doSaveSplit 成功写入 2 条', ok === true && newLogs.length === 2, 'ok=' + ok + ' n=' + newLogs.length);
+      // 按 alloc 切仓：600 / 400（而非旧实现的恒定 500/500）
+      h += T('doSaveSplit 按 60/40 切仓（非等分 500/500）',
+        newLogs.length === 2 && newLogs[0].positionSize === 600 && newLogs[1].positionSize === 400,
+        newLogs.map(function(l){return l.positionSize;}).join('/'));
+      h += T('doSaveSplit 仓位守恒 Σpos === 总仓位',
+        newLogs.length === 2 && Math.abs((newLogs[0].positionSize + newLogs[1].positionSize) - calc.positionSize) < 1e-9);
+      // 末批方向非法 → 回退全局止损 49000（不是 51000），且该批风险回退均分
+      h += T('doSaveSplit 方向非法批次回退全局止损 49000',
+        newLogs.length === 2 && newLogs[1].stopLoss === 49000, '末批 stopLoss=' + (newLogs[1] && newLogs[1].stopLoss));
+      // splitEntries.alloc 写归一化后的实际占比，与 positionSize 同源
+      h += T('doSaveSplit splitEntries.alloc = 60/40（与实际仓位同源）',
+        newLogs.length === 2 && newLogs[0].splitEntries &&
+        newLogs[0].splitEntries.entries[0].alloc === 60 && newLogs[0].splitEntries.entries[1].alloc === 40,
+        JSON.stringify(newLogs[0] && newLogs[0].splitEntries && newLogs[0].splitEntries.entries.map(function(e){return e.alloc;})));
+      // 反向用例：批次数 ≠ count（只有 1 个 _splitBatches）→ 退化为等分
+      var calcEq = JSON.parse(JSON.stringify(calc));
+      calcEq._splitBatches = [{ price: '50000', alloc: '', stopLoss: '' }];  // alloc 缺失
+      var beforeEq = logs.length;
+      doSaveSplit(calcEq, 2);
+      var eqLogs = logs.slice(beforeEq);
+      h += T('doSaveSplit alloc 缺失退化为等分 500/500（反向：不硬套比例）',
+        eqLogs.length === 2 && eqLogs[0].positionSize === 500 && eqLogs[1].positionSize === 500,
+        eqLogs.map(function(l){return l.positionSize;}).join('/'));
+      logs.length = savedLogs.length;  // 恢复，避免污染后续组
+      _stubHost.remove();  // 移除临时表单 stub
     })();
 
 // 31. 移动端适配回归（v5.6.17）：
