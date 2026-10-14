@@ -630,16 +630,24 @@ function emRecalc(item) {
     const entryForPnl = (item.effectiveEntryPrice != null && !isNaN(item.effectiveEntryPrice))
       ? item.effectiveEntryPrice : entry;
     // P0 修复：已全部平仓（positionSize<=0）时无剩余仓位可重算，保留整笔累计显示，避免预览出"-费用"
-    if (isNaN(entryForPnl) || isNaN(closePrice) || isNaN(pos) || pos <= 0 || entryForPnl === 0 || closePrice <= 0) return;
+    // BUG FIX（2026-10-14）：编辑已平仓交易时，若用户改了 closePrice/closeType，
+    // 原逻辑因 pos<=0 直接 return，导致 closePrice 和 pnlAmount 不一致——
+    // 例如先按目标价止盈算盈利，再改成实际平仓价（止损附近），盈亏还停留在旧值。
+    // 修复：已全额平仓时回退用 initialPositionSize（开仓原始仓位）重算整笔盈亏。
+    let pnlPos = pos;
+    if ((isNaN(pnlPos) || pnlPos <= 0) && item.initialPositionSize != null && !isNaN(parseFloat(item.initialPositionSize))) {
+      pnlPos = parseFloat(item.initialPositionSize);
+    }
+    if (isNaN(entryForPnl) || isNaN(closePrice) || isNaN(pnlPos) || pnlPos <= 0 || entryForPnl === 0 || closePrice <= 0) return;
     let grossPnl;
     if (direction === 'short') {
-      grossPnl = (entryForPnl - closePrice) / entryForPnl * pos;
+      grossPnl = (entryForPnl - closePrice) / entryForPnl * pnlPos;
     } else {
-      grossPnl = (closePrice - entryForPnl) / entryForPnl * pos;
+      grossPnl = (closePrice - entryForPnl) / entryForPnl * pnlPos;
     }
     const netPnl = grossPnl - emFee - emSlippage;
     const lev2 = (!isNaN(lev) && lev > 0) ? lev : 1;
-    const margin = pos / lev2;
+    const margin = pnlPos / lev2;
     const netPnlPercent = margin > 0 ? (netPnl / margin * 100) : 0;
     const pnlAmtEl = document.getElementById('emPnlAmount');
     const pnlPctEl = document.getElementById('emPnlPercent');
