@@ -354,6 +354,7 @@ function openEditModal(idx) {
         '<div class="fp"><label>R倍数</label><input type="text" id="emRMultiple" value="' + (item.rMultiple ?? '') + '" /></div>' +
         '<div class="fp"><label>盈亏金额</label><input type="text" id="emPnlAmount" value="' + (item.pnlAmount ?? '') + '" /><span id="emPnlManualTag" style="display:none;font-size:10px;color:var(--color-warning);margin-left:4px;">手动</span></div>' +
         '<div class="fp"><label>盈亏百分比 <span style="font-size:11px;color:var(--color-text-muted);font-weight:400;">（保证金回报率）</span></label><input type="text" id="emPnlPercent" value="' + (item.pnlPercent ?? '') + '" /></div>' +
+        '<div class="fp span-2" id="emCloseTypeMismatchWarn" style="display:none;font-size:12px;color:var(--color-warning);background:rgba(255,193,7,0.1);padding:8px 12px;border-radius:6px;margin-top:4px;"></div>' +
         '<div class="fp"><label>手续费</label><input type="text" id="emFee" value="' + (item.fee ?? '') + '" /></div>' +
         '<div class="fp"><label>' + slippageLabel + '</label><input type="text" id="emSlippageCost" value="' + (item.slippageCost ?? '') + '"' + slippageReadonly + ' /></div>' +
         '<div class="fp"><label>持仓最低价</label><input type="number" id="emLowPrice" step="0.00001" value="' + (item.lowPrice != null ? item.lowPrice : '') + '" style="color:var(--color-danger);" /></div>' +
@@ -566,6 +567,25 @@ function emBindRecalc(item) {
         window._emPnlManual = false;
         var tag = document.getElementById('emPnlManualTag');
         if (tag) tag.style.display = 'none';
+        // 改 closeType 时自动填充对应价格（与平仓面板行为一致）
+        // 仅当用户还没手动改过 closePrice 时才自动填，避免覆盖用户输入
+        if (id === 'emCloseType') {
+          var cpEl = document.getElementById('emClosePrice');
+          var ctVal = el.value;
+          // 检查用户是否手动改过 closePrice（通过是否与 closeType 默认值不同来判断）
+          var cpVal = cpEl ? cpEl.value : '';
+          var _autoFilled = (ctVal === 'initialTP' && item.targetPrice != null && parseFloat(cpVal) === parseFloat(item.targetPrice))
+            || (ctVal === 'initialSL' && item.stopLoss != null && parseFloat(cpVal) === parseFloat(item.stopLoss));
+          // 如果是从一个自动填充的价格改过来的（用户没手动改过），切类型时跟着换
+          // 或者 closePrice 为空，也自动填
+          if (cpEl && (cpVal === '' || _autoFilled)) {
+            if (ctVal === 'initialTP' && item.targetPrice != null && item.targetPrice !== '') {
+              cpEl.value = item.targetPrice;
+            } else if (ctVal === 'initialSL' && item.stopLoss != null && item.stopLoss !== '') {
+              cpEl.value = item.stopLoss;
+            }
+          }
+        }
         emRecalc(item);
       };
       el.addEventListener('change', handler);
@@ -687,6 +707,22 @@ function emRecalc(item) {
       : parseFloat((document.getElementById('emRiskAmount') || {}).value);
     if (rEl && !isNaN(riskBase) && riskBase !== 0) {
       rEl.value = (netPnl / riskBase).toFixed(2);
+    }
+    // 一致性检查：平仓类型与盈亏方向不匹配时给用户提醒
+    // （例如选了「初始止盈」但当前平仓价算出来是亏损——用户可能选错了平仓类型）
+    var _mismatchEl = document.getElementById('emCloseTypeMismatchWarn');
+    if (_mismatchEl) {
+      var _isWinType = (closeType === 'initialTP' || closeType === 'partialTP' || closeType === 'manualWin');
+      var _isLossType = (closeType === 'initialSL' || closeType === 'manualLoss' || closeType === 'liquidation' || closeType === 'timeStop');
+      var _isWinPnl = netPnl >= 0;
+      var _mismatch = (_isWinType && !_isWinPnl) || (_isLossType && _isWinPnl);
+      if (_mismatch) {
+        var _expected = _isWinType ? '亏损' : '盈利';
+        _mismatchEl.textContent = '⚠ 注意：平仓类型是「' + (CLOSE_TYPE_LABELS[closeType] || closeType) + '」，但当前平仓价计算为' + _expected + '。请确认平仓类型是否正确。';
+        _mismatchEl.style.display = 'block';
+      } else {
+        _mismatchEl.style.display = 'none';
+      }
     }
   }
 }
