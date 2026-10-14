@@ -538,11 +538,21 @@ window.closeEditModal = closeEditModal;
 var _emRecalcListeners = [];
 function emBindRecalc(item) {
   const ids = ['emEntryPrice','emStopLoss','emPositionSize','emLeverage','emClosePrice','emFee','emSlippageCost'];
+  // 这些字段改动意味着用户要重算盈亏 → 解除"手动覆盖"锁定
+  var _unlockFields = ['emClosePrice', 'emEntryPrice', 'emPositionSize'];
   _emRecalcListeners = []; // 清空旧监听
   ids.forEach(function(id) {
     const el = document.getElementById(id);
     if (el) {
-      var handler = function() { emRecalc(item); };
+      var handler = function() {
+        // 用户主动改了平仓价/入场价/仓位 → 解除"手动覆盖"锁定，允许重算盈亏
+        if (_unlockFields.indexOf(id) > -1) {
+          window._emPnlManual = false;
+          var tag = document.getElementById('emPnlManualTag');
+          if (tag) tag.style.display = 'none';
+        }
+        emRecalc(item);
+      };
       el.addEventListener('input', handler);
       _emRecalcListeners.push({ el: el, type: 'input', handler: handler });
     }
@@ -551,7 +561,13 @@ function emBindRecalc(item) {
   ['emDirection','emCloseType'].forEach(function(id) {
     const el = document.getElementById(id);
     if (el) {
-      var handler = function() { emRecalc(item); };
+      var handler = function() {
+        // 用户主动改了平仓类型/方向 → 解除"手动覆盖"锁定，允许按新参数重算盈亏
+        window._emPnlManual = false;
+        var tag = document.getElementById('emPnlManualTag');
+        if (tag) tag.style.display = 'none';
+        emRecalc(item);
+      };
       el.addEventListener('change', handler);
       _emRecalcListeners.push({ el: el, type: 'change', handler: handler });
     }
