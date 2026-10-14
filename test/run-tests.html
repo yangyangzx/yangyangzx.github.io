@@ -29,27 +29,27 @@
 </div>
 <div id="out">加载中…</div>
 
-<script src="../js/chart-guard.js?v=5.6.27"></script>
-<script src="../js/constants.js?v=5.6.27"></script>
-<script src="../js/utils.js?v=5.6.27"></script>
-<script src="../js/storage.js?v=5.6.27"></script>
-<script src="../js/slippage.js?v=5.6.27"></script>
-<script src="../js/skills-integration.js?v=5.6.27"></script>
-<script src="../js/calc-visuals.js?v=5.6.27"></script>
-<script src="../js/calculation-ui.js?v=5.6.27"></script>
-<script src="../js/calculator.js?v=5.6.27"></script>
-<script src="../js/risk.js?v=5.6.27"></script>
-<script src="../js/planner.js?v=5.6.27"></script>
-<script src="../js/discipline-led.js?v=5.6.27"></script>
-<script src="../js/settings.js?v=5.6.27"></script>
-<script src="../js/io.js?v=5.6.27"></script>
-<script src="../js/logs.js?v=5.6.27"></script>
-<script src="../js/modals.js?v=5.6.27"></script>
+<script src="../js/chart-guard.js?v=5.6.31"></script>
+<script src="../js/constants.js?v=5.6.31"></script>
+<script src="../js/utils.js?v=5.6.31"></script>
+<script src="../js/storage.js?v=5.6.31"></script>
+<script src="../js/slippage.js?v=5.6.31"></script>
+<script src="../js/skills-integration.js?v=5.6.31"></script>
+<script src="../js/calc-visuals.js?v=5.6.31"></script>
+<script src="../js/calculation-ui.js?v=5.6.31"></script>
+<script src="../js/calculator.js?v=5.6.31"></script>
+<script src="../js/risk.js?v=5.6.31"></script>
+<script src="../js/planner.js?v=5.6.31"></script>
+<script src="../js/discipline-led.js?v=5.6.31"></script>
+<script src="../js/settings.js?v=5.6.31"></script>
+<script src="../js/io.js?v=5.6.31"></script>
+<script src="../js/logs.js?v=5.6.31"></script>
+<script src="../js/modals.js?v=5.6.31"></script>
 <!-- version.js 刻意放在最后：它无依赖也无副作用，但第 30.8 组要读 APP_VERSION 做
      版本一致性校验。此前这个页面从没加载过 version.js——一旦有断言直接引用
      APP_VERSION，整个测试套件会因 ReferenceError 在 runAll 里炸掉，
      结果是 total=0（全部断言都没跑），比一条失败更隐蔽。 -->
-<script src="../js/version.js?v=5.6.27"></script>
+<script src="../js/version.js?v=5.6.31"></script>
 <script>
 (function() {
   // ---- 环境 mock（与生产隔离） ----
@@ -2320,7 +2320,7 @@
     // 权威下结论不一致」的又一形式。这里的字面量是刻意的绊线：升版必须顺手改它，否则会红。
     (function () {
       h += T('APP_VERSION 已定义为字符串', typeof APP_VERSION === 'string' && APP_VERSION.length > 0);
-      h += T('APP_VERSION 为本次发布的 5.6.27（升版时同步改这行）', APP_VERSION === '5.6.27');
+      h += T('APP_VERSION 为本次发布的 5.6.31（升版时同步改这行）', APP_VERSION === '5.6.31');
       var vs = [];
       for (var i = 0; i < document.scripts.length; i++) {
         var s = document.scripts[i].getAttribute('src') || '';

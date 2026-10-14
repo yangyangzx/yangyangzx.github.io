@@ -108,6 +108,10 @@ class ImportValidator {
     // 业务规则验证：不能用 if(value) 跳过 0、NaN 或空字符串。
     if (typeof item.direction !== 'string' || !this.validDirections.includes(item.direction.toLowerCase())) {
       errors.push(`第${index}条记录方向无效：${item.direction}`);
+    } else {
+      // #4 FIX：校验通过后归一化为小写再落库，避免 "LONG"/"Short" 等大小写变体原样入库后
+      // 与 calculateCloseSettlement（按 'long'/'short' 严格比较）口径矛盾、统计/平仓结论分叉。
+      item.direction = item.direction.toLowerCase();
     }
     var entryPrice = Number(item.entryPrice);
     if (!Number.isFinite(entryPrice) || entryPrice <= 0) errors.push(`第${index}条记录入场价必须为大于 0 的有限数字：${item.entryPrice}`);
@@ -116,6 +120,9 @@ class ImportValidator {
       var positionSize = Number(item.positionSize);
       // 允许 positionSize 为 0（数据损坏场景下由计算模块拦截），仅校验有限数值
       if (!Number.isFinite(positionSize)) errors.push(`第${index}条记录仓位必须为有限数字：${item.positionSize}`);
+      // #3 FIX：负数仓位放行会与 calculateCloseSettlement（拒绝 ≤0）口径矛盾，负值还会抵减
+      // totalMargin 让风控显示偏安全的假象。与 entryPrice 校验口径对齐，拒绝负数。
+      else if (positionSize < 0) errors.push(`第${index}条记录仓位必须为非负数字，收到：${item.positionSize}`);
     }
     if (item.stopLoss != null) {
       var stopLoss = Number(item.stopLoss);

@@ -160,6 +160,50 @@ function _getDefaultFeeRate(orderType) {
 // 都会让 _calculating 永真 → markCalculationDirty()(:1608) 永久短路 → 「结果已过期」提示
 // 从此不再出现，且结果区已被 resetForCalculation 清空却无任何错误提示。
 // 现将主体收敛为 _calculateImpl()，外层统一兜底：复位 _calculating + 显式报错，不静默吞异常。
+// UI 交互评估 P2 修复：表单字段级校验 a11y。
+// 仅为现有「硬阻断」分支（入场价非法 / 本金非法且无设置兜底）补充 aria-invalid
+// + 内联错误文案，不改变任何数值计算、落库或闸门逻辑。错误文案经 esc 转义后入 DOM。
+function _getOrCreateFieldError(id) {
+  var inputEl = document.getElementById(id);
+  if (!inputEl) return null;
+  var errId = 'err_' + id;
+  var span = document.getElementById(errId);
+  if (!span) {
+    span = document.createElement('span');
+    span.id = errId;
+    span.className = 'field-error';
+    span.setAttribute('role', 'alert');
+    inputEl.parentNode.insertBefore(span, inputEl.nextSibling);
+  }
+  return span;
+}
+function markFieldInvalid(id, msg) {
+  var inputEl = document.getElementById(id);
+  var span = _getOrCreateFieldError(id);
+  if (!inputEl || !span) return;
+  inputEl.setAttribute('aria-invalid', 'true');
+  span.textContent = msg;
+  var desc = inputEl.getAttribute('aria-describedby');
+  if (!desc || desc.indexOf('err_' + id) === -1) {
+    inputEl.setAttribute('aria-describedby', (desc ? desc + ' ' : '') + 'err_' + id);
+  }
+}
+function clearFieldInvalid(id) {
+  var inputEl = document.getElementById(id);
+  var errId = 'err_' + id;
+  if (inputEl) {
+    inputEl.removeAttribute('aria-invalid');
+    var desc = inputEl.getAttribute('aria-describedby');
+    if (desc) {
+      var parts = desc.split(/\s+/).filter(function(p) { return p && p !== errId; });
+      if (parts.length) inputEl.setAttribute('aria-describedby', parts.join(' '));
+      else inputEl.removeAttribute('aria-describedby');
+    }
+  }
+  var span = document.getElementById(errId);
+  if (span) span.textContent = '';
+}
+
 function calculate() {
   try {
     return _calculateImpl();
@@ -177,6 +221,9 @@ function calculate() {
 }
 
 function _calculateImpl() {
+  // UI 交互评估 P2 修复：每次计算开始前清除上次的字段级错误标注
+  clearFieldInvalid('entryPrice');
+  clearFieldInvalid('capital');
   // P0-01：先建立所有结果区引用，任何阻断分支均不可访问未初始化变量。
   const ui = CalculationUI.getResultUI();
   const posD = ui.position;
@@ -207,6 +254,7 @@ function _calculateImpl() {
   const entryPrice = getActiveEntryPrice();
   if (isNaN(entryPrice)) {
     setCalcDirty(true);
+    markFieldInvalid('entryPrice', '请输入有效的入场价格');
     CalculationUI.renderValidationError(ui, '无效入场价', '请输入有效的入场价格。');
     _calcCleanup();
     return null;
@@ -223,7 +271,7 @@ function _calculateImpl() {
       }
     } catch(e) { /* 忽略 */ }
   }
-  if (!capital || capital <= 0) { showCalcError('无效本金', '请输入本金，或在系统设置中填写账户余额', 'capital'); _calcCleanup(); return; }
+  if (!capital || capital <= 0) { markFieldInvalid('capital', '请输入本金，或在系统设置中填写账户余额'); showCalcError('无效本金', '请输入本金，或在系统设置中填写账户余额', 'capital'); _calcCleanup(); return; }
   const leverageEl = document.getElementById('leverage');
   const leverage = leverageEl ? Math.max(0, parseFloat(leverageEl.value) || 0) : 0;
   const directionEl = document.getElementById('direction');
@@ -2225,10 +2273,15 @@ function toggleFormSection(sectionId) {
   const section = document.getElementById(sectionId);
   if (!section) return;
   const chevron = section.querySelector('.form-section-header-chevron');
+  const header = section.querySelector('.form-section-header');
   const wasCollapsed = section.classList.contains('collapsed');
   section.classList.toggle('collapsed');
   if (chevron) {
     chevron.classList.toggle('rotated');
+  }
+  // UI 交互评估 P2 修复：同步 aria-expanded，使读屏用户获知分区展开/收起状态。
+  if (header) {
+    header.setAttribute('aria-expanded', String(!section.classList.contains('collapsed')));
   }
   // P0-15: 折叠面板展开时触发表单字段交错入场动效
   if (!wasCollapsed) {
@@ -2238,6 +2291,23 @@ function toggleFormSection(sectionId) {
     section.classList.add('animating');
   }
 }
+
+// UI 交互评估 P2 修复：折叠分区原为 <div onclick>，键盘(Enter/Space)与读屏均无法操作。
+// 现由 HTML 上的 role=button/tabindex 提供可聚焦与语义，这里补键盘触发。
+// 头部为静态元素（非重渲染），模块求值期直接绑定即可（脚本位于 body 末尾，元素已存在）。
+(function bindFormSectionKeyboard() {
+  var headers = document.querySelectorAll('.form-section-header');
+  Array.prototype.forEach.call(headers, function(h) {
+    var sectionId = h.getAttribute('data-section');
+    if (!sectionId) return;
+    h.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+        e.preventDefault();
+        toggleFormSection(sectionId);
+      }
+    });
+  });
+})();
 
 // 关键字段变更时使计算结果过期，并立刻关闭保存入口。
 (function() {
@@ -2265,6 +2335,7 @@ function toggleFormSection(sectionId) {
     var el = document.getElementById(id);
     if (el) {
       var markFieldDirty = function() {
+        clearFieldInvalid(id);
         if (id === 'stopLoss') delete el.dataset.provisionalStop;
         // 设计优化：用户手动修改凯利字段时清除样本背书
         // （dataset.kellySamples 只在 autoFillKellyFromLogs 自动填充时写入；

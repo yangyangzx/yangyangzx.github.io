@@ -171,10 +171,16 @@ function updateStats() {
         if (!isNaN(_fRaw)) _feeSum += _fRaw;
         // 分母必须是毛利：pnlAmount 是含费净额，拿净盈亏当分母会系统性高估
         // fee/|gross|（288 毛利、11.75 费 → 净 276.25，4.25% vs 正确 4.08%）。
-        // 优先用 logs.js 写入的 grossPnlAmount，缺失才退回 |pnlAmount|。
+        // P4-5 修复：优先用整笔累计毛利 = realizedPnl + realizedFee（部分平仓链下新旧数据都
+        // 正确，且与分子 realizedFee 同口径）；缺失才退回 grossPnlAmount，再退回 |pnlAmount|。
+        // （修复前部分平仓链的 grossPnlAmount 是"末段全量毛利"，拿它当分母会失真）
+        var _gpRp = parseFloat(closed[_k].realizedPnl);
+        var _gpRf = parseFloat(closed[_k].realizedFee);
+        var _gpSum = (!isNaN(_gpRp) && !isNaN(_gpRf)) ? Math.abs(_gpRp + _gpRf) : NaN;
         var _gpRaw = parseFloat(closed[_k].grossPnlAmount);
-        var _gp = (!isNaN(_gpRaw) && Math.abs(_gpRaw) > 0) ? Math.abs(_gpRaw)
-          : Math.abs(parseFloat(closed[_k].pnlAmount));
+        var _gp = (!isNaN(_gpSum) && _gpSum > 0) ? _gpSum
+          : ((!isNaN(_gpRaw) && Math.abs(_gpRaw) > 0) ? Math.abs(_gpRaw)
+             : Math.abs(parseFloat(closed[_k].pnlAmount)));
         if (!isNaN(_gp)) _grossSum += _gp;
       }
       if (_grossSum > 0 && _feeSum > 0) {
@@ -194,8 +200,17 @@ function updateStats() {
     if (isNaN(tp) || isNaN(cp)) continue;
     if (l.direction !== 'long' && l.direction !== 'short') continue;
     targetTotal++;
-    if (l.direction === 'long' && cp >= tp) targetHit++;
-    else if (l.direction === 'short' && cp <= tp) targetHit++;
+    // P2-1 修复：用持仓极值判定"是否触及过目标"（部分止盈触及目标后回落、最终平仓价低于
+    // 目标时，仍应记为达成）；极值缺失时退回按平仓价判定。
+    let _tHit = false;
+    if (l.direction === 'long') {
+      const _hi = parseFloat(l.highPrice);
+      _tHit = (!isNaN(_hi) && _hi >= tp) || (isNaN(_hi) && cp >= tp);
+    } else {
+      const _lo = parseFloat(l.lowPrice);
+      _tHit = (!isNaN(_lo) && _lo <= tp) || (isNaN(_lo) && cp <= tp);
+    }
+    if (_tHit) targetHit++;
   }
   const targetRateEl = document.getElementById('statTargetRate');
   const targetRateVal = targetTotal > 0 ? (targetHit / targetTotal * 100) : null;

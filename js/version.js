@@ -1,4 +1,124 @@
 // 应用版本 - 每次更新后递增，用于缓存清除
+// 5.6.31：多次部分平仓「静默覆盖上一腿」P0 收口 + 分批比例闸门改 fail-closed
+//   复核 5.6.30 的审计时补了多腿用例（verify_audit_1013.js 新增 G/H 组），才暴露 #1 只修了
+//   「首腿盈亏被抹掉」这一半：同一处比例输入框在【已有部分平仓事件】时有两种互斥意图——
+//   改末条那一笔、还是再平一笔；二者换算基准不同（末条发生前的剩余仓位 vs 本次保存前的累计
+//   状态），代码原先按「覆盖末条」写死，用户以为「再平一笔」实际把上一腿的 ratio 覆盖掉：
+//   closedRatio=40 / positionSize=600 却写着 realizedPnl=42.2（两腿之和），Σcloses.pnl 与
+//   pnlAmount 互相矛盾，真实敞口比账面记录多 200 单位——账面少算风险，风控数据从源头失真。
+//   修复：
+//     ① 编辑弹窗新增 emPartialLegMode 单选（修改最后一笔/新增一笔），仅在已有部分平仓事件时
+//        显示——没有既有事件时两种意图等价（都是建第一条），不必让用户选；
+//     ② utils.syncCloseBookkeeping 加 opts.append 显式追加新事件，默认仍是替换末条——旧数据与
+//        CSV 导入的簿记只有 {type,ratio}，静默改成追加会让同一笔被记两遍，故追加必须显式传入；
+//     ③ 编辑路径累计改「先扣回被替换那一腿再加新值」：替换语义下末条是被换掉的，直接累加会把
+//        旧腿盈亏/费用重复计入（H 组断言：错误值 32.2 vs 正确 9.2）；旧数据事件缺 pnl/fee 时
+//        按 0 扣回（那笔腿本就从未进过累计，扣 0 才自洽），gross 缺失时退回 pnl+fee（不含滑点
+//        的近似）——扣回口径必须与当初累加口径一致，否则新旧数据都会漂；
+//     ④ 累计字段先判「账本可信度」再动账。这是本轮自引入的回归，靠 HEAD 基线差分才现形：
+//        判定依据是账本里带 pnl/fee/gross 的腿各有几笔——confirmClose 从第一次部分平仓起就
+//        维护 realizedPnl/realizedFee（logs.js:291-292），存量与旧 CSV 数据却常见「closes[]
+//        有逐腿 pnl、realizedPnl 从没落过」。三种情形必须分开：
+//         - 账本有带 pnl 的腿但 realizedPnl 缺失 → 用权威 pnlAmount 播种（它已含全部腿）再
+//           扣回旧腿；直接「从 0 里扣回旧腿」会凭空造出负累计（实测 pnlAmount=600 的盈利单
+//           被算成 -300），盈利单随即被亏损原因闸门拦死、编辑无法保存——run-tests 19 项因此红；
+//         - 账本没有带 fee/gross 的腿但字段缺失 → 等价 confirmClose 的初始化，置 0 起算；
+//         - 账本已有带 fee/gross 的腿但字段缺失 → 原始值无从还原，【绝不新写】：baseFee =
+//           剩余 fee + 已实现 fee 依赖它，写个部分值会让下一次编辑把原始费用越算越小
+//           （实测 5 → 3.75 → 2.76…），把「剩余+已实现=原始费用」这条链永久打脏；
+//        grossPnlAmount 的播种须与 realizedPnl 解耦：第一次部分平仓时 realizedPnl 与 pnlAmount
+//        都还没有，若此时不播种，confirmClose 最终平仓从 undefined(→0) 起算，第一腿毛利被永久
+//        抹掉（实测 65 → 40，B 组）。
+//     ⑤ closes[] 末腿 ratioOfRemaining 不再被审计字段回填覆盖：换算后的「占剩余仓位」值被
+//        原始 partialRatio 覆盖回去，同一事件在「已平比例」与「剩余比例」两个字段上给出互相
+//        矛盾的数字（实测 19 → 23），下次打开弹窗「剩余仓位」单选会预填成未换算的错误值。
+//     ⑥ closes[] 事件补 gross 审计字段：日志页/复盘按事件追查单腿毛利时不再缺项（原只有
+//        type/ratio/fee/pnl，毛利要自己反推且反推还依赖滑点口径）。
+//   附带：
+//     ⑦ #5 从「告警后继续」升级为 fail-closed 阻断：原实现 showToast 后照样落库，用户「只平
+//        一部分」的意图仍被改写成全部退出。能确定用户不想全平，却替用户做出全平决定，是用最
+//        危险的方式猜意图；想全部退出的正确入口是初始止盈/手平赢等非分批类型（isPartialAction
+//        为 false，不受此拦，D5 对照）。
+//     ⑧ verify_audit_1013.js 加固：无守卫的 .closes.reduce 在保存被拦时（closes 未初始化）抛
+//        TypeError，让整份脚本中途崩掉、后续断言全不执行——退出码是 1 看起来「有缺陷」，实际
+//        什么都没跑完。断言脚本崩掉比断言失败更危险，已统一走 legSum/legRatios/leg 三个助手，
+//        并对 emClosePrice 补 fire('input') 让 harness 走真实 emRecalc 回填路径。
+//   校验：verify_audit_1013.js 61/61；同一脚本对 HEAD 基线为 18/61（40+ 项 FAIL），断言有区分度。
+//         run-tests.html 无头跑（test/_rt_headless.js）631 PASS / 1 FAIL，与 HEAD 基线逐条一致
+//         （唯一 FAIL 是 jsdom 无 CSS 计算能力导致的 .collapsed max-height 断言，基线上同样失败，
+//         非本次改动引入）；25 组「占比口径」用例对回归 A/B/C 有效，是抓出这三个自引入回归的手段。
+//         verify_invariants 2207 / verify_param_fix 31 / verify_sideeffects 47 全绿；
+//         no-undef 泄漏扫描 0 条本文件内同名声明。
+// 5.6.30：开仓计划/交易日志模块 7 项真实 bug 修复（审计实证 verify_audit_1013.js，34 断言全绿）
+//   真实 bug（#1~#7 均经 jsdom 行为级实证，对照现有 2400+ 回归 0 回归）：
+//     #1 P0 编辑弹窗部分平仓只做簿记不折算本腿 P&L、不初始化 realizedPnl → 首腿盈亏被最终平仓静默抹掉（少记 38%）。
+//     #2 P0 已平仓记录二次编辑被「亏损原因」误拦（实时重算用剩余 0 仓位算 grossPnl=-fee<0）。
+//     #3 P1 io.js 导入放行负仓位（与 calculateCloseSettlement 拒绝 ≤0 口径矛盾）。
+//     #4 P1 io.js 导入方向 "LONG" 原样入库不归一化（统计/平仓口径分叉）。
+//     #5 P2 confirmClose 分批平仓未填比例静默全平 → 新增告警提示。
+//     #6 P2 confirmClose 全新平仓未归零 positionSize（CSV 仓位列误导）。
+//     #7 P2 planner calcReverseTP/SL 缺失 #desiredRR 守卫（卡片移除后生产 DOM 抛 TypeError）。
+//   复核撤回（假阳性）：原审计 #8 stats 直调 isClosedTrade、#9 dashboard getHeatWarnMax 在 try 外，
+//       前者依赖人为 delete utils 才触发、后者 loadSettings 兜底不可达，均非运行期缺陷。
+// 5.6.29：平仓结算/统计链路第二轮矛盾整改（对上一轮指出的 P1/P2 逐项二次确认后修复）
+//   背景：继 5.6.28 修完平仓极值填写与 MAE/MFE 计算后，用户要求对"逻辑不通畅/矛盾"继续
+//   审查并二次确认。本轮对 5 处候选逐项核实，确认 4 处真实存在并全部整改，1 处判定为设计。
+//
+//   P4-5 logs.js confirmClose / modals.js 编辑路径 grossPnlAmount 语义（P1-1/P1-3）：
+//       原部分平仓/最终平仓把 grossPnlAmount 覆盖为"剩余仓位全量毛利"（最终平仓=末段），
+//       与整笔累计的 realizedFee/realizedPnl 口径脱节 → stats 成本侵蚀（fee/毛利）失真
+//       （分两次平仓、末段毛利小/大时被放大或缩小到荒谬值）。
+//       改为维护"整笔累计价格毛利"：部分平仓按本次比例累加（grossPnl×ratio/100）、
+//       最终平仓累加末腿毛利；编辑路径分批收尾同步累加。
+//       stats.js costDrag 分母优先 realizedPnl+realizedFee（新旧数据都正确，与分子同口径），
+//       缺失才退回 grossPnlAmount，再退回 |pnlAmount|。
+//   P4-6 modals.js calcMAEMFE 利润捕捉量纲（P1-2）：原 captureRatio = 含杠杆收益率 ÷ MFE%
+//       量纲不一致，杠杆>1 时系统性高估捕捉率（杠杆 10x、价格只走 MFE 的 30% 也被判
+//       "利润捕捉充分"）。改为价格收益% = (realizedPnl+realizedFee) ÷ initialPositionSize
+//       对比 MFE%，与 mfe 同量纲（不含杠杆）；天然兼容 positionSize=0（不再依赖 margin）。
+//   P4-7 stats.js 目标达成率（P2-1）：原仅按最终平仓价判定，部分止盈触及目标后回落、
+//       最终平仓价低于目标时被记为未达成。改为用持仓极值 highPrice/lowPrice 判定"是否触及
+//       目标"，极值缺失才退回平仓价判定。
+//   P2-2（部分平仓中间态 pnlPercent/R 为"本次"口径、最终平仓为"整笔累计"口径）经复评判定为
+//       有意的口径设计：中间态（isClosedTrade 判未平仓）不进统计，不影响胜率/期望/曲线正确性；
+//       "本次"口径正是中间态要表达的已实现信息，本轮不改（如后续希望中间态也显示累计口径再做）。
+//
+//   校验：node --check 通过；test/verify_mae_mfe.js 扩至 21 项断言全绿——新增 P1-2 量纲
+//       （杠杆 10x、价格走 2%/MFE 10% 判"利润回吐过多"而非"捕捉充分"）、P1-1/P1-3 部分平仓
+//       两腿毛利累加=整笔 -25（非末段 -50）及 costDrag 分母 25/288 两例实证。
+//   行为变更需用户过目：① 部分平仓链的成本侵蚀率较此前更接近真实（不再因末段毛利错配失真）；
+//       ② 利润捕捉解读不再随杠杆放大而虚高；③ 触及过目标但最终未守住目标的单子计入目标达成率。
+//
+// 5.6.28：平仓极值填写与 MAE/MFE 计算逻辑修复（做多/做空场景逐方向审计）
+//   背景：按用户要求对「平仓时最高/最低价填写 + 对应 MAE/MFE 计算」做做多/做空
+//   全场景审计，确认以下明显/潜在 bug 并全部修复。
+//
+//   P4-1 logs.js storeMAEMFE / modals.js calcMAEMFE 符号钳制（L1/L2/S1/S2）：
+//       原公式方向正确，但 MAE/MFE 未按语义钳位，两个方向各有两个 bug——
+//       · 盈利单（多单全程未破入场、空单全程未涨破入场）mae 算成正小数，
+//         代入 |mfe/mae| 使 MFE/MAE 比率虚高、误判「持仓管理优秀」；
+//       · 从未有有利偏移的亏损单（多单追高、空单被反弹）mfe 算成负值，
+//         利润捕捉 captureRatio=负/负=正 → 误判「利润捕捉充分」。
+//       现按「MAE=最大不利偏移（钳≤0，无不利=0）、MFE=最大有利偏移（钳≥0，无有利=0）」
+//       统一钳位，两个方向的符号反转与负负得正误判一并消除；ratio 加 mfe!==0 守卫。
+//   P4-2 logs.js confirmClose 极值合并（C1）：原每次平仓（含部分平仓）无条件用输入框
+//       值整体覆盖 lowPrice/highPrice，最终平仓会把整段持仓极值覆盖/清空，MAE/MFE 失真。
+//       改为 min/max 合并（只扩大、不覆盖、空输入不清空已存极值）；modals.js 编辑路径
+//       保持用户主动覆盖但同样触发校验。
+//   P4-3 modals.js calcMAEMFE 保证金基准（C2）：已平仓记录 positionSize=0，原
+//       margin=positionSize/leverage=0 → 「利润捕捉」解读永不触发。改为优先取
+//       initialMargin / actualMargin，再回退 positionSize/leverage。
+//   P4-4 新增 logs.js validateExtremes（L3/S3/L4/S4）：极值须满足纯几何约束
+//       low ≤ min(entry,close) 且 high ≥ max(entry,close) 且 low ≤ high（与多空无关），
+//       违反即填反/填错，toast 警告、不阻断保存。平仓（confirmClose）与编辑（modals）
+//       两路径均调用。
+//
+//   校验：node --check 通过；新增 test/verify_mae_mfe.js（node 独立运行，jsdom 加载真实
+//       logs.js/modals.js）16 项断言全绿，覆盖 L1/L2/S1/S2 钳位、C1 合并、validateExtremes
+//       填反/合法/漏入场三例、C2 已平仓 positionSize=0 解读仍触发。
+//   行为变更需用户过目：① 盈利单 MFE/MAE 比率不再显示（原虚高）；② 追高/被反弹的
+//       亏损单不再被误判「利润捕捉充分」；③ 已平仓记录编辑后利润捕捉解读能正常给出。
+//
 // 5.6.27：分批建仓明细三处口径收口（同一状态在不同权威下结论必须一致）
 //   背景：审计「开仓计划细分逻辑 / 分批建仓末节」发现 3 处 P1 + 2 处 P2，
 //   核心模式仍是仓库反复出现的「记录的占比」与「实际切出的仓位」两个权威互相矛盾。
@@ -686,7 +806,7 @@
 //          抄数字——是与多止盈位规划重复的死胡同。求解内核 solveTPForRR 仍在用；
 //          calcReverseTP / calcReverseSL 保留为测试入口（第 27 组）。
 //        版本号 5.6.17 → 5.6.23
-var APP_VERSION = '5.6.27';
+var APP_VERSION = '5.6.31';
 
 // 侧栏底部版本号由此注入（index.html 的 #navVersion 留空）。
 // 此前 HTML 里硬编码 v5.6.2，版本已到 5.6.14 仍显示旧号——版本号同步清单里

@@ -768,6 +768,22 @@
   opacity: 1;
 }
 
+/* ═══════════════════════════════════════
+   字段级校验错误（UI 交互评估 P2 修复）
+   ═══════════════════════════════════════ */
+.field-error {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--color-danger);
+}
+input[aria-invalid="true"],
+select[aria-invalid="true"] {
+  border-color: var(--color-danger);
+  box-shadow: 0 0 0 2px var(--color-danger-bg);
+}
+
 .split-add-btn {
   font-size: 12px;
   padding: 4px 12px;

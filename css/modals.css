@@ -251,6 +251,44 @@
 }
 
 /* ═══════════════════════════════════════
+   键盘快捷键帮助面板（UI 交互评估 P3）
+   ═══════════════════════════════════════ */
+.help-shortcut-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 4px 0 12px;
+}
+.help-shortcut-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.help-shortcut-row kbd {
+  flex: none;
+  min-width: 96px;
+  padding: 4px 8px;
+  text-align: center;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--font-sm);
+  color: var(--color-text);
+  background: var(--color-surface-2, var(--color-surface, oklch(20% 0 0)));
+  border: 1px solid var(--glass-border);
+  border-bottom-width: 2px;
+  border-radius: var(--radius-sm);
+}
+.help-shortcut-row span {
+  color: var(--color-text-muted);
+  font-size: var(--font-sm);
+}
+.help-note {
+  margin: 0;
+  font-size: var(--font-xs);
+  color: var(--color-text-subtle);
+  line-height: 1.5;
+}
+
+/* ═══════════════════════════════════════
    Toast 通知 — z-index 命名
    ═══════════════════════════════════════ */
 /* 容器定位（原为 index.html 内联，z-index 硬编码 400）。

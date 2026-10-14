@@ -148,9 +148,13 @@ function calcReverseTP() {
   // 「方向校验用表单方向、求解用 calc 方向」的错位。
   var u = getTPUnits();
 
-  var desiredRR = parseFloat(document.getElementById('desiredRR').value);
+  // #7 FIX：盈亏比反推卡片已于 v5.6.23 从 index.html 移除，生产 DOM 下 #desiredRR 不存在，
+  // 直接 .value 会抛 TypeError。加 null 守卫，缺失时安全退出（当前无 UI 调用方）。
+  var _drEl = document.getElementById('desiredRR');
+  var desiredRR = _drEl ? parseFloat(_drEl.value) : NaN;
   if (isNaN(desiredRR) || desiredRR <= 0) {
-    document.getElementById('reverseTP').value = '请输入有效的期望盈亏比';
+    var _rtEl = document.getElementById('reverseTP');
+    if (_rtEl) _rtEl.value = '请输入有效的期望盈亏比';
     return;
   }
 
@@ -204,11 +208,15 @@ function calcReverseSL() {
   // 本职用法整条拦在门外。
   var u = getTPUnits(false);
 
-  var targetPrice = parseFloat(document.getElementById('reverseTP').value);
-  var desiredRR = parseFloat(document.getElementById('desiredRR').value);
+  // #7 FIX：#reverseTP / #desiredRR 同属已移除的反推卡片，缺失时 null 守卫避免 TypeError。
+  var _rtEl2 = document.getElementById('reverseTP');
+  var targetPrice = _rtEl2 ? parseFloat(_rtEl2.value) : NaN;
+  var _drEl2 = document.getElementById('desiredRR');
+  var desiredRR = _drEl2 ? parseFloat(_drEl2.value) : NaN;
 
   if (isNaN(desiredRR) || desiredRR <= 0) {
-    document.getElementById('reverseSL').value = '请输入有效的期望盈亏比';
+    var _rslEl = document.getElementById('reverseSL');
+    if (_rslEl) _rslEl.value = '请输入有效的期望盈亏比';
     return;
   }
 

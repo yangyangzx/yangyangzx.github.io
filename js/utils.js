@@ -165,7 +165,7 @@
    * @param {number|null} partialRatio 分批比例（0<r<100）；非分批类型或无比例时传 null
    * @returns {Object} item
    */
-  util.syncCloseBookkeeping = function(item, closeType, partialRatio) {
+  util.syncCloseBookkeeping = function(item, closeType, partialRatio, opts) {
     if (!item) return item;
     // 没有有效平仓类型就不做簿记。modals.js 的平仓类型下拉有 <option value="">—</option>，
     // 用户把它选成「—」是在主动取消平仓标记；若空值走到下面的「非分批类型」分支，会把
@@ -187,12 +187,14 @@
       // closes 里 type 非分批的"收尾"事件（confirmClose 的最终平仓）在改成分批类型后
       // 不再成立，一并移除——否则 closedRatio 仍会算到 100，与剩余仓位自相矛盾。
       var partials = evts.filter(function(e) { return PARTIAL_TYPES.indexOf(e.type) >= 0; });
-      if (partials.length > 0) {
+      if (partials.length > 0 && !(opts && opts.append)) {
         // 有事件簿记：只换最后一次部分平仓事件的 ratio，其余历史不动
         partials[partials.length - 1].ratio = r;
       } else {
-        // 无部分平仓事件簿记（首次 / 旧数据 / CSV 导入）：本次即第一条。
-        // 带 type，保证下次编辑仍被识别为分批事件，且 CSV 往返后可重建。
+        // 无部分平仓事件簿记（首次 / 旧数据 / CSV 导入），或 opts.append 明确要求再平一笔：
+        // 追加一条新事件。带 type，保证下次编辑仍被识别为分批事件，且 CSV 往返后可重建。
+        // append 必须显式传入——静默改写上一笔会把上一笔的 ratio 覆盖掉，closedRatio 与
+        // positionSize 随之错账（见 modals.js saveEditLog 的 _legMode 说明）。
         partials.push({ type: closeType, ratio: r });
       }
       item.closes = partials;

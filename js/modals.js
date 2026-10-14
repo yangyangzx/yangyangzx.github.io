@@ -14,6 +14,8 @@ window.closeModalOverlay = function(overlay) {
   // 与退出动画同时长，避免焦点落在正在淡出的节点上。
   if (!window._modalFocusStack) window._modalFocusStack = [];
   var back = window._modalFocusStack.pop();
+  // 最后一个弹窗关闭时解除背景隔离（UI 交互评估 P3 修复）
+  if (window._modalFocusStack.length === 0) _setBackgroundInert(false);
   if (back && document.contains(back) && typeof back.focus === 'function') {
     setTimeout(function() { back.focus({ preventScroll: true }); }, 200);
   }
@@ -40,6 +42,16 @@ function _modalFocusables(root) {
   });
 }
 
+// UI 交互评估 P3 修复：弹窗打开时把背景（主内容区 + 侧栏）设为 inert，
+// 彻底隔离读屏与指针，比单纯 aria-modal + 焦点环锁更稳健（aria-modal 在部分 AT 下仍会暴露背景）。
+// 所有弹窗均挂在 document.body（见 confirmDialog/编辑弹窗的 appendChild），隔离 #mainContent/#mainNav 不影响弹窗本身。
+function _setBackgroundInert(on) {
+  ['mainContent', 'mainNav'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el && 'inert' in el) el.inert = !!on;
+  });
+}
+
 /**
  * 弹窗打开时调用（appendChild 之后）。
  * @param {HTMLElement} overlay 弹窗遮罩根节点
@@ -48,6 +60,8 @@ function _modalFocusables(root) {
 window.modalA11yOnOpen = function(overlay, preferred) {
   if (!overlay) return;
   if (!window._modalFocusStack) window._modalFocusStack = [];
+  // 首个弹窗打开时隔离背景（UI 交互评估 P3 修复）
+  if (window._modalFocusStack.length === 0) _setBackgroundInert(true);
   window._modalFocusStack.push(document.activeElement);
   // 补 dialog 语义：读屏据此播报「对话框」并把后续内容隔离在弹窗内
   if (!overlay.hasAttribute('role')) overlay.setAttribute('role', 'dialog');
@@ -206,6 +220,10 @@ function openEditModal(idx) {
     : (item.partialRatio != null ? item.partialRatio : '');
   // 切基数时同步换成该基数下的数值，避免用户切完口径还对着旧数字
   window._emPartialPrefills = { remaining: _prefillRemaining, initial: _prefillInitial };
+  // 已有部分平仓事件时，同一处输入框有两种互斥意图：改末条那一笔、还是再平一笔。
+  // 二者换算基准不同（末条发生前的剩余仓位 vs 本次保存前的累计状态），猜错就是账面错账，
+  // 所以显式单选而不是靠输入值推断。没有既有事件时两种意图等价（都是建第一条），不显示。
+  var _hasPartialEvt = !!_lastPartialEvt;
 
   let starsHTML = '<div class="star-rating-modal" style="display:flex;gap:4px;">';
   for (let s = 1; s <= 5; s++) {
@@ -327,7 +345,9 @@ function openEditModal(idx) {
       '<div class="modal-tab-panel" id="emTab1">' +
         '<div class="fp"><label>平仓类型</label><select id="emCloseType"><option value="">—</option><option value="initialSL"' + (item.closeType === 'initialSL' ? ' selected' : '') + '>初始止损</option><option value="trailingSL"' + (item.closeType === 'trailingSL' ? ' selected' : '') + '>追踪止损</option><option value="initialTP"' + (item.closeType === 'initialTP' ? ' selected' : '') + '>初始止盈</option><option value="manualWin"' + (item.closeType === 'manualWin' ? ' selected' : '') + '>手平赢</option><option value="manualLoss"' + (item.closeType === 'manualLoss' ? ' selected' : '') + '>手平损</option><option value="liquidation"' + (item.closeType === 'liquidation' ? ' selected' : '') + '>强平/爆仓</option><option value="partialTP"' + (item.closeType === 'partialTP' ? ' selected' : '') + '>部分止盈</option><option value="timeStop"' + (item.closeType === 'timeStop' ? ' selected' : '') + '>时间止损</option><option value="reducePosition"' + (item.closeType === 'reducePosition' ? ' selected' : '') + '>减仓</option></select></div>' +
         '<div class="fp" id="emPartialRatioRow" style="display:' + ((item.closeType === 'partialTP' || item.closeType === 'reducePosition') ? 'block' : 'none') + ';">' +
-          '<label>平仓比例 (%)<span style="font-size:11px;color:var(--color-text-muted);margin-left:4px;">口径：<label style="display:inline;font-weight:400;font-size:11px;cursor:pointer;"><input type="radio" name="emPartialRatioBase" value="remaining" checked onchange="emSwitchRatioBase()" /> 剩余仓位</label> <label style="display:inline;font-weight:400;font-size:11px;cursor:pointer;"><input type="radio" name="emPartialRatioBase" value="initial" onchange="emSwitchRatioBase()" /> 原始仓位</label></span></label>' +
+          '<label>平仓比例 (%)<span style="font-size:11px;color:var(--color-text-muted);margin-left:4px;">口径：<label style="display:inline;font-weight:400;font-size:11px;cursor:pointer;"><input type="radio" name="emPartialRatioBase" value="remaining" checked onchange="emSwitchRatioBase()" /> 剩余仓位</label> <label style="display:inline;font-weight:400;font-size:11px;cursor:pointer;"><input type="radio" name="emPartialRatioBase" value="initial" onchange="emSwitchRatioBase()" /> 原始仓位</label>' +
+          (_hasPartialEvt ? ' <span style="display:inline-block;margin-left:6px;color:var(--color-text-muted);font-size:11px;">对象：<label style="display:inline;font-weight:400;cursor:pointer;"><input type="radio" name="emPartialLegMode" value="edit" checked onchange="emSwitchRatioBase()" /> 修改最后一笔</label> <label style="display:inline;font-weight:400;cursor:pointer;"><input type="radio" name="emPartialLegMode" value="add" onchange="emSwitchRatioBase()" /> 新增一笔</label></span>' : '') +
+          '</span></label>' +
           '<input type="number" id="emPartialRatio" step="5" min="1" max="100" value="' + _prefillRemaining + '" placeholder="如 50 表示平仓 50%" />' +
         '</div>' +
         '<div class="fp"><label>平仓价</label><input type="number" id="emClosePrice" step="0.00001" value="' + (item.closePrice ?? '') + '" /></div>' +
@@ -663,6 +683,9 @@ window.emUpdateExecScore = emUpdateExecScore;
 function emSwitchRatioBase() {
   var el = document.getElementById('emPartialRatio');
   if (!el) return;
+  // 「新增一笔」不预填：预填的是末条那一笔的数字，直接复用会建出一条与上一笔相同的腿
+  var modeSel = document.querySelector('input[name="emPartialLegMode"]:checked');
+  if (modeSel && modeSel.value === 'add') { el.value = ''; return; }
   var sel = document.querySelector('input[name="emPartialRatioBase"]:checked');
   var key = sel ? sel.value : 'remaining';
   var pf = window._emPartialPrefills || {};
@@ -709,15 +732,17 @@ function calcMAEMFE(idx) {
   }
 
   let mae, mfe;
+  // 与 storeMAEMFE 口径一致（P4-1 符号钳制）：MAE≤0（无不利=0）、MFE≥0（无有利=0）
   if (item.direction === 'long') {
-    mae = lowVal != null ? ((lowVal - entry) / entry * 100) : null;
-    mfe = highVal != null ? ((highVal - entry) / entry * 100) : null;
+    mae = lowVal != null ? Math.min(0, (lowVal - entry) / entry * 100) : null;
+    mfe = highVal != null ? Math.max(0, (highVal - entry) / entry * 100) : null;
   } else {
-    mae = highVal != null ? ((entry - highVal) / entry * 100) : null;
-    mfe = lowVal != null ? ((entry - lowVal) / entry * 100) : null;
+    mae = highVal != null ? Math.min(0, (entry - highVal) / entry * 100) : null;
+    mfe = lowVal != null ? Math.max(0, (entry - lowVal) / entry * 100) : null;
   }
 
-  const ratio = (mae != null && mfe != null && mae !== 0) ? Math.abs(mfe / mae) : null;
+  // 比率仅在 MAE、MFE 均有实际意义（均非 0）时计算，避免盈利单 mae=0 / 从未浮盈 mfe=0 产生虚高或无穷值
+  const ratio = (mae != null && mfe != null && mae !== 0 && mfe !== 0) ? Math.abs(mfe / mae) : null;
 
   // Display
   let displayHTML = '';
@@ -757,13 +782,24 @@ function calcMAEMFE(idx) {
     else lines.push('浮亏大于浮盈，需优化出场时机');
   }
   // --- 利润捕捉 ---（需要实际盈亏）
+  // P1-2 修复：捕捉率改用"实际实现的价格收益% ÷ MFE%"——两者同量纲（都不含杠杆），
+  // 消除原 actualPnlPct(含杠杆收益率)÷mfe 在杠杆>1 时系统性高估捕捉率的量纲错误。
+  // 整笔价格收益% = 整笔累计毛利(realizedPnl+realizedFee) ÷ 初始名义仓位 initialPositionSize；
+  // 一次性全平退化为 (close−entry)/entry，部分平仓为各腿按仓位加权，均不含杠杆。
+  // 天然兼容已平仓 positionSize=0（C2：用 initialPositionSize，不再依赖 positionSize/margin）。
   if (mfe != null && mfe !== 0 && item.pnlAmount != null) {
-    const pnlPct = parseFloat(item.pnlAmount);
-    const margin = item.positionSize ? (parseFloat(item.positionSize) / (parseFloat(item.leverage) || 1)) : null;
-    let actualPnlPct = null;
-    if (margin && margin > 0) actualPnlPct = pnlPct / margin * 100;
-    if (actualPnlPct != null) {
-      const captureRatio = actualPnlPct / mfe;
+    var _grossTotal = (item.realizedPnl != null ? parseFloat(item.realizedPnl) : 0) +
+                      (item.realizedFee != null ? parseFloat(item.realizedFee) : 0);
+    var _nominal = (item.initialPositionSize != null && parseFloat(item.initialPositionSize) > 0)
+      ? parseFloat(item.initialPositionSize)
+      : (item.positionSize && parseFloat(item.positionSize) > 0 ? parseFloat(item.positionSize) : null);
+    var pricePnlPct = null;
+    if (_nominal != null && _nominal > 0 && isFinite(_grossTotal)) {
+      pricePnlPct = _grossTotal / _nominal * 100;
+    }
+    if (pricePnlPct != null) {
+      // mfe 已钳≥0 且此处 ≠0，必为正值；亏损单 pricePnlPct<0 → "利润回吐过多"解读合理
+      const captureRatio = pricePnlPct / mfe;
       if (captureRatio > 0.7) lines.push('利润捕捉充分');
       else if (captureRatio < 0.3) lines.push('利润回吐过多，考虑分批止盈');
     }
@@ -914,10 +950,22 @@ function saveEditLog(idx, _raceConfirmed) {
     for (var _ci0 = 0; _ci0 < _partialsNow.length; _ci0++) {
       cumClosedOld += (parseFloat(_partialsNow[_ci0].ratio) || 0);
     }
-    // 编辑前累计已平（排除最后一条事件）——最后一次事件发生时的剩余基数
+    // 编辑前累计已平——「本次操作发生时的剩余基数」取决于用户在弹窗里选了哪种意图：
+    //   修改最后一笔 → 末条事件是被【替换】的对象，基数是末条发生前的累计（排除末条自身）
+    //   新增一笔     → 全部既有事件都是历史，基数是本次保存前的累计（含末条）
+    // 两种意图共用同一个比例输入框，换算基准差一个末条事件；不区分就等价于每次都在改写
+    // 上一笔，上一笔的 ratio 被覆盖、closedRatio/positionSize 随之错账，而已实现盈亏是按
+    // 累加算的——两条字段从此互相矛盾（实测：2 笔分批后 closedRatio=40、positionSize=600，
+    // 而 realizedPnl 已按 70% 计）。意图由弹窗里的 emPartialLegMode 单选显式给出，不靠猜。
+    var _legModeEl = document.querySelector('input[name="emPartialLegMode"]:checked');
+    var _legMode = (_legModeEl && _legModeEl.value === 'add') ? 'add' : 'edit';
     var cumClosedBeforeEvt = 0;
-    for (var _ci1 = 0; _ci1 < _partialsNow.length - 1; _ci1++) {
-      cumClosedBeforeEvt += (parseFloat(_partialsNow[_ci1].ratio) || 0);
+    if (_legMode === 'add') {
+      cumClosedBeforeEvt = cumClosedOld;
+    } else {
+      for (var _ci1 = 0; _ci1 < _partialsNow.length - 1; _ci1++) {
+        cumClosedBeforeEvt += (parseFloat(_partialsNow[_ci1].ratio) || 0);
+      }
     }
     if (_partialsNow.length === 0) {   // 无事件簿记（旧数据 / CSV 导入）：退回 closedRatio
       cumClosedOld = cumClosedBeforeEvt = parseFloat(item.closedRatio) || 0;
@@ -952,7 +1000,10 @@ function saveEditLog(idx, _raceConfirmed) {
     var _orphanClosed = (_partialsNow.length === 0 && cumClosedBeforeEvt > 0) ? cumClosedBeforeEvt : 0;
     // P1 修复（2026-10-03）：簿记同步。confirmClose 在 logs.js 实际读的是 closedRatio/closes，
     // 不是 partialRatio —— 不写回去，下一次部分平仓会在新旧比例之间错误叠加。
-    window.utils.syncCloseBookkeeping(item, item.closeType, deltaOriginal);
+    window.utils.syncCloseBookkeeping(item, item.closeType, deltaOriginal, { append: _legMode === 'add' });
+    // #1 FIX：捕获「缩减前」的剩余仓位与费用，供下方本腿结算使用（下方 1001/1015 会改写它们）。
+    var _prePosSize = parseFloat(item.positionSize) || 0;
+    var _preFee = parseFloat(item.fee) || 0;
     // 旧数据兼容：closes[] 为空但 closedRatio>0（v5.6.1 之前的本地数据，或没有「平仓明细」
     // 列的旧版 CSV 导入）。syncCloseBookkeeping 会把本次事件当作唯一事件重建 closes，那部分
     // 历史已平比例会被丢掉，此处补回成一条历史事件，保住 sum(closes[].ratio) === closedRatio。
@@ -967,10 +1018,14 @@ function saveEditLog(idx, _raceConfirmed) {
     // ratioOfRemaining 也要跟着换算更新：上次事件簿记是按「该事件发生前的剩余仓位」存的，
     // 用原始口径改过之后若不同步，下次打开弹窗「剩余仓位」单选项会预填成旧数字。
     var _lastEvt2 = (Array.isArray(item.closes) && item.closes.length) ? item.closes[item.closes.length - 1] : null;
+    // 末腿「占剩余仓位」比例：原始口径下是换算值，剩余口径下就是用户输入本身。
+    // 单独留个变量——下方补审计字段时不能再写 partialRatio，原始口径下那是换算前的数字，
+    // 会把这个字段覆盖回未换算值（下次打开弹窗「剩余仓位」单选就预填成错的数字）。
+    var _lastLegRoR = (_baseMode === 'initial')
+      ? (fracBeforeEvt > 0 ? parseFloat((deltaOriginal / fracBeforeEvt).toFixed(4)) : deltaOriginal)
+      : partialRatio;
     if (_lastEvt2) {
-      _lastEvt2.ratioOfRemaining = (_baseMode === 'initial')
-        ? (fracBeforeEvt > 0 ? parseFloat((deltaOriginal / fracBeforeEvt).toFixed(4)) : deltaOriginal)
-        : partialRatio;
+      _lastEvt2.ratioOfRemaining = _lastLegRoR;
     }
     var cumClosed = parseFloat(item.closedRatio) || 0;
     if (!isFinite(cumClosed) || cumClosed < 0) cumClosed = 0;
@@ -1000,6 +1055,116 @@ function saveEditLog(idx, _raceConfirmed) {
     var baseFee = (parseFloat(item.fee) || 0) + (parseFloat(item.realizedFee) || 0);
     if (item.fee != null && !isNaN(item.fee)) {
       item.fee = parseFloat((baseFee * fracNow).toFixed(8));
+    }
+    // #1 FIX：编辑弹窗部分平仓必须按「本腿」折算 P&L 并初始化累计字段，
+    // 与 confirmClose 部分平仓口径严格一致（logs.js:286-331）。否则本腿盈亏不入 realizedPnl，
+    // 最终平仓时 confirmClose 把 undefined 的 realizedPnl 初始化为 0 → 首腿整段丢失（实测少记 38%）。
+    var _legCp = gn('emClosePrice');
+    if (_legCp != null && !isNaN(_legCp) && typeof calculateCloseSettlement === 'function') {
+      // 本腿占「事件前剩余仓位」的比例（与 confirmClose:224 同构）
+      var _legFraction = (_baseMode === 'initial')
+        ? (fracBeforeEvt > 0 ? (deltaOriginal / (100 * fracBeforeEvt)) : 0)
+        : (partialRatio / 100);
+      if (_legFraction > 0) {
+        // 用「本次事件前剩余仓位」+ 缩减前费用作结算基数
+        var _preItem = Object.assign({}, item, { positionSize: _prePosSize, fee: _preFee });
+        var _legSett = calculateCloseSettlement(_preItem, _legCp, _preFee);
+        if (_legSett) {
+          var _legGross = _legSett.grossPnl * _legFraction;
+          var _legFee = _legSett.fee * _legFraction;
+          var _legNet = _legGross - _legSett.legacySlippageCost * _legFraction - _legFee;
+          var _rpB = parseFloat(item.realizedPnl);
+          // 账本里带 pnl/fee/gross 的腿各有几笔——这是「累计字段当初是否真的累加过」的判据。
+          // confirmClose 从第一次部分平仓起就维护 realizedPnl/realizedFee（logs.js:291-292），
+          // 而存量与旧 CSV 数据常见「closes[] 有逐腿 pnl、realizedPnl 从没落过」。
+          var _ledgPnl = 0, _ledgFees = 0, _ledgGross = 0;
+          if (Array.isArray(item.closes)) {
+            for (var _si0 = 0; _si0 < item.closes.length; _si0++) {
+              var _sv0 = item.closes[_si0];
+              if (isFinite(parseFloat(_sv0.pnl))) _ledgPnl++;
+              if (isFinite(parseFloat(_sv0.fee))) _ledgFees++;
+              if (isFinite(parseFloat(_sv0.gross)) || isFinite(parseFloat(_sv0.pnl))) _ledgGross++;
+            }
+          }
+          var _rpWasFinite = isFinite(_rpB);
+          // 累计盈亏缺失时的两种情形必须分开处理：
+          //  - 账本里有带 pnl 的腿 → 用权威 pnlAmount 播种（它已含全部腿），再扣回旧腿；
+          //  - 账本里没有带 pnl 的腿 → 置 0 起算（等价 confirmClose 的初始化）。
+          // 无论哪种都不能「从 0 里扣回旧腿」：存量数据里 realizedPnl 从未落过，扣回会凭空
+          // 造出负累计（实测 pnlAmount=600 的盈利单被算成 -300），盈利单随即被下方亏损原因
+          // 闸门拦死、编辑无法保存。
+          var _rpAccrue = _rpWasFinite || _ledgPnl > 0;
+          if (!_rpWasFinite) {
+            item.realizedPnl = parseFloat((isFinite(parseFloat(item.pnlAmount))
+              ? parseFloat(item.pnlAmount) : 0).toFixed(2));
+            _rpB = parseFloat(item.realizedPnl);
+          }
+          // realizedFee / grossPnlAmount 只在【可重建】时才动账：
+          //  - 字段已落过 → 可重建（confirmClose 从第一次部分平仓起就维护）；
+          //  - 字段缺失但账本里已有带费用/毛利的腿（存量数据，或旧 CSV 无「累计手续费」列）
+          //    → 原始费用无从还原，绝不能新写：baseFee = 剩余 fee + 已实现 fee 依赖它，
+          //    写个部分值会让下一次编辑把原始费用越算越小（实测 5 → 3.75 → 2.76…）；
+          //  - 字段缺失且账本为空 → 全新记录，等价 confirmClose 的初始化。
+          var _rfOk = isFinite(parseFloat(item.realizedFee));
+          if (!_rfOk && _ledgFees === 0) { item.realizedFee = 0; _rfOk = true; }
+          var _rgOk = isFinite(parseFloat(item.grossPnlAmount));
+          if (!_rgOk && _ledgGross === 0) {
+            // 以「累计净盈亏 + 累计费用」起算（与 logs.js:330 的「整笔累计价格毛利」口径一致）。
+            // 第一次部分平仓时 realizedPnl 与 pnlAmount 都还没有，此处必须播种：否则
+            // confirmClose 最终平仓从 undefined(→0) 起算，第一腿毛利被永久抹掉（实测 65→40）。
+            item.grossPnlAmount = parseFloat((_rpB
+              + (_rfOk ? (parseFloat(item.realizedFee) || 0) : 0)).toFixed(2));
+            _rgOk = true;
+          }
+          // 旧数据的事件可能只有 {type, ratio}：缺失字段按 0 扣回——那笔腿本就从未进过累计，
+          // 扣 0 才是自洽的；gross 缺失时退回 pnl + 本腿费用（不含滑点的近似）。
+          var _oldEvt = (Array.isArray(item.closes) && item.closes.length) ? item.closes[item.closes.length - 1] : null;
+          var _oldPnl = 0, _oldFee = 0, _oldGross = 0;
+          if (_legMode === 'edit' && _oldEvt) {
+            if (_rpAccrue && isFinite(parseFloat(_oldEvt.pnl))) _oldPnl = parseFloat(_oldEvt.pnl);
+            if (_rfOk && isFinite(parseFloat(_oldEvt.fee))) _oldFee = parseFloat(_oldEvt.fee);
+            if (_rgOk) {
+              if (isFinite(parseFloat(_oldEvt.gross))) _oldGross = parseFloat(_oldEvt.gross);
+              else if (_rpAccrue && isFinite(parseFloat(_oldEvt.pnl))) {
+                _oldGross = parseFloat(_oldEvt.pnl)
+                  + (isFinite(parseFloat(_oldEvt.fee)) ? parseFloat(_oldEvt.fee) : 0);
+              }
+            }
+          }
+          item.realizedPnl = parseFloat(((_rpB || 0) - _oldPnl + _legNet).toFixed(2));
+          // 不可重建的累计不写：写了就把「剩余 fee + 已实现 fee = 原始费用」这条链永久打脏。
+          if (_rfOk) item.realizedFee = parseFloat(((parseFloat(item.realizedFee) || 0) - _oldFee + _legFee).toFixed(8));
+          if (_rgOk) item.grossPnlAmount = parseFloat(((parseFloat(item.grossPnlAmount) || 0) - _oldGross + _legGross).toFixed(2));
+          item.pnlAmount = parseFloat(item.realizedPnl.toFixed(2));
+          var _bR1 = parseFloat(item.initialRiskAmount);
+          item.rMultiple = (isFinite(_bR1) && _bR1 > 0)
+            ? parseFloat((item.realizedPnl / _bR1).toFixed(2))
+            : (_legSett.rMultiple == null ? null : parseFloat(_legSett.rMultiple.toFixed(2)));
+          var _bM1 = parseFloat(item.initialMargin);
+          item.pnlPercent = (isFinite(_bM1) && _bM1 > 0)
+            ? parseFloat((item.realizedPnl / _bM1 * 100).toFixed(2))
+            : parseFloat(_legSett.pnlPercent.toFixed(2));
+          // 与 emRecalc 实时预览口径对齐：把本腿盈亏/收益率/R 写回表单，
+          // 否则下方 gv('emPnlAmount'/'emPnlPercent'/'emRMultiple') 回读 emRecalc 的全仓值覆盖本腿结果
+          var _pnlEl = document.getElementById('emPnlAmount');
+          if (_pnlEl) _pnlEl.value = String(item.pnlAmount);
+          var _ppEl = document.getElementById('emPnlPercent');
+          if (_ppEl) _ppEl.value = String(item.pnlPercent);
+          var _rmEl = document.getElementById('emRMultiple');
+          if (_rmEl) _rmEl.value = String(item.rMultiple);
+          // 补全 closes[] 末条审计字段（syncCloseBookkeeping 只写了 type/ratio）
+          var _lastEvt = (Array.isArray(item.closes) && item.closes.length) ? item.closes[item.closes.length - 1] : null;
+          if (_lastEvt && (item.closeType === 'partialTP' || item.closeType === 'reducePosition')) {
+            if (_lastEvt.type !== item.closeType) _lastEvt.type = item.closeType;
+            _lastEvt.price = _legCp;
+            _lastEvt.pnl = parseFloat(_legNet.toFixed(2));
+            _lastEvt.fee = parseFloat(_legFee.toFixed(8));
+            _lastEvt.gross = parseFloat(_legGross.toFixed(2));
+            _lastEvt.time = new Date().toISOString();
+            _lastEvt.ratioOfRemaining = _lastLegRoR;
+          }
+        }
+      }
     }
   } else {
     // P1 修复（2026-10-03）：closeType 改成非分批类型 = 断言整笔已退出，同步
@@ -1048,6 +1213,12 @@ function saveEditLog(idx, _raceConfirmed) {
   v = gn('emLowPrice'); if (v !== undefined) item.lowPrice = v; else if (document.getElementById('emLowPrice')?.value === '') item.lowPrice = null;
   v = gn('emHighPrice'); if (v !== undefined) item.highPrice = v; else if (document.getElementById('emHighPrice')?.value === '') item.highPrice = null;
   storeMAEMFE(item);
+  // 极值合法性校验（编辑路径同样生效：用户主动修正时提示填反/未包住关键价位）
+  if (typeof validateExtremes === 'function') {
+    var _editCp = (item.closePrice != null && !isNaN(parseFloat(item.closePrice)) && parseFloat(item.closePrice) > 0)
+      ? parseFloat(item.closePrice) : null;
+    validateExtremes(item, _editCp);
+  }
   // Loss reason
   var lrEl = document.getElementById('emLossReason');
   if (lrEl) {
@@ -1094,7 +1265,8 @@ function saveEditLog(idx, _raceConfirmed) {
       }
       item.realizedPnl = parseFloat(((_rpBefore || 0) + _finSettlement.netPnl).toFixed(2));
       item.realizedFee = parseFloat(((parseFloat(item.realizedFee) || 0) + _finSettlement.fee).toFixed(8));
-      item.grossPnlAmount = parseFloat(_finSettlement.grossPnl.toFixed(2));
+      // P4-5 修复：分批链收尾累加最后一腿毛利，grossPnlAmount 保持"整笔累计毛利"语义
+      item.grossPnlAmount = parseFloat(((parseFloat(item.grossPnlAmount) || 0) + _finSettlement.grossPnl).toFixed(2));
       item.pnlAmount = parseFloat(item.realizedPnl.toFixed(2));
       var _bRisk = parseFloat(item.initialRiskAmount);
       item.rMultiple = (Number.isFinite(_bRisk) && _bRisk > 0)
@@ -1150,8 +1322,13 @@ function saveEditLog(idx, _raceConfirmed) {
     ? 0
     : (gn('emSlippageCost') || 0);
 
+  // #2 FIX：已平仓记录以权威 item.pnlAmount 判定亏损，禁用实时重算。
+  // 实时重算用表单「剩余仓位」(已平仓=0) 算 grossPnl = 0 - fee - slippage < 0 → 误判亏损，
+  // 强拦「亏损原因」，导致已平仓记录（尤其二次编辑、或经编辑弹窗全平后）被卡死无法保存。
+  // 已平仓记录的 pnlAmount 是结算权威值，实时重算对剩余 0 仓位毫无意义。
+  const _alreadyClosed = !!(item.closeType && item.pnlAmount != null && !isNaN(parseFloat(item.pnlAmount)));
   let realTimeNetPnl = null;
-  if (closePrice != null && entryForPnl != null && entryForPnl > 0) {
+  if (!_alreadyClosed && closePrice != null && entryForPnl != null && entryForPnl > 0) {
     let grossPnl;
     if (direction === 'short') grossPnl = (entryForPnl - closePrice) / entryForPnl * positionSize;
     else grossPnl = (closePrice - entryForPnl) / entryForPnl * positionSize;

@@ -149,13 +149,48 @@ function storeMAEMFE(item) {
   const lowVal = item.lowPrice;
   const highVal = item.highPrice;
   if (item.direction === 'long') {
-    item.mae = lowVal != null ? ((lowVal - ep) / ep * 100) : null;
-    item.mfe = highVal != null ? ((highVal - ep) / ep * 100) : null;
+    // P4-1 修复（符号钳制）：MAE=最大不利偏移（无跌破=0，钳≤0），MFE=最大有利偏移（无上破=0，钳≥0）
+    // 消除"盈利多单 low>ep 时 mae 为正小数 → MFE/MAE 比率虚高"的符号反转（L1）。
+    // 同时消除"追高亏损多单 high<ep 时 mfe 为负 → 利润捕捉负负得正误判"（L2）。
+    item.mae = lowVal != null ? Math.min(0, (lowVal - ep) / ep * 100) : null;
+    item.mfe = highVal != null ? Math.max(0, (highVal - ep) / ep * 100) : null;
   } else {
-    item.mae = highVal != null ? ((ep - highVal) / ep * 100) : null;
-    item.mfe = lowVal != null ? ((ep - lowVal) / ep * 100) : null;
+    // 空单对称：MAE=价格上行不利（钳≤0），MFE=价格下行有利（钳≥0），修复 S1/S2。
+    item.mae = highVal != null ? Math.min(0, (ep - highVal) / ep * 100) : null;
+    item.mfe = lowVal != null ? Math.max(0, (ep - lowVal) / ep * 100) : null;
   }
 }
+
+// ==================== 极值校验（L3/S3/L4/S4，warn 提示、不阻断） ====================
+// 持仓期间的价格路径必然触及入场价与平仓价两个点位，故极值须满足纯几何约束（与多空无关）：
+//   low ≤ min(entry, close) 且 high ≥ max(entry, close)，且 low ≤ high。
+// 违反即代表把极值填反/填错（如把最高价误填进最低价框、把平仓价当整段极值）。
+// 校验不阻断保存，仅 toast 提示，避免覆盖用户已填数据。
+function validateExtremes(item, closePrice) {
+  if (!item || !item.direction || (item.lowPrice == null && item.highPrice == null)) return;
+  var ep = (item.effectiveEntryPrice != null && !isNaN(parseFloat(item.effectiveEntryPrice)))
+    ? parseFloat(item.effectiveEntryPrice) : parseFloat(item.entryPrice);
+  if (isNaN(ep) || ep <= 0) return;
+  var lo = item.lowPrice != null ? parseFloat(item.lowPrice) : null;
+  var hi = item.highPrice != null ? parseFloat(item.highPrice) : null;
+  var warn = function(m) { if (typeof showToast === 'function') showToast(m, 'warn'); };
+  if (lo != null && hi != null && lo > hi) {
+    warn('警告：最低价高于最高价，极值可能填反，MAE/MFE 将失真');
+    return;
+  }
+  var cp = (closePrice != null && !isNaN(closePrice) && parseFloat(closePrice) > 0) ? parseFloat(closePrice) : null;
+  var pts = [ep];
+  if (cp != null) pts.push(cp);
+  var loOk = true, hiOk = true;
+  for (var i = 0; i < pts.length; i++) {
+    if (lo != null && lo > pts[i]) loOk = false;
+    if (hi != null && hi < pts[i]) hiOk = false;
+  }
+  if (!loOk && !hiOk) warn('警告：极值未覆盖入场/平仓价，请核对最低/最高价');
+  else if (!loOk) warn('警告：最低价高于入场/平仓价，请核对最低价');
+  else if (!hiOk) warn('警告：最高价低于入场/平仓价，请核对最高价');
+}
+window.validateExtremes = validateExtremes;
 
 // ==================== 确认平仓 ====================
 function confirmClose(idx) {
@@ -184,6 +219,16 @@ function confirmClose(idx) {
     partialRatio2 = ratioEl2 ? parseFloat(ratioEl2.value) : NaN;
   }
   var partialValid = (isPartialAction && !isNaN(partialRatio2) && partialRatio2 > 0 && partialRatio2 < 100);
+  // #5 FIX：选了「分批平仓/减仓」却没填合法比例（1-99）时，下方会走全平分支落库——
+  // 用户「只平一部分」的意图被改写为全部退出，账面与真实操作从此对不上。
+  // 这里必须拦截而不是告警后继续：能确定「用户不想全平」，却替用户做出全平决定，
+  // 属于用最危险的方式猜意图。比例框默认为空且无必填标记（rendering.js 的 cpPartialRatioRow），
+  // 用户完全可以不填就点确认，所以这条路径不是小概率边界。
+  // 想全部退出的正确入口是初始止盈/手平赢等非分批类型（isPartialAction 为 false，不受此拦）。
+  if (isPartialAction && !partialValid) {
+    showToast('已选分批平仓但未填写 1-99 之间的比例，已停止保存；若确实要全部退出请改选对应平仓类型', 'warn');
+    return;
+  }
   // P0-1 FIX：部分平仓的"本次已实现净盈亏" = (剩余仓位毛利 − 剩余滑点) × 比例 − 剩余费用 × 比例。
   // settlement 以当前剩余仓位全量计价，未平仓部分（1−比例）的浮动盈亏不得计入已实现。
   var netPnlThis = partialValid
@@ -278,8 +323,11 @@ function confirmClose(idx) {
     logs[idx].realizedFee = parseFloat((parseFloat(logs[idx].realizedFee) + feeThis).toFixed(8));
     logs[idx].closedRatio = parseFloat((parseFloat(logs[idx].closedRatio) + _closedDelta).toFixed(4));
     // ratio 与 closedRatio 同口径（占原始仓位），保证 sum(closes[].ratio) === closedRatio
-    logs[idx].closes.push({ type: closeType.value, price: closePrice, ratio: _closedDelta, fee: parseFloat(feeThis.toFixed(8)), pnl: parseFloat(netPnlThis.toFixed(2)), time: _nowISO, ratioOfRemaining: partialRatio2 });
-    logs[idx].grossPnlAmount = parseFloat(settlement.grossPnl.toFixed(2));
+    logs[idx].closes.push({ type: closeType.value, price: closePrice, ratio: _closedDelta, fee: parseFloat(feeThis.toFixed(8)), gross: parseFloat((settlement.grossPnl * (partialRatio2 / 100)).toFixed(2)), pnl: parseFloat(netPnlThis.toFixed(2)), time: _nowISO, ratioOfRemaining: partialRatio2 });
+    // P4-5 修复：grossPnlAmount 维护为"整笔累计价格毛利"（纯价格毛利，不含费/滑点）。
+    // 部分平仓按"本次平掉比例"累加，而非原先覆盖为"剩余仓位全量毛利"——后者与
+    // realizedFee(整笔累计) 口径脱节，导致 stats 成本侵蚀失真。
+    logs[idx].grossPnlAmount = parseFloat(((parseFloat(logs[idx].grossPnlAmount) || 0) + settlement.grossPnl * (partialRatio2 / 100)).toFixed(2));
     logs[idx].pnlAmount = parseFloat(netPnlThis.toFixed(2));
     // P0-1 FIX：中间态记录的收益率/R 用"本次已实现"口径（本次平仓保证金、初始风险为基准）
     var _levNow = Number(logs[idx].leverage) > 0 ? Number(logs[idx].leverage) : 1;
@@ -302,7 +350,8 @@ function confirmClose(idx) {
     logs[idx].closes.push({ type: closeType.value, price: closePrice, ratio: parseFloat(Math.max(0, ratioFinal).toFixed(4)), fee: parseFloat(feeFinal.toFixed(8)), pnl: parseFloat(netPnlVal.toFixed(2)), time: _nowISO });
     logs[idx].positionSize = 0; // 全部退出
     delete logs[idx].partialRatio;
-    logs[idx].grossPnlAmount = parseFloat(settlement.grossPnl.toFixed(2));
+    // P4-5 修复：最终平仓累加最后一腿毛利，grossPnlAmount 成为整笔累计毛利。
+    logs[idx].grossPnlAmount = parseFloat(((parseFloat(logs[idx].grossPnlAmount) || 0) + settlement.grossPnl).toFixed(2));
     logs[idx].pnlAmount = parseFloat(logs[idx].realizedPnl.toFixed(2)); // 整笔累计
     logs[idx].actualCloseFee = parseFloat(logs[idx].realizedFee.toFixed(8));
     logs[idx].actualExitLegacySlippageCost = parseFloat(settlement.legacySlippageCost.toFixed(8));
@@ -328,6 +377,10 @@ function confirmClose(idx) {
     logs[idx].realizedPnl = parseFloat(settlement.netPnl.toFixed(2));
     logs[idx].realizedFee = parseFloat(settlement.fee.toFixed(8));
     logs[idx].closedRatio = 100;
+    // #6 FIX：全新平仓必须把剩余仓位归零，与部分/最终平仓路径（:341）口径对齐。
+    // 此前遗漏 → CSV 仓位列误导为开仓量，且 edit-modal 首编辑即拿到 positionSize=0，
+    // 放大「亏损理由误拦」的触发面（#2）。
+    logs[idx].positionSize = 0;
     logs[idx].closes.push({ type: closeType.value, price: closePrice, ratio: 100, fee: parseFloat(settlement.fee.toFixed(8)), pnl: parseFloat(settlement.netPnl.toFixed(2)), time: _nowISO });
   }
   logs[idx].closeNote = closeNoteEl ? closeNoteEl.value.trim() : '';
@@ -335,11 +388,23 @@ function confirmClose(idx) {
   const execChecks = document.getElementById('cpExecChecks_' + idx);
   logs[idx].executionScore = execChecks ? execChecks.querySelectorAll('input[type="checkbox"]:checked').length || null : null;
   // MAE / MFE — 从极值价格计算百分比
+  // C1 修复：极值是"整笔持仓期间"的最值，多次（部分）平仓时只扩大范围、不覆盖/清空，
+  // 避免最终平仓把整段真正的极值覆盖掉导致 MAE/MFE 失真；空输入不清空已存极值。
   const lowEl = document.getElementById('cpLowPrice_' + idx);
   const highEl = document.getElementById('cpHighPrice_' + idx);
-  logs[idx].lowPrice = lowEl && lowEl.value !== '' ? parseFloat(lowEl.value) : null;
-  logs[idx].highPrice = highEl && highEl.value !== '' ? parseFloat(highEl.value) : null;
+  const _newLow = (lowEl && lowEl.value !== '') ? parseFloat(lowEl.value) : null;
+  const _newHigh = (highEl && highEl.value !== '') ? parseFloat(highEl.value) : null;
+  if (_newLow != null) {
+    logs[idx].lowPrice = (logs[idx].lowPrice != null && !isNaN(parseFloat(logs[idx].lowPrice)))
+      ? Math.min(parseFloat(logs[idx].lowPrice), _newLow) : _newLow;
+  }
+  if (_newHigh != null) {
+    logs[idx].highPrice = (logs[idx].highPrice != null && !isNaN(parseFloat(logs[idx].highPrice)))
+      ? Math.max(parseFloat(logs[idx].highPrice), _newHigh) : _newHigh;
+  }
   storeMAEMFE(logs[idx]);
+  // 极值合法性校验（填反/未包住入场/平仓价 → warn 提示，不阻断保存）
+  if (typeof validateExtremes === 'function') validateExtremes(logs[idx], closePrice);
   // Loss reason (only for losing trades)
   if (isLoss) {
     var lrEl = document.getElementById('cpLossReason_' + idx);

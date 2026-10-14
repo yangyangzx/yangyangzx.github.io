@@ -652,12 +652,24 @@ function renderLogs() {
 
   // 7. 空状态处理
   if (visibleCount === 0) {
-    var emptyMsg = logs.length === 0
-      ? '填写上方计算器，点击「保存日志」开始'
+    var isNoLogs = logs.length === 0;
+    var emptyMsg = isNoLogs
+      ? '还没有交易记录，先去开仓计划记录第一笔'
       : '当前筛选条件无匹配，试试清除过滤';
-    var emptyTitle = logs.length === 0 ? '暂无交易记录' : '无匹配结果';
-    tbody.innerHTML = '<tr><td colspan="9" class="empty"><div class="empty-icon"><i class="fas fa-chart-bar"></i></div><div class="empty-title">' + emptyTitle + '</div><div class="empty-sub">' + emptyMsg + '</div></td></tr>';
-    if (logs.length === 0) {
+    var emptyTitle = isNoLogs ? '暂无交易记录' : '无匹配结果';
+    // UI 交互评估 P2 修复：日志视图并无「上方计算器」，原提示指向不存在的控件；
+    // 改为可点击 CTA 直接跳到开仓计划视图，闭合首因引导。
+    var ctaHtml = isNoLogs
+      ? '<button type="button" class="btn btn-primary empty-cta" id="emptyGoPlanner">去记录第一笔交易</button>'
+      : '';
+    tbody.innerHTML = '<tr><td colspan="9" class="empty"><div class="empty-icon"><i class="fas fa-chart-bar"></i></div><div class="empty-title">' + emptyTitle + '</div><div class="empty-sub">' + emptyMsg + '</div>' + ctaHtml + '</td></tr>';
+    var emptyCta = document.getElementById('emptyGoPlanner');
+    if (emptyCta) {
+      emptyCta.addEventListener('click', function() {
+        if (typeof switchView === 'function') switchView('planner', true);
+      });
+    }
+    if (isNoLogs) {
       openClosePanelIdx = -1;
       actionPanelIdx = -1;
     }

@@ -294,6 +294,10 @@ tbody tr:hover > td {
   font-weight: var(--font-weight-normal);
 }
 
+.empty-cta {
+  margin-top: var(--space-lg);
+}
+
 
 /* 表头滚动阴影 */
 .table-wrap.scrolled th {

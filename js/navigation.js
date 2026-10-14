@@ -376,4 +376,91 @@ document.addEventListener('DOMContentLoaded', function() {
   window.addEventListener('resize', function() {
     if (window.innerWidth > 768) closeMobileNav();
   });
+
+  // ==================== 全局键盘快捷键 + 帮助面板（UI 交互评估 P3） ====================
+  // 面向高频交易者：g + 字母 跳视图，? 打开帮助。仅在非输入焦点、无弹窗时生效，
+  // 避免与表单/自绘 combobox 输入冲突；与 modals.js 的 Esc/焦点环锁互不干扰。
+  var _SHORTCUT_MAP = {
+    d: 'dashboard', p: 'planner', j: 'journal', r: 'risk',
+    a: 'analytics', v: 'review', s: 'settings'
+  };
+  var _shortcutArmed = false;
+  var _shortcutTimer = null;
+
+  function _isEditableTarget() {
+    var el = document.activeElement;
+    if (!el) return false;
+    var tag = el.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+    if (el.isContentEditable) return true;
+    return false;
+  }
+  function _modalOpen() {
+    return !!document.querySelector('.modal-overlay:not(.closing)');
+  }
+  function _clearArmed() {
+    _shortcutArmed = false;
+    clearTimeout(_shortcutTimer);
+  }
+
+  function openHelpModal() {
+    if (_modalOpen()) return;
+    var overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    var rows = [
+      ['g 然后 d', '仪表盘'],
+      ['g 然后 p', '开仓计划'],
+      ['g 然后 j', '交易日志'],
+      ['g 然后 r', '风控中心'],
+      ['g 然后 a', '统计分析'],
+      ['g 然后 v', '复盘中心'],
+      ['g 然后 s', '系统设置'],
+      ['?', '打开 / 关闭本帮助']
+    ];
+    var html = '<div class="modal-content" style="max-width:460px;">' +
+      '<div class="modal-header"><h3>键盘快捷键</h3>' +
+      '<button type="button" class="modal-close" aria-label="关闭">✕</button></div>' +
+      '<div class="modal-body"><div class="help-shortcut-list">';
+    rows.forEach(function(r) {
+      html += '<div class="help-shortcut-row"><kbd>' + esc(r[0]) + '</kbd><span>' + esc(r[1]) + '</span></div>';
+    });
+    html += '</div><p class="help-note">快捷键在输入框聚焦或弹窗打开时自动停用。Esc 或 ✕ 关闭。</p></div></div>';
+    overlay.innerHTML = html;
+    overlay.querySelector('.modal-close').addEventListener('click', function() { window.closeModalOverlay(overlay); });
+    overlay.addEventListener('click', function(e) { if (e.target === overlay) window.closeModalOverlay(overlay); });
+    document.body.appendChild(overlay);
+    window.modalA11yOnOpen(overlay, overlay.querySelector('.modal-close'));
+  }
+
+  var navHelpBtn = document.getElementById('navHelpBtn');
+  if (navHelpBtn) navHelpBtn.addEventListener('click', openHelpModal);
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === '?' && !_isEditableTarget() && !_modalOpen()) {
+      e.preventDefault();
+      openHelpModal();
+      return;
+    }
+    if (_isEditableTarget() || _modalOpen() || e.metaKey || e.ctrlKey || e.altKey) {
+      _clearArmed();
+      return;
+    }
+    var k = (e.key || '').toLowerCase();
+    if (!_shortcutArmed) {
+      if (k === 'g') {
+        _shortcutArmed = true;
+        clearTimeout(_shortcutTimer);
+        _shortcutTimer = setTimeout(_clearArmed, 1200);
+        e.preventDefault();
+      }
+      return;
+    }
+    if (_SHORTCUT_MAP[k]) {
+      e.preventDefault();
+      _clearArmed();
+      switchView(_SHORTCUT_MAP[k], true);
+    } else {
+      _clearArmed();
+    }
+  });
 });
