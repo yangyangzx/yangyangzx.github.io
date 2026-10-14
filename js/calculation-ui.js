@@ -127,6 +127,10 @@
     if (!ui) throw new Error('必须先通过 getResultUI() 获取 UI 引用');
     // 每次重算开头都会走到这里：先收起上一次的图，_calculateImpl 成功时再重新填充
     hideCalcVisuals();
+    // 主动关闭所有打开的下拉/combobox：否则若上一次聚焦 strategyFramework/symbol 后
+    // combobox list 未正确关闭（点击按钮时事件竞态），它会以玻璃拟态半透明背景
+    // 浮在下方"信号K线确认"复选框上，造成菜单重叠看不清。
+    try { if (window.SelectUI && typeof window.SelectUI.closeAll === 'function') window.SelectUI.closeAll(); } catch(e) { /* SelectUI 未加载时静默跳过 */ }
     if (ui.resultBox) {
       // 清除所有状态类：warn（有警告）/ is-blocked（硬阻断）/ is-dirty（参数已变更）/ is-provisional（临时止损）
       ui.resultBox.classList.remove('warn', 'is-blocked', 'is-dirty', 'is-provisional');
