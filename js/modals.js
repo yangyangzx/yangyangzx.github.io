@@ -1413,6 +1413,9 @@ function saveEditLog(idx, _raceConfirmed) {
       item.pnlAmount = parseFloat(editedSettlement.netPnl.toFixed(2));
       item.pnlPercent = parseFloat(editedSettlement.pnlPercent.toFixed(2));
       item.rMultiple = editedSettlement.rMultiple == null ? null : parseFloat(editedSettlement.rMultiple.toFixed(2));
+      // P0 修复：全新平仓的 realizedPnl 应该等于 pnlAmount，否则统计模块会用到旧值
+      item.realizedPnl = parseFloat(editedSettlement.netPnl.toFixed(2));
+      item.realizedFee = parseFloat(editedSettlement.fee.toFixed(8));
     }
   }
 
