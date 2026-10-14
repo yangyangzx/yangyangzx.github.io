@@ -152,7 +152,7 @@ function buildRowsHTML(dl) {
     actionHtml += '<button class="btn btn-danger-outline delete-trigger" data-action="delete" data-idx="' + realIdx + '" title="删除"><i class="fas fa-trash"></i></button>';
     if (!isClosed) {
       actionHtml += '<button class="btn btn-close-action close-trigger" data-action="close" data-idx="' + realIdx + '"><i class="fas fa-check-circle"></i> 平仓</button>';
-      actionHtml += '<button class="btn action-record-trigger" data-action="action-record" data-idx="' + realIdx + '" title="记录动作"><i class="fas fa-clipboard-list"></i> 记录</button>';
+      actionHtml += '<button class="btn action-record-trigger" data-action="action-record" data-idx="' + realIdx + '" title="盘中记录"><i class="fas fa-clipboard-list"></i> 盘中记录</button>';
     }
 
     // ====== 核心行 ======
