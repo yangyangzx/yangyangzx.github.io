@@ -651,8 +651,19 @@ function emRecalc(item) {
     // 例如先按目标价止盈算盈利，再改成实际平仓价（止损附近），盈亏还停留在旧值。
     // 修复：已全额平仓时回退用 initialPositionSize（开仓原始仓位）重算整笔盈亏。
     let pnlPos = pos;
-    if ((isNaN(pnlPos) || pnlPos <= 0) && item.initialPositionSize != null && !isNaN(parseFloat(item.initialPositionSize))) {
-      pnlPos = parseFloat(item.initialPositionSize);
+    if (isNaN(pnlPos) || pnlPos <= 0) {
+      // 优先用 initialPositionSize（平仓时保存的开仓原始仓位）
+      if (item.initialPositionSize != null && !isNaN(parseFloat(item.initialPositionSize)) && parseFloat(item.initialPositionSize) > 0) {
+        pnlPos = parseFloat(item.initialPositionSize);
+      }
+      // 兜底：旧数据没有 initialPositionSize 时，用 initialMargin * leverage 反推
+      else if (item.initialMargin != null && !isNaN(parseFloat(item.initialMargin)) && parseFloat(item.initialMargin) > 0 && lev > 0) {
+        pnlPos = parseFloat(item.initialMargin) * lev;
+      }
+      // 再兜底：用 actualMargin * leverage（可能被部分平仓缩减过，精度稍差但好过没有）
+      else if (item.actualMargin != null && !isNaN(parseFloat(item.actualMargin)) && parseFloat(item.actualMargin) > 0 && lev > 0) {
+        pnlPos = parseFloat(item.actualMargin) * lev;
+      }
     }
     if (isNaN(entryForPnl) || isNaN(closePrice) || isNaN(pnlPos) || pnlPos <= 0 || entryForPnl === 0 || closePrice <= 0) return;
     let grossPnl;
