@@ -685,6 +685,27 @@ function emRecalc(item) {
         pnlPos = parseFloat(item.actualMargin) * lev;
       }
     }
+    // P0 修复：部分平仓中间态（positionSize>0 且 closeType 是 partialTP/reducePosition）
+    // emRecalc 用的是「平仓后剩余仓位」，但 pnlAmount 应该是「本次平掉仓位」的盈亏。
+    // 两者口径不一致会导致预览和实际保存结果对不上。
+    // 修正：从 closes[] 最后一条记录取 ratioOfRemaining，反推本次平掉的仓位。
+    var _isPartialMid = (closeType === 'partialTP' || closeType === 'reducePosition')
+      && !isNaN(pos) && pos > 0
+      && Array.isArray(item.closes) && item.closes.length > 0;
+    if (_isPartialMid) {
+      var _lastClose = item.closes[item.closes.length - 1];
+      var _ratioOfRemaining = parseFloat(_lastClose.ratioOfRemaining);
+      if (isFinite(_ratioOfRemaining) && _ratioOfRemaining > 0 && _ratioOfRemaining < 100) {
+        // 剩余仓位 = 事件前仓位 × (1 - ratioOfRemaining/100)
+        // 事件前仓位 = 剩余仓位 / (1 - ratioOfRemaining/100)
+        // 本次平掉 = 事件前仓位 × ratioOfRemaining/100
+        var _fracRemaining = 1 - _ratioOfRemaining / 100;
+        if (_fracRemaining > 0) {
+          var _prePosSize = pos / _fracRemaining;
+          pnlPos = _prePosSize * _ratioOfRemaining / 100;
+        }
+      }
+    }
     if (isNaN(entryForPnl) || isNaN(closePrice) || isNaN(pnlPos) || pnlPos <= 0 || entryForPnl === 0 || closePrice <= 0) return;
     let grossPnl;
     if (direction === 'short') {
