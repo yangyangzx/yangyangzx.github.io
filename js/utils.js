@@ -309,6 +309,17 @@
     hist.push({ price: p, time: timeIso || new Date().toISOString(), note: note || '' });
     item.stopHistory = hist;
     item.stopLoss = p;
+    // P0 修复：移动止损后同步重算风险额——止损距离变了，实际风险跟着变。
+    // 原实现只改 stopLoss 不改 riskAmount，导致仪表盘持仓监控显示的风险额还是旧值。
+    var _entry = parseFloat(item.effectiveEntryPrice || item.entryPrice);
+    var _pos = parseFloat(item.positionSize);
+    if (Number.isFinite(_entry) && _entry > 0 && Number.isFinite(_pos) && _pos > 0 && Number.isFinite(p) && p > 0) {
+      var _newStopDist = Math.abs(p - _entry);
+      var _newRisk = _pos * _newStopDist / _entry;
+      if (Number.isFinite(_newRisk) && _newRisk > 0) {
+        item.riskAmount = parseFloat(_newRisk.toFixed(4));
+      }
+    }
     out.recorded = true;
     out.stop = p;
     return out;
