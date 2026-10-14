@@ -708,20 +708,51 @@ function emRecalc(item) {
     if (rEl && !isNaN(riskBase) && riskBase !== 0) {
       rEl.value = (netPnl / riskBase).toFixed(2);
     }
-    // 一致性检查：平仓类型与盈亏方向不匹配时给用户提醒
-    // （例如选了「初始止盈」但当前平仓价算出来是亏损——用户可能选错了平仓类型）
+    // 一致性检查 + 自动调整：平仓类型应反映实际结果，而非最初计划
+    // 如果是「计划类」平仓（初始止盈/初始止损/追踪止损），但实际盈亏方向反过来了，
+    // 自动改成对应的「实际类」类型（手动赢/手动损）——因为改了平仓价说明实际出场和计划不一样。
     var _mismatchEl = document.getElementById('emCloseTypeMismatchWarn');
-    if (_mismatchEl) {
-      var _isWinType = (closeType === 'initialTP' || closeType === 'partialTP' || closeType === 'manualWin');
-      var _isLossType = (closeType === 'initialSL' || closeType === 'manualLoss' || closeType === 'liquidation' || closeType === 'timeStop');
+    var _ctEl2 = document.getElementById('emCloseType');
+    if (_ctEl2) {
+      var _isPlanTP = (closeType === 'initialTP');
+      var _isPlanSL = (closeType === 'initialSL' || closeType === 'trailingSL');
       var _isWinPnl = netPnl >= 0;
-      var _mismatch = (_isWinType && !_isWinPnl) || (_isLossType && _isWinPnl);
-      if (_mismatch) {
-        var _expected = _isWinType ? '亏损' : '盈利';
-        _mismatchEl.textContent = '⚠ 注意：平仓类型是「' + (CLOSE_TYPE_LABELS[closeType] || closeType) + '」，但当前平仓价计算为' + _expected + '。请确认平仓类型是否正确。';
-        _mismatchEl.style.display = 'block';
-      } else {
-        _mismatchEl.style.display = 'none';
+      var _autoAdjusted = false;
+      var _oldType = closeType;
+      // 计划止盈 → 实际亏损 → 自动改成手动损
+      if (_isPlanTP && !_isWinPnl) {
+        _ctEl2.value = 'manualLoss';
+        _autoAdjusted = true;
+      }
+      // 计划止损 → 实际盈利 → 自动改成手动赢
+      else if (_isPlanSL && _isWinPnl) {
+        _ctEl2.value = 'manualWin';
+        _autoAdjusted = true;
+      }
+      if (_autoAdjusted) {
+        closeType = _ctEl2.value; // 更新局部变量
+        // 切换分批比例行显隐
+        var _row = document.getElementById('emPartialRatioRow');
+        if (_row) _row.style.display = (closeType === 'partialTP' || closeType === 'reducePosition') ? 'block' : 'none';
+      }
+      if (_mismatchEl) {
+        var _newTypeLabel = CLOSE_TYPE_LABELS[closeType] || closeType;
+        if (_autoAdjusted) {
+          _mismatchEl.textContent = 'ℹ 已根据实际盈亏自动调整平仓类型：「' + (CLOSE_TYPE_LABELS[_oldType] || _oldType) + '」→「' + _newTypeLabel + '」（如需改回请手动选择）';
+          _mismatchEl.style.display = 'block';
+        } else {
+          // 非计划类类型（手动赢/手动损/部分止盈/爆仓/时损）不自动改，只提示
+          var _isWinType = (closeType === 'initialTP' || closeType === 'partialTP' || closeType === 'manualWin');
+          var _isLossType = (closeType === 'initialSL' || closeType === 'manualLoss' || closeType === 'liquidation' || closeType === 'timeStop');
+          var _mismatch = (_isWinType && !_isWinPnl) || (_isLossType && _isWinPnl);
+          if (_mismatch) {
+            var _expected = _isWinType ? '亏损' : '盈利';
+            _mismatchEl.textContent = '⚠ 注意：平仓类型是「' + _newTypeLabel + '」，但当前平仓价计算为' + _expected + '。请确认平仓类型是否正确。';
+            _mismatchEl.style.display = 'block';
+          } else {
+            _mismatchEl.style.display = 'none';
+          }
+        }
       }
     }
   }
