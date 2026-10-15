@@ -67,6 +67,10 @@ function calculateCloseSettlement(item, closePrice, feeOverride, legacySlippageO
 function calcClosePnL(idx) {
   const item = logs[idx];
   if (!item) return;
+  // 本函数有多条早退路径（无类型/价格非法/计算失败），先把调整提示关掉，
+  // 只在下方真正判出矛盾时才显示，避免残留上一轮的提示。
+  var _mRow = document.getElementById('cpTypeMismatch_' + idx);
+  if (_mRow) _mRow.style.display = 'none';
   const closeType = document.getElementById('cpCloseType_' + idx);
   const closePriceEl = document.getElementById('cpClosePrice_' + idx);
   const pnlAmtEl = document.getElementById('cpPnlAmount_' + idx);
@@ -127,6 +131,30 @@ function calcClosePnL(idx) {
   var netPnlPreview = settlement.netPnl;
   if (isPartialPreview && !isNaN(ratioPreview) && ratioPreview > 0 && ratioPreview < 100) {
     netPnlPreview = (settlement.grossPnl - settlement.legacySlippageCost) * (ratioPreview / 100) - settlement.fee * (ratioPreview / 100);
+  }
+  // 计划类平仓类型与实算盈亏方向矛盾时立即归一（唯一权威实现 utils.resolveCloseType，
+  // 编辑弹窗 emRecalc 走同一函数）。不处理就让错误类型落库：渲染层徽章只按 closeType
+  // 取色，列表会「绿止盈」旁边是红负数；而 closeType 是分桶键，亏损会被 analytics 归进
+  // 止盈桶。这里在预览阶段就改掉，用户看到的是与金额同向的类型。
+  // 只在 netPnlPreview 已算出的路径执行——上方早退路径已把提示条关掉，此处不再判。
+  var _adj = window.utils.resolveCloseType(closeType.value, netPnlPreview);
+  if (_adj.adjusted) {
+    closeType.value = _adj.type;
+    // 面板重绘靠 _closePanelType 缓存恢复选中项，必须在改动后同步，否则重绘回退到旧类型
+    if (typeof _closePanelType !== 'undefined') _closePanelType = _adj.type;
+    var _ratioRow2 = document.getElementById('cpPartialRatioRow_' + idx);
+    if (_ratioRow2) {
+      var _isPartialType = (_adj.type === 'partialTP' || _adj.type === 'reducePosition');
+      _ratioRow2.style.display = _isPartialType ? 'block' : 'none';
+    }
+    if (_mRow) {
+      _mRow.style.display = 'block';
+      var _mText = document.getElementById('cpTypeMismatchText_' + idx);
+      if (_mText) {
+        var _CL = (typeof CLOSE_TYPE_LABELS !== 'undefined') ? CLOSE_TYPE_LABELS : {};
+        _mText.textContent = 'ℹ 已按实际盈亏调整平仓类型：「' + (_CL[_adj.from] || _adj.from) + '」→「' + (_CL[_adj.type] || _adj.type) + '」（' + (netPnlPreview < 0 ? '实算为亏损' : '实算为盈利') + '；计划止盈/止损价已单独记录，不受影响）';
+      }
+    }
   }
   if (pnlAmtEl) pnlAmtEl.value = netPnlPreview.toFixed(2);
   if (pnlPctEl) pnlPctEl.value = settlement.pnlPercent.toFixed(2) + '%';
@@ -259,6 +287,11 @@ function confirmClose(idx) {
   const beforeClose = JSON.parse(JSON.stringify(logs[idx]));
   // 写入时间信息（仅新平仓时设置 closeTime，修改已平仓保留原始时间）
   const isNewClose = !logs[idx].closeType;
+  // 落库兜底：calcClosePnL 在预览阶段已归一，这里再判一次以防绕过面板的调用路径
+  // （程序直调 confirmClose、或预览后下拉被外部改回矛盾类型）。基准用 netPnlThis——
+  // 即「本次平仓这一腿」的净盈亏，与 closeType 描述的对象一致，不用整笔累计。
+  var _cfAdj = window.utils.resolveCloseType(closeType.value, netPnlThis);
+  if (_cfAdj.adjusted) closeType.value = _cfAdj.type;
   logs[idx].closeType = closeType.value;
   logs[idx].closePrice = closePrice;
   if (isNewClose) {

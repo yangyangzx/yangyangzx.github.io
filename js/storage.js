@@ -308,6 +308,24 @@ function loadLogs() {
     }
   }
 
+  // v5.6.33：存量平仓类型归一（一次性）。此前内联平仓面板 calcClosePnL / confirmClose 只算
+  // 盈亏、从不校验「类型 vs 实际盈亏方向」，closeType 原样落库——做多选初始止盈但平仓价
+  // 低于入场，记录带着绿的「止盈」标签和负的 pnlAmount 进库，而渲染层徽章只按 closeType
+  // 取色，日志列表于是「绿止盈」旁边是红负数；更糟的是 closeType 是分桶键，analytics 的
+  // 平仓类型分布、review 归因、CSV 导出全按它归类，亏损被计入止盈桶。
+  // 现在写入侧（calcClosePnL 预览即改 + confirmClose 落库兜底）已归一，这里只修历史数据。
+  // 判定取「closeType 所描述的那一腿」净盈亏，与写入侧同一权威实现。
+  if (!localStorage.getItem('trade_types_normalized_v1')) {
+    try {
+      var _normFixed = window.utils.normalizeExistingCloseTypes(logs);
+      if (_normFixed > 0 && !saveLogs(true)) throw new Error('平仓类型归一写入失败');
+      localStorage.setItem('trade_types_normalized_v1', '1');
+      if (_normFixed > 0) console.info('已将 ' + _normFixed + ' 条平仓记录的类型对齐实际盈亏方向');
+    } catch (e) {
+      console.error('平仓类型归一未完成，将在下次加载时重试:', e);
+    }
+  }
+
   if (!window.__tradeStorageListenerBound) {
     window.__tradeStorageListenerBound = true;
     window.addEventListener('storage', function(e) {

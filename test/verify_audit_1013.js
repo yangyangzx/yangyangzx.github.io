@@ -381,7 +381,11 @@ console.log('\n== H. 编辑弹窗「修改最后一笔」：替换末腿不重�
 //       替换语义下累计必须先扣回被替换那一腿，否则旧腿盈亏/费用被重复计入。
 // 基准同 G：entry 100 / 原始仓位 1000 / round-trip 费 4 / 初始风险 50 / 初始保证金 100。
 //   腿1 平剩余 50% @105 → 毛利 25 − 费 2 = 23
-//   改末腿为剩余 40%（400 单位）@105 → 毛利 10 − 费 0.8 = 9.2（整笔只有这一腿）
+//   改末腿为剩余 40%（1000×40% = 400 单位）@105 → 毛利 20 − 费 1.6 = 18.4（整笔只有这一腿）
+// oracle 校正（2026-10-14）：原期望 9.2 是「基数错位」bug 的产物——它把 40% 乘在**腿1平仓后
+// 的剩余仓位 500** 上（500×40% = 200 单位 → 毛利 10），费用也乘在剩余费 2 上（2×0.4 = 0.8）。
+// 正确的结算基数是「该腿发生**前**的剩余仓位」（本例即开仓原始 1000），见 modals.js 的
+// _legBaseFactor 修复。9.2 恰为正确值 18.4 的一半，与实测偏差系数一致。
 {
   clearBody(); toasts.length = 0;
   w.logs = [mkOpenTrade()];
@@ -409,12 +413,18 @@ console.log('\n== H. 编辑弹窗「修改最后一笔」：替换末腿不重�
     JSON.stringify(legRatios()) === '[40]');
   T('H1 簿记随末腿重算：closedRatio=40 / positionSize=600 / 剩余费=2.4',
     w.logs[0].closedRatio === 40 && w.logs[0].positionSize === 600 && w.logs[0].fee === 2.4);
-  T('H2 累计盈亏先扣回旧腿再加新腿 = 9.2（若重复计入会是 32.2）',
-    Math.abs(w.logs[0].realizedPnl - 9.2) < 0.011);
-  T('H2 累计费用与毛利同步扣回 = 0.8 / 10',
-    Math.abs(w.logs[0].realizedFee - 0.8) < 1e-6 && Math.abs(w.logs[0].grossPnlAmount - 10) < 0.011);
-  T('H2 R=0.18（以初始风险 50 为基准）', Math.abs(parseFloat(w.logs[0].rMultiple) - 0.18) < 0.011);
-  // 三条不变量必须同时成立：账本与累计字段互相可还原
+  T('H2 累计盈亏按事件前基数重算 = 18.4（旧口径误为 9.2；重复计入会是 41.4）',
+    Math.abs(w.logs[0].realizedPnl - 18.4) < 0.011);
+  T('H2 累计费用与毛利同步重算 = 1.6 / 20',
+    Math.abs(w.logs[0].realizedFee - 1.6) < 1e-6 && Math.abs(w.logs[0].grossPnlAmount - 20) < 0.011);
+  T('H2 R=0.37（以初始风险 50 为基准）', Math.abs(parseFloat(w.logs[0].rMultiple) - 0.37) < 0.011);
+  // 反例：若仍用「平仓后剩余仓位」作基数，本腿盈亏会是正确值的一半（9.2）。
+  // 这条断言专门钉住那个退化形态，避免修复被回退。
+  T('H2 反例：基数错位下的旧值 9.2 不复现', Math.abs(w.logs[0].realizedPnl - 9.2) > 0.011);
+  // 费用守恒：剩余费 + 已实现费 === 原始 round-trip 费 4
+  T('H3 不变量 fee + realizedFee === 4（原始费用守恒）',
+    Math.abs((parseFloat(w.logs[0].fee) || 0) + (parseFloat(w.logs[0].realizedFee) || 0) - 4) < 1e-6);
+  // 四条不变量必须同时成立：账本与累计字段互相可还原
   T('H3 不变量 Σ closes[].pnl === realizedPnl / Σ ratio === closedRatio / Σ fee === realizedFee',
     Math.abs(legSum('pnl') - parseFloat(w.logs[0].realizedPnl)) < 0.011 &&
     Math.abs(legSum('ratio') - w.logs[0].closedRatio) < 1e-6 &&

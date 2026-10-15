@@ -223,7 +223,24 @@
     }, 0).toFixed(4));
     item.closedRatio = 100;
     if (closedSum < 99.999) {
-      partialEvts.push({ type: closeType, ratio: clamp4(100 - closedSum) });
+      // 收尾事件必须**就地更新**已有对象，不能 filter 掉再 push 一条裸 {type,ratio}。
+      // filter 会把已有收尾事件（带 price/pnl/fee/gross/time）整条丢掉，而新推的裸事件
+      // 让逐腿平仓价与逐腿盈亏永久丢失 —— 实测 closes 退化成 [{"type":"initialTP","ratio":100}]
+      // 而 realizedPnl=30、Σcloses.pnl=0。sum(ratio)===closedRatio 仍然成立，任何不变量
+      // 校验都抓不到；CSV 往返后也无法恢复。就地更新与上方 PARTIAL_TYPES 分支对
+      // partials[last].ratio 的处理同构（见 190-192）。
+      var _closingEvt = null;
+      for (var _cie = 0; _cie < evts.length; _cie++) {
+        if (PARTIAL_TYPES.indexOf(evts[_cie].type) < 0) { _closingEvt = evts[_cie]; break; }
+      }
+      var _gap = clamp4(100 - closedSum);
+      if (_closingEvt) {
+        _closingEvt.type = closeType;
+        _closingEvt.ratio = _gap;
+      } else {
+        _closingEvt = { type: closeType, ratio: _gap };
+      }
+      partialEvts.push(_closingEvt);
     }
     item.closes = partialEvts;
     return item;
@@ -1026,7 +1043,7 @@ const ChartManager = {
         }
       }
     }
-    
+
     return stats;
   }
 };
@@ -1046,6 +1063,93 @@ if (typeof window !== 'undefined') {
     }
   }, ChartManager.CONFIG.memoryCheckInterval);
 }
+
+// ======== 平仓类型与实算盈亏方向的一致性 ========
+/**
+ * 平仓类型 vs 实际盈亏方向的一致性校验与归一（唯一权威实现）。
+ *
+ * closeType 的职责是描述「实际怎么退出的」——计划信息已由 targetPrice / stopLoss
+ * 单独承载，不该用它记录「本该止盈」。因此类型与实算盈亏矛盾时，错的是类型：
+ * 改类型，而不是改盈亏（改盈亏等于把用户填的平仓价当噪声）。
+ *
+ * 判定基准是「closeType 所描述的那一腿」的净盈亏，不是整笔累计：
+ *   全新平仓 → 本次净盈亏；部分平仓 → 本次比例折算后的净盈亏；
+ *   部分平仓后的最终平仓 → 最后一腿净盈亏（closes 末条非分批事件的 pnl）。
+ * 传整笔累计会误伤「前半段赚了、最后一腿止损」或反向的记录。
+ *
+ * 只归一「计划类」类型（初始止盈/部分止盈/初始止损/追踪止损）：人工判断型
+ * （手平赢/手平损、强平、时间止损）的方向由用户主观认定，不做静默改写。
+ * partialTP→reducePosition 而非手平损：保留「部分」语义，只去掉与盈亏矛盾的
+ * 「止盈」断言；reducePosition 同属 PARTIAL_TYPES，簿记分类不受影响。
+ *
+ * 调用方：logs.js calcClosePnL（预览即改）、logs.js confirmClose（落库兜底）、
+ * modals.js emRecalc（编辑弹窗）、utils.normalizeExistingCloseTypes（存量归一）。
+ * 纯函数：不改入参、不碰 DOM。
+ *
+ * @param {string} closeType 当前类型
+ * @param {number} legNetPnl 该腿净盈亏；非有限数表示无法判定，原样返回
+ * @returns {{type:string, adjusted:boolean, from:string}}
+ */
+util.resolveCloseType = function(closeType, legNetPnl) {
+  if (legNetPnl == null || !isFinite(legNetPnl)) {
+    return { type: closeType, adjusted: false, from: closeType };
+  }
+  var isLoss = legNetPnl < 0;
+  if (closeType === 'initialTP' && isLoss) return { type: 'manualLoss', adjusted: true, from: closeType };
+  if (closeType === 'partialTP' && isLoss) return { type: 'reducePosition', adjusted: true, from: closeType };
+  if (!isLoss && (closeType === 'initialSL' || closeType === 'trailingSL')) {
+    return { type: 'manualWin', adjusted: true, from: closeType };
+  }
+  return { type: closeType, adjusted: false, from: closeType };
+};
+
+/**
+ * 存量已平仓记录的类型静默归一：把「计划类类型 + 相反盈亏」的历史记录改成一致的类型。
+ *
+ * 判定基准见 resolveCloseType 注释——取该笔最后一腿的净盈亏（closes 末条非分批事件的
+ * pnl），无 closes 的旧数据退回 item.pnlAmount。同时同步 closes 里那条收尾事件的 type，
+ * 否则 item.closeType 与 closes[].type 打架，下次 syncCloseBookkeeping 会按错分类重建簿记。
+ *
+ * 只动标签：realizedPnl / pnlAmount / grossPnlAmount / ratio / fee 一律不改，账目不动。
+ * 幂等——已一致时返回 0，重复调用安全。仅覆盖已平仓记录（isClosedTrade），
+ * 分批中间态的 closeType 只描述本腿且其盈亏口径未定，不在归一范围。
+ *
+ * @param {Array} logList 日志数组（就地修改，不 splice）
+ * @returns {number} 被改动的记录数
+ */
+util.normalizeExistingCloseTypes = function(logList) {
+  if (!Array.isArray(logList)) return 0;
+  var PARTIAL_TYPES = ['partialTP', 'reducePosition'];
+  var n = 0;
+  for (var i = 0; i < logList.length; i++) {
+    var item = logList[i];
+    if (!item || !item.closeType || !util.isClosedTrade(item)) continue;
+    var legPnl = null;
+    if (Array.isArray(item.closes) && item.closes.length > 0) {
+      for (var j = item.closes.length - 1; j >= 0; j--) {
+        var ev = item.closes[j];
+        if (!ev || ev.type === PARTIAL_TYPES[0] || ev.type === PARTIAL_TYPES[1]) continue;
+        if (isFinite(parseFloat(ev.pnl))) { legPnl = parseFloat(ev.pnl); break; }
+      }
+    }
+    if (legPnl == null && isFinite(parseFloat(item.pnlAmount))) {
+      legPnl = parseFloat(item.pnlAmount);
+    }
+    if (legPnl == null) continue;
+    var res = util.resolveCloseType(item.closeType, legPnl);
+    if (!res.adjusted) continue;
+    item.closeType = res.type;
+    if (Array.isArray(item.closes)) {
+      for (var k = item.closes.length - 1; k >= 0; k--) {
+        var cev = item.closes[k];
+        if (!cev || cev.type === PARTIAL_TYPES[0] || cev.type === PARTIAL_TYPES[1]) continue;
+        if (cev.type === res.from) { cev.type = res.type; break; }
+      }
+    }
+    n++;
+  }
+  return n;
+};
 
 // 挂载到全局
 window.utils = util;

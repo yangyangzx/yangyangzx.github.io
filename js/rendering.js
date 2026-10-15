@@ -269,6 +269,9 @@ function buildRowsHTML(dl) {
               '<option value="reducePosition"' + (_closePanelType === 'reducePosition' ? ' selected' : '') + '>减仓</option>' +
             '</select>' +
           '</div>' +
+          '<div class="fp span-2" id="cpTypeMismatch_' + realIdx + '" style="display:none;font-size:12px;color:var(--color-warning);background:rgba(255,193,7,0.1);padding:8px 12px;border-radius:6px;">' +
+            '<span id="cpTypeMismatchText_' + realIdx + '"></span>' +
+          '</div>' +
           '<div class="fp" id="cpPartialRatioRow_' + realIdx + '" style="display:' + ((item.closeType === 'partialTP' || item.closeType === 'reducePosition') ? 'block' : 'none') + ';">' +
             '<label>平仓比例 (%)<span style="font-size:11px;color:var(--color-text-muted);margin-left:4px;">剩余仓位 = 原仓位 × (1 − 比例)</span></label>' +
             '<input type="number" id="cpPartialRatio_' + realIdx + '" step="5" min="1" max="100" value="' + (item.partialRatio != null ? item.partialRatio : '') + '" placeholder="如 50 表示平仓 50%" />' +

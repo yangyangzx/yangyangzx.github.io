@@ -1,4 +1,95 @@
 // 应用版本 - 每次更新后递增，用于缓存清除
+// 5.6.33：平仓类型与实算盈亏方向的一致性收口（内联平仓面板原先完全没有这道校验）
+//   触发场景：做多选「初始止盈」但平仓价填到入场价之下——面板算出亏损，却原样落库
+//   initialTP，而渲染层徽章只按 closeType 取色（rendering.js），日志列表于是绿的「止盈」
+//   旁边是红负数。更远的危害是分桶：closeType 是 analytics 平仓类型分布 / review 归因 /
+//   CSV 导出的分桶键，亏损被计进止盈桶，win 侧统计与导出同时失真。isClosedTrade 只看
+//   pnlAmount 存在故仍判已平仓，只是归错桶。
+//   根因是两条权威路径结论不一致：编辑弹窗 emRecalc 早就有这道校验（initialTP→manualLoss、
+//   initialSL/trailingSL→manualWin + emCloseTypeMismatchWarn 提示条），而 calcClosePnL /
+//   confirmClose 一处都没有，closeType.value 在 logs.js 原样写入。
+//     ① 新增 utils.resolveCloseType(closeType, legNetPnl) 作唯一权威实现（纯函数，不改入参、
+//        不碰 DOM），四处共用：calcClosePnL（预览即改下拉 + 显示 cpTypeMismatch_ 提示条）、
+//        confirmClose（落库前兜底，防绕过面板的调用路径）、emRecalc（原内联逻辑迁入）、
+//        normalizeExistingCloseTypes（存量归一）。
+//     ② 归一范围只限「计划类」类型：initialTP→manualLoss、partialTP→reducePosition、
+//        initialSL/trailingSL→manualWin。partialTP 改 reducePosition 而非手平损——保留
+//        「部分」语义只去掉与盈亏矛盾的「止盈」断言，且两者同属 PARTIAL_TYPES，簿记分类不受
+//        影响。人工判断型（手平赢/手平损、强平、时间止损）方向由用户主观认定，不改写；
+//        emRecalc 对它们的 warn-only 提示保留。
+//     ③ 判定基准是「closeType 所描述的那一腿」的净盈亏，不是整笔累计：传累计会误伤「前半段
+//        赚了、最后一腿止损」这类记录。面板用 netPnlPreview / netPnlThis（本次动作口径），
+//        存量归一取 closes 末条非分批事件的 pnl，无 closes 的旧数据退回 pnlAmount。
+//     ④ 存量静默归一（storage.js loadLogs 一次性标记 trade_types_normalized_v1）：修正历史
+//        已平仓记录，同步改 closes 里那条收尾事件的 type，否则 item.closeType 与 closes[].type
+//        打架，下次 syncCloseBookkeeping 会按错分类重建簿记。只动标签——realizedPnl /
+//        pnlAmount / grossPnlAmount / ratio / fee 一律不改，账目不动；幂等，只覆盖
+//        isClosedTrade 记录（分批中间态的本腿盈亏口径未定，不在范围）。
+//     ⑤ 未覆盖的已知边界（刻意不替用户决定）：JSON/CSV 导入不改写标签——导入是用户显式
+//        「带上自己的记录」动作，静默改标签比保留更意外；新写入侧已归一，导入后如出现矛盾
+//        可用编辑弹窗修正，emRecalc 会提示。
+//   方法论补充：① 两条权威路径对同一状态给出不同结论时，症状常只显示在一侧（这里徽章按错
+//        类型渲染），要按「同一状态在哪些权威下各算一遍」枚举才找得到第二处缺校验的路径。
+//     ② 归一只能动标签、绝不能动账目——类型是分桶键、盈亏是钱，两类字段的修复权限必须分开。
+//     ③ 计划信息（targetPrice/stopLoss）已单独承载时，用 closeType 记录「本该止盈」是语义
+//        过载：类型必须描述实际结果，否则任何「计划 vs 实际」的复盘都无法归因。
+//     ④ 程序式 select.value 赋值不触发 change 事件，故自动改型不会自激循环；但必须同步
+//        _closePanelType 模块缓存，否则面板重绘会从缓存恢复旧类型。
+// 5.6.32：编辑日志细分场景 8 项修复（jsdom 数值探针 _edit_scenarios.js 109/109，HEAD 基线 80/29）
+//   把上一轮「多次部分平仓覆盖」修完后仍残留的编辑路径问题一次收口。两处金额错账是本轮核心——
+//   四个现存不变量（riskAmount 恒等式、Σratio===closedRatio、Σpnl===realizedPnl、positionSize
+//   按 fracNow 缩减）全部成立，任何守恒校验都抓不到：
+//     ① P0「_hadPartialEvt 快照时机」：读在 syncCloseBookkeeping 之后，而该调用对非分批类型必把
+//        closes.length 变成 >0 ⇒「曾分批」对任何已平仓记录恒真，1379（累加）与「全新平仓重算」
+//        两分支对已全平记录双双不可达。改平仓价 52000→49000 后 pnlAmount=−30 而 realizedPnl
+//        仍冻结在 +30、grossPnlAmount 仍 +40 —— 一笔亏损单带着盈利毛利进胜率/期望/凯利样本。
+//        commit 3d7efac 加的正是那个死分支，对它自己的目标场景是死代码。修复：快照取簿记同步
+//        之前，判据从「closes 非空」改为「closes 里有 PARTIAL 类型事件」（全新平仓写入的收尾
+//        事件本身不是分批事件，计入「曾分批」是判据本身的错误）；已全平记录按「编辑收尾腿」
+//        语义重算，腿占比 = 100 − 分批之和。
+//     ② P0「修改最后一笔」本腿盈亏恰为正确值一半：_prePosSize/_preFee 取的是**该腿发生【后】**
+//        的剩余仓位与费用，而 _legFraction 用的是 fracBeforeEvt（该腿发生【前】的口径），两个
+//        基数混用。实测 50%→60%：closedRatio/positionSize/fee 全对，gross 24→12、realizedFee
+//        6→3、realizedPnl 18→9。因子 fracBeforeEvt/fracOld 在「新增一笔」模式为 1（行为不变），
+//        在「修改最后一笔」模式差一个末腿，把当前剩余还原到该腿发生前。
+//     ③ P1 非分批编辑销毁收尾事件审计字段（utils.syncCloseBookkeeping）：filter 掉已有收尾事件
+//        再 push 一条裸 {type,ratio}，closes 退化成 [{"type":"initialTP","ratio":100}] 而
+//        realizedPnl=30、Σcloses.pnl=0 —— 逐腿价格/盈亏永久丢失，sum(ratio)===closedRatio 仍成立
+//        故任何校验都抓不到，CSV 往返后也无法恢复。改为就地更新已有收尾事件（与上方 PARTIAL
+//        分支处理 partials[last].ratio 同构）。
+//     ④ P1 撤销平仓标记是半完成操作：closeType 选「—」后保存成功但 closedRatio=100 / closes /
+//        closePrice / closeTime / pnlAmount=30 全留、positionSize=0 ⇒ isClosedTrade 判「未平仓」，
+//        这笔交易从已平仓统计里整笔消失，而敞口无法回滚，CSV 会导出一条「已平 100% 却没平」的
+//        矛盾记录。改为显式清理全部平仓字段并按初始锚点恢复敞口（initialPositionSize → 保证金×
+//        杠杆，仍无则提示而非静默保留 0 敞口）。位置必须在全部表单回读之后——回读会把预填的
+//        emPnlAmount/emPnlPercent 写回 item，放前面等于白清。
+//     ⑤ P2 清空平仓价是静默 no-op：gn('') 返 null，守卫 `!== null` 跳过写入，「平仓价格不能为空」
+//        闸门永不触发，旧价被静默沿用。同函数相邻 5 处都有 `else if(…=== '')→null` 分支，只有
+//        emClosePrice 漏了。
+//     ⑥ P2 `const closeType` 重赋值抛 TypeError：DOM 类型已在自动调整处改成 manualLoss 故落库
+//        正确，但整段逻辑静默中断，emCloseTypeMismatchWarn 永远不显示——用户看不出「计划止盈」
+//        被改成了「手平损」，而复盘的 closeType 分桶统计已被污染。改 let。
+//     ⑦ P2 改分批比例后盈亏预览不刷新。两层原因：emPartialRatio 不在 emBindRecalc 监听名单；
+//        更要命的是 413 行的 _emPnlManual 锁定条件只看「有 closeType + 有 pnlAmount」，而分批
+//        中间态记录两者皆有，于是 emRecalc 在 669 行直接 return——任何已带 PnL 的记录改比例
+//        预览都纹丝不动（实测改 50→80 恒显 15），落库却是新值，保存前无从察觉。修复：把
+//        emPartialRatio 加入解锁名单，并让 emRecalc 读输入框当前值（按「剩余/原始仓位」口径
+//        换算）而非已落库的 ratioOfRemaining，费用/滑点按仓位线性缩放到本腿占比。
+//        emFee/emSlippageCost 刻意【不】加入解锁名单：已全平记录改费用若解锁，emRecalc 会按
+//        初始仓位重算整笔毛利覆盖累计值（分批链 realizedPnl=40 会被写成 30），比预览不刷新更糟。
+//     ⑧ 收尾腿费用基准：已全平记录改价时，item.fee 是 confirmClose 遗留的「最终平仓前剩余费用」，
+//        并不等于收尾腿承担的费用。改为优先取收尾事件自身记录的 fee，否则「打开即保存」会把
+//        累计盈亏从 61 改成 59（收尾腿被多扣一笔本不属于它的费用）——这是本轮改动打穿的一个
+//        相邻边界，A1 用例原本全绿。
+//   附带：verify_audit_1013.js H 组 oracle 被污染已校正——H2 原断言 realizedPnl≈9.2，注释写「400
+//          单位」却按 200 单位算（基数错位 bug 的产物），正确值 18.4；H3 又断言 Σcloses.pnl===
+//          realizedPnl 而两值同源于一个变量、永远自洽，整组 61/61 全绿却毫无保护力。现改为断言
+//          18.4 并补「旧值 9.2 不复现」反例 + 原始费用守恒不变量。
+//   校验：verify_audit_1013.js 63/63（HEAD 基线 58/5，5 项 H 组 FAIL 正是被校正的 oracle）；
+//         _edit_scenarios.js 109/109（HEAD 基线 80/29）；_rt_headless.js 631 PASS / 1 FAIL
+//         （唯一 FAIL 是 jsdom 无 CSS 计算能力导致的 .collapsed max-height 断言，基线上同样失败）；
+//         verify_invariants 2207 / verify_param_fix 31 / verify_sideeffects 47 全绿；
+//         no-undef 块作用域泄漏扫描 0 条本文件内同名声明。
 // 5.6.31：多次部分平仓「静默覆盖上一腿」P0 收口 + 分批比例闸门改 fail-closed
 //   复核 5.6.30 的审计时补了多腿用例（verify_audit_1013.js 新增 G/H 组），才暴露 #1 只修了
 //   「首腿盈亏被抹掉」这一半：同一处比例输入框在【已有部分平仓事件】时有两种互斥意图——
@@ -806,7 +897,7 @@
 //          抄数字——是与多止盈位规划重复的死胡同。求解内核 solveTPForRR 仍在用；
 //          calcReverseTP / calcReverseSL 保留为测试入口（第 27 组）。
 //        版本号 5.6.17 → 5.6.23
-var APP_VERSION = '5.6.31';
+var APP_VERSION = '5.6.33';
 
 // 侧栏底部版本号由此注入（index.html 的 #navVersion 留空）。
 // 此前 HTML 里硬编码 v5.6.2，版本已到 5.6.14 仍显示旧号——版本号同步清单里
