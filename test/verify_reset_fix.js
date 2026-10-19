@@ -158,7 +158,40 @@ check('多标签页同步两处已显式传 externalReplace:true',
 check('普通 saveLogs 收尾未传该标记（不清状态）',
   /_safeRenderAfterStorageChange\(\);/.test(storageSrc));
 
+say('\n========== R7 resetForm 的手续费率必须读设置 ==========');
+// 回归点：resetForm 曾写死 `feeRate.value = '0.08'`。_calculateImpl 优先读表单值、
+// 仅在为空/非正数时才回退 _getDefaultFeeRate，所以写死等于让用户在设置页调好的
+// 费率被「重置」按钮静默改回去。放在本跑测器是因为它加载真实 index.html，
+// 表单 DOM 齐全，能真正执行 resetForm（run-tests.html 的精简 DOM 跑不了）。
+const r7=w.eval(`(function(){
+  var _old = localStorage.getItem('trade_settings_v1');
+  var out = {};
+  try {
+    localStorage.setItem('trade_settings_v1', JSON.stringify({
+      feeRateMarket: 0.06, feeRateLimit: 0.03
+    }));
+    _clearSettingsCache();
+    document.getElementById('feeRate').value = '';
+    resetForm();
+    out.market = document.getElementById('feeRate').value;
+
+    localStorage.removeItem('trade_settings_v1');
+    _clearSettingsCache();
+    resetForm();
+    out.fallback = document.getElementById('feeRate').value;
+  } finally {
+    if (_old === null) localStorage.removeItem('trade_settings_v1');
+    else localStorage.setItem('trade_settings_v1', _old);
+    _clearSettingsCache();
+  }
+  return out;
+})()`);
+check(`resetForm 写入设置中的市价单费率（期望 0.06，修复前恒为 0.08）`,
+  Math.abs(parseFloat(r7.market) - 0.06) < 1e-12, `实际=${r7.market}`);
+check(`无设置时 resetForm 回退默认 0.08`,
+  Math.abs(parseFloat(r7.fallback) - 0.08) < 1e-12, `实际=${r7.fallback}`);
+
 say('\n========================================');
 say(`结果：${pass} 通过 / ${fail} 失败（共 ${pass+fail} 项）`);
 say('========================================\n');
-process.exit(0);
+process.exit(fail > 0 ? 1 : 0);

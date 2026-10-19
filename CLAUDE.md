@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目性质
 
-TradingDiscipline：纯前端交易风控/复盘终端（**v5.6.23**），无任何构建工具。原生 JS（IIFE + 全局函数）+ CSS（OKLCH 变量），数据全部存 localStorage，完全离线。`index.html` 直接可运行，但推荐用本地 HTTP 服务器打开（file:// 下 PWA manifest / 部分浏览器行为受限）：
+TradingDiscipline：纯前端交易风控/复盘终端（**v5.6.35**），无任何构建工具。原生 JS（IIFE + 全局函数）+ CSS（OKLCH 变量），数据全部存 localStorage，完全离线。`index.html` 直接可运行，但推荐用本地 HTTP 服务器打开（file:// 下 PWA manifest / 部分浏览器行为受限）：
 
 ```bash
 python3 -m http.server 8000   # 然后开 http://localhost:8000
@@ -16,9 +16,11 @@ python3 -m http.server 8000   # 然后开 http://localhost:8000
 
 ```bash
 node --check js/<file>.js          # 改完 JS 先语法检查
-npx eslint js/**/*.js              # Lint（注意：.eslintrc.json 未启用 no-undef，见下）
-# 浏览器内回归：打开 test/run-tests.html 自动跑全部断言（打开即跑，611 条 T() 断言）
-# 改完前端后强刷：URL 追加 ?cb=<时间戳> 避开缓存（index.html 里 script 已带 ?v=5.6.23，改 CSS 时同样需要）
+npx eslint js/                     # Lint（注意：.eslintrc.json 未启用 no-undef，见下）
+npm test                           # 无头全量回归：跑完 13 个跑测器，有失败则 exit 1
+npm run test:main                  # 只跑主回归（test/_rt_headless.js，浏览器内 run-tests.html）
+npm run test:browser               # 浏览器内回归：打开 test/run-tests.html 自动跑全部断言
+# 改完前端后强刷：URL 追加 ?cb=<时间戳> 避开缓存（index.html 里 script 已带 ?v=5.6.35，改 CSS 时同样需要）
 ```
 
 **块作用域泄漏必查**（`.eslintrc.json` 没开 `no-undef`，所以常规 lint 查不出这类崩溃）：
@@ -33,7 +35,11 @@ npx eslint --no-eslintrc --env browser,es2021 \
 ```
 报错里会混入大量跨文件全局（`showToast`、`Slippage`…）属正常误报；**只需看那些"本文件内有同名 `const/let/var/function` 声明"的**——那就是真泄漏。
 
-⚠️ **不要跑 `npm test` / `npx jest`**：package.json 里的 jest 配置是空转的——`testMatch` 指向 `**/tests/**/*.test.js`、`setupFiles` 指向 `./tests/setup.js`，而 `tests/` 目录**从未创建**（活跃测试是 `test/run-tests.html`）。跑必然失败。新增断言优先加进 `run-tests.html`。
+✅ **`npm test` 可用**（v5.6.34 起）：它跑 `node test/run-all.js`，聚合 13 个无头跑测器，任一失败即 `exit 1`。
+
+> 历史（勿照旧结论理解）：此前 `npm test` 指向 jest 配置，`testMatch` 写 `**/tests/**/*.test.js`、`setupFiles` 写 `./tests/setup.js`，而 `tests/` 目录早在 2026-08-14（`4ba7130`）就已删除 —— 跑必然 Validation Error。同时 14 个跑测器里 6 个无条件 `process.exit(0)`，而唯一退出码正确的 `_rt_headless.js` 又被一条 jsdom `maxHeight "0"` vs 浏览器 `"0px"` 的断言卡成永久红灯，等于全仓 3,300+ 条断言**没有任何一道有效门禁**。这三处已在 v5.6.34 全部修掉。
+
+新增断言优先加进 `run-tests.html`；只有需要完整 `index.html` DOM（`resetForm`、`openEditModal` 这类）时才写进 `test/verify_*.js`——`run-tests.html` 的 DOM 是精简的，调用依赖完整表单的函数会直接把整个 `runAll` 炸掉（summary 停在 `—`，比一条失败更隐蔽）。
 
 ## 架构要点（跨文件才能看懂的部分）
 
@@ -116,7 +122,11 @@ v5.6.19 引入两个 P0 时前两套都是全绿的 —— 它们只证明**计�
 
 **品种定义单一数据源**（`js/settings.js`，v5.6.17 收口）：系统设置 → 品种管理（`settings.customSymbols`）是品种候选的唯一来源。所有需要品种候选的入口——开仓计划录入 `#symbol`、日志筛选 `#fltSymbol`、编辑弹窗 `#emSymbol`——都必须调 `getDefinedSymbols()`，**不得各自从 `logs` 聚合或写死列表**（前者会让「设置里加了但还没交易过的品种」永远选不到，后者与设置脱节）。口径统一在 `getDefinedSymbols()` 里：代码 `trim().toUpperCase()`、按代码去重、丢弃空代码；`desc` 写进 `option[label]`，combobox 显示为右对齐次要文字并参与输入过滤。筛选器可以是「定义 ∪ 日志」并集（定义项在前），但定义项必须在列。默认选中值取 `getDefaultSymbol()`（定义首项），不要在 HTML 或各模块里写死 `'BTC'`。
 
-**部分平仓生命周期**（`js/logs.js`）：开仓 → 部分平仓（closes 追加 + realizedPnl/closedRatio）→ 最终平仓。R 倍数以 `initialRiskAmount` 为基准，CSV 导入导出必须完整保留这些字段。
+**R 倍数 / 收益率的分母锚点**（`js/utils.js` 的 `resolveRMultiple` / `resolvePnlPercent`，v5.6.35 收口）：分母**只认 `initialRiskAmount` / `initialMargin`**，锚点非正数或脏值（`null`/`"abc"`）时回退 `calculateCloseSettlement` 自带的 `rMultiple` / `pnlPercent`。任何写 `rMultiple` / `pnlPercent` 的地方——落库或预览——都必须调这两个函数，**不得就地写「锚点 > 0 ? 自己算 : 回退」的三元**。这段三元此前有 7 份副本且写法不一（有的判 `!= null`、有的判 `!isNaN`），脏锚点下会分叉；只要有人新写一份，`verify_logs_fixed.js` 的 R8 组（源码级计数 + 无内联三元）就会红。
+
+> 注意别过度合并：`logs.js:confirmClose` 是**增量累加**（新平仓事件 `realizedPnl += netPnl`），`modals.js:saveEditLog` 是**替换重建**（编辑已有腿 `Σ(分批腿) + 新收尾腿`）。二者是不同运算，不要试图合并簿记主流程——那会引入 P0。收敛的只是两端共用的分母锚点这一层。两者已共用的还有 `calculateCloseSettlement` 与 `utils.closedRatioDelta`。
+
+**部分平仓生命周期**（`js/logs.js`）：开仓 → 部分平仓（closes 追加 + realizedPnl/closedRatio）→ 最终平仓。R 倍数以 `initialRiskAmount` 为基准（选择规则见上），CSV 导入导出必须完整保留这些字段。
 
 **数据存储**（`js/storage.js`）：
 - `trade_logs_plus_v4`：日志数组（SCHEMA_VERSION=4）
@@ -131,7 +141,7 @@ v5.6.19 引入两个 P0 时前两套都是全绿的 —— 它们只证明**计�
 
 | # | 位置 | 形式 |
 |---|------|------|
-| 1 | `js/version.js` | `var APP_VERSION = '5.6.23';` |
+| 1 | `js/version.js` | `var APP_VERSION = '5.6.35';` |
 | 2 | `index.html` | 28 处 `?v=` + 15 处 CSS `?v=` |
 | 3 | `test/run-tests.html` | 17 处 `../js/*.js?v=`（漏改 → 测试跑的是旧代码，绿得毫无意义） |
 | 4 | `js/version.js` 顶部 changelog | 追加本次变更说明 |
@@ -142,9 +152,13 @@ v5.6.19 引入两个 P0 时前两套都是全绿的 —— 它们只证明**计�
 
 ## 测试
 
-- `test/run-tests.html`（2500 行，611 条 `T()` 断言，打开即跑）：活跃回归套件，覆盖 isClosedTrade / 凯利链 / 集中度 / 一致性门 / 分批 / 移动端适配 / 纪律 LED 等 32 组。
+- `npm test` → `test/run-all.js`：聚合跑 13 个无头跑测器（v5.6.34 新增），任一失败 `exit 1`。这是唯一该挂在 CI / 预提交钩子上的门禁。
+- `test/run-tests.html`（活跃回归套件，打开即跑，**665 条** `T()` 断言，32 组）：主回归。`npm run test:main` 可无头跑它（`test/_rt_headless.js`）。
+- `test/verify_*.js` / `test/_edit_scenarios.js`：专项跑测器，按场景拆分，各自 Node CLI 可直接跑。
 - `test/verify-fixes.html`：**已过时的一次性验证页**（2026-09-23）。它引用的 js 不带 `?v=`（缓存风险），且第 6–9 节是**内联复现的算法**、不是对真实代码的回归（其自身注释已声明"改动 modals.js 后这些节不会自动失效"）。不要把它当作回归依据。
-- Jest：见上方「常用命令」，配置悬空，不可用。
+- Jest：配置已删除（v5.6.34）。`tests/` 目录早在 `4ba7130`（2026-08-14）就已移除，不要再按 jest 的方式加测试。
+
+**新增断言放哪**：`run-tests.html` 是主套件，优先加这里。但它的 DOM 是精简的——`resetForm()` / `openEditModal()` 这类依赖完整表单的函数在它里面会抛错，且抛错会让整个 `runAll` 停摆（summary 停在 `—`，全部断言都不产出，比单条失败更隐蔽）。这类断言放 `test/verify_*.js`（那几个跑测器加载真实 `index.html`）。判据：**断言纯函数 → run-tests.html；断言需要真实 DOM 的端到端流程 → verify_*.js**。
 
 **已知覆盖缺口**：`run-tests.html` 只加载 17 个 js，**以下 11 个模块零断言覆盖**——
 `analytics.js`、`app.js`、`chart-factory.js`、`dashboard.js`、`dom-cache.js`、`navigation.js`、`rendering.js`、`review.js`、`select-ui.js`、`stats.js`、`toast.js`。
@@ -173,7 +187,7 @@ v5.6.19 引入两个 P0 时前两套都是全绿的 —— 它们只证明**计�
 | `img/logo.png` | **v5.6.15 起已零引用**：导航 logo 改用 `assets/icon-192.png`（40px 清晰，原图 803 KB 缩到 48px 糊成噪点），favicon 仍是 `assets/logo.png`。文件保留但可直接删除 |
 | `风控交易逻辑审计报告-v5.6.9.html`、`-v5.6.10.html`、`风控统计复盘系统审计报告.html` | 历史审计产物，无任何代码引用 | 移入 `docs/audit/` 归档，或直接删除 |
 | `trading_backup_2026-09-07_15-40-56.json` | 用户数据导出残留，已被 `.gitignore` 排除 | 删除或移出仓库 |
-| `node_modules/` + `package-lock.json`（308 包） | 只为 jest/eslint，而两者实际都跑不起来（见上） | 若要保留 lint 就留 eslint；否则整包清理 |
+| `node_modules/` + `package-lock.json` | 已收敛（v5.6.34）：jest 与 jest-environment-jsdom 已从 devDependencies 移除，`package.json` 只剩 `eslint` + `jsdom`（13 个跑测器都 require 它，此前靠 jest 的传递依赖侥幸可用）。仍以「跑测试」而非「跑应用」为目的 | 若不再跑无头回归，可连 `jsdom` 一并清掉（但那样 `npm test` 就没了） |
 
 ### 投机性注释（premature comments）
 

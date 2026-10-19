@@ -2220,7 +2220,11 @@ function resetForm() {
   document.getElementById('orderType').value = 'market';
   var stEl = document.getElementById('stopType');
   if (stEl) stEl.value = 'stop-market';
-  document.getElementById('feeRate').value = '0.08';
+  // 手续费率必须走设置项，不能写死 0.08：_calculateImpl:1096 优先读表单值，
+  // 只有表单为空/非正数才回退 _getDefaultFeeRate。写死会让「设置页把市价单费率
+  // 调成 0.06 → 点重置 → 表单又被塞回 0.08」，用户的配置在重置后静默失效。
+  // 此处 orderType 已在上方重置为 market，对应读 feeRateMarket（与 :2220 时序一致）。
+  document.getElementById('feeRate').value = String(_getDefaultFeeRate('market'));
   var slippageModeEl = document.getElementById('slippageMode');
   var entrySlipEl = document.getElementById('entrySlippageTicks');
   var exitSlipEl = document.getElementById('exitSlippageTicks');

@@ -3,23 +3,14 @@
   "version": "5.0.0",
   "description": "专业期货交易风控与复盘工具",
   "scripts": {
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "lint": "eslint js/**/*.js",
-    "lint:fix": "eslint js/**/*.js --fix"
+    "test": "node test/run-all.js",
+    "test:main": "node test/_rt_headless.js",
+    "test:browser": "open test/run-tests.html",
+    "lint": "eslint js/",
+    "lint:fix": "eslint js/ --fix"
   },
   "devDependencies": {
     "eslint": "^8.56.0",
-    "jest": "^29.7.0",
-    "jest-environment-jsdom": "^29.7.0"
-  },
-  "jest": {
-    "testEnvironment": "jsdom",
-    "setupFiles": [
-      "./tests/setup.js"
-    ],
-    "testMatch": [
-      "**/tests/**/*.test.js"
-    ]
+    "jsdom": "^20.0.3"
   }
 }

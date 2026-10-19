@@ -365,12 +365,11 @@ function confirmClose(idx) {
     // P0-1 FIX：中间态记录的收益率/R 用"本次已实现"口径（本次平仓保证金、初始风险为基准）
     var _levNow = Number(logs[idx].leverage) > 0 ? Number(logs[idx].leverage) : 1;
     var marginThis = posBefore > 0 ? (posBefore / _levNow) * (partialRatio2 / 100) : 0;
-    logs[idx].pnlPercent = marginThis > 0
-      ? parseFloat((netPnlThis / marginThis * 100).toFixed(2))
-      : parseFloat(settlement.pnlPercent.toFixed(2));
-    logs[idx].rMultiple = (logs[idx].initialRiskAmount != null && parseFloat(logs[idx].initialRiskAmount) > 0)
-      ? parseFloat((netPnlThis / parseFloat(logs[idx].initialRiskAmount)).toFixed(2))
-      : (settlement.rMultiple == null ? null : parseFloat(settlement.rMultiple.toFixed(2)));
+    logs[idx].pnlPercent = window.utils.resolvePnlPercent(netPnlThis, marginThis, settlement.pnlPercent);
+    // R 与收益率一律走 utils.resolveRMultiple / resolvePnlPercent（锚点选择的唯一权威）。
+    // 分母用「初始风险额 / 初始保证金」：部分平仓已把 riskAmount 按剩余仓位缩减，
+    // 直接拿它当分母会让 R 随平仓次数漂移，全链不守恒。
+    logs[idx].rMultiple = window.utils.resolveRMultiple(netPnlThis, logs[idx].initialRiskAmount, settlement.rMultiple);
     logs[idx].actualCloseFee = parseFloat(feeThis.toFixed(8));
     logs[idx].actualExitLegacySlippageCost = parseFloat(settlement.legacySlippageCost.toFixed(8));
   } else if (hadPartialBefore) {
@@ -389,22 +388,18 @@ function confirmClose(idx) {
     logs[idx].actualCloseFee = parseFloat(logs[idx].realizedFee.toFixed(8));
     logs[idx].actualExitLegacySlippageCost = parseFloat(settlement.legacySlippageCost.toFixed(8));
     // 整笔 R 与收益率以初始风险/初始保证金为基准（部分止盈的已实现盈亏计入分子）
-    if (logs[idx].initialRiskAmount != null && parseFloat(logs[idx].initialRiskAmount) > 0) {
-      logs[idx].rMultiple = parseFloat((parseFloat(logs[idx].realizedPnl) / parseFloat(logs[idx].initialRiskAmount)).toFixed(2));
-    } else {
-      logs[idx].rMultiple = settlement.rMultiple == null ? null : parseFloat(settlement.rMultiple.toFixed(2));
-    }
-    if (logs[idx].initialMargin != null && parseFloat(logs[idx].initialMargin) > 0) {
-      logs[idx].pnlPercent = parseFloat((parseFloat(logs[idx].realizedPnl) / parseFloat(logs[idx].initialMargin) * 100).toFixed(2));
-    } else {
-      logs[idx].pnlPercent = parseFloat(settlement.pnlPercent.toFixed(2));
-    }
+    logs[idx].rMultiple = window.utils.resolveRMultiple(logs[idx].realizedPnl, logs[idx].initialRiskAmount, settlement.rMultiple);
+    logs[idx].pnlPercent = window.utils.resolvePnlPercent(logs[idx].realizedPnl, logs[idx].initialMargin, settlement.pnlPercent);
   } else {
     // —— 全新平仓：原有逻辑 + 初始化整笔累计字段 ——
     logs[idx].grossPnlAmount = parseFloat(settlement.grossPnl.toFixed(2));
     logs[idx].pnlAmount = parseFloat(settlement.netPnl.toFixed(2));
+    // 全新平仓：没有「本次已实现 vs 整笔累计」之分，settlement 算出的口径就是最终口径。
     logs[idx].pnlPercent = parseFloat(settlement.pnlPercent.toFixed(2));
-    logs[idx].rMultiple = settlement.rMultiple == null ? null : parseFloat(settlement.rMultiple.toFixed(2));
+    // R 走锚点：initialRiskAmount 在 :318 刚由 riskAmount 播种，故与直接取
+    // settlement.rMultiple 恒等——统一走 resolveRMultiple，避免「有锚点用锚点」
+    // 这条规则在本文件里出现第三种写法。
+    logs[idx].rMultiple = window.utils.resolveRMultiple(settlement.netPnl, logs[idx].initialRiskAmount, settlement.rMultiple);
     logs[idx].actualCloseFee = parseFloat(settlement.fee.toFixed(8));
     logs[idx].actualExitLegacySlippageCost = parseFloat(settlement.legacySlippageCost.toFixed(8));
     logs[idx].realizedPnl = parseFloat(settlement.netPnl.toFixed(2));

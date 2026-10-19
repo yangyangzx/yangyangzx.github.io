@@ -29,27 +29,27 @@
 </div>
 <div id="out">加载中…</div>
 
-<script src="../js/chart-guard.js?v=5.6.33"></script>
-<script src="../js/constants.js?v=5.6.33"></script>
-<script src="../js/utils.js?v=5.6.33"></script>
-<script src="../js/storage.js?v=5.6.33"></script>
-<script src="../js/slippage.js?v=5.6.33"></script>
-<script src="../js/skills-integration.js?v=5.6.33"></script>
-<script src="../js/calc-visuals.js?v=5.6.33"></script>
-<script src="../js/calculation-ui.js?v=5.6.33"></script>
-<script src="../js/calculator.js?v=5.6.33"></script>
-<script src="../js/risk.js?v=5.6.33"></script>
-<script src="../js/planner.js?v=5.6.33"></script>
-<script src="../js/discipline-led.js?v=5.6.33"></script>
-<script src="../js/settings.js?v=5.6.33"></script>
-<script src="../js/io.js?v=5.6.33"></script>
-<script src="../js/logs.js?v=5.6.33"></script>
-<script src="../js/modals.js?v=5.6.33"></script>
+<script src="../js/chart-guard.js?v=5.6.35"></script>
+<script src="../js/constants.js?v=5.6.35"></script>
+<script src="../js/utils.js?v=5.6.35"></script>
+<script src="../js/storage.js?v=5.6.35"></script>
+<script src="../js/slippage.js?v=5.6.35"></script>
+<script src="../js/skills-integration.js?v=5.6.35"></script>
+<script src="../js/calc-visuals.js?v=5.6.35"></script>
+<script src="../js/calculation-ui.js?v=5.6.35"></script>
+<script src="../js/calculator.js?v=5.6.35"></script>
+<script src="../js/risk.js?v=5.6.35"></script>
+<script src="../js/planner.js?v=5.6.35"></script>
+<script src="../js/discipline-led.js?v=5.6.35"></script>
+<script src="../js/settings.js?v=5.6.35"></script>
+<script src="../js/io.js?v=5.6.35"></script>
+<script src="../js/logs.js?v=5.6.35"></script>
+<script src="../js/modals.js?v=5.6.35"></script>
 <!-- version.js 刻意放在最后：它无依赖也无副作用，但第 30.8 组要读 APP_VERSION 做
      版本一致性校验。此前这个页面从没加载过 version.js——一旦有断言直接引用
      APP_VERSION，整个测试套件会因 ReferenceError 在 runAll 里炸掉，
      结果是 total=0（全部断言都没跑），比一条失败更隐蔽。 -->
-<script src="../js/version.js?v=5.6.33"></script>
+<script src="../js/version.js?v=5.6.35"></script>
 <script>
 (function() {
   // ---- 环境 mock（与生产隔离） ----
@@ -2320,7 +2320,7 @@
     // 权威下结论不一致」的又一形式。这里的字面量是刻意的绊线：升版必须顺手改它，否则会红。
     (function () {
       h += T('APP_VERSION 已定义为字符串', typeof APP_VERSION === 'string' && APP_VERSION.length > 0);
-      h += T('APP_VERSION 为本次发布的 5.6.33（升版时同步改这行）', APP_VERSION === '5.6.33');
+      h += T('APP_VERSION 为本次发布的 5.6.35（升版时同步改这行）', APP_VERSION === '5.6.35');
       var vs = [];
       for (var i = 0; i < document.scripts.length; i++) {
         var s = document.scripts[i].getAttribute('src') || '';
@@ -2502,9 +2502,123 @@
       _stubHost.remove();  // 移除临时表单 stub
     })();
 
+// 30.11 R 倍数 / 收益率的分母锚点单一权威（utils.resolveRMultiple / resolvePnlPercent）。
+    // 修复前这段三元在仓库里有 7 份副本（logs.js 三处 + modals.js 三处落库/预览），
+    // 且条件写法并不一致——有的判 `!= null`、有的判 `!isNaN`，锚点是脏值时行为会分叉。
+    // 「R 只认初始风险额」此前只写在注释里，没有任何机制保证。
+    (function () {
+      var u = window.utils;
+      h += T('utils 暴露 resolveRMultiple / resolvePnlPercent',
+        typeof u.resolveRMultiple === 'function' && typeof u.resolvePnlPercent === 'function');
+
+      // 锚点有效 → 用锚点，忽略 fallback
+      h += T('R：锚点 50 有效时用锚点（100/50=2）', u.resolveRMultiple(100, 50, 99) === 2);
+      h += T('R：负盈亏同样走锚点（-100/50=-2）', u.resolveRMultiple(-100, 50, 99) === -2);
+      h += T('R：结果统一保留两位（100/3=33.33）', u.resolveRMultiple(100, 3, 99) === 33.33);
+
+      // 锚点不可用 → 回退
+      h += T('R：锚点 0 回退', u.resolveRMultiple(100, 0, 4) === 4);
+      h += T('R：锚点负数回退', u.resolveRMultiple(100, -50, 4) === 4);
+      h += T('R：锚点 null 回退', u.resolveRMultiple(100, null, 4) === 4);
+      h += T('R：锚点 undefined 回退', u.resolveRMultiple(100, undefined, 4) === 4);
+      h += T('R：锚点 "abc" 回退（原 != null 判法会漏掉这种脏值）',
+        u.resolveRMultiple(100, 'abc', 4) === 4);
+      h += T('R：锚点与 fallback 都不可用时为 null',
+        u.resolveRMultiple(100, 0, null) === null);
+      h += T('R：分子非数字时不崩，回退而非返回 NaN', u.resolveRMultiple(NaN, 50, 4) === 4);
+
+      // 收益率同构
+      h += T('%%：锚点 200 时 100/200×100=50', u.resolvePnlPercent(100, 200, 9) === 50);
+      h += T('%%：锚点 0 回退', u.resolvePnlPercent(100, 0, 7.456) === 7.46);
+      h += T('%%：锚点脏值 "abc" 回退', u.resolvePnlPercent(100, 'abc', 7.456) === 7.46);
+      h += T('%%：锚点与 fallback 都不可用时为 0', u.resolvePnlPercent(100, 0, null) === 0);
+
+      // 恒等式：锚点等于 settlement 自带口径时，两者必须给出同一个值——
+      // 这是「全新平仓分支改走 resolveRMultiple 后行为不变」的证明。
+      h += T('恒等：锚点 = riskAmount 时与 settlement.rMultiple 同值',
+        u.resolveRMultiple(150, 50, 150 / 50) === 3);
+      h += T('恒等：负值同样成立', u.resolveRMultiple(-150, 50, -150 / 50) === -3);
+    })();
+
+    // 锚点选择不得被内联回业务文件的源码级断言放在 Node 跑测器
+    // （test/verify_logs_fixed.js R8 组）——浏览器里读不到 fs，只能验函数行为。
+
 // 31. 移动端适配回归（v5.6.17）：
     // 本测试页不链接应用 CSS（独立 DOM），在探针运行前把 base.css 的
     // .form-section-content 相关规则以 <style> 注入，再校验展开/折叠态的
+    // 30.9 回撤告警阈值单一来源（utils.drawdownAlertClass）。
+    // 修复前 stats.js 的 statMaxDD / equityDrawdown 写死 `>=20 ? danger : >=10 ? warn`，
+    // 完全不读 settings.maxDrawdownAlert，而 risk.js 的风控中心读设置——
+    // 用户把告警线从 20 调到 30，同一份回撤数据会在两个面板给出相反结论。
+    (function () {
+      var _old = localStorage.getItem('trade_settings_v1');
+      try {
+        var u = window.utils;
+        h += T('utils 暴露 getDrawdownAlertPct / drawdownAlertClass',
+          typeof u.getDrawdownAlertPct === 'function' && typeof u.drawdownAlertClass === 'function');
+
+        localStorage.removeItem('trade_settings_v1');
+        _clearSettingsCache();
+        h += T('无设置时回退默认 20', u.getDrawdownAlertPct() === 20);
+
+        // 用户把告警线调到 30 —— 修复前 stats.js 写死 20，25% 会被误判成 dd-danger
+        localStorage.setItem('trade_settings_v1', JSON.stringify({ maxDrawdownAlert: 30 }));
+        _clearSettingsCache();
+        h += T('读到用户设置的 30', u.getDrawdownAlertPct() === 30);
+        h += T('25% 回撤不再误判 dd-danger（回归点：stats.js 原写死 20）',
+          u.drawdownAlertClass(25) !== 'dd-danger');
+        h += T('25% 回撤落在警戒档 dd-warn', u.drawdownAlertClass(25) === 'dd-warn');
+        h += T('30% 回撤恰好判 dd-danger', u.drawdownAlertClass(30) === 'dd-danger');
+        h += T('8% 回撤判 safe', u.drawdownAlertClass(8) === 'dd-safe');
+        h += T('15% 回撤仍走警戒档 dd-warn', u.drawdownAlertClass(15) === 'dd-warn');
+        h += T('0 回撤判 safe', u.drawdownAlertClass(0) === 'dd-safe');
+
+        // 脏值守卫：null 会让 `pct > null` 恒真（一点回撤就报红），
+        // "abc" 会让比较恒 false（永不告警）——两种都必须回退 20。
+        localStorage.setItem('trade_settings_v1', JSON.stringify({ maxDrawdownAlert: 'abc' }));
+        _clearSettingsCache();
+        h += T('脏值 "abc" 回退 20', u.getDrawdownAlertPct() === 20);
+        localStorage.setItem('trade_settings_v1', JSON.stringify({ maxDrawdownAlert: null }));
+        _clearSettingsCache();
+        h += T('脏值 null 回退 20', u.getDrawdownAlertPct() === 20);
+        // 回归点：null 若不守卫，`1 > null` 恒真 → 1% 回撤就被染红
+        h += T('脏值下 1% 回撤不误报红', u.drawdownAlertClass(1) === 'dd-safe');
+        h += T('脏值下 25% 按回退的 20 判 dd-danger',
+          u.drawdownAlertClass(25) === 'dd-danger');
+      } finally {
+        if (_old === null) localStorage.removeItem('trade_settings_v1');
+        else localStorage.setItem('trade_settings_v1', _old);
+        _clearSettingsCache();
+      }
+    })();
+
+    // 30.10 resetForm 的手续费率必须读设置，不能写死 0.08。
+    // _calculateImpl 优先读表单值、仅在为空/非正数时才回退 _getDefaultFeeRate，
+    // 因此写死会让「设置页把市价单费率调成 0.06 → 点重置 → 表单又被塞回 0.08」。
+    // 此处只校验纯函数；resetForm 依赖完整表单 DOM，对它的端到端断言放在
+    // verify_reset_fix.js（该跑测器加载真实 index.html，能真正执行 resetForm）。
+    (function () {
+      var _old = localStorage.getItem('trade_settings_v1');
+      try {
+        localStorage.setItem('trade_settings_v1', JSON.stringify({
+          feeRateMarket: 0.06, feeRateLimit: 0.03
+        }));
+        _clearSettingsCache();
+        h += T('_getDefaultFeeRate 读设置（market = 0.06）',
+          Math.abs(_getDefaultFeeRate('market') - 0.06) < 1e-12);
+        h += T('_getDefaultFeeRate 按订单类型分别读取（limit = 0.03）',
+          Math.abs(_getDefaultFeeRate('limit') - 0.03) < 1e-12);
+        localStorage.removeItem('trade_settings_v1');
+        _clearSettingsCache();
+        h += T('无设置时回退默认费率（market = 0.08）',
+          Math.abs(_getDefaultFeeRate('market') - 0.08) < 1e-12);
+      } finally {
+        if (_old === null) localStorage.removeItem('trade_settings_v1');
+        else localStorage.setItem('trade_settings_v1', _old);
+        _clearSettingsCache();
+      }
+    })();
+
     // max-height 计算值——这是 P0 修复的根因层（base 态 max-height:0 压制展开态）。
     h += group('31. 移动端适配（折叠面板规则 / CSSOM 单一来源校验）');
     (function () {
@@ -2535,7 +2649,11 @@
       probeWrap.classList.add('collapsed');
       void probeContent.offsetHeight;
       var csClosed = getComputedStyle(probeContent);
-      h += T('折叠态（.collapsed）max-height = 0px', csClosed.maxHeight === '0px');
+      // 断言「max-height 为 0」而不是「字符串严格等于 '0px'」：无单位零的序列化
+      // 各引擎不一致——真实浏览器返回 '0px'，jsdom 的 cssstyle 返回 '0'。写死 '0px'
+      // 会让 test/_rt_headless.js 这条唯一退出码正确的门禁永久红灯。
+      var _closedMaxH = parseFloat(csClosed.maxHeight);
+      h += T('折叠态（.collapsed）max-height = 0（实际 ' + csClosed.maxHeight + '）', _closedMaxH === 0);
       h += T('折叠态 pointer-events = none', csClosed.pointerEvents === 'none');
 
       // .open 类兜底规则仍有效（与 :not(.collapsed) 等效，保留给旧代码路径）

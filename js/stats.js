@@ -112,7 +112,9 @@ function updateStats() {
   if (maxDD > 0 || peak > 0) {
     ddEl.textContent = maxDD.toFixed(1) + '%';
     ddEl.classList.remove('dd-danger', 'dd-warn', 'dd-safe');
-    ddEl.classList.add(maxDD >= 20 ? 'dd-danger' : maxDD >= 10 ? 'dd-warn' : 'dd-safe');
+    // 阈值走 utils.drawdownAlertClass（单一权威，读 settings.maxDrawdownAlert）。
+    // 此前此处写死 20/10，用户改设置后本面板与风控中心会给出相反结论。
+    ddEl.classList.add(window.utils.drawdownAlertClass(maxDD));
   } else {
     ddEl.textContent = '—';
     ddEl.style.color = '';
@@ -363,7 +365,8 @@ function drawEquityCurve(closed) {
   peakEl.textContent = peakVal.toFixed(2) + ' USDT';
   ddEl.textContent = (maxDD > 0 ? '-' : '') + maxDD.toFixed(1) + '%';
   ddEl.classList.remove('dd-danger', 'dd-warn', 'dd-safe');
-  ddEl.classList.add(maxDD >= 20 ? 'dd-danger' : maxDD >= 10 ? 'dd-warn' : 'dd-safe');
+  // 与上方 statMaxDD 同一权威入口（utils.drawdownAlertClass），两处不再各写一份阈值。
+  ddEl.classList.add(window.utils.drawdownAlertClass(maxDD));
 }
 
 // ── 订单类型分布 ──

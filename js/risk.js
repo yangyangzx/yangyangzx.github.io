@@ -290,10 +290,11 @@ function renderDrawdown(closedOverride) {
   //   "abc"/NaN → 比较恒 false，永不告警。
   // 而 skills-integration.getCurrentDrawdown（开仓闸门消费）有守卫会回退 20，
   // 于是同一份数据下「风控中心显示安全」与「点计算却放行」互相矛盾。
-  var maxDrawdownAlert = (function(){
-    var v = Number(ddSettings && ddSettings.maxDrawdownAlert);
-    return (isFinite(v) && v > 0) ? v : 20;
-  })();
+  // 现统一走 utils.getDrawdownAlertPct（与 stats.js 的着色分级、settings.js 的
+  // 默认值同源），三处判定不再各写一份守卫。
+  var maxDrawdownAlert = (typeof window.utils && typeof window.utils.getDrawdownAlertPct === 'function')
+    ? window.utils.getDrawdownAlertPct()
+    : (function(){ var v = Number(ddSettings && ddSettings.maxDrawdownAlert); return (isFinite(v) && v > 0) ? v : 20; })();
   var capitalKnown = (capital > 0);
   var warnThreshold = capitalKnown ? capital * (maxDrawdownAlert / 100) : Infinity;
   var ddClass = 'risk-safe';

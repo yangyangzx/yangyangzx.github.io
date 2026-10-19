@@ -631,7 +631,94 @@
     return id;
   };
 
-  // ======== 已平仓交易判断（统一过滤条件） ========
+  // ======== 回撤告警阈值与着色分级（单一权威） ========
+  /**
+   * 读取 settings.maxDrawdownAlert 并做有效性守卫。
+   *
+   * 此前风控中心（risk.js 的回撤卡片）与统计概览（stats.js 的 statMaxDD /
+   * equityDrawdown 指标）各自实现了一遍阈值判定，且 stats.js 直接写死
+   * `maxDD >= 20 ? 'dd-danger' : maxDD >= 10 ? 'dd-warn'`，完全不看设置项。
+   * 用户把告警线从 20% 调到 30% 后，同一份回撤数据会在风控中心显示「安全」、
+   * 在统计概览显示「危险」——同一指标两种结论。守卫不可省：
+   *   null      → `pct > null` 即 `> 0` 恒真，只要有一点回撤就报危险；
+   *   "abc"/NaN → 比较恒 false，永不告警。
+   * 脏值一律回退 20（与 SETTINGS_DEFAULTS.maxDrawdownAlert 一致）。
+   *
+   * @returns {number} 告警线百分比（> 0 的有限数）
+   */
+  util.getDrawdownAlertPct = function() {
+    var s = null;
+    try {
+      if (typeof loadSettings === 'function') s = loadSettings();
+    } catch (e) { s = null; }
+    var v = Number(s && s.maxDrawdownAlert);
+    return (isFinite(v) && v > 0) ? v : 20;
+  };
+
+  /**
+   * 把回撤百分比映射到统计页的 dd-* 着色等级。
+   * 警戒档固定 10%（与历史行为一致），危险档读用户设置。
+   *
+   * @param {number} drawdownPct 回撤百分比（正数）
+   * @returns {'dd-danger'|'dd-warn'|'dd-safe'}
+   */
+  util.drawdownAlertClass = function(drawdownPct) {
+    var pct = Number(drawdownPct);
+    if (!isFinite(pct) || pct <= 0) return 'dd-safe';
+    if (pct >= util.getDrawdownAlertPct()) return 'dd-danger';
+    if (pct >= 10) return 'dd-warn';
+    return 'dd-safe';
+  };
+
+  // ======== R 倍数 / 收益率的分母锚点（单一权威） ========
+  /**
+   * R 倍数 = 净盈亏 ÷ **初始风险额**。
+   *
+   * 为什么必须走这个函数：部分平仓会把 riskAmount 按剩余仓位缩减，
+   * 直接拿 riskAmount 当分母会让同一笔交易的 R 随平仓次数漂移（全链不守恒）。
+   * 锚点缺失/非法时回退 settlement 自带的 R（该值本身就是 netPnl ÷ riskAmount）。
+   *
+   * 此前这段三元表达式在仓库里有 7 份副本（logs.js 的分批/收尾/全新平仓三处、
+   * modals.js 的预览与两处落库），且副本之间的条件写法并不一致——有的判 `!= null`，
+   * 有的判 `!isNaN`，锚点为 `"abc"` 之类脏值时行为会分叉。
+   * 「R 只认初始风险额」这条不变量此前只写在注释里，没有任何机制保证。
+   *
+   * @param {number} netPnl 分子（本次已实现 或 整笔累计，视调用点）
+   * @param {number} initialRiskAmount 锚点；非正数/非法时走 fallback
+   * @param {number} fallbackR 锚点不可用时的回退值（多传 null）
+   * @returns {number|null}
+   */
+  util.resolveRMultiple = function(netPnl, initialRiskAmount, fallbackR) {
+    var anchor = parseFloat(initialRiskAmount);
+    var v = parseFloat(netPnl);
+    if (isFinite(anchor) && anchor > 0 && isFinite(v)) {
+      return parseFloat((v / anchor).toFixed(2));
+    }
+    var fb = parseFloat(fallbackR);
+    return isFinite(fb) ? parseFloat(fb.toFixed(2)) : null;
+  };
+
+  /**
+   * 收益率 = 净盈亏 ÷ **初始保证金** × 100。
+   * 锚点口径与 resolveRMultiple 同源；锚点不可用时回退 settlement 的 pnlPercent
+   * （该值本就以本次平仓保证金为分母，是唯一还有意义的替代口径）。
+   *
+   * @param {number} netPnl 分子
+   * @param {number} anchor 保证金锚点（整笔用 initialMargin；单腿用该腿实际保证金）
+   * @param {number} fallbackPct 锚点不可用时的回退值
+   * @returns {number}
+   */
+  util.resolvePnlPercent = function(netPnl, anchor, fallbackPct) {
+    var a = parseFloat(anchor);
+    var v = parseFloat(netPnl);
+    if (isFinite(a) && a > 0 && isFinite(v)) {
+      return parseFloat((v / a * 100).toFixed(2));
+    }
+    var fb = parseFloat(fallbackPct);
+    return isFinite(fb) ? parseFloat(fb.toFixed(2)) : 0;
+  };
+
+// ======== 已平仓交易判断（统一过滤条件） ========
   // isClosedTrade 的权威定义在文件头部（第 16 行附近）。此处曾有一份逐字相同的重复定义，
   // 靠"后赋值覆盖"保持语义一致——历史上已实际漂移过一次，且掩盖了"该改哪一份"的歧义。
   // 已删除，保留单一实现。

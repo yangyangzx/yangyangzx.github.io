@@ -119,4 +119,5 @@ if (errors.length) {
   console.log('\n--- 页面错误（前 5 条） ---');
   errors.slice(0, 5).forEach(function (e) { console.log(String(e).slice(0, 1800)); });
 }
-process.exit(0);
+// 退出码必须反映断言结果（原先无条件 exit(0)，失败不可见）。
+process.exit(r.fail > 0 ? 1 : 0);

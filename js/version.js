@@ -1,4 +1,55 @@
 // 应用版本 - 每次更新后递增，用于缓存清除
+// 5.6.35：R 倍数 / 收益率的分母锚点收敛为单一权威（utils.resolveRMultiple / resolvePnlPercent）
+//
+//   问题：「有锚点用锚点、否则回退 settlement」这段三元此前在仓库里有 7 份副本——
+//   logs.js 的部分平仓 / 部分后收尾 / 全新平仓三处，modals.js 的预览与两处落库。
+//   它们语义相同但**写法不一致**：有的判 `!= null`，有的判 `!isNaN`，锚点是
+//   "abc" 这类脏值时行为会分叉（`!= null` 通过、`> 0` 为 false，落到回退；
+//   换成只判 `> 0` 的副本则会静默用 NaN 做分母，把 NaN 写进 rMultiple，
+//   污染统计页的 R 倍数均值与排序）。
+//   CLAUDE.md 早就写明「R 倍数分母唯一 = initialRiskAmount，全链一致」，
+//   但这条不变量此前只存在于注释里，没有任何机制保证。
+//
+//   现收敛为 utils.resolveRMultiple / resolvePnlPercent，两个函数都做了
+//   isFinite 守卫，业务层只负责取输入。新增落库路径若绕过它们，
+//   verify_logs_fixed.js 的 R8 组（源码级计数 + 无内联三元）会红。
+//
+//   注意：本次**没有**合并 logs.js:confirmClose 与 modals.js:saveEditLog 的
+//   簿记主流程——二者是「增量累加」与「替换重建」两种不同运算，强行合并会引入 P0。
+//   本次收敛的只是两端共用的分母锚点选择这一层。
+//
+// 5.6.34：两处「设置项写了却没人读」的静默失效 + 测试门禁从假绿变成真绿
+//
+//   ① resetForm 写死手续费率 0.08（calculator.js）
+//      _calculateImpl 优先读表单值、仅在为空/非正数时才回退 _getDefaultFeeRate，
+//      所以 resetForm 里那行硬编码等于让用户在设置页调好的 feeRateMarket/feeRateLimit
+//      被「重置」按钮静默改回去。现改走 _getDefaultFeeRate('market')。
+//
+//   ② 回撤告警阈值口径分叉（stats.js vs risk.js）
+//      stats.js 的 statMaxDD 与 equityDrawdown 两处写死 `>=20 ? dd-danger : >=10 ? dd-warn`，
+//      完全不读 settings.maxDrawdownAlert；而 risk.js 的风控中心读设置。用户把告警线从 20
+//      调到 30，同一份回撤数据会在风控中心显示「安全」、在统计概览显示「危险」。
+//      新增 utils.getDrawdownAlertPct / drawdownAlertClass 作为单一权威（含脏值守卫：
+//      null 会让 `pct > null` 恒真、"abc" 会让比较恒 false），三处统一走它。
+//
+//   ③ 测试门禁此前是「假绿」：
+//      - _rt_headless.js 是全仓唯一退出码正确的跑测器，却因一条断言把 jsdom 返回的
+//        maxHeight "0" 与浏览器 "0px" 严格比较而永久 exit 1；
+//      - 14 个跑测器里 6 个无条件 process.exit(0)，失败完全不可见
+//        （verify_logs_fixed 长期红着 2 条，退出码却是 0）；
+//      - package.json 的 `npm test` 指向 2026-08-14 已删除的 tests/ 目录，直接 Validation
+//        Error；~3,300 条断言没有一条挂进任何脚本。
+//      现：新增 test/run-all.js 聚合跑测器，`npm test` 改为跑它（13 个跑测器），
+//      6 个 exit(0) 改为 exit(fail?1:0)，jsdom 提升为显式 devDependency。
+//
+//   ④ verify_logs_fixed 的 F5 两条断言断言的是 2f6a3cb「修复编辑已平仓交易时改平仓价/
+//      类型盈亏不重算」之前的行为——改平仓价却不重算盈亏才是 bug。现改为断言重算后的
+//      预览值与落库值一致（两者都必须是 299.12 / R 5.98）。原 fixture 也一并修正：
+//      它写 positionSize:10 @ entry 100 却配 fee:0.4、pnl:66.6，数学上不可能，
+//      重算出的 2.60 是数据不自洽的产物，曾被误读成产品 bug。
+//
+//   ⑤ 升版同步：index.html 43 处 ?v=、run-tests.html 17 处 ?v= 及其 30.8 的硬编码断言。
+//
 // 5.6.33：平仓类型与实算盈亏方向的一致性收口（内联平仓面板原先完全没有这道校验）
 //   触发场景：做多选「初始止盈」但平仓价填到入场价之下——面板算出亏损，却原样落库
 //   initialTP，而渲染层徽章只按 closeType 取色（rendering.js），日志列表于是绿的「止盈」
@@ -897,7 +948,7 @@
 //          抄数字——是与多止盈位规划重复的死胡同。求解内核 solveTPForRR 仍在用；
 //          calcReverseTP / calcReverseSL 保留为测试入口（第 27 组）。
 //        版本号 5.6.17 → 5.6.23
-var APP_VERSION = '5.6.33';
+var APP_VERSION = '5.6.35';
 
 // 侧栏底部版本号由此注入（index.html 的 #navVersion 留空）。
 // 此前 HTML 里硬编码 v5.6.2，版本已到 5.6.14 仍显示旧号——版本号同步清单里

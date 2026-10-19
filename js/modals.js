@@ -769,12 +769,18 @@ function emRecalc(item) {
     const rEl = document.getElementById('emRMultiple');
     if (pnlAmtEl) pnlAmtEl.value = netPnl.toFixed(2);
     if (pnlPctEl) pnlPctEl.value = netPnlPercent.toFixed(2) + '%';
-    // 设计优化：R 倍数基准统一用"初始风险"（部分平仓后 riskAmount 被缩减，直接用它会导致 R 漂移）
-    var riskBase = (item.initialRiskAmount != null && !isNaN(parseFloat(item.initialRiskAmount)) && parseFloat(item.initialRiskAmount) > 0)
+    // R 倍数基准统一用「初始风险额」（部分平仓后 riskAmount 被缩减，直接用它会导致 R 漂移）。
+    // 分母的选择规则由 utils.resolveRMultiple 单点定义，此处只负责取输入：
+    // 锚点缺失时回退表单里的风险额。
+    var riskBase = (parseFloat(item.initialRiskAmount) > 0 && isFinite(parseFloat(item.initialRiskAmount)))
       ? parseFloat(item.initialRiskAmount)
       : parseFloat((document.getElementById('emRiskAmount') || {}).value);
-    if (rEl && !isNaN(riskBase) && riskBase !== 0) {
-      rEl.value = (netPnl / riskBase).toFixed(2);
+    if (rEl) {
+      // 算不出分母时**保持原值不动**，不能清空：emRMultiple 在 :354 已用 item.rMultiple
+      // 预填，而 :1356 保存时会回读该字段——空串会把 item.rMultiple 置 null，
+      // 于是「打开一条记录什么都不改直接保存」就会静默抹掉 R 倍数。
+      var _rVal = window.utils.resolveRMultiple(netPnl, riskBase, null);
+      if (_rVal !== null) rEl.value = _rVal.toFixed(2);
     }
     // 一致性检查 + 自动调整：走 utils.resolveCloseType（内联平仓面板 calcClosePnL /
     // confirmClose 与存量归一同源，两处权威结论一致）。closeType 描述「实际怎么退出」，
@@ -1300,14 +1306,8 @@ function saveEditLog(idx, _raceConfirmed) {
           if (_rfOk) item.realizedFee = parseFloat(((parseFloat(item.realizedFee) || 0) - _oldFee + _legFee).toFixed(8));
           if (_rgOk) item.grossPnlAmount = parseFloat(((parseFloat(item.grossPnlAmount) || 0) - _oldGross + _legGross).toFixed(2));
           item.pnlAmount = parseFloat(item.realizedPnl.toFixed(2));
-          var _bR1 = parseFloat(item.initialRiskAmount);
-          item.rMultiple = (isFinite(_bR1) && _bR1 > 0)
-            ? parseFloat((item.realizedPnl / _bR1).toFixed(2))
-            : (_legSett.rMultiple == null ? null : parseFloat(_legSett.rMultiple.toFixed(2)));
-          var _bM1 = parseFloat(item.initialMargin);
-          item.pnlPercent = (isFinite(_bM1) && _bM1 > 0)
-            ? parseFloat((item.realizedPnl / _bM1 * 100).toFixed(2))
-            : parseFloat(_legSett.pnlPercent.toFixed(2));
+          item.rMultiple = window.utils.resolveRMultiple(item.realizedPnl, item.initialRiskAmount, _legSett.rMultiple);
+          item.pnlPercent = window.utils.resolvePnlPercent(item.realizedPnl, item.initialMargin, _legSett.pnlPercent);
           // 与 emRecalc 实时预览口径对齐：把本腿盈亏/收益率/R 写回表单，
           // 否则下方 gv('emPnlAmount'/'emPnlPercent'/'emRMultiple') 回读 emRecalc 的全仓值覆盖本腿结果
           var _pnlEl = document.getElementById('emPnlAmount');
@@ -1537,14 +1537,8 @@ function saveEditLog(idx, _raceConfirmed) {
       // grossPnlAmount 保持"整笔累计价格毛利"语义（logs.js:354）
       item.grossPnlAmount = parseFloat((_partialsGrossSum + _closeSett.grossPnl).toFixed(2));
       item.pnlAmount = parseFloat(item.realizedPnl.toFixed(2));
-      var _bRisk = parseFloat(item.initialRiskAmount);
-      item.rMultiple = (Number.isFinite(_bRisk) && _bRisk > 0)
-        ? parseFloat((item.realizedPnl / _bRisk).toFixed(2))
-        : (_closeSett.rMultiple == null ? null : parseFloat(_closeSett.rMultiple.toFixed(2)));
-      var _bMargin = parseFloat(item.initialMargin);
-      item.pnlPercent = (Number.isFinite(_bMargin) && _bMargin > 0)
-        ? parseFloat((item.realizedPnl / _bMargin * 100).toFixed(2))
-        : parseFloat(_closeSett.pnlPercent.toFixed(2));
+      item.rMultiple = window.utils.resolveRMultiple(item.realizedPnl, item.initialRiskAmount, _closeSett.rMultiple);
+      item.pnlPercent = window.utils.resolvePnlPercent(item.realizedPnl, item.initialMargin, _closeSett.pnlPercent);
     } else if (!_hadPartialEvt && !_partialNow) {
       // —— 全新平仓记录（从未分批）：整笔重算，含「已全平后再改价」 ——
       item.grossPnlAmount = parseFloat(_closeSett.grossPnl.toFixed(2));

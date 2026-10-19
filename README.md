@@ -1,6 +1,6 @@
 # TradingDiscipline · 交易风险管理终端
 
-**纯前端期货/合约交易风控与复盘工具 · v5.6.17**
+**纯前端期货/合约交易风控与复盘工具 · v5.6.35**
 
 面向加密货币/合约交易者的全流程交易管理系统：开仓前计算 → 持仓监控 → 平仓记录 → 统计分析 → 复盘优化。所有数据本地存储（`localStorage`），完全离线运行，无构建工具，双击 `index.html` 即可使用。
 
@@ -208,8 +208,12 @@ notes/
 │   ├── app.js              事件绑定/主题/初始化
 │   └── version.js          版本号（含完整 changelog 注释）
 ├── test/
-│   ├── run-tests.html      浏览器内回归测试（611 条断言，打开即跑）★ 活跃
-│   └── verify-fixes.html   2026-09-23 一次性验证页（已过时，非回归套件）
+│   ├── run-all.js           聚合跑测器（npm test 入口，跑 13 个无头跑测器）
+│   ├── run-tests.html       浏览器内回归测试（665 条断言，打开即跑）★ 活跃主套件
+│   ├── _rt_headless.js      run-tests.html 的无头运行器
+│   ├── _edit_scenarios.js   编辑弹窗场景回归（S0~S12）
+│   ├── verify_*.js          各专项回归（平仓类型 / 日志簿记 / 配置 / 重置 / 参数化 / 不变量 …）
+│   └── verify-fixes.html    2026-09-23 一次性验证页（已过时，非回归套件）
 └── assets/ img/            图标与资源（导航用 assets/icon-192.png、favicon 用 assets/logo.png；img/logo.png 已无引用）
 ```
 
@@ -220,9 +224,10 @@ notes/
 
 ## 六、测试与验证
 
-- **浏览器内回归**：打开 `test/run-tests.html` 自动运行 597 条断言（平仓三态、凯利链、集中度、一致性门、分批建仓、移动端适配、纪律 LED 文案条数与顺序等 32 组）；
-- 修改 JS 后建议：`node --check js/<file>.js` 语法检查 → 浏览器强刷（URL 追加 `?cb=<时间戳>` 避开缓存）→ 关键链路 E2E；
-- ⚠️ **不要使用 `npm test` / `npx jest`**：package.json 的 jest 配置指向并不存在的 `tests/` 目录与 `tests/setup.js`，跑必然失败。活跃测试只有 `test/run-tests.html`；
+- **一键全量回归**：`npm test` → `test/run-all.js`，依次跑完 13 个无头跑测器（主回归 + 编辑场景 + 平仓类型 + 日志簿记 + 配置 + 重置 + 冒烟 + 参数化 + 副作用 + 不变量 + MAE/MFE + 开仓审计），任一失败 `exit 1`。这是本仓库唯一有效的自动化门禁；
+- **浏览器内回归**：打开 `test/run-tests.html` 自动运行 665 条断言（平仓三态、凯利链、集中度、一致性门、分批建仓、回撤告警阈值、移动端适配、纪律 LED 文案条数与顺序等 32 组）；也可 `npm run test:main` 无头跑；
+- 修改 JS 后建议：`node --check js/<file>.js` 语法检查 → `npm test` → 浏览器强刷（URL 追加 `?cb=<时间戳>` 避开缓存）→ 关键链路 E2E；
+- ⚠️ Jest 已移除：`tests/` 目录早已删除，`package.json` 中的 jest 配置为悬空配置（v5.6.34 已清理）。加测试请用 `run-tests.html` 或 `test/verify_*.js`；
 - ⚠️ `test/verify-fixes.html` 是 2026-09-23 的一次性验证页，**不是回归套件**：其第 6–9 节是内联复现的算法（页面自身注释已声明"改动 modals.js 后不会自动失效"），不要作为验收依据。
 
 **覆盖缺口（2026-10-09 审计）**：`run-tests.html` 只加载 28 个模块中的 17 个，以下 11 个模块**零断言覆盖**——  
@@ -253,7 +258,7 @@ notes/
 | `img/logo.png` | v5.6.15 起已零引用（导航改用 `assets/icon-192.png`，favicon 用 `assets/logo.png`），可直接删除；两处 logo 原本 md5 完全相同，784 KB × 2 |
 | `风控交易逻辑审计报告-v5.6.9/v5.6.10.html`、`风控统计复盘系统审计报告.html` | 历史审计产物，无引用，建议归档至 `docs/audit/`                  |
 | `trading_backup_2026-09-07_15-40-56.json`            | 用户数据导出残留（已被 `.gitignore` 排除）                    |
-| `node_modules/` + `package-lock.json`                | 308 个包只为 jest/eslint，而两者当前都跑不起来                 |
+| `node_modules/` + `package-lock.json`                | 已收敛（v5.6.34）：jest 及其 environment 已移除，只剩 `eslint` + `jsdom`。仍以跑测试而非跑应用为目的；若不再需要无头回归可整包清掉 |
 
 ### 3. 注释规范问题
 
@@ -264,7 +269,7 @@ notes/
 ### 4. 版本号同步（四处，漏一处即缓存事故）
 
 `js/version.js` 的 `APP_VERSION` → `index.html` 的 28 处 JS `?v=` + 15 处 CSS `?v=` → `test/run-tests.html` 的 17 处 `?v=` → `version.js` 顶部 changelog。  
-（`package.json` 的 `version: 5.0.0` 与实际 5.6.17 脱节且无程序读取。）
+（`package.json` 的 `version: 5.0.0` 与实际 5.6.35 脱节且无程序读取。）
 
 ---
 

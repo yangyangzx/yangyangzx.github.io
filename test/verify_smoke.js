@@ -47,4 +47,4 @@ const results=w.eval(`(function(){
 results.forEach(r=>process.stdout.write(r+'\n'));
 const failed=results.filter(r=>r.startsWith('FAIL'));
 process.stdout.write('\n结果：'+results.length+' 项，失败 '+failed.length+' 项\n');
-process.exit(0);
+process.exit(failed.length > 0 ? 1 : 0);
