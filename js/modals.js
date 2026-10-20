@@ -1161,7 +1161,9 @@ function saveEditLog(idx, _raceConfirmed) {
     var _orphanClosed = (_partialsNow.length === 0 && cumClosedBeforeEvt > 0) ? cumClosedBeforeEvt : 0;
     // P1 修复（2026-10-03）：簿记同步。confirmClose 在 logs.js 实际读的是 closedRatio/closes，
     // 不是 partialRatio —— 不写回去，下一次部分平仓会在新旧比例之间错误叠加。
-    window.utils.syncCloseBookkeeping(item, item.closeType, deltaOriginal, { append: _legMode === 'add' });
+    // syncCloseBookkeeping 调用移至下方改判扣回块内（2026-10-20）：扣回语义需要
+    // 【sync 前】的最后一条收尾事件引用与【sync 后】的守卫快照各拿一份，且扣回
+    // 必须先于 P1-3 费用锚点读取 realizedFee——调用点在那里语义才完整。
     // #1 FIX（2026-10-14 基数错位）：本腿的结算基数必须是「该腿事件【发生前】的剩余
     // 仓位与费用」，而 item.positionSize / item.fee 是「本次编辑后的当前剩余」（已含
     // 该腿自身的缩减）。下方 _legFraction 用的是 fracBeforeEvt（该腿发生前的口径），
@@ -1172,8 +1174,68 @@ function saveEditLog(idx, _raceConfirmed) {
     // 四个现存不变量（riskAmount 恒等式、Σratio===closedRatio、Σpnl===realizedPnl、
     // positionSize 按 fracNow 缩减）在此全部成立，任何校验都抓不到这个错。
     var _legBaseFactor = (fracOld > 0) ? (fracBeforeEvt / fracOld) : 1;
-    var _prePosSize = (parseFloat(item.positionSize) || 0) * _legBaseFactor;
+    // P0 修复（2026-10-20 已全平→分批改判）：全平后 item.positionSize=0，裸乘因子得 0，
+    // calculateCloseSettlement 遇 pos<=0 返 null → 本腿永久静默跳过：新腿只剩 syncClose
+    // 的裸骨架（无 price/pnl/fee/gross/time），realized 三源不累加，且锁死的已全平回退
+    // 预览值经下方 DOM 回读污染 pnlAmount/pnlPercent（实测两者同为 139.69，P&L 结构破坏）。
+    // pos<=0 时按 initialPositionSize 锚点还原全仓基数（frOld 锚点语义本身的权威，
+    // 与 fracOld = 1 − cumClosedOld/100 × 全仓 同构）。
+    // 正常中间态（pos>0）走原值，行为不变——既有 S2-S15 快照全部依赖原路径。
+    // initialPositionSize 缺失的旧数据不兜底编造（settlement 仍返 null、行为同旧）。
+    var _posRawTB = parseFloat(item.positionSize);
+    var _initPosTB = parseFloat(item.initialPositionSize);
+    var _useAnchorTB = !(_posRawTB > 0) && isFinite(_initPosTB) && _initPosTB > 0;
+    // 基数口径不同：锚点基数是「全仓」，事件前剩余 = 全仓 × fracBeforeEvt；
+    // 裸 pos 基数已含 fracOld，事件前剩余 = pos × (fracBefore/fracOld) = pos × 因子。
+    // 两条路径代数等价（fracBefore = fracOld × factor 时直接抵消），混用才会错位
+    // （首个版本误用因子乘全仓，实测 legGross 42 vs 正确 1.3125）。
+    var _prePosSize = _useAnchorTB
+      ? _initPosTB * fracBeforeEvt
+      : ((_posRawTB > 0) ? _posRawTB : 0) * _legBaseFactor;
     var _preFee = (parseFloat(item.fee) || 0) * _legBaseFactor;
+    // P0 修复（2026-10-20 改判扣回）：syncCloseBookkeeping 的分批分支会把收尾事件整条滤掉
+    // （utils.js「收尾在改成分批类型后不再成立，一并移除」），可收尾腿已实现的
+    // pnl/fee/gross 还躺在累计字段里 —— sum(closes[].ratio)===closedRatio、
+    // pos×frac === positionSize 等比率校验全自洽，唯独 Σcloses.pnl ≠ realizedPnl。
+    // 改判语义 = 账面重述（记录上确实发生了那些成交，但「全平」前提不再成立）：
+    // 收尾腿的钱随事件全额扣回，再由下方本腿结算累加新账。扣回必须在 P1-3 费用锚点
+    // （baseFee = fee + realizedFee）之前完成，否则剩余费用锚点会多含已扣回的一份。
+    // 守卫与下方 #1 FIX 的 _rpAccrue/_rfOk/_rgOk 同构：字段从未落过的不可重建，不写
+    // 部分值（见 _rgOk 处注释：部分值会让下次编辑把原始费用越算越小）。
+    // 只认【最后一条】非分批事件为被丢弃的收尾腿——syncCloseBookkeeping 产出的
+    // 收尾事件恒在链尾（chrono 顺序），其余位置的收尾事件属脏数据，不承担重述。
+    var _dropCloseTB = null;
+    if (_isPartialClose) {
+      var _lastEvtTB = (Array.isArray(item.closes) && item.closes.length)
+        ? item.closes[item.closes.length - 1] : null;
+      if (_lastEvtTB && _PARTIAL_TYPES_EDIT2.indexOf(_lastEvtTB.type) < 0) _dropCloseTB = _lastEvtTB;
+    }
+    window.utils.syncCloseBookkeeping(item, item.closeType, deltaOriginal, { append: _legMode === 'add' });
+    if (_dropCloseTB) {
+      var _dcPnl = parseFloat(_dropCloseTB.pnl);
+      var _dcFee = parseFloat(_dropCloseTB.fee);
+      var _dcGross = isFinite(parseFloat(_dropCloseTB.gross))
+        ? parseFloat(_dropCloseTB.gross)
+        : (isFinite(_dcPnl) ? _dcPnl + (isFinite(_dcFee) ? _dcFee : 0) : NaN);
+      var _rpFinTB = isFinite(parseFloat(item.realizedPnl));
+      var _rfFinTB = isFinite(parseFloat(item.realizedFee));
+      var _rgFinTB = isFinite(parseFloat(item.grossPnlAmount));
+      // #1 FIX 同构造底：realized 缺失时看账本里有没有带 pnl 的腿（存量数据挣过却没落），
+      // 有则允许扣回；两者皆无则这笔钱从未进过账，扣 0 与不扣等价，跳过保持幂等。
+      var _ledgPnlTB = 0;
+      if (Array.isArray(item.closes)) {   // 此处已是 sync 后的 partial 链
+        for (var _siTB = 0; _siTB < item.closes.length; _siTB++) {
+          if (isFinite(parseFloat(item.closes[_siTB].pnl))) _ledgPnlTB++;
+        }
+      }
+      if (isFinite(_dcPnl) && (_rpFinTB || _ledgPnlTB > 0)) {
+        item.realizedPnl = parseFloat((((parseFloat(item.realizedPnl) || 0)) - _dcPnl).toFixed(2));
+      }
+      if (isFinite(_dcFee) && _rfFinTB) item.realizedFee = parseFloat(
+        ((parseFloat(item.realizedFee) || 0) - _dcFee).toFixed(8));
+      if (isFinite(_dcGross) && _rgFinTB) item.grossPnlAmount = parseFloat(
+        ((parseFloat(item.grossPnlAmount) || 0) - _dcGross).toFixed(2));
+    }
     // 旧数据兼容：closes[] 为空但 closedRatio>0（v5.6.1 之前的本地数据，或没有「平仓明细」
     // 列的旧版 CSV 导入）。syncCloseBookkeeping 会把本次事件当作唯一事件重建 closes，那部分
     // 历史已平比例会被丢掉，此处补回成一条历史事件，保住 sum(closes[].ratio) === closedRatio。

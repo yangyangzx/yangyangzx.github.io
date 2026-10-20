@@ -693,10 +693,14 @@ function renderLogs() {
   restoreAfterRender();
 
   // 10. 触发统计更新（仅在需要的视图）
+  // stats.js 与本模块是两份独立脚本，全量 index.html 下同步加载、二者恒在；
+  // 但半量测试环境（verify_close_type_consistency / _edit_scenarios 等只内联部分文件）
+  // 恒缺 stats.js —— 此前的裸调用在测试里稳定抛 ReferenceError，console.error 刷屏，
+  // 真错误被淹没。防线与 dashboard.js:282 / calculator.js:462 的跨模块守卫同模式。
   if (_currentView === 'journal' || _currentView === 'stats') {
-    try { updateStats(); } catch(e) { console.error('[renderLogs] updateStats error:', e); }
+    try { if (typeof updateStats === 'function') updateStats(); } catch(e) { console.error('[renderLogs] updateStats error:', e); }
   }
   // P3: 连亏计数抛错不得阻断后续 populateFilterOptions()（否则筛选下拉选项无法刷新）
-  try { autoCountLossStreak(); } catch(e) { console.error('[renderLogs] autoCountLossStreak error:', e); }
+  try { if (typeof autoCountLossStreak === 'function') autoCountLossStreak(); } catch(e) { console.error('[renderLogs] autoCountLossStreak error:', e); }
   populateFilterOptions();
 }

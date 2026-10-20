@@ -5,6 +5,54 @@
 
 ---
 
+// 5.6.37：编辑弹窗已全平→分批改判 P0 修复 + 裸调用守卫 + 编辑场景 S13-S15 补盲（2026-10-20）
+//
+//   ① P0 · 已全平记录切回分批加腿的账面重述链（modals.js saveEditLog 分批分支）
+//      满载收尾（closedRatio=100、closeType=manualWin）的记录在编辑弹窗里切回 partialTP
+//      「再平一笔」时，三个环节连锁静默失效，任何比率校验都发现不了：
+//      a) _prePosSize = 裸 item.positionSize(=0) × 因子 → 结算基数 0，calculateCloseSettlement
+//         返 null，本腿结算整段静默跳过——新腿只剩 syncCloseBookkeeping 的裸骨架
+//         （无 price/pnl/fee/gross/time）；
+//      b) 锁死的已全平回退预览值（pos=0 → 按 initialPositionSize 全仓重算，实测 139.69）
+//         经 DOM 回读污染 item.pnlAmount/pnlPercent（实测两字段同为 139.69，P&L 结构破坏）；
+//      c) syncCloseBookkeeping 按设计滤掉收尾事件，但其已实现的钱还躺在 realized
+//         三源里——sum(closes[].ratio)===closedRatio、pos×frac===positionSize 等校验全自洽，
+//         唯独 Σcloses.pnl ≠ realizedPnl（实测 45.32 vs 49.38）。
+//      修复三件套：
+//      · _prePosSize 在 pos<=0 时按 initialPositionSize 锚点 × fracBeforeEvt 还原事件前
+//        剩余基数（全仓基数不能乘「剩余→剩余」因子——首个版本误乘因子，legGross 被算成
+//        42 vs 正确 1.3125，靠探针实证纠出）。missing 初始锚点的旧数据不编造，行为同旧。
+//      · 改判扣回（新代码块）：sync 后若被丢弃的收尾腿金额可从累计字段重建（守卫与
+//        #1 FIX 的 _rpAccrue/_rfOk/_rgOk 同构），先全额扣回再由本腿结算累加新账——
+//        改判语义 = 账面重述。扣回必须在 P1-3 费用锚点之前完成，否则剩余费用
+//        会多含已扣回的一份（实测 baseFee 10.3125→10，锚点因此精确）。
+//      · syncCloseBookkeeping 调用点随之移入该块（原调用点先于扣回引用拿不到
+//        pre-sync 收尾事件；位置错误曾导致双重追加同腿、closedRatio 算到 100——S3 首轮回归抓出）。
+//      数值验证（S14b）：49.38 − 4.06(收尾腿 pnl) + 1.21875(新腿) = 46.54 ≡ Σcloses.pnl；
+//      realizedFee 10 − 0.3125 + 0.09375 = 9.78125 ≡ Σcloses.fee；gross 56.31；
+//      剩余仓位 21.875、剩余费 0.21875 —— 五组恒等式全过。
+//
+//   ② renderLogs 跨模块裸调用加守卫（rendering.js:697/700）
+//      updateStats / autoCountLossStreak 定义在 stats.js，与 rendering.js 是两份独立脚本：
+//      全量 index.html 下同步加载恒可用，但半量测试环境（verify_close_type_consistency /
+//      verify_logs_fixed 等只内联部分文件）稳定抛 ReferenceError，console.error 刷屏淹没
+//      真错误。防线与 dashboard.js:282 / calculator.js:462 的跨模块守卫同模式
+//      （typeof fn === 'function'），生产路径零行为变化。
+//      注：已全平记录改滑点会经 item.slippageCost 进入收尾腿重建（这是 #2 FIX 以外的
+//      结算权威路径），实测重建转负时亏损原因闸门会拦下并回滚（S13b 钉住）。
+//
+//   ③ 编辑弹窗交互链测试补盲（_edit_scenarios_body.js）
+//      S13 已全平记录手动锁防线：emFee/emSlippageCost 刻意不进解锁名单（modals.js 550）
+//      首次有断言——改费用/滑点预览恒冻结、手动标签常亮、保存后逐腿账本不动；
+//      S13b 闸门：滑点经重建使 pnlAmount 转负 → 保存被拒 + 记录回滚 + slippageCost 未污染；
+//      S13c 锁活性：改平仓价解锁重算（防线不是死锁）；
+//      S14 5 腿满载链（MAX_SPLITS 只管建仓、closes[] 无上限）：50% 相对 5 腿 + 收尾，
+//      Σ净 49.375 / Σ费 10 / 毛 59.375 与手工推导一致；满载后原始口径越界仍被拦、
+//      剩余口径 30% 合法放行（口径分叉可见）；
+//      S14b 改判场景 = ① 的数值验证；
+//      S15 分批中间态手动锁：fee/滑点不复算本腿预览，比例改动仍解锁，费用锚点不被
+//      emFee 之上的覆盖值污染。
+//
 // 5.6.36：applyKellyRisk 止损与凯利统计解耦 + planner 四处一致性缺口（2026-10-20 量纲审计）
 //
 //   ① P0 · applyKellyRisk 无 ATR 止损分支量纲不通（calculator.js）

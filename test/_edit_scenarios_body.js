@@ -416,4 +416,228 @@ ok = edit(function () {
 });
 T('S12b 勾选亏损原因后保存成功', ok === true, 'toasts=' + JSON.stringify(window.__toasts));
 
+// ========================================================================
+console.log('== S13. 已全平记录·手动锁防线（emFee/emSlippageCost 刻意不进解锁名单）==');
+// emBindRecalc 的解锁名单只有 emClosePrice/emEntryPrice/emPositionSize/emPartialRatio
+// （+ change 型 emCloseType/emDirection）。emFee/emSlippageCost 被刻意排除：已全平记录
+// 若被费用解锁，emRecalc 会按 initialPositionSize 重算整笔毛利，把分批链的累计
+// realizedPnl 覆盖掉（modals.js 550 注释引用的实测：realizedPnl=40 会被写成 30）。
+// 此前这防线只有注释自证，没有断言——解锁名单或锁判定任何一处回归，绿灯不会红。
+loadFresh();
+seedCloseThenWin();   // → closedRatio=100, closes=2 腿, realizedPnl=40, fee=5, realizedFee=10
+openFirst();
+// 打开时手动锁生效，emRecalc 提前 return，预览保持落库原值（未格式化），所以
+// 断言用「打开时快照」对比，不写字面量格式。
+var _pnlBefore13 = val('emPnlAmount');
+T('S13 打开即锁定（_emPnlManual=true，「手动」标签亮）',
+  window._emPnlManual === true && (el('emPnlManualTag') || {}).style &&
+    el('emPnlManualTag').style.display === 'inline',
+  '_emPnlManual=' + window._emPnlManual + '  tag=' + ((el('emPnlManualTag') || {}).style || {}).display);
+T('S13 打开时预览仍为落库值 40', isFinite(parseFloat(_pnlBefore13)) &&
+  Math.abs(parseFloat(_pnlBefore13) - 40) < 0.011, 'emPnlAmount="' + _pnlBefore13 + '"');
+set('emFee', 12); fire('emFee', 'input');
+T('S13 改 emFee 后预览不变（防解锁重算）', val('emPnlAmount') === _pnlBefore13,
+  'emPnlAmount="' + val('emPnlAmount') + '"');
+// 滑点也试一下锁，再还原（不 fire）：滑点若带着改值进保存路径，会经
+// item.slippageCost 进入收尾腿重建（见 S13b），S13 里只单独验证 fee。
+set('emSlippageCost', 100); fire('emSlippageCost', 'input');
+T('S13 改 emSlippageCost 后预览不变', val('emPnlAmount') === _pnlBefore13,
+  'emPnlAmount="' + val('emPnlAmount') + '"');
+set('emSlippageCost', '');
+T('S13 手动标签仍亮', (el('emPnlManualTag') || { style: {} }).style.display === 'inline');
+var ok13 = saveEditLog(0); closeModal();
+T('S13 保存成功', ok13 === true, 'toasts=' + JSON.stringify(window.__toasts));
+s = S();
+dump('S13');
+near('S13 realizedPnl 不被费用改写=40', s.realizedPnl, 40);
+near('S13 realizedFee 不被费用改写=10', s.realizedFee, 10);
+near('S13 pnlAmount 不被费用改写=40', s.pnlAmount, 40);
+// 收尾腿结算的 fees 权威 = 历史收尾事件里的 fee（modals.js _closeFeeOverride）；编辑里
+// 改的 emFee 12 不进重建。item.fee=12 是 :1073 的无能力裸写并存语义，如实钉住。
+T('S13 item.fee 保留手动覆盖值 12（裸写语义，逐腿账本不动）',
+  Math.abs((parseFloat(s.fee) || 0) - 12) < 0.011, 'fee=' + s.fee);
+T('S13 closes 账本未受影响（仍是 2 腿）', (s.closes || []).length === 2, 'len=' + (s.closes || []).length);
+
+// S13b：改滑点会经 item.slippageCost 进入收尾腿重建（calculateCloseSettlement 的
+// legacySlippageCost 直读该字段），重建结果 15 + (30−5−100) = −60 < 0 → 亏损原因闸门
+// 拦下（#2 FIX 用权威 item.pnlAmount 判亏，此时重建后的 pnlAmount 已变负）。
+// 预览却因手动锁停留在 40 —— 这正是「预览防锁 + 保存闸门」两级防线组合的实际行为：
+// 不是静默把 −60 写进账本（那会污染统计），而是保存被拒、记录回滚。
+loadFresh();
+seedCloseThenWin();
+openFirst();
+set('emSlippageCost', 100); fire('emSlippageCost', 'input');
+var ok13b = saveEditLog(0); closeModal();
+T('S13b 改滑点致重建转亏 → 保存被拒', ok13b === false,
+  'toasts=' + JSON.stringify(window.__toasts));
+s = S();
+dump('S13b');
+near('S13b 回滚后 realizedPnl=40', s.realizedPnl, 40);
+near('S13b 回滚后 pnlAmount=40', s.pnlAmount, 40);
+near('S13b 回滚后 realizedFee=10', s.realizedFee, 10);
+T('S13b 滑点未写入（item.slippageCost 未被污染）', s.slippageCost == null,
+  'slippageCost=' + s.slippageCost);
+T('S13b closes 账本完整（2 腿）', (s.closes || []).length === 2, 'len=' + (s.closes || []).length);
+
+// S13c：锁是活的——改平仓价仍解锁并重算（防线不是死锁）
+// 重开：emFee=5（S13b 未保存成功、费用|账本均原样）。
+// 改平仓价 52000 → 预览毛 40 − 费 5 = 净 35.00（解锁后 emRecalc 格式化）。
+openFirst();
+T('S13c 重开仍锁定', window._emPnlManual === true);
+set('emClosePrice', 52000); fire('emClosePrice', 'input');
+T('S13c 解锁后重算：40−5=35.00', val('emPnlAmount') === '35.00',
+  'emPnlAmount="' + val('emPnlAmount') + '"');
+closeEditModal(true); purgeModals();
+
+// ========================================================================
+console.log('== S14. 5 腿分批满载链（MAX_SPLITS 只管建仓，closes[] 无上限）==');
+// 手工推导（entry 50000, 初始仓 1000, 初始费 10, 各腿 ratioOfRemaining=50%）：
+//   腿i: 毛=事件前仓位×价差比, 净=毛×50% − 腿费, 剩仓/费各 ×0.5
+//   1000/10 → 500/5 → 250/2.5 → 125/1.25 → 62.5/0.625 → 31.25/0.3125 → 收尾 0
+//   Σ净 = 15+12.5+8.75+5.625+3.4375+4.0625 = 49.375
+//   Σ费 = 10（原始费用 10 全部实现）  →  毛 = 49.375 + 10 = 59.375
+loadFresh();
+T('S14 腿1 成功', seedFirstLeg() === true);
+var _chainPrices = [53000, 54000, 55000, 56000];
+var _chainCum = [75, 87.5, 93.75, 96.875];
+var _chainRem = [250, 125, 62.5, 31.25];
+var _chainNet = [27.5, 36.25, 41.875, 45.3125];
+for (var _ci = 0; _ci < _chainPrices.length; _ci++) {
+  (function (i) {
+    var okLeg = edit(function () {
+      modeAdd();
+      set('emPartialRatio', 50);
+      set('emClosePrice', _chainPrices[i]); fire('emClosePrice', 'input');
+    });
+    T('S14 腿' + (i + 2) + ' 成功', okLeg === true, 'toasts=' + JSON.stringify(window.__toasts));
+    s = S();
+    near('S14 腿' + (i + 2) + ' closedRatio=' + _chainCum[i], s.closedRatio, _chainCum[i]);
+    near('S14 腿' + (i + 2) + ' 剩仓=' + _chainRem[i], s.positionSize, _chainRem[i]);
+    near('S14 腿' + (i + 2) + ' realizedPnl=' + _chainNet[i], s.realizedPnl, _chainNet[i]);
+  })(_ci);
+}
+// 收尾：第 6 事件（manualWin 全平剩余 31.25 @57000）
+T('S14 收尾成功', edit(function () {
+  set('emCloseType', 'manualWin'); set('emClosePrice', 57000);
+  fire('emCloseType', 'change'); fire('emClosePrice', 'input');
+}) === true);
+s = S();
+dump('S14');
+near('S14 Σpnl=realizedPnl=49.375', s.realizedPnl, 49.375);
+near('S14 grossPnlAmount=59.375（Σ净+Σ费）', s.grossPnlAmount, 59.375);
+near('S14 realizedFee=10（原始费用全额实现）', s.realizedFee, 10);
+near('S14 closedRatio=100', s.closedRatio, 100);
+near('S14 剩仓=0', s.positionSize, 0);
+T('S14 closes=6 条', (s.closes || []).length === 6, 'len=' + (s.closes || []).length);
+T('S14 逐腿审计字段完整',
+  (s.closes || []).every(function (e) { return e.price != null && e.pnl != null && e.fee != null && e.time != null; }),
+  'closes=' + closesJson());
+T('S14 不变量 Σcloses.pnl===realizedPnl',
+  Math.abs(legSum('pnl') - (parseFloat(s.realizedPnl) || 0)) < 0.011,
+  'Σ=' + legSum('pnl') + ' realizedPnl=' + s.realizedPnl);
+T('S14 不变量 realizedPnl===gross−realizedFee',
+  Math.abs((parseFloat(s.realizedPnl) || 0) -
+    ((parseFloat(s.grossPnlAmount) || 0) - (parseFloat(s.realizedFee) || 0))) < 0.011,
+  'pnl=' + s.realizedPnl + ' gross=' + s.grossPnlAmount + ' fee=' + s.realizedFee);
+// 越界闸门在满载后仍有效。注意前提：满载收尾后 item.closeType=manualWin，弹窗预填的是
+// 收尾态——继续保存走 manualWin 全平分支，比例校验根本不参与；必须先在弹窗里把类型
+// 切回 partialTP（用户「还想再平一笔」的真实路径），越界校验才在路径上。
+// 96.875% 已平 + 新增原始口径 30% → 累计 126.875%，必须被拦。
+ok = edit(function () {
+  modeAdd(); baseInitial();
+  set('emCloseType', 'partialTP'); fire('emCloseType', 'change');
+  set('emPartialRatio', 30);
+});
+T('S14 满载后越界仍被拦', ok === false, 'toasts=' + JSON.stringify(window.__toasts));
+T('S14 拒绝后回滚（realizedPnl 仍 49.375）', Math.abs((S().realizedPnl || 0) - 49.375) < 0.011,
+  'realizedPnl=' + S().realizedPnl);
+// 对照：同一状态、剩余口径 30%（占改判后仅剩 3.125% 剩余仓位的 30%）→ 换算 0.9375%
+// 原始口径 → 累计 97.8125 <100，合法放行。同一输入框两种口径一个被拦一个放行。
+// 放行后的账本 = 改判重述：旧收尾腿（manualWin，net 4.06 / fee 0.3125 / gross 4.375）
+// 随事件扣回，新腿（占剩余 30% @57000，基数 31.25）净 1.21875 入账：
+//   realizedPnl = 49.38 − 4.06 + 1.21875 → 46.54（=Σcloses.pnl 46.53125，容差内）
+//   realizedFee = 10 − 0.3125 + 0.09375 = 9.78125（=Σcloses.fee 恒等）
+//   gross       = 59.38 − 4.38 + 1.3125 → 56.31（净+费恒等：46.53125+9.78125=56.3125）
+//   剩余仓位 = 1000×(1−97.8125%) = 21.875；剩余费 = 10×2.1875% = 0.21875
+//   （baseFee = fee 0.3125 + realizedFee 9.6875 = 原始 10，锚点因此精确）
+ok = edit(function () {
+  modeAdd();
+  set('emCloseType', 'partialTP'); fire('emCloseType', 'change');
+  set('emPartialRatio', 30);
+});
+T('S14b 满载后剩余口径 30% 合法放行', ok === true &&
+  Math.abs((parseFloat(S().closedRatio) || 0) - 97.8125) < 0.011,
+  'ok=' + ok + ' closedRatio=' + S().closedRatio + ' toasts=' + JSON.stringify(window.__toasts));
+s = S();
+dump('S14b');
+near('S14b 改判重述 realizedPnl=46.53', s.realizedPnl, 46.54);
+near('S14b 改判重述 realizedFee=9.78125', s.realizedFee, 9.78125, 1e-4);
+near('S14b 改判重述 grossPnlAmount=56.31', s.grossPnlAmount, 56.31, 0.011);
+near('S14b 改判后剩余仓位=21.875', s.positionSize, 21.875);
+near('S14b 剩余费=10×2.1875%（锚点精确）', parseFloat(s.fee), 0.21875, 1e-4);
+T('S14b 逐腿审计字段完整（新腿非裸骨架）',
+  (s.closes || []).every(function (e) { return e.price != null && e.pnl != null && e.fee != null && e.time != null; }),
+  'closes=' + closesJson());
+T('S14b 前 5 条历史腿未被改判污染（比例/价格原样）',
+  (s.closes || []).slice(0, 5).every(function (e, i) {
+    return e.ratio === [50, 25, 12.5, 6.25, 3.125][i] && e.price === [52000, 53000, 54000, 55000, 56000][i];
+  }),
+  'closes=' + closesJson());
+T('S14b 不变量 Σcloses.pnl===realizedPnl（改判后仍成立）',
+  Math.abs(legSum('pnl') - (parseFloat(s.realizedPnl) || 0)) < 0.011,
+  'Σ=' + legSum('pnl') + ' realizedPnl=' + s.realizedPnl);
+T('S14b 不变量 realizedPnl===gross−realizedFee（阈值含 toFixed 双重舍入余量）',
+  Math.abs((parseFloat(s.realizedPnl) || 0) -
+    ((parseFloat(s.grossPnlAmount) || 0) - (parseFloat(s.realizedFee) || 0))) < 0.02,
+  'pnl=' + s.realizedPnl + ' gross=' + s.grossPnlAmount + ' fee=' + s.realizedFee +
+  '（46.53125 精确值 46.53125，三字段各自 toFixed 后交叉项最多漂 ±0.015）');
+T('S14b 不变量 fee+realizedFee===原始费用 10',
+  Math.abs((parseFloat(s.fee) || 0) + (parseFloat(s.realizedFee) || 0) - 10) < 0.011,
+  'fee=' + s.fee + ' realizedFee=' + s.realizedFee);
+T('S14b 不变量 pnlAmount===realizedPnl（DOM 回读不再污染累计口径）',
+  Math.abs((parseFloat(s.pnlAmount) || 0) - (parseFloat(s.realizedPnl) || 0)) < 0.011,
+  'pnlAmount=' + s.pnlAmount + ' realizedPnl=' + s.realizedPnl);
+T('S14b 记录回退到部分平仓态（isPartialClosed）', window.utils.isPartialClosed(s));
+
+// ========================================================================
+console.log('== S15. 分批中间态·手动锁防线（fee/滑点改动不重算本腿预览）==');
+// 中间态记录也有 pnlAmount（=本腿累计口径 15），打开同样进手动锁。改 emFee 不解锁，
+// _isPartialMid 分支若被费用触发会用 emFee×feeFactor×newFrac 重写预览，与落库累计
+// 口径立即分叉、保存前无从察觉。
+loadFresh();
+seedFirstLeg();          // → pos 500, closes=[L1@52000], realizedPnl=15, fee=5, pnlAmount=15
+openFirst();
+T('S15 中间态打开即锁定', window._emPnlManual === true);
+var _pnlBefore15 = val('emPnlAmount');
+T('S15 基线预览=本腿口径 15', isFinite(parseFloat(_pnlBefore15)) &&
+  Math.abs(parseFloat(_pnlBefore15) - 15) < 0.011, 'emPnlAmount="' + _pnlBefore15 + '"');
+set('emFee', 20); fire('emFee', 'input');
+T('S15 改 emFee 后预览不变', val('emPnlAmount') === _pnlBefore15,
+  'emPnlAmount="' + val('emPnlAmount') + '"');
+set('emSlippageCost', 100); fire('emSlippageCost', 'input');
+T('S15 改 emSlippageCost 后预览不变', val('emPnlAmount') === _pnlBefore15,
+  'emPnlAmount="' + val('emPnlAmount') + '"');
+// 还原费用/滑点 DOM 值（不 fire，不触发解锁）：emFee 一旦带着 20 进保存路径，
+// 它会先于部分平仓重算写入 item.fee，把「原始费用 = 剩余 + 已实现」的锚点改写，
+// 本腿净盈亏期望值就不再是纯比例口径——防线测试与费用覆盖语义解耦。
+set('emFee', 5); set('emSlippageCost', '');
+// 反例：解锁链依旧活性——改比例仍解锁重算，预览应与落库一致
+set('emPartialRatio', 80); fire('emPartialRatio', 'input');
+T('S15 改比例仍解锁重算（预览离开基线）', val('emPnlAmount') !== _pnlBefore15,
+  'emPnlAmount="' + val('emPnlAmount') + '"');
+// 预览 = 落库口径：本腿净 = 毛 40×80% − 费 10×80% = 24
+T('S15 解锁后预览=24.00（与保存口径同构）', val('emPnlAmount') === '24.00',
+  'emPnlAmount="' + val('emPnlAmount') + '"');
+var _ok15 = saveEditLog(0); closeModal();
+T('S15 保存成功', _ok15 === true);
+s = S();
+dump('S15');
+near('S15 realizedPnl 按 80% 本腿重算=24', s.realizedPnl, 24);
+T('S15 费用锚点未被污染（fee+realizedFee===10）',
+  Math.abs((parseFloat(s.fee) || 0) + (parseFloat(s.realizedFee) || 0) - 10) < 0.011,
+  'fee=' + s.fee + ' realizedFee=' + s.realizedFee);
+T('S15 逐腿账本未被费用干预破坏（Σpnl===realizedPnl）',
+  Math.abs(legSum('pnl') - (parseFloat(s.realizedPnl) || 0)) < 0.011,
+  'Σ=' + legSum('pnl') + ' realizedPnl=' + s.realizedPnl);
+
 window.__editResult = __R;

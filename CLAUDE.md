@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目性质
 
-TradingDiscipline：纯前端交易风控/复盘终端（**v5.6.36**），无任何构建工具。原生 JS（IIFE + 全局函数）+ CSS（OKLCH 变量），数据全部存 localStorage，完全离线。`index.html` 直接可运行，但推荐用本地 HTTP 服务器打开（file:// 下 PWA manifest / 部分浏览器行为受限）：
+TradingDiscipline：纯前端交易风控/复盘终端（**v5.6.37**），无任何构建工具。原生 JS（IIFE + 全局函数）+ CSS（OKLCH 变量），数据全部存 localStorage，完全离线。`index.html` 直接可运行，但推荐用本地 HTTP 服务器打开（file:// 下 PWA manifest / 部分浏览器行为受限）：
 
 ```bash
 python3 -m http.server 8000   # 然后开 http://localhost:8000
@@ -20,7 +20,7 @@ npx eslint js/                     # Lint（注意：.eslintrc.json 未启用 no
 npm test                           # 无头全量回归：跑完 13 个跑测器，有失败则 exit 1
 npm run test:main                  # 只跑主回归（test/_rt_headless.js，浏览器内 run-tests.html）
 npm run test:browser               # 浏览器内回归：打开 test/run-tests.html 自动跑全部断言
-# 改完前端后强刷：URL 追加 ?cb=<时间戳> 避开缓存（index.html 里 script 已带 ?v=5.6.36，改 CSS 时同样需要）
+# 改完前端后强刷：URL 追加 ?cb=<时间戳> 避开缓存（index.html 里 script 已带 ?v=5.6.37，改 CSS 时同样需要）
 ```
 
 **块作用域泄漏必查**（`.eslintrc.json` 没开 `no-undef`，所以常规 lint 查不出这类崩溃）：
@@ -141,7 +141,7 @@ v5.6.19 引入两个 P0 时前两套都是全绿的 —— 它们只证明**计�
 
 | # | 位置 | 形式 |
 |---|------|------|
-| 1 | `js/version.js` | `var APP_VERSION = '5.6.36';` |
+| 1 | `js/version.js` | `var APP_VERSION = '5.6.37';` |
 | 2 | `index.html` | 28 处 `?v=` + 15 处 CSS `?v=` |
 | 3 | `test/run-tests.html` | 17 处 `../js/*.js?v=`（漏改 → 测试跑的是旧代码，绿得毫无意义） |
 | 4 | `js/version.js` 顶部 changelog | 追加本次变更说明 |
