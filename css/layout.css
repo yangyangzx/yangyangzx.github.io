@@ -160,38 +160,6 @@ body {
   text-align: center;
 }
 
-/* 键盘快捷键入口（UI 交互评估 P3）：侧栏底部常驻按钮，提供发现性 */
-.nav-help-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  width: 100%;
-  margin-top: 10px;
-  padding: 8px 12px;
-  min-height: 40px;
-  appearance: none;
-  -webkit-appearance: none;
-  border: 1px solid var(--nav-border);
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--color-text-muted);
-  font-family: inherit;
-  font-size: var(--font-xs);
-  cursor: pointer;
-  transition: color var(--dur-short) var(--ease-out),
-              border-color var(--dur-short) var(--ease-out),
-              background-color var(--dur-short) var(--ease-out);
-}
-.nav-help-btn:hover {
-  color: var(--color-text);
-  border-color: var(--color-primary);
-  background: color-mix(in oklch, var(--color-primary) 8%, transparent);
-}
-.nav-help-btn:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 2px;
-}
 
 /* ═══════════════════════════════════════
    导航按钮 — 立体风格（Uiverse dexter-st 适配版）

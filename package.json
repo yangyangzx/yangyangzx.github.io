@@ -1,6 +1,5 @@
 {
   "name": "trading-discipline",
-  "version": "5.0.0",
   "description": "专业期货交易风控与复盘工具",
   "scripts": {
     "test": "node test/run-all.js",

@@ -1913,7 +1913,6 @@ function toggleSplitMode() {
     area.classList.add('open');
     if (!_splitBatches.length) { initSplitBatches(2); }
     renderSplitBatches();
-    updateSplitButtons(); // 新增：确保按钮状态正确
     persistSplitState();
     if (!document.getElementById('entryPrice').value) {
       document.getElementById('entryPrice').placeholder = '加权均价（自动计算）';
@@ -2067,7 +2066,7 @@ function computeWeightedEntry() {
 }
 // 分批建仓的批次上下限——唯一来源。
 // 修复（2026-10-09）：原先 MIN_SPLITS/MAX_SPLITS 在 addSplitBatch / removeSplitBatch /
-// updateSplitButtons 三个函数里各写一份（2 / 5），且每份只用其中一个、另一个是未使用
+// addSplitBatch / removeSplitBatch 原先各写一份（2 / 5），且每份只用其中一个、另一个是未使用
 // 变量（ESLint no-unused-vars 报错）。三处常量一旦改动不同步，就会出现「添加按钮还亮着
 // 但 addSplitBatch 拒绝」或「删除按钮还亮着但 removeSplitBatch 拒绝」的自相矛盾：
 // UI 放行、逻辑拦下，用户只看到一句 toast。提到模块级，三处共用同一对数字。
@@ -2083,7 +2082,6 @@ function addSplitBatch() {
   // 添加新批次
   _splitBatches.push({ price: '', alloc: '', stopLoss: '' });
   renderSplitBatches();
-  updateSplitButtons(); // 新增：更新按钮状态
   persistSplitState();
   return true; // 返回true表示添加成功
 }
@@ -2097,50 +2095,11 @@ function removeSplitBatch(idx) {
   // 删除指定批次
   _splitBatches.splice(idx, 1);
   renderSplitBatches();
-  updateSplitButtons(); // 更新按钮状态
   onSplitChange();
   persistSplitState();
   return true; // 返回true表示删除成功
 }
 
-/**
- * 更新分批建仓按钮的显示状态
- * 根据当前批次数动态显示/隐藏添加和删除按钮
- */
-function updateSplitButtons() {
-  const container = document.getElementById('splitContainer');
-  if (!container) return;
-  
-  const addBtn = container.querySelector('.split-add-btn');
-  const removeBtns = container.querySelectorAll('.split-remove-btn');
-  
-  if (!addBtn) return;
-  
-  const currentCount = _splitBatches ? _splitBatches.length : 2;
-  
-  // 控制添加按钮显示
-  if (currentCount >= MAX_SPLITS) {
-    addBtn.style.display = 'none'; // 达到最大批次，隐藏添加按钮
-  } else {
-    addBtn.style.display = 'inline-block'; // 允许添加，显示按钮
-  }
-  
-  // 控制删除按钮显示
-  removeBtns.forEach(btn => {
-    if (currentCount <= MIN_SPLITS) {
-      btn.style.display = 'none'; // 达到最小批次，隐藏删除按钮
-    } else {
-      btn.style.display = 'inline-block'; // 允许删除，显示按钮
-    }
-  });
-  
-  // 可选：添加视觉提示
-  if (currentCount >= MAX_SPLITS) {
-    addBtn.title = `已达到最大批次数(${MAX_SPLITS})`;
-  } else {
-    addBtn.title = `添加第${currentCount + 1}批 (最多${MAX_SPLITS}批)`;
-  }
-}
 function getSplitEntries() {
   if (!_splitMode || _splitBatches.length < 2) return null;
   // 2026-10-12：部分批次无效不再整体丢弃（原 :2091 一旦任一批 price/alloc 非法即
@@ -2256,9 +2215,6 @@ if (_splitMode) toggleSplitMode();
       .forEach(function(id) { SelectUI.syncFromNative(id); });
   }
   document.getElementById('positionDisplay').textContent = '—';
-  document.getElementById('detailDisplay') && (document.getElementById('detailDisplay').textContent = '输入参数后点击「计算仓位」');
-  document.getElementById('warningDisplay').innerHTML = '';
-  document.getElementById('riskTag') && (document.getElementById('riskTag').textContent = '风险: 待计算');
   const resultBox = document.getElementById('resultBox');
   if (resultBox) resultBox.classList.remove('warn');
   const cardMargin = document.getElementById('cardMargin');
@@ -2360,8 +2316,6 @@ function toggleFormSection(sectionId) {
       el.addEventListener('change', markFieldDirty);
     }
   });
-  var sld = document.getElementById('stopLossSlider');
-  if (sld) sld.addEventListener('input', markCalculationDirty);
   // 信号复选框变更同样需要重算，否则 checklist 与落库内容不一致
   var sigBox = document.getElementById('signalCheckboxes');
   if (sigBox) sigBox.addEventListener('change', markCalculationDirty);

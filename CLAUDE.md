@@ -168,26 +168,27 @@ v5.6.19 引入两个 P0 时前两套都是全绿的 —— 它们只证明**计�
 
 以下均为**已确认**、可安全处理项。清理前先确认列表状态是否已被后续提交改动。
 
-### 死代码 / 静默失效（确认无副作用，因有 `if` 保护而未报错）
+### 死代码 / 静默失效（2026-10-19 已清理，留作审计记录）
 
-| 位置 | 问题 | 建议 |
+| 位置 | 问题 | 状态 |
 |------|------|------|
-| `js/calculator.js:1767` `updateSplitButtons()` | 查 `#splitContainer`（真实容器是 `#splitAreaInner`）、查 `.split-remove-btn`（真实 class 是 `.btn-remove`）→ `container` 恒为 `null`，**函数每次调用都立即 return**。4 处调用（navigation.js:186、calculator.js:1579/1743/1757）全部空转 | 整体删除（add/removeSplitBatch 已内置 MIN/MAX 拦截，删掉行为不变） |
-| `js/app.js:379` `window.debugAnalysisData` | P0 期一次性数据诊断工具，全仓零调用点，仅 `console.log` | 删除 |
-| `js/calculator.js:1898/1900` `detailDisplay` / `riskTag` | `getElementById` 恒 `null`，`&&` 短路后分支永不执行 | 删除两行 |
-| `js/calculator.js:1979` `stopLossSlider` | HTML 中无此元素，`if (sld)` 后监听永不绑定 | 删除 |
-| `js/storage.js:10` `STORAGE_CONFIG.compressionEnabled` | 定义后**从未被任何代码读取**（"暂不启用"） | 删除该字段 |
-| `js/utils.js:814` | `console.log('清理长时间未使用的Chart实例')` 生产日志 | 降级或删除 |
+| `js/calculator.js` `updateSplitButtons()` + 3 处调用 | 查 `#splitContainer`（真实容器 `#splitAreaInner`）→ 恒 `null`，函数每次立即 return | ✅ 已删（含 navigation.js:186 调用点） |
+| `js/app.js:379` `window.debugAnalysisData` | P0 期一次性诊断工具，零调用点 | ✅ 已删 |
+| `js/calculator.js` `detailDisplay` / `riskTag` | `getElementById` 恒 `null`，`&&` 短路后永不执行 | ✅ 已删 |
+| `js/calculator.js` `stopLossSlider` | HTML 中无此元素，监听永不绑定 | ✅ 已删 |
+| `js/storage.js` `STORAGE_CONFIG.compressionEnabled` | 定义后从未被读取 | ✅ 已删 |
+| `js/utils.js:814` | 生产 `console.log` | 未动（降级项） |
 | 41 个未使用 CSS 类 | 确认无引用：`risk-grid` `result-row` `result-sub` `warning-bar` `clickable` `empty-hint` `mt-1` `mt-2` `nav-icon` `section-title(-text)` `section-icon` `stats-divider` `stats-filter-bar` `split-breakdown` `calculator-result` `btn-ripple` `btn-modify-action` `setting-input-wrap` `form-section-content-inner` 等 | 删除（⚠️ `vv-badge-*` / `vv-g-fill-*` / `exec-0~3` / `stat-group-bg-*` 是**动态拼接**产生的假阳性，勿删） |
 
 ### 冗余文件
 
 | 文件 | 问题 | 建议 |
 |------|------|------|
-| `img/logo.png` | **v5.6.15 起已零引用**：导航 logo 改用 `assets/icon-192.png`（40px 清晰，原图 803 KB 缩到 48px 糊成噪点），favicon 仍是 `assets/logo.png`。文件保留但可直接删除 |
-| `风控交易逻辑审计报告-v5.6.9.html`、`-v5.6.10.html`、`风控统计复盘系统审计报告.html` | 历史审计产物，无任何代码引用 | 移入 `docs/audit/` 归档，或直接删除 |
-| `trading_backup_2026-09-07_15-40-56.json` | 用户数据导出残留，已被 `.gitignore` 排除 | 删除或移出仓库 |
-| `node_modules/` + `package-lock.json` | 已收敛（v5.6.34）：jest 与 jest-environment-jsdom 已从 devDependencies 移除，`package.json` 只剩 `eslint` + `jsdom`（13 个跑测器都 require 它，此前靠 jest 的传递依赖侥幸可用）。仍以「跑测试」而非「跑应用」为目的 | 若不再跑无头回归，可连 `jsdom` 一并清掉（但那样 `npm test` 就没了） |
+| `img/logo.png` | **v5.6.15 起已零引用** | ✅ 已删（2026-10-19） |
+| `风控交易逻辑审计报告-v5.6.9.html`、`-v5.6.10.html`、`风控统计复盘系统审计报告.html` | 历史审计产物，无代码引用 | 待归档/删除 |
+| `trading_backup_2026-09-07_15-40-56.json` | 用户数据导出残留，已被 `.gitignore` 排除 | 待删除 |
+| `package.json` version 字段 | 与 APP_VERSION 脱节且无程序读取 | ✅ 已删（2026-10-19） |
+| `node_modules/` + `package-lock.json` | 已收敛（v5.6.34）：`package.json` 只剩 `eslint` + `jsdom`（13 个跑测器都 require 它） | 若不再跑无头回归可连 `jsdom` 清掉 |
 
 ### 投机性注释（premature comments）
 
@@ -201,7 +202,7 @@ v5.6.19 引入两个 P0 时前两套都是全绿的 —— 它们只证明**计�
 - `js/storage.js:10` —"暂不启用压缩，避免复杂性"
 - `test/verify-fixes.html:14-25` —12 行"本页不是回归测试"的免责说明（代码不会自证，只能靠人读）
 
-另：`js/version.js` 348 行中 **346 行是注释（99.4%）**，只有 1 行有效代码。完整 changelog 常驻生产脚本，每次刷新都要下载 35 KB 只为拿到 `var APP_VERSION`。**建议把 changelog 迁到 `CHANGELOG.md`，version.js 只保留版本号 + 一行说明**（迁移时记得保留该文件，测试第 30.8 组依赖它）。
+另：`js/version.js` 的 changelog 已于 2026-10-19 迁至 `CHANGELOG.md`（960 行→10 行），测试第 30.8 组仍通过（只读 `APP_VERSION` 字面量，不读注释）。此后每版变更说明直接追加到 `CHANGELOG.md`，不再写进生产 JS。
 
 ## 约定
 

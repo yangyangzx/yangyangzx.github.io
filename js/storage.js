@@ -6,8 +6,7 @@
 // 存储安全增强配置
 const STORAGE_CONFIG = {
   maxSizeBytes: 4 * 1024 * 1024, // 4MB安全限制（浏览器通常5-10MB）
-  warningThreshold: 3 * 1024 * 1024, // 3MB警告阈值
-  compressionEnabled: false // 暂不启用压缩，避免复杂性
+  warningThreshold: 3 * 1024 * 1024, // 3MB警告阈值,
 };
 
 // UTF-8 字节数。localStorage 的配额以 UTF-8 字节计，navigator.storage.estimate() 的
