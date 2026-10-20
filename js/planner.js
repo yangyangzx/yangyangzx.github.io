@@ -25,6 +25,22 @@ function _formText(id) {
 }
 
 /**
+ * 反推函数输出写入的统一入口：输出元素不存在时静默跳过。
+ *
+ * P2 修复（2026-10-20）：反推卡片于 v5.6.23 从生产 DOM 移除，#7 FIX 只给
+ * #desiredRR / #reverseTP / #reverseSL 的读取端加了 null 守卫，所有写入端仍是
+ * 裸 `document.getElementById(...).value = …`。生产 DOM 下不炸只是因为 #desiredRR
+ * 在首个守卫分支就 return 掩护了路径；一旦出现「desiredRR 存在而输出框不存在」的
+ * 部分 DOM（未来重接反推 UI 只接一半、或测试桩不完整），写入端会抛 TypeError，
+ * 与注释宣称的安全行为自相矛盾。此后 calcReverseTP / calcReverseSL 的全部输出
+ * 都经本函数写入。
+ */
+function _reverseWrite(id, text) {
+  var el = document.getElementById(id);
+  if (el) el.value = String(text);
+}
+
+/**
  * 取多止盈/反推共用的单位口径（每 1U 名义本金）。
  *
  * v5.6.9 P0 修复：计算结果不可用时退回表单输入，而不是返回 null。
@@ -150,6 +166,7 @@ function calcReverseTP() {
 
   // #7 FIX：盈亏比反推卡片已于 v5.6.23 从 index.html 移除，生产 DOM 下 #desiredRR 不存在，
   // 直接 .value 会抛 TypeError。加 null 守卫，缺失时安全退出（当前无 UI 调用方）。
+  // 2026-10-20：写入端守卫由 _reverseWrite() 统一补齐（#7 FIX 原先只守了读取端）。
   var _drEl = document.getElementById('desiredRR');
   var desiredRR = _drEl ? parseFloat(_drEl.value) : NaN;
   if (isNaN(desiredRR) || desiredRR <= 0) {
@@ -165,19 +182,19 @@ function calcReverseTP() {
     var _e0 = _formNumber('entryPrice'), _s0 = _formNumber('stopLoss');
     var _badDir = (_e0 > 0 && _s0 > 0) &&
       ((_d0 === 'long' && _s0 >= _e0) || (_d0 === 'short' && _s0 <= _e0));
-    document.getElementById('reverseTP').value = _badDir
+    _reverseWrite('reverseTP', _badDir
       ? (_d0 === 'long' ? '做多止损价需 < 入场价' : '做空止损价需 > 入场价')
-      : '请先填写入场价和止损价';
+      : '请先填写入场价和止损价');
     return;
   }
 
   // 方向校验
   if (u.direction === 'long' && u.stopLoss >= u.ep) {
-    document.getElementById('reverseTP').value = '做多止损价需 < 入场价';
+    _reverseWrite('reverseTP', '做多止损价需 < 入场价');
     return;
   }
   if (u.direction === 'short' && u.stopLoss <= u.ep) {
-    document.getElementById('reverseTP').value = '做空止损价需 > 入场价';
+    _reverseWrite('reverseTP', '做空止损价需 > 入场价');
     return;
   }
 
@@ -191,10 +208,10 @@ function calcReverseTP() {
   // 而不是塞一个按纯毛利算出来的错值——回填后再被 RR 门判不达标，比不给结果更误导。
   var targetPrice = solveTPForRR(u, desiredRR, u.direction);
   if (!targetPrice) {
-    document.getElementById('reverseTP').value = '无法按含费口径反推目标价（费率过高或参数异常）';
+    _reverseWrite('reverseTP', '无法按含费口径反推目标价（费率过高或参数异常）');
     return;
   }
-  document.getElementById('reverseTP').value = targetPrice.toFixed(5);
+  _reverseWrite('reverseTP', targetPrice.toFixed(5));
 }
 
 /**
@@ -209,6 +226,7 @@ function calcReverseSL() {
   var u = getTPUnits(false);
 
   // #7 FIX：#reverseTP / #desiredRR 同属已移除的反推卡片，缺失时 null 守卫避免 TypeError。
+  // 2026-10-20：写入端守卫由 _reverseWrite() 统一补齐（#7 FIX 原先只守了读取端）。
   var _rtEl2 = document.getElementById('reverseTP');
   var targetPrice = _rtEl2 ? parseFloat(_rtEl2.value) : NaN;
   var _drEl2 = document.getElementById('desiredRR');
@@ -223,24 +241,24 @@ function calcReverseSL() {
   if (!u) {
     // u 只在入场价缺失或方向无效时为 null。按真实缺失字段提示——原实现固定报
     // 「请先填写入场价」，而入场价已填时指错了字段。
-    document.getElementById('reverseSL').value = !(_formNumber('entryPrice') > 0)
+    _reverseWrite('reverseSL', !(_formNumber('entryPrice') > 0)
       ? '请先填写入场价'
-      : '请先填写方向（做多/做空）';
+      : '请先填写方向（做多/做空）');
     return;
   }
 
   if (isNaN(targetPrice) || targetPrice <= 0) {
-    document.getElementById('reverseSL').value = '请先反推目标价或手动输入';
+    _reverseWrite('reverseSL', '请先反推目标价或手动输入');
     return;
   }
 
   // 方向校验：目标价必须与方向一致（做多需高于入场价，做空需低于入场价）
   if (u.direction === 'long' && targetPrice <= u.ep) {
-    document.getElementById('reverseSL').value = '做多目标价需 > 入场价';
+    _reverseWrite('reverseSL', '做多目标价需 > 入场价');
     return;
   }
   if (u.direction === 'short' && targetPrice >= u.ep) {
-    document.getElementById('reverseSL').value = '做空目标价需 < 入场价';
+    _reverseWrite('reverseSL', '做空目标价需 < 入场价');
     return;
   }
 
@@ -256,23 +274,23 @@ function calcReverseSL() {
   // 分子 num = tpDist/ep − 目标腿费 必须先为正，否则目标价连手续费都覆盖不了。
   var _numU = Math.abs(targetPrice - u.ep) / u.ep - u.feeRateFrac * (1 + targetPrice / u.ep);
   if (!(_numU > 0)) {
-    document.getElementById('reverseSL').value = '目标价太近，覆盖手续费后无正收益，无法反推';
+    _reverseWrite('reverseSL', '目标价太近，覆盖手续费后无正收益，无法反推');
     return;
   }
   var stopLoss = solveSLForRR(u, desiredRR, targetPrice, u.direction);
   if (stopLoss == null) {
-    document.getElementById('reverseSL').value = '无法按含费口径反推止损价（目标价过近或期望盈亏比过大）';
+    _reverseWrite('reverseSL', '无法按含费口径反推止损价（目标价过近或期望盈亏比过大）');
     return;
   }
 
   // 止损价方向正确性校验
   if ((u.direction === 'long' && stopLoss >= u.ep) ||
       (u.direction === 'short' && stopLoss <= u.ep)) {
-    document.getElementById('reverseSL').value = '期望盈亏比过大，止损价越过入场价，请降低 RR';
+    _reverseWrite('reverseSL', '期望盈亏比过大，止损价越过入场价，请降低 RR');
     return;
   }
 
-  document.getElementById('reverseSL').value = stopLoss.toFixed(5);
+  _reverseWrite('reverseSL', stopLoss.toFixed(5));
 }
 
 // ==================== 多止盈位 ====================
@@ -356,29 +374,51 @@ function autoCalcMultiTP() {
  * - 往返费按腿的成交价由 feeRate 直接算（各腿各付各的），不依赖 calc.fee，
  *   因此本函数返回值不受无关的 #targetPrice 影响
  * - 返回 { rr, remain, sumRatio, unitLoss, overLimit }；未规划返回 null
+ * - calc 缺失时退回表单口径（getTPUnits(false) 同源），不再与行级 RR 分裂（2026-10-20）
  */
 function computeWeightedTPRR() {
   var calc = getCalc();
-  if (!calc || !calc.entryPrice) return null;
-  var entryPrice = calc.effectiveEntryPrice || calc.entryPrice;
-  var stopLoss = calc.stopLoss;
-  var direction = calc.direction;
-  var stopDistance = calc.stopDistance != null ? calc.stopDistance
-    : (!isNaN(entryPrice) && !isNaN(stopLoss) ? Math.abs(entryPrice - stopLoss) : 0);
-  if (!(entryPrice > 0) || !(stopDistance > 0)) return null;
-  var ep = entryPrice;
+  // 计算 / 表单两条口径（v5.6.20 补齐表单回退，2026-10-20）：
+  // 原先 calc 缺失时整体 return null，与行级 RR 分裂——updateMultiTP 行级经
+  // getTPUnits() 有表单回退，本函数没有：表单已填三档止盈、「计算仓位」还没点时
+  // 三行有含费 RR、组合行显示 '—'，同一卡片两套口径；saveLog 的 tpPlan.weightedRR
+  // 也因此恒 null（同源调用本函数）。回退经 getTPUnits(false)，与行级同源。
+  var ep, legFee, unitLoss, direction;
+  if (calc && calc.entryPrice) {
+    var entryPrice = calc.effectiveEntryPrice || calc.entryPrice;
+    var stopLoss = calc.stopLoss;
+    var stopDistance = calc.stopDistance != null ? calc.stopDistance
+      : (!isNaN(entryPrice) && !isNaN(stopLoss) ? Math.abs(entryPrice - stopLoss) : 0);
+    if (!(entryPrice > 0) || !(stopDistance > 0)) return null;
+    ep = entryPrice;
+    direction = calc.direction;
 
-  // 单位往返费用（每 1U 仓位）：按腿的成交价直接由费率算出。
-  // 修复（2026-09-23 RR 审计）：原实现从 calc.fee / calc.positionSize 反推，
-  // 而 calc.fee 在无目标价时是止损腿费、有目标价时是目标腿费，导致本函数返回值
-  // 随无关的 #targetPrice 漂移（实测未改任何止盈输入，加权 RR 与各行 RR 均位移）。
-  var feeRateFrac = (calc.feeRate != null ? parseFloat(calc.feeRate) : 0) / 100;
-  if (isNaN(feeRateFrac) || feeRateFrac < 0) feeRateFrac = 0;
-  var legFee = function(exitPrice) {
-    return feeRateFrac * (1 + (exitPrice > 0 ? exitPrice / ep : 1));
-  };
-  var unitLoss = stopDistance / ep + legFee(stopLoss);   // 止损路径付止损腿费
-  if (!(unitLoss > 0)) return null;
+    // 单位往返费用（每 1U 仓位）：按腿的成交价直接由费率算出。
+    // 修复（2026-09-23 RR 审计）：原实现从 calc.fee / calc.positionSize 反推，
+    // 而 calc.fee 在无目标价时是止损腿费、有目标价时是目标腿费，导致本函数返回值
+    // 随无关的 #targetPrice 漂移（实测未改任何止盈输入，加权 RR 与各行 RR 均位移）。
+    var feeRateFrac = (calc.feeRate != null ? parseFloat(calc.feeRate) : 0) / 100;
+    if (isNaN(feeRateFrac) || feeRateFrac < 0) feeRateFrac = 0;
+    legFee = function(exitPrice) {
+      return feeRateFrac * (1 + (exitPrice > 0 ? exitPrice / ep : 1));
+    };
+    unitLoss = stopDistance / ep + legFee(stopLoss);   // 止损路径付止损腿费
+    if (!(unitLoss > 0)) return null;
+  } else {
+    // ===== 表单回退口径：经 getTPUnits(false)（requireStop=false，止损未知也可解）=====
+    // 期望形态：ep>0 + 方向有效 + 止损距离>0（否则 unitLoss 无意义，返回 null）。
+    // 补方向一致性校验：getTPUnits 的 sd 取绝对值，止损价与方向同侧属非法输入
+    // （做多止损 ≥ 入场价 / 做空止损 ≤ 入场价），此时不给加权期望，交由行级显示『逆势』。
+    var _u0 = getTPUnits(false);
+    if (!_u0 || !(_u0.unitLoss > 0)) return null;
+    var _badSide = (_u0.direction === 'long' && _u0.stopLoss >= _u0.ep) ||
+      (_u0.direction === 'short' && _u0.stopLoss <= _u0.ep);
+    if (_badSide) return null;
+    ep = _u0.ep;
+    direction = _u0.direction;
+    legFee = _u0.legFee;
+    unitLoss = _u0.unitLoss;
+  }
 
   var ids = ['tp1', 'tp2', 'tp3'];
   var prices = [], ratios = [];
@@ -575,11 +615,17 @@ function initMultiTPListeners() {
     }
   }
 
-  // 当方向或止损价变化时重置所有 TP 标记，允许重新自动计算。
+  // 当方向、止损价或入场价变化时重置所有 TP 标记，允许重新自动计算。
+  // P3 修复（2026-10-20）：入场价原先不重置 _userEdited——多止盈价是「入场价 + RR 距离」
+  // 的相对解，用户改入场价后旧手工 TP 已整份失效，却因标记残留被 autoCalcMultiTP
+  // 静默跳过重填，过期价格还会随 tpPlan 原样落库。改用与 direction / stopLoss 相同
+  // 的 change 监听（程序化赋值不触发 change，分批模式的 updateEntryPriceFromSplit
+  // 回填不受影响）。
   // #direction / #stopLoss 缺失时静默跳过（缺元素的视图不该让 initMultiTPListeners 抛错）。
   if (_tpBaseChangeBound) return;
   var directionEl = document.getElementById('direction');
   var stopLossEl = document.getElementById('stopLoss');
+  var entryPriceEl = document.getElementById('entryPrice');
   if (!directionEl || !stopLossEl) return;
   function resetAllTPFlags() {
     ['tp1Price', 'tp2Price', 'tp3Price'].forEach(function(id) {
@@ -589,6 +635,7 @@ function initMultiTPListeners() {
   }
   directionEl.addEventListener('change', resetAllTPFlags);
   stopLossEl.addEventListener('change', resetAllTPFlags);
+  if (entryPriceEl) entryPriceEl.addEventListener('change', resetAllTPFlags);
   _tpBaseChangeBound = true;
 }
 
@@ -791,11 +838,14 @@ function updateChecklist() {
     // 现按实际适用的那套上限表述，聚合上限为唯一相关阈值。
     var _isSpot = !(calc.leverage > 0);
     var _limitPct = _isSpot ? _agPct : _muPct;
+    // P2 修复（2026-10-20）：现货同样可被品种集中度截断（calculator.js 集中度分支
+    // 置 cappedByMargin = true），原现货文案只报「聚合/交易所上限」，把集中度归因
+    // 刻丢了——用户看到的截断原因与真实风控不一致。补齐归因，与非现货分支对称。
     if (calc.cappedByMargin) {
       return {
         result: false,
         level: 'warn',
-        message: '保证金占比 ' + (ratio * 100).toFixed(1) + '%，仓位已被' + (_isSpot ? '聚合 ' + _agPct + '%/交易所上限' : '保证金 ' + _muPct + '%/聚合 ' + _agPct + '%/交易所上限/集中度上限') + '截断'
+        message: '保证金占比 ' + (ratio * 100).toFixed(1) + '%，仓位已被' + (_isSpot ? '聚合 ' + _agPct + '%/交易所上限/集中度上限' : '保证金 ' + _muPct + '%/聚合 ' + _agPct + '%/交易所上限/集中度上限') + '截断'
       };
     }
     return { result: true, message: '保证金占比 ' + (ratio * 100).toFixed(1) + '% ≤ ' + _limitPct + '%' + (_isSpot ? '（现货按聚合上限）' : '') };

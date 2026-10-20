@@ -5,6 +5,49 @@
 
 ---
 
+// 5.6.36：applyKellyRisk 止损与凯利统计解耦 + planner 四处一致性缺口（2026-10-20 量纲审计）
+//
+//   ① P0 · applyKellyRisk 无 ATR 止损分支量纲不通（calculator.js）
+//      原实现 slPct = kellyAvgLoss(USDT 金额) ÷ entryPrice(价格)，当作「止损距离比例」用。
+//      avgLoss 是亏损金额（≈ 风险比例 × 本金），不是价格单位，量纲不成立；更根本的是该
+//      映射在概念上无意义——任何止损宽度下触发止损的损失恒等于计划风险额
+//      （仓位 × 止损距离比 ≡ riskAmount，由半凯利决定），「让止损损失 ≈ 历史平均亏损」
+//      对任何宽度都不同时成立。实测 avgLoss=30U：ep=100 → slPct=30%、ep=50000 → 0.06%，
+//      几乎总被打到 clamp 边界，生成的止损价与凯利统计完全无关；旧测试
+//      verify_param_fix[8] 只断言 clamp 上限，绿灯掩护了 bug。
+//      现走 provisional 统一口径（getProvisionalStopLoss：设置 provisionalStopPct /
+//      ETH 0.8% / 其它 1%），并按 getStopLimitPct()（customStopLimit 唯一权威）收紧，
+//      保证重算不被 custom-stop-limit-exceeded 闸门拦下。
+//      verify_param_fix 新增 [8b] 组：avgLoss 30U/100U 止损一致、恒为 1%、同一宽度不随
+//      entryPrice 漂移——旧代码三条全红。
+//
+//   ② P2 · 反推函数写入端守卫缺失（planner.js）
+//      反推卡片 v5.6.23 从生产 DOM 移除后，#7 FIX 只给 #desiredRR / #reverseTP /
+//      #reverseSL 的读取端加了 null 守卫，写入端仍是裸 `.value =`。生产不炸只因
+//      #desiredRR 在首个守卫分支提前 return 掩护了路径；「desiredRR 存在而输出框不存在」
+//      的部分 DOM（未来重接 UI 只接一半、测试桩不完整）会抛 TypeError，与注释宣称的
+//      安全行为自相矛盾。新增 _reverseWrite() 统一写入（元素缺失静默跳过），
+//      calcReverseTP / calcReverseSL 共 11 处写入全部改经它。
+//      verify_param_fix 新增 [8c]：无 #reverseTP 时调用不抛错，旧代码抛 TypeError。
+//
+//   ③ P2 · computeWeightedTPRR 表单口径回退（planner.js）
+//      calc 缺失时原先整体 return null，与行级 RR 分裂——updateMultiTP 行级经
+//      getTPUnits() 有表单回退，本函数没有：表单已填三档止盈、「计算仓位」还没点时，
+//      三行有含费 RR、组合行显示 '—'，同一卡片两套口径；saveLog 的 tpPlan.weightedRR
+//      也恒 null（同源调用本函数）。现补 getTPUnits(false) 同源回退，并加方向一致性
+//      校验（止损价与方向同侧属非法输入，此时返回 null，交由行级显示「逆势」）。
+//
+//   ④ P3 · 入场价变化不重置多止盈手工标记（planner.js: initMultiTPListeners）
+//      多止盈价是「入场价 + RR 距离」的相对解，用户改入场价后旧手工 TP 已整份失效，
+//      却因 _userEdited 残留被 autoCalcMultiTP 静默跳过重填，过期价格随后随 tpPlan
+//      原样落库。#entryPrice 补 change 监听（程序化赋值不触发 change，分批模式的
+//      updateEntryPriceFromSplit 回填不受影响）。
+//
+//   ⑤ P2 · 现货保证金占比截断归因缺「集中度」（planner.js: updateChecklist）
+//      calculator.js 集中度分支对现货同样可能置 cappedByMargin = true，原现货文案只报
+//      「聚合/交易所上限」，刻丢集中度归因——用户看到的截断原因与真实风控不一致。
+//      补齐，与非现货分支对称。
+//
 // 应用版本 - 每次更新后递增，用于缓存清除
 // 5.6.35：R 倍数 / 收益率的分母锚点收敛为单一权威（utils.resolveRMultiple / resolvePnlPercent）
 //

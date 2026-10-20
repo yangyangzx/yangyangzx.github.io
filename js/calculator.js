@@ -2369,8 +2369,9 @@ function syncSettingsToForm() {
  * 
  * 功能：
  * 1. 读取已计算的凯利数据（getCalc().kellyData）
- * 2. 将半凯利比例四舍五入到最近的 0.5% 步进
- * 3. 自动计算并填入止损价（优先 ATR，其次凯利平均亏损）
+ * 2. 将半凯利比例应用到后续计算（凯利驱动路径直接使用真实 halfKellyPct 计算风险）
+ * 3. 自动计算并填入止损价（优先 ATR，其次按「临时止损」统一口径，
+ *    并按品种止损上限收紧——历史值与凯利平均亏损无关，2026-10-20 量纲修复后如此）
  * 4. 触发重新计算仓位
  * 
  * @returns {void}
@@ -2425,29 +2426,31 @@ function applyKellyRisk() {
       }
     }
 
-    // 如果没有 ATR，使用凯利平均亏损反推合理止损距离
+    // 如果没有 ATR，走「临时止损」统一口径（getProvisionalStopLoss）。
+    // P0 修复（2026-10-20 量纲审计）：原实现用 kellyAvgLoss(USDT 金额) ÷ entryPrice(价格)
+    // 当「止损距离比例」，量纲不通——avgLoss 是亏损金额（≈风险比例×本金），不是价格单位。
+    // 更根本的是该映射在概念上不成立：任何止损宽度下，触发止损的损失恒等于计划风险额
+    // （仓位 P × 止损距离/E ≡ riskAmount，后者由半凯利决定，与止损宽度无关），
+    // 所以「让止损触发损失 ≈ 历史平均亏损」对任何宽度都不同时成立——此分支对止损宽度
+    // 没有任何有意义的作用。实测 avgLoss=30U：ep=100 时 slPct=30%、ep=50000 时 0.06%，
+    // 几乎总被 clamp 打到 0.5%/3% 边界，止损价与凯利统计完全无关（旧测试
+    // verify_param_fix.js[8] 只断言 clamp 上限，绿灯掩护了这个 bug）。
+    // 现复用 provisional 口径（设置 provisionalStopPct / ETH 0.8% / 其它 1%），
+    // 并按 getStopLimitPct()（品种止损上限的唯一权威）收紧，保证重算时不被
+    // custom-stop-limit-exceeded 闸门拦下——延续旧分支遗留的 getStopLimitPct 收口。
+    // 止损价仍写回表单供用户确认或修改，与 provisional 语义一致。
     if (stopLoss === null) {
-      var kellyAvgLoss = parseFloat(document.getElementById('kellyAvgLoss')?.value);
-      if (!isNaN(kellyAvgLoss) && kellyAvgLoss > 0) {
-        // 用平均亏损占入场价的比例作为止损距离基准
-        var slPct = kellyAvgLoss / entryPrice;
-        // 止损区间必须走 getStopLimitPct()（唯一权威，读 settings.customStopLimit）。
-        // 原实现在此写死 ETH 0.3%~2% / 其余 0.5%~3%，是同一概念的第三份副本且完全
-        // 绕过了用户的 customStopLimit：设置里把 BTC 上限改成 1.5%，这里仍按 3%
-        // 生成止损，随后又被 calculate() 的 custom-stop-limit-exceeded 闸门拦下——
-        // 用户看到的是「点了应用半凯利却被系统阻断」，且阻断原因与自己填的设置矛盾。
-        var maxStopPct = getStopLimitPct(calc ? calc.symbol : '') / 100;
-        // 下限保留内置的 0.3%/0.5%（止损过窄会让仓位爆炸，与设置无关），
-        // 上限改由设置决定。getStopLimitPct 已保证返回正数。
-        var minStopPct = (calc && calc.symbol && calc.symbol.toUpperCase() === 'ETH') ? 0.003 : 0.005;
-        slPct = Math.max(minStopPct, Math.min(maxStopPct, slPct));
-        stopLoss = direction === 'long'
-          ? entryPrice * (1 - slPct)
-          : entryPrice * (1 + slPct);
-      }
+      var _planSymbol = (calc && calc.symbol) ? calc.symbol
+        : (document.getElementById('symbol') ? (document.getElementById('symbol').value || '') : '');
+      var _provStop = getProvisionalStopLoss(entryPrice, direction, _planSymbol, settings);
+      var _maxStopPct = getStopLimitPct(_planSymbol) / 100;
+      var _slPct = Math.min(_provStop.stopPct, _maxStopPct);
+      stopLoss = direction === 'long'
+        ? entryPrice * (1 - _slPct)
+        : entryPrice * (1 + _slPct);
     }
 
-    // 兜底：使用 1% 止损距离
+    // 兜底：使用 1% 止损距离（仅当 provisional 路径异常时可达）
     if (stopLoss === null) {
       stopLoss = direction === 'long' ? entryPrice * 0.99 : entryPrice * 1.01;
     }

@@ -232,6 +232,53 @@ console.log('\n[3] 连亏降仓阈值与系数（现货，连亏 2 笔）');
   check('生成止损 ≤ 设置上限 1%', isFinite(genPct) && genPct <= 1.0,
     '止损=' + genStop + ' (' + genPct.toFixed(3) + '%)');
 
+  console.log('\n[8b] applyKellyRisk 止损与凯利平均亏损解耦（2026-10-20 量纲修复）');
+  // 原实现 slPct = avgLoss(USDT) / entryPrice(价格)，量纲不通：
+  // 止损宽度随 entryPrice 漂移（avgLoss=30：ep=100000 → clamp 0.5%；ep=50000 → 0.5% 边界
+  // 抖动），且与凯利统计无关。修复后走 provisional 统一口径（BTC 默认 1%，被
+  // customStopLimit 收紧），avgLoss 不再参与止损 → 同一 ep 下 stop% 恒为 1%，且与 ep 无关。
+  // 断言设计：old code 在 ep=100000/avgLoss=30 时给出 99500（0.5% clamp），会 fail 两项。
+  const kellyStopAt = (o, avgLoss) => {
+    fill(o);
+    set('kellyWinRate', '0.55'); set('kellyAvgWin', '150'); set('kellyAvgLoss', String(avgLoss));
+    const ke = w.document.getElementById('kellyEnableCalc');
+    if (ke) ke.checked = false;           // 隔离：不驱动仓位，避免凯利超限阻断干扰
+    w.calculate();
+    w.applyKellyRisk && w.applyKellyRisk();
+    return parseFloat(w.document.getElementById('stopLoss').value);
+  };
+  const slA = kellyStopAt({}, 30);                 // ep 100000（fill 默认）
+  const slB = kellyStopAt({}, 100);                // avgLoss 变化 → 止泄应不变
+  check('avgLoss 30U/100U 生成的止损一致（不再按金额/价格误算比例）',
+    isFinite(slA) && isFinite(slB) && Math.abs(slA - slB) < 1e-6,
+    'slA=' + slA + ' slB=' + slB);
+  check('止损按 provisional 统一口径 = 1%（old code 在此为 0.5% clamp）',
+    isFinite(slB) && Math.abs((100000 - slB) / 100000 * 100 - 1) < 1e-6,
+    'pct=' + (isFinite(slB) ? ((100000 - slB) / 100000 * 100).toFixed(3) : 'NaN') + '%');
+  const slC = kellyStopAt({ entryPrice: '50000', stopLoss: '49500' }, 30);  // 同宽度，ep 变化 → 止损价等比例
+  check('同一宽度不随 entryPrice 漂移：ep=50000 → 止损 49500（1%）',
+    isFinite(slC) && Math.abs((50000 - slC) / 50000 * 100 - 1) < 1e-6,
+    'stop=' + slC + ' pct=' + (isFinite(slC) ? ((50000 - slC) / 50000 * 100).toFixed(3) : 'NaN') + '%');
+  { const ke = w.document.getElementById('kellyEnableCalc'); if (ke) ke.checked = false; }
+
+  console.log('\n[8c] calcReverseTP 写入端守卫（2026-10-20）');
+  // 场景：#desiredRR 存在（输入依赖满足、越过首个守卫分支）而输出框 #reverseTP 不存在。
+  // 原实现 #7 FIX 只守读取端，此场景写输出时抛 TypeError。
+  const drEl8 = w.document.createElement('input');
+  drEl8.id = 'desiredRR'; drEl8.value = '2';
+  const cardEl8 = w.document.querySelector('.card');
+  if (cardEl8) {
+    cardEl8.appendChild(drEl8);
+    try {
+      w.calcReverseTP();
+      check('无 #reverseTP 时 calcReverseTP 不抛错（_reverseWrite 兜底）', true, '');
+    } catch (e) {
+      check('无 #reverseTP 时 calcReverseTP 不抛错（_reverseWrite 兜底）', false, e.constructor.name + ': ' + e.message);
+    } finally {
+      drEl8.remove();
+    }
+  }
+
   console.log('\n[9] 组合热量硬上限与警告上限解耦');
   setS({ riskHeatMax: 12 });
   const hard = w.getHeatHardMax();
