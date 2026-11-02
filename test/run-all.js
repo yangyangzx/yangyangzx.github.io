@@ -30,6 +30,7 @@ const SUITES = [
   ['不变量遍历', 'verify_invariants.js'],
   ['MAE/MFE', 'verify_mae_mfe.js'],
   ['开仓链路审计', 'verify_audit_1013.js'],
+  ['覆盖率补盲', 'verify_coverage_gaps.js'],
 ];
 
 const results = [];

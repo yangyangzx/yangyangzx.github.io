@@ -275,3 +275,26 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ═══════════════════════════════════════════════
+   风险档位跨越脉冲 — warn→danger 或 danger→warn 时
+   在风险数值上做一次短暂透明度脉冲，提示状态已变
+   ═══════════════════════════════════════════════ */
+.dash-risk-value.tier-pulse {
+  animation: tierPulse 600ms var(--ease-out);
+}
+
+@keyframes tierPulse {
+  0%   { opacity: 1; }
+  25%  { opacity: 0.55; }
+  50%  { opacity: 1; }
+  75%  { opacity: 0.75; }
+  100% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dash-risk-value.tier-pulse {
+    animation: none;
+    opacity: 1;
+  }
+}

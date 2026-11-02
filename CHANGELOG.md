@@ -1046,3 +1046,44 @@
 //          抄数字——是与多止盈位规划重复的死胡同。求解内核 solveTPForRR 仍在用；
 //          calcReverseTP / calcReverseSL 保留为测试入口（第 27 组）。
 //        版本号 5.6.17 → 5.6.23
+
+// 5.6.38：四组操作反馈动画 + 视图交叉淡入淡出（2026-11-02）
+//
+//   新增四组有意义的操作反馈动画，均为 transform/opacity 级别，不影响布局：
+//
+//   ① 交易日志新增行插入动画（table.css + rendering.js）
+//      新交易落库时，对应行从左侧滑入（240ms）+ 左侧强调条短暂亮起后淡出。
+//      此前新行直接出现，无任何过渡——这是核心"我做了某事"的反馈时刻。
+//      由 rendering.js 的 _prevRenderedIds 追踪上次渲染的日志 ID 集合，
+//      检测到新 ID 时给对应行加 .row-new 类触发动画。
+//
+//   ② 风险档位跨越脉冲（dashboard.css + dashboard.js）
+//      组合热量从 warn 跨越到 danger（或反向）时，风险数值做一次短暂
+//      透明度脉冲（600ms），提示用户状态已变。此前颜色静默切换，
+//      无人注意。由 _dashPrevRiskTier 追踪上次档位，跨越时加 .tier-pulse。
+//
+//   ③ 视图切换交叉淡入淡出（layout.css + navigation.js）
+//      旧视图淡出（180ms）的同时新视图淡入（150ms），此前旧视图瞬时消失。
+//      由 _doSwitchView 在切换前加 .view-leaving 类触发，180ms 后清理。
+//
+//   ④ 设置保存按钮闪烁（settings.css + settings.js）
+//      保存成功后按钮短暂变绿再恢复，提供即时视觉确认（toast 之外更快的感知）。
+//      由 saveSettings 成功路径加 .save-flash 类触发，600ms 后自动移除。
+//
+//   所有动画均含 @media (prefers-reduced-motion: reduce) 降级路径。
+
+// 5.6.39：图表渲染错误兜底 + 三个零覆盖模块补盲断言（2026-11-02）
+//
+//   ① 图表渲染错误兜底（analytics.js + review.js）
+//      此前所有 new Chart() 调用无 try/catch：Chart.js CDN 不可达或单个图表
+//      数据异常时抛异常，导致后续图表静默不渲染且无任何提示。
+//      新增 safeChart() 包装函数：18 处 new Chart() 全部替换，
+//      单图失败时显示占位文案 + console.error，不阻断后续渲染。
+//      错误处理器自身也做了防御（canvas.style 缺失时不二次抛异常）。
+//
+//   ② 三个零覆盖模块最小断言集（test/verify_coverage_gaps.js）
+//      analytics.js / review.js / stats.js 此前零测试覆盖
+//      （run-tests.html 只加载 17 个 JS，不含这三个）。
+//      新增 36 条断言：extractPatternName / safeParseNum / groupByStrategy /
+//      groupByDimension / computeGroupStats / computeWinLoss 的边界值 +
+//      safeChart 的异常路径（Chart 抛异常 / Chart 未定义 / 正常创建）。

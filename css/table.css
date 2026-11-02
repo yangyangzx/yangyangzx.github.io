@@ -1495,3 +1495,56 @@ tbody tr:hover > td {
     border-bottom: 1px solid var(--glass-border);
   }
 }
+
+
+/* ═══════════════════════════════════════════════
+   新增行插入动画 — 记录新交易落库时的视觉确认
+   ═══════════════════════════════════════════════ */
+tbody tr.row-new {
+  animation: rowSlideIn var(--dur-normal) var(--ease-out) both;
+}
+
+/* 左侧强调条：插入瞬间出现，300ms 后淡出消失 */
+tbody tr.row-new::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 3px;
+  height: 100%;
+  background: var(--color-primary);
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  animation: rowAccentFade var(--dur-slow) var(--ease-out) forwards;
+  pointer-events: none;
+  z-index: 1;
+}
+
+tbody tr {
+  position: relative;
+}
+
+@keyframes rowSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes rowAccentFade {
+  0% { opacity: 1; }
+  60% { opacity: 0.7; }
+  100% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  tbody tr.row-new {
+    animation: none;
+  }
+  tbody tr.row-new::before {
+    animation: rowAccentFade 600ms var(--ease-out) forwards;
+  }
+}

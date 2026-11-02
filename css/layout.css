@@ -759,8 +759,19 @@ body {
   animation: viewFadeIn var(--dur-short) var(--ease-out);
 }
 
+/* 离开视图的淡出：由 JS 在切换前加 .view-leaving 触发，180ms 后移除 */
+.view.view-leaving {
+  display: block;
+  animation: viewFadeOut 180ms var(--ease-out) forwards;
+}
+
 @keyframes viewFadeIn {
   from { opacity: 0; }
+}
+
+@keyframes viewFadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
 }
 
 .view > .card {

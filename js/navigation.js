@@ -65,17 +65,26 @@ function _doSwitchView(viewName, writeHistory) {
   }
 
   var viewId = _viewMap[viewName];
-
-  // 隐藏所有视图
-  var allViews = document.querySelectorAll('.view');
-  for (var i = 0; i < allViews.length; i++) {
-    allViews[i].classList.remove('active');
-  }
-
-  // 显示目标视图
+  var currentViewEl = document.getElementById(_viewMap[_currentView]);
   var targetView = document.getElementById(viewId);
-  if (targetView) {
+
+  if (currentViewEl && targetView && currentViewEl !== targetView) {
+    // 交叉淡入淡出：旧视图淡出的同时新视图淡入
+    currentViewEl.classList.add('view-leaving');
     targetView.classList.add('active');
+    setTimeout(function() {
+      currentViewEl.classList.remove('view-leaving');
+      currentViewEl.classList.remove('active');
+    }, 180);
+  } else {
+    // 无旧视图或同一视图：直接切换
+    var allViews = document.querySelectorAll('.view');
+    for (var i = 0; i < allViews.length; i++) {
+      allViews[i].classList.remove('active');
+    }
+    if (targetView) {
+      targetView.classList.add('active');
+    }
   }
 
   // 更新导航高亮

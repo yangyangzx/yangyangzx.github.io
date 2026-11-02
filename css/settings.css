@@ -393,3 +393,23 @@
 #customSymbolsList p {
   margin: 0 0 8px 0;
 }
+
+
+/* ═══════════════════════════════════════════════
+   保存成功闪烁 — 按钮短暂变绿再恢复，提供即时视觉确认
+   ═══════════════════════════════════════════════ */
+#settingsSaveBtn.save-flash {
+  animation: saveFlash 600ms var(--ease-out);
+}
+
+@keyframes saveFlash {
+  0%   { box-shadow: 0 0 0 0 var(--glow-success); }
+  30%  { box-shadow: 0 0 0 4px var(--color-success-bg); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #settingsSaveBtn.save-flash {
+    animation: none;
+  }
+}

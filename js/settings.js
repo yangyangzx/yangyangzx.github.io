@@ -479,6 +479,14 @@ function saveSettings() {
   showToast('设置已保存', 'success');
   _refreshSettingsSnapshot();
 
+  // 保存成功闪烁：按钮短暂变绿再恢复，提供即时视觉确认
+  var _saveBtn = document.getElementById('settingsSaveBtn');
+  if (_saveBtn) {
+    _saveBtn.classList.remove('save-flash');
+    void _saveBtn.offsetWidth; // 强制 reflow 以重启动画
+    _saveBtn.classList.add('save-flash');
+  }
+
   // 回同步到开仓计算表单（P0：原实现缺此步）。
   // syncSettingsToForm()此前唯一调用点是 app.js 的 DOMContentLoaded，于是
   // accountBalance / riskPercent / defaultLeverage / atrStopEnabled / atrDefaultMultiplier

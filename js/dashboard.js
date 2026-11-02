@@ -1,5 +1,8 @@
 // ==================== 仪表盘渲染 ====================
 
+// 风险档位跨越追踪：记录上一次渲染的档位，用于检测 warn↔danger 跨越
+var _dashPrevRiskTier = null;
+
 /**
  * 统一调用 utils.getClosedSorted()，避免与 storage/risk 实现分叉。
  * 已平仓判定统一使用 window.utils.isClosedTrade（要求 closeType 非空且 pnlAmount 可解析）。
@@ -248,6 +251,12 @@ function _renderRiskExposure() {
   } catch(e) {}
   var riskCls = riskNum >= heatMax ? 'danger' : (riskNum >= heatWarn ? 'warn' : '');
 
+  // 风险档位跨越检测：warn→danger 或 danger→warn 时触发脉冲
+  var _tierNames = { '': 'safe', warn: 'warn', danger: 'danger' };
+  var _prevTier = _dashPrevRiskTier;
+  var _currTier = _tierNames[riskCls] || 'safe';
+  _dashPrevRiskTier = _currTier;
+
   rowsEl.innerHTML =
     '<div class="dash-risk-row">' +
       '<span class="dash-risk-label">总持仓</span>' +
@@ -255,7 +264,7 @@ function _renderRiskExposure() {
     '</div>' +
     '<div class="dash-risk-row">' +
       '<span class="dash-risk-label">总风险（占本金）</span>' +
-      '<span class="dash-risk-value ' + riskCls + '">' + _fmtUSDT(totalRisk) + (riskPctDisplay === '—' ? '' : ' (' + riskPctDisplay + '%)') + '</span>' +
+      '<span class="dash-risk-value ' + riskCls + (_prevTier && _prevTier !== _currTier ? ' tier-pulse' : '') + '">' + _fmtUSDT(totalRisk) + (riskPctDisplay === '—' ? '' : ' (' + riskPctDisplay + '%)') + '</span>' +
     '</div>' +
     '<div class="dash-risk-row">' +
       '<span class="dash-risk-label">占用保证金</span>' +

@@ -7,6 +7,23 @@ var _analyticsCharts = {};
  * 销毁所有图表实例
  * 同时清理 ChartManager 注册，防止内存泄漏
  */
+// ==================== 图表安全创建 ====================
+// 所有 new Chart() 调用统一经此包装：Chart.js CDN 不可达时 chart-guard 注入占位桩，
+// 但部分渲染函数在 _analyticsCharts 未初始化时仍会走到 new Chart() 抛异常，
+// 导致后续图表静默不渲染且无任何提示。此处 try/catch 保证单个图表失败不阻断后续渲染。
+function safeChart(registry, key, ctx, config) {
+  try {
+    if (typeof Chart === 'undefined') return null;
+    registry[key] = new Chart(ctx, config);
+    return registry[key];
+  } catch (e) {
+    console.error('[analytics] 图表创建失败 ' + key + ':', e);
+    var canvas = ctx && ctx.canvas;
+    if (canvas && canvas.style) _setCanvasEmpty(canvas, 'fa-exclamation-triangle', '图表渲染失败');
+    return null;
+  }
+}
+
 function destroyAnalyticsCharts() {
   var ids = ['chartEquity', 'chartStrategy', 'chartPattern', 'chartSession', 'chartMAEMFE', 'closeTypeChart',
              'chartDailyPnl', 'chartDayOfWeek', 'chartHoldDuration', 'chartMonthlyPnl',
@@ -188,7 +205,7 @@ function renderEquityChart(closed) {
 
   var ctx = canvas.getContext('2d');
   var cc = utils.getChartColors();
-  _analyticsCharts['chartEquity'] = new Chart(ctx, {
+  _analyticsCharts['chartEquity'] = safeChart(_analyticsCharts, 'chartEquity', ctx, {
     type: 'line',
     data: {
       labels: _eqLabels,
@@ -313,7 +330,7 @@ function renderStrategyChart(closed) {
   }
 
   var ctx = canvas.getContext('2d');
-  _analyticsCharts['chartStrategy'] = new Chart(ctx, {
+  _analyticsCharts['chartStrategy'] = safeChart(_analyticsCharts, 'chartStrategy', ctx, {
     type: 'bar',
     data: {
       labels: labels,
@@ -511,7 +528,7 @@ function renderPatternChart(closed) {
   }
 
   var ctx = canvas.getContext('2d');
-  _analyticsCharts['chartPattern'] = new Chart(ctx, {
+  _analyticsCharts['chartPattern'] = safeChart(_analyticsCharts, 'chartPattern', ctx, {
     type: 'bar',
     data: {
       labels: labels,
@@ -619,7 +636,7 @@ function renderSessionChart(closed) {
   ensureChartContainer(canvas);
 
   var ctx = canvas.getContext('2d');
-  _analyticsCharts['chartSession'] = new Chart(ctx, {
+  _analyticsCharts['chartSession'] = safeChart(_analyticsCharts, 'chartSession', ctx, {
     type: 'bar',
     data: {
       labels: labels,
@@ -700,7 +717,7 @@ function renderMAEMFEScatter(closed) {
       }
     }
   };
-  _analyticsCharts['chartMAEMFE'] = new Chart(ctx, {
+  _analyticsCharts['chartMAEMFE'] = safeChart(_analyticsCharts, 'chartMAEMFE', ctx, {
     type: 'scatter',
     data: {
       datasets: [createScatterDataset('盈利单', points.filter(function(p) { return p.isWin; }), cc.scatterWin),
@@ -910,7 +927,7 @@ function renderCloseTypeChart(closed) {
       ctx2.restore();
     }
   };
-  _analyticsCharts['closeTypeChart'] = new Chart(ctx, {
+  _analyticsCharts['closeTypeChart'] = safeChart(_analyticsCharts, 'closeTypeChart', ctx, {
     type: 'bar',
     data: {
       labels: labels,
@@ -1031,7 +1048,7 @@ function renderDailyPnlChart(closed) {
   ensureChartContainer(canvas);
 
   var ctx = canvas.getContext('2d');
-  _analyticsCharts['chartDailyPnl'] = new Chart(ctx, {
+  _analyticsCharts['chartDailyPnl'] = safeChart(_analyticsCharts, 'chartDailyPnl', ctx, {
     type: 'bar',
     data: {
       labels: labels,
@@ -1097,7 +1114,7 @@ function renderDayOfWeekChart(closed) {
   ensureChartContainer(canvas);
 
   var ctx = canvas.getContext('2d');
-  _analyticsCharts['chartDayOfWeek'] = new Chart(ctx, {
+  _analyticsCharts['chartDayOfWeek'] = safeChart(_analyticsCharts, 'chartDayOfWeek', ctx, {
     type: 'bar',
     data: {
       labels: labels,
@@ -1174,7 +1191,7 @@ function renderHoldDurationChart(closed) {
   ensureChartContainer(canvas);
 
   var ctx = canvas.getContext('2d');
-  _analyticsCharts['chartHoldDuration'] = new Chart(ctx, {
+  _analyticsCharts['chartHoldDuration'] = safeChart(_analyticsCharts, 'chartHoldDuration', ctx, {
     type: 'bar',
     data: {
       labels: labels,
@@ -1230,7 +1247,7 @@ function renderMonthlyPnlChart(closed) {
   ensureChartContainer(canvas);
 
   var ctx = canvas.getContext('2d');
-  _analyticsCharts['chartMonthlyPnl'] = new Chart(ctx, {
+  _analyticsCharts['chartMonthlyPnl'] = safeChart(_analyticsCharts, 'chartMonthlyPnl', ctx, {
     type: 'bar',
     data: {
       labels: labels,
@@ -1356,7 +1373,7 @@ function renderMindsetAnalysis(closed) {
   }
 
   var ctx = canvas.getContext('2d');
-  _analyticsCharts['chartMindsetPnl'] = new Chart(ctx, {
+  _analyticsCharts['chartMindsetPnl'] = safeChart(_analyticsCharts, 'chartMindsetPnl', ctx, {
     type: 'bar',
     data: {
       labels: labels,
@@ -1529,7 +1546,7 @@ function renderMarketConditionAnalysis(closed) {
   }
 
   var ctx = canvas.getContext('2d');
-  _analyticsCharts['chartMarketCondition'] = new Chart(ctx, {
+  _analyticsCharts['chartMarketCondition'] = safeChart(_analyticsCharts, 'chartMarketCondition', ctx, {
     type: 'bar',
     data: {
       labels: labels,

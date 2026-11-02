@@ -6,6 +6,20 @@ var _reviewCharts = {};
 /**
  * 销毁复盘页面的所有图表实例
  */
+// ==================== 图表安全创建 ====================
+function safeChart(registry, key, ctx, config) {
+  try {
+    if (typeof Chart === 'undefined') return null;
+    registry[key] = new Chart(ctx, config);
+    return registry[key];
+  } catch (e) {
+    console.error('[review] 图表创建失败 ' + key + ':', e);
+    var canvas = ctx && ctx.canvas;
+    if (canvas && canvas.style) _setReviewEmpty(canvas, '图表渲染失败');
+    return null;
+  }
+}
+
 function destroyReviewCharts() {
   var ids = ['chartLossReason', 'chartStrategyRank', 'chartOrderType', 'chartEmotion', 'chartExecutionQuality', 'chartEntryReason'];
   for (var i = 0; i < ids.length; i++) {
@@ -124,7 +138,7 @@ function renderLossReasonPie(closed) {
   }
 
   var ctx = canvas.getContext('2d');
-  _reviewCharts['chartLossReason'] = new Chart(ctx, {
+  _reviewCharts['chartLossReason'] = safeChart(_reviewCharts, 'chartLossReason', ctx, {
     type: 'doughnut',
     data: {
       labels: labels,
@@ -199,7 +213,7 @@ function renderStrategyRank(closed) {
   }
 
   var ctx = canvas.getContext('2d');
-  _reviewCharts['chartStrategyRank'] = new Chart(ctx, {
+  _reviewCharts['chartStrategyRank'] = safeChart(_reviewCharts, 'chartStrategyRank', ctx, {
     type: 'bar',
     data: {
       labels: labels,
@@ -278,7 +292,7 @@ function renderOrderTypeChart(closed) {
   var wrColors = wrData.map(function(v) { return v >= 50 ? cc.barWin : cc.barLoss; });
 
   var ctx = canvas.getContext('2d');
-  _reviewCharts['chartOrderType'] = new Chart(ctx, {
+  _reviewCharts['chartOrderType'] = safeChart(_reviewCharts, 'chartOrderType', ctx, {
     type: 'bar',
     data: {
       labels: labels,
@@ -365,7 +379,7 @@ function renderEmotionAnalysis(closed) {
   }
 
   var ctx = canvas.getContext('2d');
-  _reviewCharts['chartEmotion'] = new Chart(ctx, {
+  _reviewCharts['chartEmotion'] = safeChart(_reviewCharts, 'chartEmotion', ctx, {
     type: 'bar',
     data: {
       labels: labels,
@@ -513,7 +527,7 @@ function renderExecutionQuality(closed) {
   }
 
   var ctx = canvas.getContext('2d');
-    _reviewCharts['chartExecutionQuality'] = new Chart(ctx, {
+    _reviewCharts['chartExecutionQuality'] = safeChart(_reviewCharts, 'chartExecutionQuality', ctx, {
     type: 'bar',
     data: {
       labels: labels,
@@ -663,7 +677,7 @@ function renderEntryReasonAnalysis(closed) {
   var wrColors = wrData.map(function(v) { return v >= 50 ? cc.barWin : cc.barLoss; });
 
   var ctx = canvas.getContext('2d');
-  _reviewCharts['chartEntryReason'] = new Chart(ctx, {
+  _reviewCharts['chartEntryReason'] = safeChart(_reviewCharts, 'chartEntryReason', ctx, {
     type: 'bar',
     data: {
       labels: labels,

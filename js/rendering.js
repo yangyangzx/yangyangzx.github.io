@@ -23,6 +23,9 @@ function renderTpPlanHtml(tpPlan) {
 let _expandedRows = new Set();   // 已展开的日志行索引集合
 let _tbodyEventsBound = false;   // 事件委托是否已初始化
 
+// 新增行插入动画追踪：记录上次渲染的日志 ID 集合，用于检测新插入的行
+var _prevRenderedIds = new Set();
+
 // P1: 平仓面板「平仓类型」「平仓价格」跨重渲染持久化（默认空串，关闭面板时重置）
 var _closePanelType = '';
 var _closePanelPrice = '';
@@ -688,6 +691,31 @@ function renderLogs() {
   // 8. 构建并设置 HTML
   var html = buildRowsHTML(dl);
   tbody.innerHTML = html;
+
+  // 8b. 新增行插入动画：检测本次渲染中新出现的日志 ID，给对应行加 .row-new
+  var _currIds = new Set();
+  var _newIds = new Set();
+  for (var _ni = 0; _ni < dl.length; _ni++) {
+    var _nId = dl[_ni].item.id != null ? dl[_ni].item.id : dl[_ni].item.time;
+    _currIds.add(_nId);
+    if (!_prevRenderedIds.has(_nId)) _newIds.add(_nId);
+  }
+  _prevRenderedIds = _currIds;
+  if (_newIds.size > 0) {
+    var _newRows = tbody.querySelectorAll('tr');
+    for (var _nr = 0; _nr < _newRows.length; _nr++) {
+      // 每行 data-idx 对应 origIdx，通过 origIdx 找到 item 再比对 ID
+      var _rowIdx = _newRows[_nr].getAttribute('data-idx');
+      var _entry = null;
+      for (var _ne = 0; _ne < dl.length; _ne++) {
+        if (String(dl[_ne].origIdx) === String(_rowIdx)) { _entry = dl[_ne]; break; }
+      }
+      if (_entry) {
+        var _rowId = _entry.item.id != null ? _entry.item.id : _entry.item.time;
+        if (_newIds.has(_rowId)) _newRows[_nr].classList.add('row-new');
+      }
+    }
+  }
 
   // 9. 恢复动态状态
   restoreAfterRender();
