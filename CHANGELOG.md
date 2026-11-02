@@ -1087,3 +1087,37 @@
 //      新增 36 条断言：extractPatternName / safeParseNum / groupByStrategy /
 //      groupByDimension / computeGroupStats / computeWinLoss 的边界值 +
 //      safeChart 的异常路径（Chart 抛异常 / Chart 未定义 / 正常创建）。
+
+// 5.6.40：五项审计修复——保存闸门大小写/凯利还原前置热量预检/曲线基准口径/
+//         凯利全胜提示/ChartManager 延迟销毁竞态（2026-11-02）
+//
+//   ① P2 · 保存闸门品种比对改大小写不敏感（calculator.js assertSavableCalculation）
+//      calc.symbol 已 toUpperCase 归一，而输入框的 text-transform:uppercase 只是视觉大写，
+//      闸门原用全等比较 fv('symbol') !== String(calc.symbol)：手输 "btc" 时快照是 "BTC"，
+//      保存被永久误拦（「参数已变更（品种）」且重算无法解除——重算只是再生成同样的快照）。
+//      现两端各自 trim+toUpperCase 后比较（_verify_bugs.js A2 实证放行）。
+//
+//   ② P2 · 凯利驱动取消后的还原前移到组合热量预检之前（calculator.js _calculateImpl）
+//      预检直接读 #riskInput 估算本仓计划风险；勾选凯利后 riskInput 残留驱动值（如 5%），
+//      原还原代码在预检之后，且会被硬阻断的提前 return 短路——取消凯利后重算被
+//      「组合热量超限」误熔断，表单停留在过期驱动值。还原只改显示值、不参与数值计算，
+//      提前执行无副作用（_verify_bugs.js B3/B3b 实证：还原为 2%、重算放行）。
+//
+//   ③ P2 · 资金曲线基准提示与实际实现对齐（analytics.js renderEquityChart）
+//      utils.js calcEquityCurve 以「最早一条已平仓日志的 capital 快照」为曲线起点
+//      （首笔缺失才回退 accountBalance），原提示却写「设置中账户余额（曲线以此为准）」
+//      ——余额与首笔快照偏差 >1% 时，提示标注的起点与曲线实际起点对不上。
+//      现改为以实际起点（最早日志本金快照）为准，设置余额仅作对照参考。
+//
+//   ④ P3 · 全胜/无亏损策略凯利静默失效补提示（skills-integration.js + calculator.js）
+//      losses=0 时 avgLoss=0，calcKelly 判无效返回 null，凯利卡片/驱动静默消失。
+//      新增：calcKellyStatsFromLogs 返回 noLosses 标记；autoFillKellyFromLogs 不再写入
+//      "0.00" 占位、给出「样本无亏损，无法计算平均亏损（凯利不适用）」明确提示；
+//      凯利参考区对 avgLoss≤0 显示可见警告（不写 kellyData，避免向日志持久化无效标记）。
+//      calcKelly 本体判 null 不变（全胜时凯利数学上无定义，显式告知而非静默失效）。
+//
+//   ⑤ P3 · ChartManager 同 key 重注册立即销毁旧实例（utils.js）
+//      register 遇 key 冲突原走默认延迟 1000ms 销毁：同 canvas 重渲染（常态）时新 Chart
+//      会因旧图未销毁抛 "Canvas is already in use"，延迟回调还会抹掉新实例的 __chartKey
+//      标记，形成跨实例竞态。改为 unregister(key, true) 同步销毁（现有调用点均传
+//      immediate=true，行为不变；_verify_bugs.js E1/E2 实证）。

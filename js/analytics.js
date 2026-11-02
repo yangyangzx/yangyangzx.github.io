@@ -155,19 +155,19 @@ function renderEquityChart(closed) {
     if (_eqCapital != null && _eqCapital > 0) capital = _eqCapital;
   }
 
-  // 检查设置中的 accountBalance 是否与推算值差异较大
+  // 检查设置中的 accountBalance 是否与曲线实际起点差异较大
   var _abSettings = null;
   try { _abSettings = loadSettings(); } catch(e) { console.error('[analytics]', e); }
-  // 曲线实际起点口径：calcEquityCurve 优先用 settings.accountBalance，其次首笔 capital。
-  // 提示文本必须与该优先级一致，否则用户看到"设置值 vs 日志推算值"却对不上曲线起点。
-  var _curveUsesSettings = !!( _abSettings && _abSettings.accountBalance > 0 );
-  var _noteSource = _curveUsesSettings
-    ? (_abSettings.accountBalance).toFixed(2)
-    : (capital > 0 ? capital.toFixed(2) : '0');
+  // P2 FIX（2026-11-02 审计）：曲线实际起点口径必须与 utils.js calcEquityCurve 一致——
+  // 它以「最早一条已平仓日志的 capital 快照」为起点（即上方 capital，首笔缺失时才
+  // 回退 getAccountCapital()）；settings.accountBalance 仅在完全没有日志时兜底。
+  // 原实现把提示写成「设置中账户余额（曲线以此为准）」，与真实起点相反：
+  // 用户余额与首笔快照偏差 >1% 时，看到的提示标注的起点与曲线实际起点对不上。
+  // 现改为：提示以实际起点（最早日志本金快照）为准，设置余额只作对照参考。
   var _noteEl = document.getElementById('equityBalanceNote');
-  if (_abSettings && _abSettings.accountBalance > 0) {
+  if (_abSettings && _abSettings.accountBalance > 0 && capital > 0) {
     var _diff = Math.abs(_abSettings.accountBalance - capital);
-    var _diffPct = capital > 0 ? (_diff / capital * 100) : 100;
+    var _diffPct = _diff / capital * 100;
     if (_diffPct > 1) {
       if (!_noteEl) {
         _noteEl = document.createElement('div');
@@ -175,7 +175,7 @@ function renderEquityChart(closed) {
         _noteEl.style.cssText = 'font-size:11px;color:var(--chart-canvas-text);margin-top:6px;text-align:right;';
         canvas.parentElement.appendChild(_noteEl);
       }
-      _noteEl.textContent = '设置中账户余额: ' + _abSettings.accountBalance.toFixed(2) + ' USDT（曲线以此为准 · 日志推算: ' + (capital > 0 ? capital.toFixed(2) : '无') + ' USDT）';
+      _noteEl.textContent = '曲线起点: ' + capital.toFixed(2) + ' USDT（最早日志本金快照 · 设置中账户余额: ' + _abSettings.accountBalance.toFixed(2) + ' USDT）';
     } else if (_noteEl) {
       _noteEl.remove();
     }

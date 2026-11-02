@@ -388,6 +388,23 @@ function _calculateImpl() {
     );
   }
 
+  // ===== P2 FIX：凯利驱动取消后的还原，必须先于组合热量预检执行 =====
+  // 预检直接读 #riskInput 的值来估算本仓计划风险；若用户此前勾选过凯利驱动，
+  // riskInput 里残留的是凯利驱动写入的驱动值（如 "5%"）。若在预检之后才还原，
+  // 预检会把「取消凯利后的真实风险」（如 2%）误算成驱动风险（5%），造成误熔断；
+  // 且原实现还原位置在预检之后，预检一旦硬阻断提前 return，还原永不执行，
+  // 表单会一直停留在过期驱动值上（riskInput=5%、preKelly 残留）。
+  // 还原本身只改 riskInput 的显示值，不参与任何数值计算，提前执行无副作用。
+  const kellyEnableElPre = document.getElementById('kellyEnableCalc');
+  const kellyDrivenPre = !!(kellyEnableElPre && kellyEnableElPre.checked);
+  if (!kellyDrivenPre) {
+    const _restoreRiskElPre = document.getElementById('riskInput');
+    if (_restoreRiskElPre && _restoreRiskElPre.dataset.preKelly) {
+      _restoreRiskElPre.value = _restoreRiskElPre.dataset.preKelly;
+      delete _restoreRiskElPre.dataset.preKelly;
+    }
+  }
+
   // ===== P0-01：组合热量检查 =====
   // v5.6.3：必须计入本仓。此处 riskAmount 尚未产出（在下方 :307 之后按风险输入计算），
   // 故按表单风险输入预估——这是闸门口径（本仓计划风险），最终数值由管线确定。
@@ -498,16 +515,8 @@ function _calculateImpl() {
   if (isNaN(stopLoss) || stopLoss <= 0) { showCalcError('无效止损价', '请输入有效止损价格', 'stopLoss'); _calcCleanup(); return; }
 
   let riskAmount=0, riskPercent=0;
-  // 凯利驱动取消还原：必须在读取 riskInput 之前执行，否则取消后 riskPercent 仍沿用驱动值
-  const kellyEnableElPre = document.getElementById('kellyEnableCalc');
-  const kellyDrivenPre = !!(kellyEnableElPre && kellyEnableElPre.checked);
-  if (!kellyDrivenPre) {
-    const _restoreRiskElPre = document.getElementById('riskInput');
-    if (_restoreRiskElPre && _restoreRiskElPre.dataset.preKelly) {
-      _restoreRiskElPre.value = _restoreRiskElPre.dataset.preKelly;
-      delete _restoreRiskElPre.dataset.preKelly;
-    }
-  }
+  // 凯利驱动取消还原已前置到组合热量预检之前（见上方 kellyDrivenPre 处），
+  // 保证预检读取的是还原后的真实风险输入，且任何硬阻断都不会留下过期驱动值。
   const rawRisk = document.getElementById('riskInput').value.trim();
 
   // FIX #6: Support both percentage format (e.g., "2%") and fixed amount (e.g., "200")
@@ -567,6 +576,10 @@ function _calculateImpl() {
     var kellyWinRate = parseFloat(document.getElementById('kellyWinRate')?.value);
     var kellyAvgWin = parseFloat(document.getElementById('kellyAvgWin')?.value);
     var kellyAvgLoss = parseFloat(document.getElementById('kellyAvgLoss')?.value);
+    // P2 FIX（2026-11-02）：三字段都填了但平均亏损 ≤0（典型：全胜样本自动统计得到的 0）
+    // 时，calcKelly 判无效返回 null，旧实现凯利参考区静默空白。此处给出可见提示；
+    // 不写 kellyData（避免向日志持久化无效标记），勾选「凯利驱动仓位」时下方 else
+    // 分支仍会报「凯利数据无效」。
     if (!isNaN(kellyWinRate) && !isNaN(kellyAvgWin) && !isNaN(kellyAvgLoss) && kellyAvgLoss > 0) {
       var kellyLev = parseInt(document.getElementById('leverage').value, 10) || 1;
       // P0-1：样本量与保本率同源，都来自 autoFillKellyFromLogs 写入的 dataset；
@@ -610,6 +623,9 @@ function _calculateImpl() {
         };
         kellyHTML = '<span class="kelly-result-text" style="color:var(--color-warning);"><i class="fas fa-exclamation-triangle"></i> 策略期望值为负，不建议开仓（期望 ' + kellyResult.expectancy.toFixed(2) + ' USDT/笔）</span>';
       }
+    } else if (!isNaN(kellyWinRate) && !isNaN(kellyAvgWin) && !isNaN(kellyAvgLoss) && kellyAvgLoss <= 0) {
+      // 平均亏损为 0 或负值（全胜样本/无效输入）：显示明确提示而非静默空白
+      kellyHTML = '<span class="kelly-result-text" style="color:var(--color-warning);"><i class="fas fa-exclamation-triangle"></i> 平均亏损必须大于 0 才能计算凯利（样本无亏损时不适用）</span>';
     }
   } catch(e) { console.error('[kelly]', e); }
 
@@ -1698,7 +1714,13 @@ function assertSavableCalculation() {
       return Math.abs(pa - pb) > Math.max(Math.abs(pb) * 1e-6, 1e-6);
     }
     var _mismatch = [];
-    if (fv('symbol') !== null && fv('symbol') !== String(calc.symbol)) _mismatch.push('品种');
+    // P2 FIX（2026-11-02 审计）：品种做大小写不敏感比较。
+    // calc.symbol 在 _calculateImpl 里已 toUpperCase 归一（输入框的 text-transform:uppercase
+    // 只是视觉大写，.value 保留用户手输的原始大小写），此处若用全等比较，
+    // 手输 "btc" 时快照是 "BTC"，闸门会误报「参数已变更（品种）」——保存被永久拦截，
+    // 且重算无法解除（重算只是再次生成同样的快照）。两端各自 trim+toUpperCase 后比较。
+    if (fv('symbol') !== null &&
+        String(fv('symbol')).trim().toUpperCase() !== String(calc.symbol).trim().toUpperCase()) _mismatch.push('品种');
     if (!_splitMode && fv('entryPrice') !== null && fv('entryPrice') !== '' && numDiff(fv('entryPrice'), calc.entryPrice)) _mismatch.push('入场价');
     if (fv('stopLoss') !== null && fv('stopLoss') !== '' && numDiff(fv('stopLoss'), calc.stopLoss)) _mismatch.push('止损价');
     if (fv('leverage') !== null && fv('leverage') !== '' && numDiff(fv('leverage'), calc.leverage)) _mismatch.push('杠杆');

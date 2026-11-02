@@ -636,7 +636,10 @@ function calcKellyStatsFromLogs(minSamples, strategyFramework, lookbackDays) {
   var avgWin = totalWin / (wins || 1);
   var avgLoss = totalLoss / (losses || 1);
 
-  return { winRate: winRate, avgWin: avgWin, avgLoss: avgLoss, samples: totalTrades, breakEvenRate: totalTrades > 0 ? (breakEvens / totalTrades) : 0 };
+  // P2 FIX（2026-11-02）：无亏损样本时 avgLoss=0，calcKelly 会因 avgLoss≤0 判无效返回
+  // null，凯利卡片静默消失。这里显式标记 noLosses，供 autoFillKellyFromLogs 等调用方
+  // 给出「样本无亏损，凯利不适用」的明确提示，而不是无声地失效。
+  return { winRate: winRate, avgWin: avgWin, avgLoss: avgLoss, samples: totalTrades, breakEvenRate: totalTrades > 0 ? (breakEvens / totalTrades) : 0, noLosses: losses === 0 };
 }
 
 /**
@@ -658,7 +661,17 @@ function autoFillKellyFromLogs() {
     // 仅在字段为空时自动填充
     if (!winRateEl.value || winRateEl.value === '') winRateEl.value = stats.winRate.toFixed(2);
     if (!avgWinEl.value || avgWinEl.value === '') avgWinEl.value = stats.avgWin.toFixed(2);
-    if (!avgLossEl.value || avgLossEl.value === '') avgLossEl.value = stats.avgLoss.toFixed(2);
+    // P2 FIX（2026-11-02 审计）：样本无亏损时 avgLoss 恒为 0，而 calcKelly 把
+    // avgLoss≤0 判为无效数据返回 null——旧实现把 "0.00" 填进字段后，凯利卡片/
+    // 驱动静默消失，无任何提示（全胜策略反而看不到凯利结论）。
+    // 现在：无亏损样本不清空用户已填的合法值（手动覆盖优先），但清除残留的
+    // "0"/"0.00" 占位并给出明确提示；正常路径仅在字段为空时填充。
+    if (stats.noLosses) {
+      var _alVal = avgLossEl.value;
+      if (_alVal === '0' || _alVal === '0.00' || _alVal === '') avgLossEl.value = '';
+    } else if (!avgLossEl.value || avgLossEl.value === '') {
+      avgLossEl.value = stats.avgLoss.toFixed(2);
+    }
 
     // 设计优化：样本量元信息挂到 winRate 元素，供 calculate() 组装 kellyData 时读取
     // （小样本凯利是噪音放大器，applyKellyRisk 依据它决定是否驱动仓位）
@@ -668,14 +681,19 @@ function autoFillKellyFromLogs() {
     winRateEl.dataset.kellyBreakEven = String(stats.breakEvenRate || 0);
 
     // K3 修复：增加平盘率和样本质量提示
-    var tipText = '已从 ' + stats.samples + ' 笔' + (curFramework ? '「' + curFramework + '」策略' : '历史') + '交易自动计算';
-    if (stats.breakEvenRate > 0) {
-      tipText += '（平盘 ' + (stats.breakEvenRate * 100).toFixed(0) + '%）';
+    var tipText;
+    if (stats.noLosses) {
+      tipText = '已从 ' + stats.samples + ' 笔' + (curFramework ? '「' + curFramework + '」策略' : '历史') + '交易自动计算：样本无亏损，无法计算平均亏损（凯利不适用）';
+    } else {
+      tipText = '已从 ' + stats.samples + ' 笔' + (curFramework ? '「' + curFramework + '」策略' : '历史') + '交易自动计算';
+      if (stats.breakEvenRate > 0) {
+        tipText += '（平盘 ' + (stats.breakEvenRate * 100).toFixed(0) + '%）';
+      }
+      if (stats.samples < 30) {
+        tipText += '；⚠ 样本不足 30 笔，统计参考性有限';
+      }
+      tipText += '；修改后手动覆盖';
     }
-    if (stats.samples < 30) {
-      tipText += '；⚠ 样本不足 30 笔，统计参考性有限';
-    }
-    tipText += '；修改后手动覆盖';
     if (tipEl) tipEl.textContent = tipText;
   } catch(e) { console.error('[skills]', e); }
 }

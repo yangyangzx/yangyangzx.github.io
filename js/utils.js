@@ -910,9 +910,15 @@ const ChartManager = {
       }
       
       // 如果key已存在，先销毁旧实例
+      // P2 FIX（2026-11-02）：必须 immediate 销毁，不能走默认的 1000ms 延迟销毁。
+      // 旧实现 this.unregister(key) 默认延迟：同一 key 立即重注册时（同 canvas 重渲染
+      // 是常态——Chart.js 在"已存在活跃 Chart 的 canvas"上再 new Chart 会直接抛
+      // "Canvas is already in use"，且延迟回调还会把新实例的 __chartKey 标记抹掉），
+      // 会产生跨实例竞态。key 冲突本身就是"复用"语义，延迟销毁的防闪烁收益在此场景
+      // 没有意义，同步销毁旧实例才符合本方法"替换"的职责。
       if (this.instances.has(key)) {
-        console.warn(`Chart实例key冲突: ${key}，销毁旧实例`);
-        this.unregister(key);
+        console.warn(`Chart实例key冲突: ${key}，立即销毁旧实例`);
+        this.unregister(key, true);
       }
       
       // 注册新实例
