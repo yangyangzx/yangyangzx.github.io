@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目性质
 
-TradingDiscipline：纯前端交易风控/复盘终端（**v5.6.37**），无任何构建工具。原生 JS（IIFE + 全局函数）+ CSS（OKLCH 变量），数据全部存 localStorage，完全离线。`index.html` 直接可运行，但推荐用本地 HTTP 服务器打开（file:// 下 PWA manifest / 部分浏览器行为受限）：
+TradingDiscipline：纯前端交易风控/复盘终端（**v5.6.43**），无任何构建工具。原生 JS（IIFE + 全局函数）+ CSS（OKLCH 变量），数据全部存 localStorage，完全离线。`index.html` 直接可运行，但推荐用本地 HTTP 服务器打开（file:// 下 PWA manifest / 部分浏览器行为受限）：
 
 ```bash
 python3 -m http.server 8000   # 然后开 http://localhost:8000
@@ -35,7 +35,7 @@ npx eslint --no-eslintrc --env browser,es2021 \
 ```
 报错里会混入大量跨文件全局（`showToast`、`Slippage`…）属正常误报；**只需看那些"本文件内有同名 `const/let/var/function` 声明"的**——那就是真泄漏。
 
-✅ **`npm test` 可用**（v5.6.34 起）：它跑 `node test/run-all.js`，聚合 13 个无头跑测器，任一失败即 `exit 1`。
+✅ **`npm test` 可用**（v5.6.34 起）：它跑 `node test/run-all.js`，聚合 15 个无头跑测器，任一失败即 `exit 1`。
 
 > 历史（勿照旧结论理解）：此前 `npm test` 指向 jest 配置，`testMatch` 写 `**/tests/**/*.test.js`、`setupFiles` 写 `./tests/setup.js`，而 `tests/` 目录早在 2026-08-14（`4ba7130`）就已删除 —— 跑必然 Validation Error。同时 14 个跑测器里 6 个无条件 `process.exit(0)`，而唯一退出码正确的 `_rt_headless.js` 又被一条 jsdom `maxHeight "0"` vs 浏览器 `"0px"` 的断言卡成永久红灯，等于全仓 3,300+ 条断言**没有任何一道有效门禁**。这三处已在 v5.6.34 全部修掉。
 
@@ -212,3 +212,55 @@ v5.6.19 引入两个 P0 时前两套都是全绿的 —— 它们只证明**计�
 - **不留注释掉的代码块**：版本控制在 Git 里，删除即可。
 - **不提交调试残留**：`console.log` 诊断函数、一次性验证页应随修复一并删除（`debugAnalysisData` 就是前车之鉴）。
 - 版本号在 `js/version.js`，index.html / run-tests.html 的 `?v=` 同步升级（见「版本号必须四处同步」）。
+
+## 核心算法升级（v5.6.41）与口径边界
+
+**新增有效门禁**：`test/verify_core_algo.js`（v5.6.41）与 `test/verify_crossmodule.js`（v5.6.43）已接入 `run-all.js`（现 **16 个跑测器**）。它们专攻「3300+ 断言全绿也保护不到」的异常路径、数值稳健性与跨模块接线，都带 `--inject` 自检模式：
+
+```bash
+node test/verify_core_algo.js           # 全绿才算修复完成
+node test/verify_core_algo.js --inject  # 注入旧实现，必须出现 FAIL，证明断言不是恒真的
+```
+
+新增守卫后务必做第二步——只写「不该发生什么」的断言对「闸门被架空」天然免疫。
+
+**本次收口的不变量**（改代码前先读）：
+- `calculate()` 的 `finally` 是 `_calcCleanup()` 的唯一兜底；新增早退分支不必再手写清理。
+- 连亏熔断的 IIFE **只负责判定并写 `_streakBlock`**，早退必须由主流程执行。再出现「IIFE 内 `return renderHardBlock()` 以为能退出主函数」即为 P0。
+- `getLegacySlippageCost` / `calculateCloseSettlement` / `calcKelly` / `calcATRStop` 一律用 `Number.isFinite`，禁止退回 `parseFloat(...) || 0` 或全局 `isNaN`（`isNaN(Infinity) === false`）。
+- `calcPortfolioHeat` / `checkDailyLossLimit` / `checkSymbolConcentration` 统一透出 `readFailed` / `capitalKnown`；calculator 的四处消费点必须判 `readFailed`，禁止只判 `blocked`。
+- 单次计算上下文 `_calcInProgress` / `_calcSettingsSnapshot` 只在 `calculate()` 内置真、finally 复位；非计算路径（检查清单文案渲染）必须继续直读 `loadSettings()`，否则会拿到上次计算的过期设置。
+
+**v5.6.42 已修的三项数学口径（新边界，改动前先读）**：
+
+| 口径 | 当前权威实现 | 不可回退的边界 |
+|---|---|---|
+| 强平价公式 | `utils.js` `LP_long=E(1−IMR)/(1−MMR)`、`LP_short=E(1+IMR)/(1+MMR)`，满足 `IM−亏损=MM` | ① 杠杆硬阻断**仍锁 `floor(1/(2×MMR))=100x`**，是留一倍缓冲的保守风控边界，不是公式零缓冲点 `1/MMR=200x`，禁止「顺手」改成 `1/mmr`；② `MMR∈[0,1)`；③ `IMR=1`（1x）时 `LP=0` 是合法解，终检只能用 `<0`，用 `<=0` 会误拦 216 组参数 |
+| 分批加权入场价 | `calculator.js` `computeWeightedEntry()` = `Σalloc/Σ(alloc/price)`（资金权重**调和平均**）；`computeWeightedStopDistance()` = `E×Σ(w·dist/bp)` | ① 三处同口径：`computeWeightedEntry` / `doSaveSplit` / `risk.js` 聚合均价，禁止再内联算术平均；② 新记录带 `weightedEntryModel='harmonic'`，**旧记录读端只读落库值、绝不按 entries 重算**（`modals.js:259`）；③ 20/21/30.11 组断言按新口径写死 |
+| 夏普比率 | `utils.js` `dailySharpe(closed, {startEquity, annualDays, riskFreeRate})`，日收益率 + 样本标准差 `÷(n−1)` + 365 年化 | ① `startEquity` **必需**，缺失返回 `null`，禁止退回「日盈亏金额」旧口径；② 日期必须字典序排序后才做权益递推；③ `stats.js` 从 `getAccountCapital()` 取期初权益，取不到时显示「—」并说明原因 |
+
+另：三结果凯利精确解、风险加权 R 仍属「改变仓位建议 / 历史指标定义」的产品决策，需单独立项 + 迁移方案。凯利小样本收缩与 CAGR 年化已于 v5.6.43 落地，见下节。
+
+## 跨模块口径边界（v5.6.43）
+
+**新增门禁**：`test/verify_crossmodule.js`（56 断言，带 `--inject`），专测跨模块接线与 UI↔落库口径；`npm test` 现为 **16 个跑测器**。
+
+**改代码前必读的新不变量**：
+- **设置读侧**：`loadSettings()` 是唯一净化入口（`_sanitizeLoadedSettings`），所有阈值消费点都不许再自行 `Number(x)||default`。数字字符串会先归一（保住 `loadMmr('0.8')`）；越界/非有限/非整数一律回退 `SETTINGS_DEFAULTS`。**测试不得再用越界设置值构造场景**——`(v5.6.43)` 已把 `riskHeatMax:50`、`maxDrawdownAlert:90` 这类值迁到合法区间，否则场景会被净化吞掉。
+- **`portfolioHeatMax` 是警告线唯一来源**（默认 5，必须 < 默认硬上限 6，否则 warn 档不可达）；`heatWarnMax` 别名已从默认值移除，禁止再加回来。
+- **半凯利恒 = 完整凯利 / 2**：先钳完整凯利到 `kellyRiskLimitPct` 再取一半，不允许两条各自 `Math.min`（会让 raw>2×limit 时两者相等、风险预算翻倍）。
+- **CSV 数据文件存机器键**：`closeType` 导出写 `partialTP` 这类英文键，不写 `CLOSE_TYPE_LABELS` 中文标签；导入靠 `_normalizeCsvCloseType` 兼容历史中文值，未知值**保留原值**并告警，绝不抹空（抹空会把「已平仓但缺字段」的坏记录伪装成未平仓，绕过 fail-closed 校验）。
+- **时间转换走 `io._safeISOString`**：非法时间置空 + 计数告警，禁止 `new Date(x).toISOString()` 裸调用（一条脏日志会毁掉整批导出）。
+- **连亏排序按时间戳**（`stats._closedTimeMs`），禁止对 `closeTime` 字符串 `localeCompare`（时区偏移会颠倒同日先后，让末尾盈利被算成连亏）。
+- **分批占比只有一份**：`computeNormalizedSplitAlloc()` 供结果表 / 触发行 / `getSplitEntries` 共用，禁止再按原始 `ba/100` 渲染。批次数一律读 `MIN_SPLITS`/`MAX_SPLITS`。
+- **部分平仓缩减只有一份**：`logs.applyPartialShrink()` 同时缩仓位/风险额/保证金/fee/**slippageCost**；少缩滑点会让每腿重复扣一次性成本。`closedRatio` 封顶 100。
+- **组合热量只有一处硬阻断**：截断后 `:1144` 复核点（用 `effectiveRiskAmount`）；预检侧 `_heatPrecheckSoft` 仅软标记。`readFailed` 两侧都 fail-closed。
+- **年化收益 = CAGR**（`Math.pow(期末/期初, 365/span)-1`，百分比显示），不是金额线性外推；本金缺失 fail-closed。**夏普筛选态**按筛选样本 `capital` 均值取期初权益，缺字段显示「—」。
+- **RR 两腿入场成交价必须唯一**：目标腿复用 `stopEntryTicks`，退出 ticks 才按各腿执行类型区分。色阶读 `settings.minRRRatio`，不写死 3/2。
+- **刻意未改（复核结论）**：利润因子的 `grossProfit/grossLoss` 来自 `pnlAmount`（已扣费扣滑点），本就是净额口径，仅变量名误导；同品种双向持仓的集中度按保证金累加是保守正确，改「方向净额」会掩盖对冲风险、放宽闸门。二者不要为了改而改。
+
+**数值守卫与存量脏数据（v5.6.42 已收口，禁止回退）**：
+- 全站统一 `toFiniteNum(v, fallback)`（`js/utils.js` 顶层全局函数，语义等价 `parseFloat(x)||0` 但额外挡 `±Infinity`/`NaN`）。`js/` 下已无 `parseFloat(X)||0`；新代码禁止再写这种形式，也不要用全局 `isNaN`/`isFinite` 判数值。
+- `utils.sanitizeLogNumbers(rows)` 在 `loadLogs()` 的 `JSON.parse` 之后无条件调用，并覆盖 `migrateLogsToCurrentSchema`（导入）与两处多标签 `logs=remoteLogs`。只把「本该是数字却非有限」的字段改 0，**故意不动 `null`**（改成 0 会凭空造一笔 0 盈亏已平仓交易，污染胜率分母）。只改内存，不改写磁盘原始证据。
+- 写入侧仍有 `calculateCloseSettlement` 出参终检与 `getLegacySlippageCost` 守卫（v5.6.41），两侧共同构成闭环。
+- `risk.js:633` 虽只判 `blocked`，但其 `:627` 已有 `!capital` 空态提前返回，不是同类缺口。

@@ -153,6 +153,26 @@ document.addEventListener('DOMContentLoaded', function() {
 
   var directionEl = document.getElementById('direction'); if (directionEl) directionEl.addEventListener('change', function() { filterOrderTypes(this.value); });
 
+  // v5.6.43 P1：切换订单类型时联动默认手续费率。
+  // 设置页的 feeRateLimit / feeRateMarket 与 _getDefaultFeeRate() 早已参数化，
+  // 但表单 #feeRate 只在 resetForm 时按 market 写一次；切到限价单后仍保持 0.08，
+  // 用户配置形同虚设。用 data-fee-auto 区分「系统自动填的默认值」与「用户手填值」：
+  // 用户一旦编辑过费率，就不再被订单类型覆盖。
+  (function() {
+    var frEl = document.getElementById('feeRate');
+    var otEl = document.getElementById('orderType');
+    if (!frEl || !otEl || typeof _getDefaultFeeRate !== 'function') return;
+    frEl.dataset.feeAuto = '1';
+    frEl.dataset.feeAutoType = otEl.value || 'market';
+    frEl.addEventListener('input', function() { delete this.dataset.feeAuto; });
+    otEl.addEventListener('change', function() {
+      if (frEl.dataset.feeAuto === '1') {
+        frEl.value = String(_getDefaultFeeRate(this.value));
+        frEl.dataset.feeAutoType = this.value || 'market';
+      }
+    });
+  })();
+
   // ==================== 全站 select 统一组件（v5.6.14）====================
   // 16 个 select 全部换成自定义 listbox（SelectUI.enhance）。
   // 原 <select> 保留在 DOM（.sl-native 视觉隐藏），20+ 处 JS 的 .value 读点
@@ -235,7 +255,7 @@ document.addEventListener('DOMContentLoaded', function() {
   if (riskInputEl) riskInputEl.addEventListener('change', function() {
     var raw = this.value.trim();
     var capitalEl = document.getElementById('capital');
-    var capital = capitalEl ? parseFloat(capitalEl.value) || 0 : 0;
+    var capital = capitalEl ? toFiniteNum(capitalEl.value) : 0;
     var amount = NaN;
     if (raw.endsWith('%')) { amount = parseFloat(raw) / 100 * capital; }
     var hint = document.getElementById('riskHint');
@@ -270,7 +290,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // P2-13 FIX：默认倍数与 calculate() 主逻辑统一（settings.atrDefaultMultiplier → 2），
     // 避免同一表单清空时"应用 ATR"按钮用 1.5、点计算却用 2 导致止损/仓位不一致
     var _atrSettings = loadSettings();
-    const mult = parseFloat(document.getElementById('atrMultiplier').value) || _atrSettings.atrDefaultMultiplier || 2;
+    const mult = toFiniteNum(document.getElementById('atrMultiplier').value) || _atrSettings.atrDefaultMultiplier || 2;
     // FIX #9: Use actual entry price (considering split mode weighted average)
     let entry;
     if (typeof getActiveEntryPrice === 'function') {

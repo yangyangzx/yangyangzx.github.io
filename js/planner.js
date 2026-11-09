@@ -427,7 +427,7 @@ function computeWeightedTPRR() {
     var pEl = document.getElementById(ids[i] + 'Price');
     var rEl = document.getElementById(ids[i] + 'Ratio');
     var p = pEl ? parseFloat(pEl.value) : NaN;
-    var r = rEl ? (parseFloat(rEl.value) || 0) : 0;
+    var r = rEl ? (toFiniteNum(rEl.value)) : 0;
     prices.push((!isNaN(p) && p > 0) ? p : null);
     ratios.push(r);
     if (prices[i] !== null) anyFilled = true;
@@ -482,9 +482,9 @@ function updateMultiTP() {
   var tp1RatioEl = document.getElementById('tp1Ratio');
   var tp2RatioEl = document.getElementById('tp2Ratio');
   var tp3RatioEl = document.getElementById('tp3Ratio');
-  var tp1Ratio = tp1RatioEl ? parseFloat(tp1RatioEl.value) || 0 : 0;
-  var tp2Ratio = tp2RatioEl ? parseFloat(tp2RatioEl.value) || 0 : 0;
-  var tp3Ratio = tp3RatioEl ? parseFloat(tp3RatioEl.value) || 0 : 0;
+  var tp1Ratio = tp1RatioEl ? toFiniteNum(tp1RatioEl.value) : 0;
+  var tp2Ratio = tp2RatioEl ? toFiniteNum(tp2RatioEl.value) : 0;
+  var tp3Ratio = tp3RatioEl ? toFiniteNum(tp3RatioEl.value) : 0;
   var totalRatio = tp1Ratio + tp2Ratio + tp3Ratio;
   var remain = Math.max(0, 100 - totalRatio);
   var remainEl = document.getElementById('tpRemain');
@@ -1111,7 +1111,7 @@ function refreshChecklistLabels() {
   try {
     var formAtrEnabled = document.getElementById('formAtrStopEnabled');
     var atrOn = (formAtrEnabled && formAtrEnabled.checked) || settings.atrStopEnabled === true;
-    var atrMult = parseFloat(document.getElementById('atrMultiplier').value) || settings.atrDefaultMultiplier || 2;
+    var atrMult = toFiniteNum(document.getElementById('atrMultiplier').value) || settings.atrDefaultMultiplier || 2;
     var hardBlockTxt = '';
     try {
       if (typeof getStopLimitPct === 'function') {

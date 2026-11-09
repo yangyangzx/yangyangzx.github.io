@@ -94,23 +94,34 @@ function getAggregatedOpenPositions() {
     var pos = openLogs[i];
     var gid = pos.groupId || ('single_' + i);
     if (!groups[gid]) {
-      groups[gid] = { symbol: pos.symbol, direction: pos.direction, leverage: pos.leverage, stopLoss: pos.stopLoss, positionSize: 0, weightedEntrySum: 0, weightedStopSum: 0, stopCount: 0, entries: [] };
+      groups[gid] = { symbol: pos.symbol, direction: pos.direction, leverage: pos.leverage, stopLoss: pos.stopLoss,
+        positionSize: 0, weightedEntryCapital: 0, weightedEntryInverseSum: 0,
+        weightedStopSum: 0, stopCount: 0, entries: [] };
     }
-    groups[gid].positionSize += parseFloat(pos.positionSize) || 0;
+    var _aggPos = toFiniteNum(pos.positionSize, 0);
+    groups[gid].positionSize += _aggPos;
     groups[gid].entries.push(pos);
-    if (pos.entryPrice != null && !isNaN(parseFloat(pos.entryPrice)) && parseFloat(pos.entryPrice) > 0) {
-      groups[gid].weightedEntrySum += parseFloat(pos.entryPrice) * (parseFloat(pos.positionSize) || 0);
+    var _aggEntry = toFiniteNum(pos.entryPrice, NaN);
+    // v5.6.42：聚合均价与分批口径一致，用资金权重【调和平均】。
+    // positionSize 是名义 USDT，数量 q_i = P_i/p_i，等效均价 = ΣP_i / Σ(P_i/p_i)。
+    // 旧实现 Σ(p_i·P_i)/ΣP_i 是算术平均，跨价格批次会高估均价，进而把强平预警
+    // 算在错误的基准上（与 calculator.computeWeightedEntry 是同一个数学错误）。
+    if (Number.isFinite(_aggEntry) && _aggEntry > 0 && _aggPos > 0) {
+      groups[gid].weightedEntryCapital += _aggPos;
+      groups[gid].weightedEntryInverseSum += _aggPos / _aggEntry;
     }
     // 聚合止损：按仓位加权（分批独立止损时强平安全距离用正确止损；同止损时结果一致）
-    if (pos.stopLoss != null && !isNaN(parseFloat(pos.stopLoss))) {
-      groups[gid].weightedStopSum += parseFloat(pos.stopLoss) * (parseFloat(pos.positionSize) || 0);
+    var _aggStop = toFiniteNum(pos.stopLoss, NaN);
+    if (Number.isFinite(_aggStop)) {
+      groups[gid].weightedStopSum += _aggStop * _aggPos;
       groups[gid].stopCount++;
     }
   }
   var result = [];
   for (var gid in groups) {
     var g = groups[gid];
-    g.weightedEntry = g.positionSize > 0 ? g.weightedEntrySum / g.positionSize : 0;
+    g.weightedEntry = (g.weightedEntryCapital > 0 && g.weightedEntryInverseSum > 0)
+      ? g.weightedEntryCapital / g.weightedEntryInverseSum : 0;
     // 分批独立止损：用仓位加权止损替代"仅取第一笔"（2026-09-07 审计修复）
     if (g.stopCount > 0 && g.positionSize > 0) {
       g.stopLoss = g.weightedStopSum / g.positionSize;
@@ -194,7 +205,7 @@ function renderDailyLoss(closedOverride) {
     var closeDateStr = window.utils.toLocalDateStr(ct);
     if (!closeDateStr) continue;
     if (closeDateStr === todayStr) {
-      todayPnl += parseFloat(closed[i].pnlAmount) || 0;
+      todayPnl += toFiniteNum(closed[i].pnlAmount);
     }
   }
 
@@ -278,7 +289,7 @@ function renderDrawdown(closedOverride) {
       // 与 calcEquityCurve 口径一致：balanceAdjustment（存取款）+ 已实现盈亏累加
       var _adj = Number(closed[i].balanceAdjustment);
       if (Number.isFinite(_adj) && _adj !== 0) equity += _adj;
-      equity += parseFloat(closed[i].pnlAmount) || 0;
+      equity += toFiniteNum(closed[i].pnlAmount);
       if (equity > peak) peak = equity;
     }
   }
@@ -536,7 +547,7 @@ function renderFrequency(closedOverride) {
     var d = _getTradeDateRisk(closed[i]);
     if (!dailyStats[d]) dailyStats[d] = { count: 0, pnl: 0 };
     dailyStats[d].count++;
-    dailyStats[d].pnl += parseFloat(closed[i].pnlAmount) || 0;
+    dailyStats[d].pnl += toFiniteNum(closed[i].pnlAmount);
   }
 
   // 按日期排序
@@ -551,7 +562,7 @@ function renderFrequency(closedOverride) {
   var maxLossStreak = 0, curLossStreak = 0;
   var sortedByClose = [...closed].sort(function(a, b) { return new Date(a.closeTime || a.time) - new Date(b.closeTime || b.time); });
   for (var wi = 0; wi < sortedByClose.length; wi++) {
-    var pnl = parseFloat(sortedByClose[wi].pnlAmount) || 0;
+    var pnl = toFiniteNum(sortedByClose[wi].pnlAmount);
     if (pnl > 0) { curWinStreak++; curLossStreak = 0; }
     else if (pnl < 0) { curLossStreak++; curWinStreak = 0; }
     else { curWinStreak = 0; curLossStreak = 0; }

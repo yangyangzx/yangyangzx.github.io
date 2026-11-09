@@ -146,6 +146,14 @@ function _migrateTimes(logArr) {
 
 function migrateLogsToCurrentSchema(rows, fromVersion) {
   var changed = false;
+  // v5.6.42：JSON/CSV 导入路径（settings.js 以 fromVersion=0 调用本函数）同样可能
+  // 带入 "Infinity"/"NaN" 脏数值。这里只清洗传入数组的内存副本，不置 changed，
+  // 以免在 loadLogs 的迁移分支额外触发一次磁盘写回；导入路径由调用方自行落库。
+  try {
+    if (window.utils && typeof window.utils.sanitizeLogNumbers === 'function') {
+      window.utils.sanitizeLogNumbers(rows);
+    }
+  } catch (e) { console.error('[migrate] 脏数值隔离失败:', e); }
   // v3 → v4: entry reason 标准化，将旧字符串映射到 ENTRY_REASON_OPTIONS
   if (fromVersion < 4 && typeof ENTRY_REASON_OPTIONS !== 'undefined') {
     // 旧计算器选项 → 新标准选项的映射
@@ -234,12 +242,41 @@ function _safeRenderAfterStorageChange(opts) {
   }
 }
 
+// v5.6.42：历史日志非有限数值隔离（原地、只改内存）。
+// 返回值 = 被修正的字段数；同一页面只提示一次，避免每次 loadLogs 都弹 toast。
+var _dirtyLogToastShown = false;
+function _sanitizeLoadedLogs() {
+  try {
+    if (!window.utils || typeof window.utils.sanitizeLogNumbers !== 'function') return 0;
+    var fixed = window.utils.sanitizeLogNumbers(logs);
+    if (fixed > 0) {
+      console.warn('[loadLogs] 已隔离 ' + fixed + ' 个非有限数值字段（历史脏日志）；磁盘原始数据未改写');
+      if (!_dirtyLogToastShown) {
+        _dirtyLogToastShown = true;
+        if (typeof showToast === 'function') {
+          showToast('检测到 ' + fixed + ' 个历史脏数值字段，已在读取时隔离（原始数据未改写）。建议导出备份后核查。', 'warn');
+        }
+      }
+    }
+    return fixed;
+  } catch (e) {
+    console.error('[loadLogs] 脏数值隔离失败，继续使用原始数据:', e);
+    return 0;
+  }
+}
+
 function loadLogs() {
   var raw = null;
   try {
     raw = localStorage.getItem(STORAGE_KEY);
     logs = raw ? JSON.parse(raw) : [];
     if (!Array.isArray(logs)) throw new Error('日志根节点不是数组');
+    // v5.6.42 存量脏数据隔离：写入侧（v5.6.41）已挡住新脏值，但历史日志里仍可能存着
+    // "Infinity" / "NaN" / 溢出数字串，读端 70+ 处 parseFloat||0 曾让它们一路流进
+    // 胜率 / 权益曲线 / 凯利样本，还会经 toFixed + JSON.stringify 落成 null 让整笔交易消失。
+    // 这里在唯一数据入口做一次原地规范化（只改内存，不改写磁盘原始证据），
+    // 覆盖 JSON 导入、版本迁移、多标签同步之外的所有常规读取路径。
+    _sanitizeLoadedLogs();
   } catch (e) {
     // 保留原始 localStorage 值，绝不以空数组覆盖损坏数据。
     logs = [];
@@ -338,6 +375,7 @@ function loadLogs() {
         // 改用应用内对话框，保持非阻塞。
         if (typeof window.confirmDialog !== 'function') {
           logs = remoteLogs;
+          _sanitizeLoadedLogs();   // v5.6.42：另一标签页推来的数据同样要隔离脏值
           _safeRenderAfterStorageChange({ externalReplace: true });
           if (typeof showToast === 'function') showToast('已同步为最新数据', 'info');
           return;
@@ -350,6 +388,7 @@ function loadLogs() {
         }).then(function(ok) {
           if (!ok) return;
           logs = remoteLogs;
+          _sanitizeLoadedLogs();   // v5.6.42：另一标签页推来的数据同样要隔离脏值
           _safeRenderAfterStorageChange({ externalReplace: true });
           if (typeof showToast === 'function') showToast('已同步为最新数据', 'info');
         });

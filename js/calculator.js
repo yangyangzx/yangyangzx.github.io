@@ -1,6 +1,13 @@
 // ==================== 核心计算 ====================
 var _calculating = false;
 
+// v5.6.41 单次计算上下文：一次 calculate() 内只读一次设置，
+// 所有经 _numSetting 的风控阈值都取自同一份快照，避免计算中途设置被改动时
+// 前半段用旧阈值、后半段用新阈值（同一笔计划出现两套口径）。
+var _calcInProgress = false;
+var _calcSettingsSnapshot = null;
+var _calcSettingsLoaded = false;
+
 // 金额千分位格式化（仅用于展示，不参与任何计算或持久化）
 function fmtMoney(v, decimals) {
   return Number(v).toLocaleString('zh-CN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
@@ -121,13 +128,23 @@ function getProvisionalStopLoss(entryPrice, direction, symbol, settings) {
 // 被 `if (!cappedByMargin && ...)` 跳过 → 交易所上限被突破 50%。
 // 现按 SETTINGS_VALIDATORS 的 min/max 钳制；越界一律回退 fallback（不静默钳到边界，
 // 因为「150%」不是用户可能想要的合法值，回退默认值更安全且可预期）。
+// 一次计算内只反序列化一次设置；loadSettings() 抛错时记住失败，不在同一次计算里反复重试。
+function _getCalcSettingsSnapshot() {
+  if (_calcSettingsLoaded) return _calcSettingsSnapshot;
+  _calcSettingsLoaded = true;
+  try {
+    if (typeof loadSettings === 'function') _calcSettingsSnapshot = loadSettings() || null;
+  } catch (e) { _calcSettingsSnapshot = null; }
+  return _calcSettingsSnapshot;
+}
 function _numSetting(key, fallback) {
   var v = null;
   try {
-    if (typeof loadSettings === 'function') {
-      var s = loadSettings();
-      if (s) v = Number(s[key]);
-    }
+    // 计算进行中复用同一份快照；非计算路径（检查清单文案渲染等）保持原行为，
+    // 避免拿到上次计算遗留的过期设置。
+    var s = _calcInProgress ? _getCalcSettingsSnapshot() : null;
+    if (!s && typeof loadSettings === 'function') s = loadSettings();
+    if (s) v = Number(s[key]);
   } catch (e) { v = null; }
   if (typeof v !== 'number' || !isFinite(v)) return fallback;
   // 区间钳制：SETTINGS_VALIDATORS 是保存路径与读侧共用的唯一权威（settings.js）。
@@ -204,11 +221,18 @@ function clearFieldInvalid(id) {
   if (span) span.textContent = '';
 }
 
+// P1 修复（v5.6.41）：_calcCleanup() 原先散落在 20+ 个早退分支里手写，注释里已记录
+// 至少 3 次「漏调 → _calculating 永真 → 计算按钮永久失效」的 P0 事故。改为 finally
+// 单点收口：成功、早退、异常三条路径都必然复位，新增分支不再可能漏写。
+// 各分支里保留的手写调用是幂等的（只复位标志 + 移除一条 DOM 节点），暂不删除以降低回归面。
 function calculate() {
+  // 每次计算取一份新的设置快照，同一次计算内所有阈值读同一份数据（见 _numSetting）。
+  _calcInProgress = true;
+  _calcSettingsSnapshot = null;
+  _calcSettingsLoaded = false;
   try {
     return _calculateImpl();
   } catch (e) {
-    _calcCleanup();
     console.error('[calculate] 未捕获异常:', e);
     try {
       CalculationUI.renderValidationError(
@@ -217,6 +241,9 @@ function calculate() {
       );
     } catch (e2) { console.error('[calculate] 错误提示渲染失败:', e2); }
     return null;
+  } finally {
+    _calcInProgress = false;
+    _calcCleanup();
   }
 }
 
@@ -273,7 +300,7 @@ function _calculateImpl() {
   }
   if (!capital || capital <= 0) { markFieldInvalid('capital', '请输入本金，或在系统设置中填写账户余额'); showCalcError('无效本金', '请输入本金，或在系统设置中填写账户余额', 'capital'); _calcCleanup(); return; }
   const leverageEl = document.getElementById('leverage');
-  const leverage = leverageEl ? Math.max(0, parseFloat(leverageEl.value) || 0) : 0;
+  const leverage = leverageEl ? Math.max(0, toFiniteNum(leverageEl.value)) : 0;
   const directionEl = document.getElementById('direction');
   const direction = directionEl ? directionEl.value : 'long';
   const orderTypeEl = document.getElementById('orderType');
@@ -306,7 +333,7 @@ function _calculateImpl() {
   // 若用户在表单中显式关闭 ATR（checked=false），即使 settings.atrStopEnabled=true 也应生效
   const formAtrEnabled = document.getElementById('formAtrStopEnabled');
   const atrEnabled = formAtrEnabled ? formAtrEnabled.checked : (settings.atrStopEnabled === true);
-  const atrMultiplier = parseFloat(document.getElementById('atrMultiplier').value) || settings.atrDefaultMultiplier || 2;
+  const atrMultiplier = toFiniteNum(document.getElementById('atrMultiplier').value) || settings.atrDefaultMultiplier || 2;
   if (atrEnabled && !isNaN(atrValue) && atrValue > 0) {
     var atrStopResult = calcATRStop(effectiveEntryPrice, atrValue, atrMultiplier, direction);
     if (atrStopResult) {
@@ -339,6 +366,17 @@ function _calculateImpl() {
   // ===== P0-01：日亏损硬止损检查 =====
   // 传入表单本金，使熔断阈值与本次风险预算分母（capital）一致，避免两处资本口径分歧。
   var dailyLossCheck = checkDailyLossLimit(capital);
+  // P1 修复（v5.6.41）：本金不可用时 limit=Infinity、overLimit 恒 false，
+  // 等于静默放行；与组合热量/回撤闸门的 fail-closed 方向相反，显式阻断。
+  if (dailyLossCheck.readFailed) {
+    _calcCleanup();
+    return renderHardBlock(
+      'daily-loss-unavailable',
+      '日亏损状态不可用',
+      '无法读取账户本金，日亏损上限无法判定，为安全起见已阻止本次开仓。请在系统设置中填写账户余额后重试。',
+      dailyLossCheck
+    );
+  }
   if (dailyLossCheck.blocked) {
     _calcCleanup();
     return renderHardBlock(
@@ -419,17 +457,29 @@ function _calculateImpl() {
     }
   }
   var heatCheck = calcPortfolioHeat(heatPlanRisk, symbol, capital);
-  if (heatCheck.blocked) {
+  // P1 修复（v5.6.41）：calcPortfolioHeat 早已透出 readFailed，但两处消费点都只判
+  // blocked，与同文件回撤闸门的 fail-closed 语义不对称。取不到本金时必须显式阻断。
+  if (heatCheck.readFailed) {
     _calcCleanup();
     return renderHardBlock(
-      'portfolio-heat-limit',
-      '组合热量超限',
-      '当前组合热量 ' + heatCheck.heat.toFixed(1) + '%，' + (heatCheck.warning || '已超过风险上限。'),
+      'portfolio-heat-unavailable',
+      '组合热量不可用',
+      '无法读取账户本金，组合热量无法判定，为安全起见已阻止本次开仓。请在系统设置中填写账户余额后重试。',
       heatCheck
     );
   }
+  // v5.6.43：预检降级为「软标记」。此处用的 heatPlanRisk 只是表单风险输入的估算值，
+  // 而凯利驱动与保证金/集中度/心态四道截断都会改变真实风险额。硬阻断在这里会
+  // 拒掉「表单 10% 但半凯利 1%」这类实际只占 1% 的合法计划；真正的硬阻断保留在
+  // 截断后 :1144 的复核点（那里用 effectiveRiskAmount，含本仓、同一上限）。
+  // readFailed 仍是 fail-closed 硬阻断——取不到本金时不能放行。
+  var _heatPrecheckSoft = null;
+  if (heatCheck.blocked) {
+    _heatPrecheckSoft = '预检：按表单风险估算的组合热量 ' + heatCheck.heat.toFixed(1) +
+      '% 已达上限，最终以截断后复核为准';
+  }
 
-  if (ui.riskHint) ui.riskHint.textContent = '';
+  if (ui.riskHint) ui.riskHint.textContent = _heatPrecheckSoft || '';
 
   function showCalcError(title, msg, relatedInput) {
     setCalc(null);
@@ -473,6 +523,12 @@ function _calculateImpl() {
   // 回退到 time。同一批数据下「硬熔断计数」与「清单/仪表盘显示的连亏笔数」会不一致，
   // 出现「页面显示 2 笔未触发、点计算却被熔断」的矛盾。现统一委托权威实现。
   // （calculator.js 在 stats.js 之前加载，但 _calculateImpl 是运行时调用，届时已定义。）
+  // P0 修复（v5.6.41 核心算法升级）：原实现把整段闸门包在 IIFE 里，两处
+  // `return renderHardBlock()` 只退出匿名函数，_calculateImpl 继续向下执行，
+  // 末尾 setCalc() 把刚渲染的阻断 UI 覆盖成「计算成功」。
+  // 实测：当日连亏 3 笔已达熔断阈值，仍算出 99512.44 USDT 仓位（verify_core_algo A1）。
+  // 现改为 IIFE 只负责「判定 + 写出阻断描述」，由主流程统一早退。
+  var _streakBlock = null;
   (function() {
     var currentStreak = 0;
     var _streakKnown = false;   // 区分「真的0 笔」与「取不到」
@@ -482,33 +538,33 @@ function _calculateImpl() {
         currentStreak = (_sr && _sr.streak) || 0;
         _streakKnown = true;
       } catch (e) {
-        // P0 修复（2026-10-10 深度审计）：原实现 catch 里只 console.error，
-        // streak 停在 0 → 连亏熔断整道闸门**静默失效**（fail-open），
-        // 而这是风控链上最不该放行的一类异常（连亏时恰恰最需要拦住）。
-        // 现改为 fail-closed：取不到连亏数就不允许开仓，让用户看到明确原因。
+        // fail-closed：取不到连亏数就不允许开仓，让用户看到明确原因。
         console.error('[calculate] 连亏熔断计数失败:', e);
-        _calcCleanup();
-        return renderHardBlock(
-          'loss-streak-unavailable',
-          '连亏状态不可用',
-          '无法读取当日连亏记录（数据异常），为安全起见已阻止本次开仓。请刷新页面重试；若持续出现，请检查日志数据。',
-          { streak: null }
-        );
+        _streakBlock = {
+          code: 'loss-streak-unavailable',
+          title: '连亏状态不可用',
+          detail: '无法读取当日连亏记录（数据异常），为安全起见已阻止本次开仓。请刷新页面重试；若持续出现，请检查日志数据。',
+          raw: { streak: null }
+        };
+        return;
       }
     } else {
       // 函数不存在（测试页只加载部分模块）——不阻断，避免测试环境无法计算
       _streakKnown = true;
     }
     if (_streakKnown && currentStreak >= _getLossStreakBlockThreshold()) {
-      _calcCleanup();
-      return renderHardBlock(
-        'loss-streak-limit',
-        '连续亏损熔断',
-        '当日已连续亏损 ' + currentStreak + ' 笔（阈值 ' + _getLossStreakBlockThreshold() + ' 笔）；冷却期结束前不可建立新计划。',
-        { streak: currentStreak }
-      );
+      _streakBlock = {
+        code: 'loss-streak-limit',
+        title: '连续亏损熔断',
+        detail: '当日已连续亏损 ' + currentStreak + ' 笔（阈值 ' + _getLossStreakBlockThreshold() + ' 笔）；冷却期结束前不可建立新计划。',
+        raw: { streak: currentStreak }
+      };
     }
   })();
+  if (_streakBlock) {
+    _calcCleanup();
+    return renderHardBlock(_streakBlock.code, _streakBlock.title, _streakBlock.detail, _streakBlock.raw);
+  }
 
   if (entryPrice <= 0) { showCalcError('无效入场价', '入场价必须大于 0', 'entryPrice'); _calcCleanup(); return; }
   if (isNaN(capital) || capital <= 0) { showCalcError('无效本金', '请输入本金', 'capital'); _calcCleanup(); return; }
@@ -587,8 +643,8 @@ function _calculateImpl() {
       // 缺它时保本单会被当成完整亏损，统计页正期望而凯利判负。
       var kellyWinEl = document.getElementById('kellyWinRate') || {};
       var kellySampleCount = parseInt(kellyWinEl.dataset?.kellySamples, 10) || 0;
-      var kellyBreakEvenRate = parseFloat(kellyWinEl.dataset?.kellyBreakEven) || 0;
-      var kellyResult = calcKelly(kellyWinRate, kellyAvgWin, kellyAvgLoss, capital, true, kellyLev, kellyBreakEvenRate);
+      var kellyBreakEvenRate = toFiniteNum(kellyWinEl.dataset?.kellyBreakEven);
+      var kellyResult = calcKelly(kellyWinRate, kellyAvgWin, kellyAvgLoss, capital, true, kellyLev, kellyBreakEvenRate, kellySampleCount);
       if (kellyResult && kellyResult.halfKellyPct > 0) {
         var kellyRisk = capital * kellyResult.halfKellyPct;
         kellyData = {
@@ -600,7 +656,8 @@ function _calculateImpl() {
           halfKellyCapped: kellyResult.halfKellyCapped,
           recommendation: kellyResult.recommendation,
           sampleCount: kellySampleCount,
-          sampleWarning: kellySampleCount > 0 && kellySampleCount < 30
+          sampleWarning: kellySampleCount > 0 && kellySampleCount < 30,
+          shrinkFactor: kellyResult.shrinkFactor
         };
         var kellyCappedMsg = '';
         if (kellyResult.kellyCapped || kellyResult.halfKellyCapped) {
@@ -705,25 +762,15 @@ function _calculateImpl() {
   }
   let useWeightedStop = false;
   if (_splitMode && _splitBatches.length >= 2) {
-    const hasIndepSL = _splitBatches.some(function(b) { return b.stopLoss && !isNaN(parseFloat(b.stopLoss)); });
+    const hasIndepSL = _splitBatches.some(function(b) {
+      return b.stopLoss && Number.isFinite(toFiniteNum(b.stopLoss, NaN));
+    });
     if (hasIndepSL) {
-      let totalAlloc = 0, weightedStopPct = 0;
-      var skippedCount = 0;
-      for (var _i = 0; _i < _splitBatches.length; _i++) {
-        var b = _splitBatches[_i];
-        var bp = parseFloat(b.price), ba = parseFloat(b.alloc);
-        if (isNaN(bp) || bp <= 0 || isNaN(ba) || ba <= 0) continue;
-        var bsl = b.stopLoss && !isNaN(parseFloat(b.stopLoss)) ? parseFloat(b.stopLoss) : stopLoss;
-        if (direction === 'long' && bsl >= bp) { skippedCount++; continue; }
-        if (direction === 'short' && bsl <= bp) { skippedCount++; continue; }
-        // P0-1 修复：各批止损距离(USDT)按仓位权重归一（仓位 ∝ alloc）。
-        // 原实现按"各批自身价百分比 × 全局价"中转，分母用各批 bp、还原乘全局 eff，
-        // 价格跨区间时基准混用致距离失真。归一后 stopDistance = Σ(dist_i·ba_i)/Σ(ba_i)。
-        // 注：此处 dist_i 仍按各批 bp 计算（未套主滑点 effectiveEntryPrice），因各批各自
-        // 成交价不同，逐批真实止损距离即 |bp-bsl|；这是分批独立止损的既有设计口径。
-        weightedStopPct += Math.abs(bp - bsl) * ba;   // Σ(dist_i · ba_i)，dist_i 为 USDT 距离
-        totalAlloc += ba;                              // Σ(ba_i)
-      }
+      // v5.6.42：加权止损距离收敛为纯函数（含 E/bp_i 量纲因子），本处只消费结果、
+      // 负责生成提示文案与落仓位，不再内联第二份数学实现。
+      var _wsd = computeWeightedStopDistance(_splitBatches, direction, stopLoss, computeWeightedEntry());
+      var skippedCount = _wsd.skippedCount;
+      var totalAlloc = _wsd.totalAlloc;
       if (skippedCount > 0 && totalAlloc === 0) {
         // 所有批次止损方向非法，回退使用主止损距离
         rw = '<span class="warning-tag"><i class="fas fa-exclamation-circle"></i> 分批止损所有批次方向非法，已回退为全局止损计算。</span>';
@@ -731,9 +778,8 @@ function _calculateImpl() {
         // BUG-9 修复：跳过的批次不再占用比例，重新计算归一化权重
         rw = '<span class="warning-tag"><i class="fas fa-exclamation-circle"></i> 分批止损 ' + skippedCount + ' 批方向非法已跳过，使用剩余 ' + totalAlloc.toFixed(1) + '% 仓位加权计算。</span>';
       }
-      // 各批止损距离(USDT)按仓位权重归一，得到整笔加权止损距离，直接用于仓位公式
-      if (totalAlloc > 0 && weightedStopPct > 0) {
-        stopDistance = weightedStopPct / totalAlloc;
+      if (_wsd.distance !== null) {
+        stopDistance = _wsd.distance;
         positionSize = riskAmount * effectiveEntryPrice / stopDistance;
         useWeightedStop = true;
       }
@@ -744,6 +790,18 @@ function _calculateImpl() {
   if (atrStopMode && !useWeightedStop) {
     var atrResult = calcATRStop(effectiveEntryPrice, atrValue, atrMultiplier, direction);
     if (atrResult) {
+      // P1 修复（v5.6.41）：calcATRStop 已做终检，这里再守一次——
+      // 任何绕过路径让 stopDistance 非正都会把 positionSize 算成 Infinity，
+      // 并先流进下方 capMsg 的 toFixed(2) 文案（写出 "Infinity"）。
+      if (!Number.isFinite(atrResult.stopDistance) || atrResult.stopDistance <= 0) {
+        _calcCleanup();
+        return renderHardBlock(
+          'stop-distance-invalid',
+          '止损距离无效',
+          'ATR 计算出的止损距离非正，无法解出有效仓位。请检查 ATR 值与倍数后重试。',
+          { atr: atrValue, multiplier: atrMultiplier }
+        );
+      }
       stopDistance = atrResult.stopDistance;
       positionSize = riskAmount * effectiveEntryPrice / stopDistance;
     }
@@ -781,6 +839,21 @@ function _calculateImpl() {
     }
   }
   if (!valid) { showCalcError(err, ''); _calcCleanup(); return; }  // P2 FIX：见上，避免残留上次组合风险行
+
+  // P1 修复（v5.6.41）：把有限性检查从 :902 前移到仓位求解结束处。
+  // 极小但为正的 stopDistance 会让 positionSize 溢出成 Infinity，原先要等保证金 /
+  // 聚合截断之后才被兜住，中间 capMsg 已写出 "Infinity" 文案，快照风险额也被污染。
+  // 沿用同一阻断码提前收口，不改变下游对阻断结果的判定口径。
+  if (!Number.isFinite(positionSize) || positionSize <= 0 ||
+      !Number.isFinite(stopDistance) || stopDistance <= 0) {
+    _calcCleanup();
+    return renderHardBlock(
+      'available-margin-limit',
+      '可用保证金额度不足',
+      '当前止损距离或保证金参数无法解出有效仓位，请检查入场价 / 止损价 / ATR 设置后重试。',
+      { usedMargin: 0, capital: capital, aggregateLimit: 0 }
+    );
+  }
 
   // 零止损距离硬阻断（止损距离 < 入场价 0.1%）：仓位会被放大到危险值，不允许继续计算。
   // P1 修复（2026-10-10）：阻断只对杠杆合约成立，现货（leverage=0）不再拦。
@@ -926,17 +999,22 @@ function _calculateImpl() {
     }
     liquidationPrice = window.utils.calcLiquidationPrice(_liqEntryPrice, direction, leverage, mmr);
     // P0 修复：杠杆高过维护保证金极限时仓位开仓即被强平。
-    // 强平价公式 LP = E×(1−IMR+MMR)/(1−MMR)（IMR = 1/杠杆），令 LP = E 解得 IMR = 2×MMR，
-    // 即零缓冲边界在「杠杆 = 1/(2×MMR)」——注意是 2 倍 MMR，不是 MMR 本身。
-    // 原实现只比较「止损 vs 强平价」：这种零缓冲仓位下止损必然落在强平价的另一侧之外，
-    // isInvalid 恒为假，于是照样通过闸门。这里对杠杆本身设下限。
-    // （实测 MMR 0.5%：100x 强平价恰为入场价，101x 已被推到入场价之上。）
-    if (!Number.isFinite(liquidationPrice) || liquidationPrice <= 0) {
+    // v5.6.42：强平价公式已修正为单一计价口径 LP=E(1−IMR)/(1−MMR)，其零缓冲点
+    // （LP=E）在 IMR=MMR，即 L=1/MMR（MMR 0.5% 时 200x）。
+    // 但下面的硬阻断是【保守风控边界：仍锁在 1/(2×MMR)=100x】，刻意保留一倍
+    // 价格缓冲——零缓冲点处没有任何容错，真实交易所还要叠加维持保证金档位、
+    // 资金费率、强平手续费与标记价偏离。修公式 ≠ 放宽风控，故本阈值不随公式
+    // 推导结果变化，禁止「顺手」改成 1/MMR。
+    // 原实现只比较「止损 vs 强平价」：零缓冲仓位下止损必落在强平价另一侧之外，
+    // isInvalid 恒为假，于是照样通过闸门，因此必须对杠杆本身设下限。
+    // LP=0 是 1x 杠杆的合法解（价格归零才亏完本金），不能判成无解；只有 NaN / 负价才拦。
+    if (!Number.isFinite(liquidationPrice) || liquidationPrice < 0) {
       _calcCleanup();
       return renderHardBlock('liquidation-unsolvable', '无法计算强平价',
         '当前杠杆 ' + leverage + 'x 与维护保证金率 ' + (mmr * 100).toFixed(2) + '% 组合下强平价无解，请降低杠杆后重新计算。',
         { leverage: leverage, mmr: mmr });
     }
+    // 保守风控边界（不是公式零缓冲点）：MMR 0.5% → 100x。见上方说明，勿改成 1/mmr。
     var maxViableLev = (mmr > 0) ? Math.floor(1 / (2 * mmr)) : 0;
     if (maxViableLev > 0 && leverage > maxViableLev) {
       _calcCleanup();
@@ -993,6 +1071,16 @@ function _calculateImpl() {
 
   // ===== Skills 融合：品种集中度检查 =====
   var concentrationCheck = checkSymbolConcentration(symbol, finalPosBeforeMindset, leverage, capital, openPositions);
+  // P1 修复（v5.6.41）：无本金时原闸门直接 pass:true，现与其余闸门统一 fail-closed。
+  if (concentrationCheck.readFailed) {
+    _calcCleanup();
+    return renderHardBlock(
+      'symbol-concentration-unavailable',
+      '品种集中度不可用',
+      '无法读取账户本金，单品种集中度无法判定，为安全起见已阻止本次开仓。请在系统设置中填写账户余额后重试。',
+      concentrationCheck
+    );
+  }
   if (!concentrationCheck.pass) {
     var allowedFinalPos = concentrationCheck.allowedNewMargin * effLev;
     if (allowedFinalPos <= 0) {
@@ -1056,6 +1144,16 @@ function _calculateImpl() {
   // 截断后再复核一次，闸门与显示同源（含本仓、同一 maxHeat）。方向上复核只会更严——
   // 只有截断把风险压到表单值之下时才会放行，而那正是真实敞口确实更小的情形。
   var _heatRecheck = calcPortfolioHeat(effectiveRiskAmount, symbol, capital);
+  // P1 修复（v5.6.41）：复核侧同样消费 readFailed，与预检侧对称。
+  if (_heatRecheck.readFailed) {
+    _calcCleanup();
+    return renderHardBlock(
+      'portfolio-heat-unavailable',
+      '组合热量不可用',
+      '无法读取账户本金，截断后的组合热量无法判定，为安全起见已阻止本次开仓。',
+      _heatRecheck
+    );
+  }
   if (_heatRecheck.blocked) {
     _calcCleanup();
     return renderHardBlock(
@@ -1109,7 +1207,7 @@ function _calculateImpl() {
   }
 
   // ===== P0-05：手续费与双侧 tick 滑点（供 targetRR 使用） =====
-  let feeRate = parseFloat(document.getElementById('feeRate').value) || 0;
+  let feeRate = toFiniteNum(document.getElementById('feeRate').value);
   // 费率回落取自设置（原为硬编码 0.04 / 0.08，2026-10-10 参数化）
   if (feeRate <= 0) feeRate = _getDefaultFeeRate(orderType);
 
@@ -1158,7 +1256,12 @@ function _calculateImpl() {
       expectedExitPrice: targetPrice,
       quantity: quantity,
       tickSize: tickSize,
-      entryTicks: planSlippageInput.entryTicks,
+      // v5.6.43 P1：入场成交价在一笔仓位里只能有一个。原实现目标腿用
+      // planSlippageInput.entryTicks（按 #orderType），止损腿用 stopEntryTicks
+      // （按 #stopType，stop-market 多 1 tick），于是同一笔仓位出现两个
+      // effectiveEntryPrice（实测 50000.1 vs 50000.2），亏损侧被虚增、
+      // targetRR 与两道闸门同时被污染。退出 ticks 仍按各腿执行类型区分。
+      entryTicks: stopEntryTicks,
       exitTicks: planSlippageInput.exitTicks
     });
     targetSlippage = Slippage.toLogSnapshot(targetSlippageModel, { source: planSlippageInput.source });
@@ -1295,10 +1398,11 @@ function _calculateImpl() {
   // 上一轮的批次行会残留在这块 DOM 上。
   let triggerHTML = '';
   if (shouldShowStopTriggerRows(_splitMode, _splitBatches)) {
-    _splitBatches.forEach(function(b, i) {
-      const bp = parseFloat(b.price), ba = parseFloat(b.alloc);
-      if (isNaN(bp) || isNaN(ba)) return;
-      const bsl = b.stopLoss && !isNaN(parseFloat(b.stopLoss)) ? parseFloat(b.stopLoss) : (stopLoss || 0);
+    // v5.6.43：与分批明细表 / 落库共用归一化占比，避免 70/70 时按 140% 拆风险额
+    computeNormalizedSplitAlloc().forEach(function(r, i) {
+      if (!r.valid) return;
+      const bp = r.price, ba = r.alloc;
+      const bsl = r.stopLoss && !isNaN(parseFloat(r.stopLoss)) ? parseFloat(r.stopLoss) : (stopLoss || 0);
       if (bsl <= 0) return; // 止损未设置，跳过
       // BUG#2 修复：统一使用 effectiveRiskAmount（已截断）按批次比例拆分，避免与 bpos 口径不一致
       const bRisk = effectiveRiskAmount * ba / 100;
@@ -1329,11 +1433,12 @@ function _calculateImpl() {
     if (w !== null) {
       splitSummary.innerHTML = '加权入场价 <strong>' + w.toFixed(5) + '</strong>';
       let tbody = '';
-      _splitBatches.forEach(function(b, i) {
-        const bp = parseFloat(b.price), ba = parseFloat(b.alloc);
-        const bpos = !isNaN(bp) && !isNaN(ba) ? (effectivePositionSize * ba / 100).toFixed(2) : '—';
-        const bsl = b.stopLoss && !isNaN(parseFloat(b.stopLoss)) ? parseFloat(b.stopLoss).toFixed(5) : '—';
-        tbody += '<tr><td>#' + (i + 1) + '</td><td>' + (isNaN(bp) ? '—' : bp) + '</td><td>' + (isNaN(ba) ? '—' : ba + '%') + '</td><td>' + bpos + ' U</td><td>' + bsl + '</td></tr>';
+      // v5.6.43：占比与仓位一律用归一化后的口径，展示数字必须等于落库数字。
+      computeNormalizedSplitAlloc().forEach(function(r, i) {
+        const bp = r.price, ba = r.alloc;
+        const bpos = r.valid ? (effectivePositionSize * ba / 100).toFixed(2) : '—';
+        const bsl = r.stopLoss && !isNaN(parseFloat(r.stopLoss)) ? parseFloat(r.stopLoss).toFixed(5) : '—';
+        tbody += '<tr><td>#' + (i + 1) + '</td><td>' + (r.valid ? bp : '—') + '</td><td>' + (r.valid ? ba + '%' : '—') + '</td><td>' + bpos + ' U</td><td>' + bsl + '</td></tr>';
       });
       splitTable.innerHTML = '<thead><tr><th>批次</th><th>入场价</th><th>占比</th><th>仓位</th><th>止损</th></tr></thead><tbody>' + tbody + '</tbody>';
       splitArea.style.display = 'block';
@@ -1524,8 +1629,8 @@ function renderPortfolioRisk(calc) {
     // effectiveEntryPrice。原实现在这里用未加滑点的 entryPrice，与 calcPortfolioHeat
     // 差一截；移动止损后 riskAmount 又已冻结，三个表面各说各话。
     portRisk += (typeof positionCurrentRisk === 'function') ? positionCurrentRisk(p) : 0;
-    var pos = parseFloat(p.positionSize) || 0;
-    var lev = parseFloat(p.leverage) || 0;
+    var pos = toFiniteNum(p.positionSize);
+    var lev = toFiniteNum(p.leverage);
     portMargin += lev > 0 ? pos / lev : pos;
   }
   var thisRisk = (calc.riskAmount != null && !isNaN(calc.riskAmount)) ? calc.riskAmount : 0;
@@ -1545,7 +1650,7 @@ function renderPortfolioRisk(calc) {
     var atrOn = (document.getElementById('formAtrStopEnabled') || {}).checked === true;
     if (!atrOn && !calc.atrStopMode) {
       var atrValue = parseFloat((document.getElementById('atrValue') || {}).value);
-      var atrMult = parseFloat((document.getElementById('atrMultiplier') || {}).value) || 2;
+      var atrMult = toFiniteNum((document.getElementById('atrMultiplier') || {}).value) || 2;
       if (!isNaN(atrValue) && atrValue > 0 && typeof calcATRStop === 'function' && calc.entryPrice > 0 && calc.stopLoss > 0) {
         var atrRes = calcATRStop(calc.entryPrice, atrValue, atrMult, calc.direction);
         if (atrRes && atrRes.stopPrice > 0) {
@@ -1834,7 +1939,7 @@ function saveLog() {
         var rEl = document.getElementById(id + 'Ratio');
         var pv = pEl ? parseFloat(pEl.value) : NaN;
         p.push((!isNaN(pv) && pv > 0) ? pv : null);
-        r.push(rEl ? (parseFloat(rEl.value) || 0) : 0);
+        r.push(rEl ? (toFiniteNum(rEl.value)) : 0);
       });
       return { prices: p, ratios: r, weightedRR: (w && w.rr != null && !w.overLimit) ? w.rr : null, remain: w.remain };
     })(),
@@ -1933,7 +2038,7 @@ function toggleSplitMode() {
     btn.classList.add('active');
     btn.innerHTML = '<i class="fas fa-layer-group"></i> 关闭分批';
     area.classList.add('open');
-    if (!_splitBatches.length) { initSplitBatches(2); }
+    if (!_splitBatches.length) { initSplitBatches(MIN_SPLITS); }
     renderSplitBatches();
     persistSplitState();
     if (!document.getElementById('entryPrice').value) {
@@ -1995,10 +2100,12 @@ function renderSplitBatches() {
       '<input type="number" id="splitAlloc_' + i + '" step="0.5" min="0" max="100" placeholder="%" value="' + (b.alloc || '') + '" class="alloc-input" oninput="onSplitChange()" /></div>' +
       '<div class="fp"><label>止损(可选)</label>' +
       '<input type="number" id="splitSL_' + i + '" step="0.00001" placeholder="共用" value="' + (b.stopLoss || '') + '" oninput="onSplitChange()" /></div>' +
-      (_splitBatches.length > 2 ? '<button class="btn-remove" onclick="removeSplitBatch(' + i + ')" title="移除此批">&times;</button>' : '<span></span>') +
+      (_splitBatches.length > MIN_SPLITS ? '<button class="btn-remove" onclick="removeSplitBatch(' + i + ')" title="移除此批">&times;</button>' : '<span></span>') +
       '</div>';
   });
-  if (_splitBatches.length < 3) {
+  // v5.6.43：原写死 `< 3`，与 MAX_SPLITS=5 冲突——加到 3 批后「增加一批」按钮
+  // 就消失，第 4/5 批永远不可达（CLAUDE.md 记录的老隐患）。
+  if (_splitBatches.length < MAX_SPLITS) {
     html += '<button class="split-add-btn" onclick="addSplitBatch()"><i class="fas fa-plus"></i> 增加一批</button>';
   }
   html += '<span class="split-alloc-hint" id="splitAllocHint">比例总和须为 100%</span>';
@@ -2037,7 +2144,7 @@ function autoCompleteAlloc() {
   // 加权入场价与主计算器均按 Σ(dist·alloc)/Σ(alloc) 归一，2 批 fill-sum ≠100 时
   // 权重比例不变（70/70 ≡ 1/2,1/2），故不强制改写用户输入的 alloc——改它反而会
   // 让 UI 显示值偏离用户所填，引入新的口径矛盾。提示已足以让用户自行修正。
-  if (_splitBatches.length < 3) return;
+  if (_splitBatches.length < MIN_SPLITS + 1) return;
   const totalFilled = _splitBatches.reduce(function(s, b) {
     return s + (b.alloc !== '' && !isNaN(parseFloat(b.alloc)) ? parseFloat(b.alloc) : 0);
   }, 0);
@@ -2067,24 +2174,122 @@ function updateEntryPriceFromSplit() {
 }
 var _cachedWeightedEntry = null;
 var _cachedWeightedEntryHash = '';
+/**
+ * 分批占比归一化（v5.6.43，P0）——展示层 / 触发行 / 落库的唯一口径。
+ *
+ * 立项原因：用户把两批都填 70%（合计 140%）时，落库 getSplitEntries() 早已
+ * 归一化成 50/50，结果区「分批明细表」却仍按原始 ba/100 渲染，实测各显示
+ * 21000 U（合计 42000 U = 实际仓位的 140%）。照展示数字手动下单会超仓 40%。
+ * 修复前这个分叉没有任何断言覆盖：落库侧对、展示侧错，单测任一单独通过。
+ *
+ * 返回与 _splitBatches 等长的数组，alloc 已按有效批次的总权重折算到 100%，
+ * 与落库保持同一位小数（toFixed(1)），避免「展示 33.33 / 落库 33.3」的二次分叉。
+ */
+function computeNormalizedSplitAlloc() {
+  var rows = [], sum = 0;
+  for (var i = 0; i < _splitBatches.length; i++) {
+    var b = _splitBatches[i];
+    var p = toFiniteNum(b.price, NaN), a = toFiniteNum(b.alloc, NaN);
+    var valid = Number.isFinite(p) && p > 0 && Number.isFinite(a) && a > 0;
+    if (valid) sum += a;
+    rows.push({ idx: i, price: p, rawAlloc: a, stopLoss: b.stopLoss, valid: valid, alloc: 0 });
+  }
+  for (var j = 0; j < rows.length; j++) {
+    rows[j].alloc = (rows[j].valid && sum > 0)
+      ? parseFloat((rows[j].rawAlloc / sum * 100).toFixed(1)) : 0;
+  }
+  return rows;
+}
+/**
+ * 分批建仓的等效入场价（v5.6.42 数学修复：调和平均）。
+ *
+ * 每批按 alloc 分配的是【资金】（名义 USDT），成交价 bp_i 不同 → 该批数量
+ * q_i = F_i / bp_i ∝ alloc_i / bp_i。整笔等效均价应是「总资金 / 总数量」：
+ *   E = Σalloc / Σ(alloc_i / bp_i)   —— 资金权重的调和平均
+ * 旧实现写成 Σ(alloc·bp)/Σalloc（算术平均），只在各批同价时才相等。
+ * 例：100 / 200 各 50% 资金 → 真实均价 133.33，旧实现给 150（高估 12.5%），
+ * 之后仓位、强平价、止损距离、滑点、落库全部被这个错价污染。
+ *
+ * 兼容性：weightedEntry 已落进历史日志。新记录由 getSplitEntries() 打上
+ * weightedEntryModel='harmonic' 标记；旧记录没有该字段，读端只读落库值、
+ * 绝不按 entries 重算，因此新旧记录各自口径自洽、不互相污染。
+ */
 function computeWeightedEntry() {
   // P2: 排序后哈希，避免因批次顺序不同但内容相同时产生无效缓存失效
   var hash = JSON.stringify(_splitBatches.slice().sort(function(a, b) {
-    return parseFloat(a.price) - parseFloat(b.price) || parseFloat(a.alloc) - parseFloat(b.alloc);
+    return toFiniteNum(a.price, NaN) - toFiniteNum(b.price, NaN) ||
+           toFiniteNum(a.alloc, NaN) - toFiniteNum(b.alloc, NaN);
   }));
   if (hash === _cachedWeightedEntryHash) return _cachedWeightedEntry;
-  let totalAlloc = 0, weightedSum = 0;
+  var totalAlloc = 0, inverseSum = 0;
   for (const b of _splitBatches) {
-    const price = parseFloat(b.price), alloc = parseFloat(b.alloc);
-    if (!isNaN(price) && price > 0 && !isNaN(alloc) && alloc > 0) {
-      weightedSum += price * alloc;
+    const price = toFiniteNum(b.price, NaN), alloc = toFiniteNum(b.alloc, NaN);
+    if (Number.isFinite(price) && price > 0 && Number.isFinite(alloc) && alloc > 0) {
+      inverseSum += alloc / price;
       totalAlloc += alloc;
     }
   }
-  var result = totalAlloc > 0 ? weightedSum / totalAlloc : null;
+  var result = (totalAlloc > 0 && inverseSum > 0 && Number.isFinite(inverseSum))
+    ? totalAlloc / inverseSum : null;
   _cachedWeightedEntry = result;
   _cachedWeightedEntryHash = hash;
   return result;
+}
+
+/**
+ * 分批独立止损的整笔加权止损距离（纯函数，v5.6.42 数学修复）。
+ *
+ * 总亏损 = Σ q_i·dist_i = 名义仓位 × Σ(w_i·dist_i/bp_i)，其中 w_i 为归一化资金权重。
+ * 主计算器约定 riskAmount = 名义仓位 × stopDistance / E，两式相等得：
+ *   stopDistance = E × Σ(w_i · dist_i / bp_i)
+ * 旧实现用 Σ(w_i·dist_i)（缺 E/bp_i 量纲因子），只有各批同价时才碰巧正确。
+ * 例：bp=100/200、dist=10/40、各 50% → 正确 20，旧实现 25。
+ *
+ * @param {Array} batches 分批明细（price / alloc / stopLoss）
+ * @param {string} direction 'long' | 'short'
+ * @param {number} globalStopLoss 该批未填独立止损时回退的全局止损价
+ * @param {number} weightedEntry 调和均价 E（缺省时按 batches 现算）
+ * @returns {{distance:number|null,totalAlloc:number,skippedCount:number}}
+ */
+function computeWeightedStopDistance(batches, direction, globalStopLoss, weightedEntry) {
+  var out = { distance: null, totalAlloc: 0, skippedCount: 0 };
+  if (!Array.isArray(batches)) return out;
+  var E = weightedEntry;
+  if (!Number.isFinite(E) || E <= 0) {
+    // 允许调用方省略 E（测试与单批场景），按传入明细独立求调和均价
+    var a = 0, inv = 0;
+    for (var j = 0; j < batches.length; j++) {
+      var p0 = toFiniteNum(batches[j] && batches[j].price, NaN);
+      var q0 = toFiniteNum(batches[j] && batches[j].alloc, NaN);
+      if (Number.isFinite(p0) && p0 > 0 && Number.isFinite(q0) && q0 > 0) { inv += q0 / p0; a += q0; }
+    }
+    E = (a > 0 && inv > 0) ? a / inv : null;
+  }
+  if (!Number.isFinite(E) || E <= 0) return out;
+
+  var gsl = toFiniteNum(globalStopLoss, NaN);
+  var totalAlloc = 0, acc = 0;
+  for (var i = 0; i < batches.length; i++) {
+    var b = batches[i];
+    var bp = toFiniteNum(b && b.price, NaN), ba = toFiniteNum(b && b.alloc, NaN);
+    if (!Number.isFinite(bp) || bp <= 0 || !Number.isFinite(ba) || ba <= 0) continue;
+    var bsl = (b.stopLoss !== '' && b.stopLoss != null)
+      ? toFiniteNum(b.stopLoss, NaN) : gsl;
+    // 脏值 / 方向非法一律跳过，不再让 NaN 污染整个加权和（原实现会静默退化）
+    if (!Number.isFinite(bsl) ||
+        (direction === 'long' && bsl >= bp) || (direction === 'short' && bsl <= bp)) {
+      out.skippedCount++;
+      continue;
+    }
+    var dist = Math.abs(bp - bsl);
+    if (!Number.isFinite(dist) || dist <= 0) { out.skippedCount++; continue; }
+    acc += ba * dist / bp;   // Σ(alloc_i · dist_i / bp_i)
+    totalAlloc += ba;
+  }
+  out.totalAlloc = totalAlloc;
+  var distance = (totalAlloc > 0 && acc > 0) ? E * acc / totalAlloc : null;
+  out.distance = (Number.isFinite(distance) && distance > 0) ? distance : null;
+  return out;
 }
 // 分批建仓的批次上下限——唯一来源。
 // 修复（2026-10-09）：原先 MIN_SPLITS/MAX_SPLITS 在 addSplitBatch / removeSplitBatch /
@@ -2132,22 +2337,30 @@ function getSplitEntries() {
   // 批次」，否则用户走单条保存（而非拆分保存）时坏批次原样落库、事后无从知晓。
   const entries = [];
   for (const b of _splitBatches) {
-    const price = parseFloat(b.price), alloc = parseFloat(b.alloc);
-    if (isNaN(price) || price <= 0 || isNaN(alloc) || alloc <= 0) continue;
-    entries.push({ price: price, alloc: alloc, stopLoss: b.stopLoss ? parseFloat(b.stopLoss) : null });
+    const price = toFiniteNum(b.price, NaN), alloc = toFiniteNum(b.alloc, NaN);
+    if (!Number.isFinite(price) || price <= 0 || !Number.isFinite(alloc) || alloc <= 0) continue;
+    const sl = toFiniteNum(b.stopLoss, NaN);
+    entries.push({ price: price, alloc: alloc, stopLoss: Number.isFinite(sl) ? sl : null });
   }
   const weighted = computeWeightedEntry();
   if (entries.length < 2 || weighted === null) return null;
-  // alloc 归一化（总和 ≠100 时按实际权重折算，与主计算器的加权止损距离公式同口径——
-  // Σ(dist·alloc)/Σ(alloc)，分母自动消掉 ≠100）：落库的 alloc 是「占整笔的百分比」，
+  // alloc 归一化（总和 ≠100 时按实际权重折算，与 computeWeightedStopDistance 的
+  // Σ(alloc·dist/bp)/Σ(alloc) 同口径，分母自动消掉 ≠100）：落库的 alloc 是「占整笔的百分比」，
   // 若用户 2 批填 70/70 直接落 70/70，读端（编辑弹窗占比列）会误读为「合计 140%」。
-  var _allocSum = entries.reduce(function(s, e) { return s + e.alloc; }, 0);
-  if (_allocSum > 0 && Math.abs(_allocSum - 100) > 1e-9) {
-    for (var _ni = 0; _ni < entries.length; _ni++) {
-      entries[_ni].alloc = parseFloat((entries[_ni].alloc / _allocSum * 100).toFixed(1));
-    }
+  // v5.6.43：归一化改用 computeNormalizedSplitAlloc() 的唯一结果，
+  // 与结果区表格、触发行的展示数字严格同源（原本两份算法各自 toFixed(1)，
+  // 且展示侧根本没归一化，出现「展示 140% / 落库 100%」的分叉）。
+  var _norm = computeNormalizedSplitAlloc().filter(function(r) { return r.valid; });
+  for (var _ni = 0; _ni < entries.length; _ni++) {
+    if (_norm[_ni]) entries[_ni].alloc = _norm[_ni].alloc;
   }
-  return { entries: entries, weightedEntry: parseFloat(weighted.toFixed(5)) };
+  // v5.6.42：打上口径标记。没有该字段的历史记录一律「只读落库值、不重算」，
+  // 避免用新调和口径覆盖旧算术口径，导致同一份日志里新旧记录不可比。
+  return {
+    entries: entries,
+    weightedEntry: parseFloat(weighted.toFixed(5)),
+    weightedEntryModel: 'harmonic'
+  };
 }
 function getActiveEntryPrice() {
   if (_splitMode && _splitBatches.length >= 2) {
@@ -2206,6 +2419,9 @@ function resetForm() {
   // 调成 0.06 → 点重置 → 表单又被塞回 0.08」，用户的配置在重置后静默失效。
   // 此处 orderType 已在上方重置为 market，对应读 feeRateMarket（与 :2220 时序一致）。
   document.getElementById('feeRate').value = String(_getDefaultFeeRate('market'));
+  // resetForm 重新写回系统默认值，feeRate 重新进入「自动联动」状态
+  var _frReset = document.getElementById('feeRate');
+  if (_frReset && _frReset.dataset) { _frReset.dataset.feeAuto = '1'; _frReset.dataset.feeAutoType = 'market'; }
   var slippageModeEl = document.getElementById('slippageMode');
   var entrySlipEl = document.getElementById('entrySlippageTicks');
   var exitSlipEl = document.getElementById('exitSlippageTicks');
@@ -2438,7 +2654,7 @@ function applyKellyRisk() {
     // 否则用户显式关闭 ATR 后这里仍会被 settings.atrStopEnabled=true 打开。
     var atrValue = parseFloat(document.getElementById('atrValue').value);
     var settings = loadSettings();
-    const atrMultiplier = parseFloat(document.getElementById('atrMultiplier').value) || settings.atrDefaultMultiplier || 2;
+    const atrMultiplier = toFiniteNum(document.getElementById('atrMultiplier').value) || settings.atrDefaultMultiplier || 2;
     var formAtrOn = document.getElementById('formAtrStopEnabled');
     var atrOn = formAtrOn ? formAtrOn.checked : (settings.atrStopEnabled === true);
     if (atrOn && !isNaN(atrValue) && atrValue > 0 && typeof calcATRStop === 'function') {

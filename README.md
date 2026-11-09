@@ -1,6 +1,6 @@
 # TradingDiscipline · 交易风险管理终端
 
-**纯前端期货/合约交易风控与复盘工具 · v5.6.35**
+**纯前端期货/合约交易风控与复盘工具 · v5.6.43**
 
 面向加密货币/合约交易者的全流程交易管理系统：开仓前计算 → 持仓监控 → 平仓记录 → 统计分析 → 复盘优化。所有数据本地存储（`localStorage`），完全离线运行，无构建工具，双击 `index.html` 即可使用。
 
@@ -208,7 +208,7 @@ notes/
 │   ├── app.js              事件绑定/主题/初始化
 │   └── version.js          版本号（含完整 changelog 注释）
 ├── test/
-│   ├── run-all.js           聚合跑测器（npm test 入口，跑 13 个无头跑测器）
+│   ├── run-all.js           聚合跑测器（npm test 入口，跑 16 个无头跑测器）
 │   ├── run-tests.html       浏览器内回归测试（665 条断言，打开即跑）★ 活跃主套件
 │   ├── _rt_headless.js      run-tests.html 的无头运行器
 │   ├── _edit_scenarios.js   编辑弹窗场景回归（S0~S12）
@@ -224,7 +224,7 @@ notes/
 
 ## 六、测试与验证
 
-- **一键全量回归**：`npm test` → `test/run-all.js`，依次跑完 13 个无头跑测器（主回归 + 编辑场景 + 平仓类型 + 日志簿记 + 配置 + 重置 + 冒烟 + 参数化 + 副作用 + 不变量 + MAE/MFE + 开仓审计），任一失败 `exit 1`。这是本仓库唯一有效的自动化门禁；
+- **一键全量回归**：`npm test` → `test/run-all.js`，依次跑完 16 个无头跑测器（主回归 + 核心算法升级 + 跨模块计算逻辑 + 编辑场景 + 平仓类型 + 日志簿记 + 配置 + 重置 + 冒烟 + 参数化 + 副作用 + 不变量 + MAE/MFE + 开仓审计 + 覆盖率补盲），任一失败 `exit 1`。这是本仓库唯一有效的自动化门禁；`test/verify_core_algo.js` 与 `test/verify_crossmodule.js` 带 `--inject` 自检模式，注入旧实现必须复红，否则断言没有捕获力。
 - **浏览器内回归**：打开 `test/run-tests.html` 自动运行 665 条断言（平仓三态、凯利链、集中度、一致性门、分批建仓、回撤告警阈值、移动端适配、纪律 LED 文案条数与顺序等 32 组）；也可 `npm run test:main` 无头跑；
 - 修改 JS 后建议：`node --check js/<file>.js` 语法检查 → `npm test` → 浏览器强刷（URL 追加 `?cb=<时间戳>` 避开缓存）→ 关键链路 E2E；
 - ⚠️ Jest 已移除：`tests/` 目录早已删除，`package.json` 中的 jest 配置为悬空配置（v5.6.34 已清理）。加测试请用 `run-tests.html` 或 `test/verify_*.js`；

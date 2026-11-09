@@ -22,8 +22,11 @@ var SETTINGS_DEFAULTS = {
   // Skills 融合新增配置
   atrStopEnabled: false,     // ATR 动态止损开关
   atrDefaultMultiplier: 2,   // ATR 默认倍数
-  portfolioHeatMax: 8,       // 组合热量警告上限 (%) —— 语义已与硬熔断分离（见 skills-integration.getHeatWarnMax）
-  heatWarnMax: 8,            // 组合热量警告上限（%），portfolioHeatMax 的语义化别名，优先于它被读
+  // v5.6.43：默认警告线必须 < 默认硬熔断线（riskHeatMax=6），否则
+  // calcPortfolioHeat 里 heat>=hard 先判 blocked，warn 档永远不可达。
+  // 同时删除 heatWarnMax 默认值——它曾以 8 恒常存在并优先于 portfolioHeatMax 被读，
+  // 使用户在设置页配置的 portfolioHeatMax 完全失效（getHeatWarnMax 恒返回 8）。
+  portfolioHeatMax: 5,       // 组合热量警告上限 (%) —— 唯一权威来源
   minRRRatio: 2,             // 最低盈亏比 (默认 2:1)
   singleSymbolMaxPct: 30,    // 单品种最大占比 (%) —— 用户自定 30%
   dailyTradeMax: 8,          // 每日建议最大交易笔数
@@ -119,6 +122,49 @@ function validateCustomStopLimit(parsed) {
 }
 
 /**
+ * 读侧统一净化（v5.6.43，P0）。
+ *
+ * 立项原因：校验原本只发生在 saveSettings() 的表单路径，而 localStorage 手改、
+ * 旧版本残留、JSON/CSV 备份导入都能绕过它。skills-integration.js 里五道闸门
+ * 各自写 `Number(settings.X) || default`，只挡住 0/NaN，不挡 999/负数/字符串，
+ * 实测把 dailyLossLimit 改成 999 会得到 99900 U 的日亏上限（默认应 500 U），
+ * 集中度 999%、热量 999% —— 五道闸门同时 fail-open；同一个设置项在
+ * _numSetting（有区间校验）与 checkDailyLossLimit（无）里结论相反。
+ *
+ * 与其在六个消费点各补一份边界，不如在唯一数据入口收口：任何有
+ * SETTINGS_VALIDATORS 规则的字段，只要不是「有限数字且落在 [min,max] 内」
+ * （整数规则还要是整数），一律回退 SETTINGS_DEFAULTS。与 saveSettings 的
+ * 「越界拒绝保存」语义一致：存不进去的值，读出来也不该生效。
+ *
+ * 无 validator 的字段（autoBackup / customStopLimit / customSymbols / tpRRs 等）
+ * 原样保留，由各自的专用校验器负责。
+ */
+function _sanitizeLoadedSettings(merged) {
+  var out = {};
+  var keys = Object.keys(merged);
+  for (var i = 0; i < keys.length; i++) {
+    var k = keys[i];
+    var v = merged[k];
+    var rule = SETTINGS_VALIDATORS[k];
+    if (!rule) { out[k] = v; continue; }
+    // 数字字符串先归一成数字（旧备份 / CSV 设置导入会写 "0.8" 这类字符串，
+    // loadMmr / _numSetting 历史上都按 parseFloat 读取，不能因为加了净化就丢掉）。
+    // 'abc' → NaN、'Infinity' → Infinity，两者都在下面的有限性检查里回退默认。
+    if (typeof v === 'string' && v.trim() !== '') {
+      var parsed = parseFloat(v);
+      v = Number.isFinite(parsed) ? parsed : v;
+    }
+    if (typeof v !== 'number' || !Number.isFinite(v) || v < rule.min || v > rule.max ||
+        (rule.integer && v % 1 !== 0)) {
+      out[k] = SETTINGS_DEFAULTS[k];
+    } else {
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
+/**
  * 加载设置（返回对象）
  */
 function loadSettings() {
@@ -133,8 +179,8 @@ function loadSettings() {
       var k = keys[i];
       merged[k] = (settings[k] != null) ? settings[k] : SETTINGS_DEFAULTS[k];
     }
-    SETTINGS_CACHE = merged;
-    return merged;
+    SETTINGS_CACHE = _sanitizeLoadedSettings(merged);
+    return SETTINGS_CACHE;
   } catch (e) {
     SETTINGS_CACHE = JSON.parse(JSON.stringify(SETTINGS_DEFAULTS));
     return SETTINGS_CACHE;
@@ -615,6 +661,43 @@ function stripBOM(text) {
   return String(text == null ? '' : text).replace(/^﻿/, '');
 }
 
+/**
+ * CSV「平仓类型」值归一（v5.6.43，P0）。
+ *
+ * 立项原因：exportCSV 一直把 closeType 写成中文标签（CLOSE_TYPE_LABELS），
+ * 而本函数出现之前，导入端只做「中文表头 → 英文字段名」映射，不做「中文值 → 机器键」
+ * 反查，也没有值域校验。一次 CSV 往返后 partialTP 变成「部分止盈」，
+ * utils.isClosedTrade 由 false（部分平仓中间态）翻成 true（已全平），
+ * 剩余敞口、组合热量、胜率、权益曲线同时算错；且英文键丢失不可逆。
+ *
+ * 修复策略是双向的：导出端改写成机器键（数据文件不该存展示文案），
+ * 导入端保留中文反查以兼容历史备份，并拒绝值域外的值。
+ */
+function _isKnownCloseType(s) {
+  if (typeof CLOSE_TYPE_LABELS === 'undefined' || !s) return false;
+  if (Object.prototype.hasOwnProperty.call(CLOSE_TYPE_LABELS, s)) return true;
+  var keys = Object.keys(CLOSE_TYPE_LABELS);
+  for (var i = 0; i < keys.length; i++) {
+    if (CLOSE_TYPE_LABELS[keys[i]] === s) return true;
+  }
+  return false;
+}
+
+function _normalizeCsvCloseType(v) {
+  var s = String(v == null ? '' : v).trim();
+  if (!s) return '';
+  if (typeof CLOSE_TYPE_LABELS === 'undefined') return s;
+  if (Object.prototype.hasOwnProperty.call(CLOSE_TYPE_LABELS, s)) return s;
+  var keys = Object.keys(CLOSE_TYPE_LABELS);
+  for (var i = 0; i < keys.length; i++) {
+    if (CLOSE_TYPE_LABELS[keys[i]] === s) return keys[i];
+  }
+  // 未知值**保留原值**：把它抹成空串会让「已平仓但缺平仓价/盈亏」的坏记录
+  // 静默变成「未平仓」，绕过 _prepareImportedRecords 的 fail-closed 整批拒绝。
+  // 值域外由调用方记 warning，数据的对错交给既有校验链判定。
+  return s;
+}
+
 function parseCSVImport(csvText) {
   var lines = parseCSVRecords(stripBOM(csvText));   // 引号内换行的安全解析，见 parseCSVRecords 注释
   if (lines.length < 2) { showToast('CSV 文件为空', 'error'); return; }
@@ -632,8 +715,8 @@ function parseCSVImport(csvText) {
     '计算版本':'calculationVersion','滑点Schema':'slipSchema','入场Ticks':'slipEntryTicks','退出Ticks':'slipExitTicks',
     'TickSize':'slipTickSize','计划有效退出价':'slipEffectiveExit','GroupId':'groupId',
     '已实现盈亏':'realizedPnl','累计手续费':'realizedFee','已平仓比例%':'closedRatio','初始风险':'initialRiskAmount',
-    '初始仓位':'initialPositionSize','平仓明细':'closes','部分平仓':'isPartial',
-    '盘中动作':'actions','止损轨迹':'stopHistory',
+    '初始仓位':'initialPositionSize','初始保证金':'initialMargin','平仓明细':'closes','部分平仓':'isPartial',
+    '盘中动作':'actions','止损轨迹':'stopHistory','分批明细':'splitEntries','加权均价模型':'weightedEntryModel',
     '目标盈亏比':'targetRR','计划净盈利':'plannedNetProfit',
     // 含费净 RR 的三段金额（2026-10-10）。缺列时复盘无法还原 RR 是含费口径还是价格距离口径。
     '毛利盈利':'rrGrossProfit','净盈利':'rrNetProfit','净亏损':'rrNetLoss'
@@ -663,6 +746,12 @@ function parseCSVImport(csvText) {
       var h = headers[j];
       var v = values[j] || '';
       var key = CSV_FIELD_MAP[h] || h; // 中文 header 映射；未知/英文 header 原样使用
+      if (key === 'closeType') {
+        v = _normalizeCsvCloseType(v);
+        if (v && !_isKnownCloseType(v)) {
+          importWarnings.push('第 ' + (i + 1) + ' 行平仓类型「' + v + '」不在已知值域');
+        }
+      }
       if (CSV_ARRAY_FIELDS.indexOf(key) !== -1) {
         obj[key] = v ? v.split(';').filter(Boolean) : [];
       } else if (CSV_JSON_FIELDS.indexOf(key) !== -1) {
@@ -677,7 +766,9 @@ function parseCSVImport(csvText) {
         var parsed = parseFloat(_numSrc);
         // rMultiple 可能带 'R' 后缀（如 "2.5R"），需先去除
         if (key === 'rMultiple' && typeof v === 'string') parsed = parseFloat(v.replace(/R$/g, ''));
-        obj[key] = isNaN(parsed) ? null : parsed;
+        // v5.6.43：parseFloat('Infinity') === Infinity 且 isNaN(Infinity) === false，
+        // 旧写法会把 Infinity / 1e999 直接写进 26 个数值列，再经 JSON 落库变 null。
+        obj[key] = Number.isFinite(parsed) ? parsed : null;
       } else if (CSV_INT_FIELDS.indexOf(key) !== -1) {
         var parsedInt;
         if (key === 'mindsetScore' && typeof v === 'string' && v.indexOf('★') !== -1) {

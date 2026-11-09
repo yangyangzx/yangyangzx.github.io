@@ -29,27 +29,27 @@
 </div>
 <div id="out">加载中…</div>
 
-<script src="../js/chart-guard.js?v=5.6.39"></script>
-<script src="../js/constants.js?v=5.6.39"></script>
-<script src="../js/utils.js?v=5.6.39"></script>
-<script src="../js/storage.js?v=5.6.39"></script>
-<script src="../js/slippage.js?v=5.6.39"></script>
-<script src="../js/skills-integration.js?v=5.6.39"></script>
-<script src="../js/calc-visuals.js?v=5.6.39"></script>
-<script src="../js/calculation-ui.js?v=5.6.39"></script>
-<script src="../js/calculator.js?v=5.6.39"></script>
-<script src="../js/risk.js?v=5.6.39"></script>
-<script src="../js/planner.js?v=5.6.39"></script>
-<script src="../js/discipline-led.js?v=5.6.39"></script>
-<script src="../js/settings.js?v=5.6.39"></script>
-<script src="../js/io.js?v=5.6.39"></script>
-<script src="../js/logs.js?v=5.6.39"></script>
-<script src="../js/modals.js?v=5.6.39"></script>
+<script src="../js/chart-guard.js?v=5.6.43"></script>
+<script src="../js/constants.js?v=5.6.43"></script>
+<script src="../js/utils.js?v=5.6.43"></script>
+<script src="../js/storage.js?v=5.6.43"></script>
+<script src="../js/slippage.js?v=5.6.43"></script>
+<script src="../js/skills-integration.js?v=5.6.43"></script>
+<script src="../js/calc-visuals.js?v=5.6.43"></script>
+<script src="../js/calculation-ui.js?v=5.6.43"></script>
+<script src="../js/calculator.js?v=5.6.43"></script>
+<script src="../js/risk.js?v=5.6.43"></script>
+<script src="../js/planner.js?v=5.6.43"></script>
+<script src="../js/discipline-led.js?v=5.6.43"></script>
+<script src="../js/settings.js?v=5.6.43"></script>
+<script src="../js/io.js?v=5.6.43"></script>
+<script src="../js/logs.js?v=5.6.43"></script>
+<script src="../js/modals.js?v=5.6.43"></script>
 <!-- version.js 刻意放在最后：它无依赖也无副作用，但第 30.8 组要读 APP_VERSION 做
      版本一致性校验。此前这个页面从没加载过 version.js——一旦有断言直接引用
      APP_VERSION，整个测试套件会因 ReferenceError 在 runAll 里炸掉，
      结果是 total=0（全部断言都没跑），比一条失败更隐蔽。 -->
-<script src="../js/version.js?v=5.6.39"></script>
+<script src="../js/version.js?v=5.6.43"></script>
 <script>
 (function() {
   // ---- 环境 mock（与生产隔离） ----
@@ -139,12 +139,16 @@
     var k1b = calcKelly(0.6, 20, 10, 10000, true, 10); // 同策略、杠杆 ×10
     var k1c = calcKelly(0.6, 20, 10, 10000, true, 20); // 同策略、杠杆 ×20
     h += T('杠杆截断：原始 0.4 截断到 0.05', k1a && Math.abs(k1a.kellyPct - 0.05) < 1e-9);
-    h += T('半凯利 0.2 截断到 0.05', k1a && Math.abs(k1a.halfKellyPct - 0.05) < 1e-9);
+    // v5.6.43 期望值迁移：旧实现把 rawKelly 与 rawKelly/2 分别钳到 5%，
+    // 原始值 >10% 时两者都变 5%，「半凯利」实际等于完整凯利（风险预算翻倍）。
+    // 现口径为「先钳完整凯利，再取其一半」，故半凯利恒 = 0.025 = kellyPct/2。
+    h += T('半凯利恒为完整凯利的一半（0.05 → 0.025）', k1a && Math.abs(k1a.halfKellyPct - 0.025) < 1e-9);
+    h += T('半凯利 / 完整凯利比值 = 0.5', k1a && Math.abs(k1a.halfKellyPct / k1a.kellyPct - 0.5) < 1e-9);
     h += T('截断标记 kellyCapped=true', k1a && k1a.kellyCapped === true);
     // 关键回归：建议风险与杠杆无关（杠杆敞口由保证金/热量/单品种占比独立约束）
     h += T('lev=1 与 lev=10 建议风险一致', k1a && k1b && Math.abs(k1a.halfKellyPct - k1b.halfKellyPct) < 1e-9);
-    h += T('lev=10 仍为 0.05（不再被折叠成 0.005）', k1b && Math.abs(k1b.halfKellyPct - 0.05) < 1e-9);
-    h += T('lev=20 仍为 0.05（卡片与实际不再 2 倍错位）', k1c && Math.abs(k1c.halfKellyPct - 0.05) < 1e-9);
+    h += T('lev=10 仍为 0.025（不再被折叠成 0.005）', k1b && Math.abs(k1b.halfKellyPct - 0.025) < 1e-9);
+    h += T('lev=20 仍为 0.025（卡片与实际不再 2 倍错位）', k1c && Math.abs(k1c.halfKellyPct - 0.025) < 1e-9);
     var k2 = calcKelly(0.3, 10, 20, 10000, true, 10); // 期望为负
     h += T('期望为负时 kellyPct<=0', k2 && k2.kellyPct <= 0);
 
@@ -838,8 +842,12 @@
         saveLogs(true) === true);
     })();
 
-    // ---- 20. 日频夏普（空闲日铺满 + 365 天年化） ----
-    h += group('20. dailySharpe 空闲日铺满 / 年化系数');
+    // ---- 20. 日频夏普（日收益率 + 样本标准差 + 空闲日铺满 + 365 天年化） ----
+    // v5.6.43 口径升级：旧实现拿「日盈亏金额」当收益序列、标准差用总体 ÷n，
+    // 本金 1 万与 100 万的两条相同曲线会给出同一个夏普，且波动被系统性低估。
+    // 现按逐日递推权益 r_d = pnl_d / E_{d-1} 计算，startEquity 为必需入参；
+    // 标准差改样本 ÷(n−1)，可选 riskFreeRate（年化小数）。
+    h += group('20. dailySharpe 日收益率 / 样本标准差 / 年化');
     h += T('dailySharpe 已定义', typeof window.utils.dailySharpe === 'function');
     var _clday = (function() {
       var d = new Date(2026, 0, 1, 12, 0, 0, 0);
@@ -848,17 +856,21 @@
         return x.toISOString();
       };
     })();
-    // 20a. 跨 20 天但只在首末两天平仓：20 个持仓日中 18 天应为 0
+    // 20a. 跨 20 天但只在首末两天平仓：18 个空闲日记 0；期初权益 1000
     (function() {
       var r = window.utils.dailySharpe([
         { closeTime: _clday(0), pnlAmount: 100 },
         { closeTime: _clday(19), pnlAmount: 100 }
-      ]);
+      ], { startEquity: 1000 });
       h += T('跨 20 天含 18 个无平仓日', r.days === 20 && r.zeroDays === 18);
-      h += T('空闲日记 0 后均值被摊薄（200/20）', Math.abs(r.mean - 10) < 1e-9);
-      h += T('铺满后 sd>0（原实现会因 sd=0 而报无法计算）', r.sd > 0);
-      h += T('sd 精确值（2×90² + 18×10² 开方 /20 = 30）', Math.abs(r.sd - 30) < 1e-9);
+      h += T('逐日权益递推：r0=0.1 / r19=100÷1100，mean=0.00954545',
+        Math.abs(r.mean - 0.0095454545454) < 1e-9, '得 ' + r.mean);
+      h += T('mean 为收益率量纲而非金额（旧口径给 10）', Math.abs(r.mean) < 1);
+      h += T('样本标准差 ÷(n−1)=0.02941728（旧总体 ÷n=0.02867）',
+        Math.abs(r.sd - 0.0294172780954) < 1e-9, '得 ' + r.sd);
       h += T('年化用 365 天口径', Math.abs(r.sharpe - r.mean / r.sd * Math.sqrt(365)) < 1e-9);
+      h += T('basis=return 且期末权益递推正确（1000→1200）',
+        r.basis === 'return' && Math.abs(r.endEquity - 1200) < 1e-9);
     })();
     // 20b. 同一天的多笔合并为一个交易日
     (function() {
@@ -866,52 +878,80 @@
         { closeTime: _clday(0), pnlAmount: 60 },
         { closeTime: _clday(0), pnlAmount: 40 },
         { closeTime: _clday(1), pnlAmount: -100 }
-      ]);
+      ], { startEquity: 1000 });
       h += T('同日多笔合并为 1 个持仓日', r.days === 2 && r.zeroDays === 0);
-      h += T('合并后日盈亏为 +100 与 -100（mean 0 / sd 100）',
-        Math.abs(r.mean) < 1e-9 && Math.abs(r.sd - 100) < 1e-9);
+      h += T('合并后日收益率 +0.1 / −0.090909，mean=0.00454545 / sd=0.13499311',
+        Math.abs(r.mean - 0.0045454545454) < 1e-9 && Math.abs(r.sd - 0.1349931127720) < 1e-9,
+        '得 mean=' + r.mean + ' sd=' + r.sd);
     })();
-    // 20c. 边界：有效日不足 2、波动率为 0、空输入
-    h += T('空数组返回 null', window.utils.dailySharpe([]) === null);
-    h += T('只有 1 个有效日返回 null', window.utils.dailySharpe([{ closeTime: _clday(0), pnlAmount: 10 }]) === null);
+    // 20c. 边界：有效日不足 2、波动率为 0、空输入、缺期初权益（fail-closed）
+    h += T('空数组返回 null', window.utils.dailySharpe([], { startEquity: 1000 }) === null);
+    h += T('只有 1 个有效日返回 null',
+      window.utils.dailySharpe([{ closeTime: _clday(0), pnlAmount: 10 }], { startEquity: 1000 }) === null);
     h += T('全为 0 盈亏（sd=0）返回 null',
-      window.utils.dailySharpe([{ closeTime: _clday(0), pnlAmount: 0 }, { closeTime: _clday(1), pnlAmount: 0 }]) === null);
+      window.utils.dailySharpe([{ closeTime: _clday(0), pnlAmount: 0 }, { closeTime: _clday(1), pnlAmount: 0 }],
+        { startEquity: 1000 }) === null);
     h += T('缺失/非法 closeTime 与 pnlAmount 被跳过',
       window.utils.dailySharpe([{ pnlAmount: 10 }, { closeTime: 'bad', pnlAmount: 10 },
-        { closeTime: _clday(0) }]) === null);
-    // 20d. 年化系数可配置（回测 252 天口径）
+        { closeTime: _clday(0) }], { startEquity: 1000 }) === null);
+    h += T('缺 startEquity → null（不拿金额冒充收益率）',
+      window.utils.dailySharpe([{ closeTime: _clday(0), pnlAmount: 100 },
+        { closeTime: _clday(1), pnlAmount: -100 }]) === null);
+    h += T('startEquity ≤ 0 / 非有限 → null',
+      window.utils.dailySharpe([{ closeTime: _clday(0), pnlAmount: 100 },
+        { closeTime: _clday(1), pnlAmount: -100 }], { startEquity: 0 }) === null &&
+      window.utils.dailySharpe([{ closeTime: _clday(0), pnlAmount: 100 },
+        { closeTime: _clday(1), pnlAmount: -100 }], { startEquity: Infinity }) === null);
+    // 20d. 年化系数可配置 + 无风险利率
     (function() {
       var base = [{ closeTime: _clday(0), pnlAmount: 100 }, { closeTime: _clday(5), pnlAmount: -50 }];
-      var r365 = window.utils.dailySharpe(base, { annualDays: 365 });
-      var r252 = window.utils.dailySharpe(base, { annualDays: 252 });
+      var opt = { startEquity: 1000 };
+      var r365 = window.utils.dailySharpe(base, Object.assign({}, opt, { annualDays: 365 }));
+      var r252 = window.utils.dailySharpe(base, Object.assign({}, opt, { annualDays: 252 }));
       h += T('annualDays 生效且 365 高于 252',
         r365.sharpe > r252.sharpe &&
         Math.abs(r365.sharpe / r252.sharpe - Math.sqrt(365 / 252)) < 1e-9);
+      var rRf = window.utils.dailySharpe(base, Object.assign({}, opt, { riskFreeRate: 0.0365 }));
+      h += T('无风险利率生效（年化 3.65% → 日 0.0001）',
+        rRf.sharpe < r365.sharpe &&
+        Math.abs(rRf.sharpe - (r365.mean - 0.0001) / r365.sd * Math.sqrt(365)) < 1e-9);
     })();
 
     // ---- 21. 强平价 / 杠杆维护保证金极限 ----
-    // LP = E×(1−IMR+MMR)/(1−MMR)，令 LP = E 解得 IMR = 2×MMR，
-    // 所以零缓冲边界在「杠杆 = 1/(2×MMR)」——MMR 0.5% 时是 100x，不是 200x。
+    // v5.6.43：修正为单一计价口径 LP=E(1−IMR)/(1−MMR)（多）/ E(1+IMR)/(1+MMR)（空），
+    // 满足逐仓恒等式 IM − 亏损 = MM（维持保证金按强平价名义计）。
+    // 公式的零缓冲点（LP=E）在 IMR=MMR 即 1/MMR=200x；旧拼接口径错给 1/(2×MMR)=100x。
+    // calculator.js 的硬阻断【刻意仍锁 100x】——那是留一倍价格缓冲的保守风控边界，
+    // 不是公式推导结果，修公式不等于放宽风控。
     h += group('21. calcLiquidationPrice 与杠杆上限');
     h += T('calcLiquidationPrice 已定义', typeof window.utils.calcLiquidationPrice === 'function');
     var _LP = window.utils.calcLiquidationPrice;
     var _E = 100000, _MMR = 0.005;
-    h += T('BTC 100k / 10x / MMR 0.5% → 强平 90954.77',
-      Math.abs(_LP(_E, 'long', 10, _MMR) - 90954.7738693) < 1e-5);
-    h += T('空头 10x 强平价 108955.22（镜像）',
-      Math.abs(_LP(_E, 'short', 10, _MMR) - 108955.2238806) < 1e-5);
-    h += T('杠杆 100x（= 1/(2×MMR)）强平价恰等于入场价（零缓冲边界）',
-      Math.abs(_LP(_E, 'long', 100, _MMR) - _E) < 1e-6);
-    h += T('杠杆 101x 已被推到入场价之上（开仓即被强平）', _LP(_E, 'long', 101, _MMR) > _E);
-    h += T('杠杆 250x 多头强平 100603.01 > 入场价',
-      _LP(_E, 'long', 250, _MMR) > _E && Math.abs(_LP(_E, 'long', 250, _MMR) - 100603.015) < 1e-3);
+    h += T('BTC 100k / 10x / MMR 0.5% → 强平 90452.26131',
+      Math.abs(_LP(_E, 'long', 10, _MMR) - 90452.2613065) < 1e-5);
+    h += T('空头 10x → 109452.73632（同口径镜像）',
+      Math.abs(_LP(_E, 'short', 10, _MMR) - 109452.7363184) < 1e-5);
+    h += T('多头满足 IM−亏损=MM 恒等式',
+      Math.abs((_E - _LP(_E, 'long', 10, _MMR)) - (_E / 10 - _LP(_E, 'long', 10, _MMR) * _MMR)) < 1e-6);
+    h += T('空头满足 IM−亏损=MM 恒等式',
+      Math.abs((_LP(_E, 'short', 10, _MMR) - _E) - (_E / 10 - _LP(_E, 'short', 10, _MMR) * _MMR)) < 1e-6);
+    h += T('100x 仍有 0.5% 价格缓冲（LP=99497.49 < E，旧公式误判为零缓冲）',
+      Math.abs(_LP(_E, 'long', 100, _MMR) - 99497.4874372) < 1e-5);
+    h += T('200x 才是公式零缓冲点（LP 恰等于 E）',
+      Math.abs(_LP(_E, 'long', 200, _MMR) - _E) < 1e-6);
+    h += T('250x 多头强平 100100.50 > 入场价',
+      _LP(_E, 'long', 250, _MMR) > _E && Math.abs(_LP(_E, 'long', 250, _MMR) - 100100.5025126) < 1e-3);
     h += T('空头 250x 对称地被推到入场价之下', _LP(_E, 'short', 250, _MMR) < _E);
     h += T('参数非法返回 NaN',
       isNaN(_LP(0, 'long', 10, _MMR)) && isNaN(_LP(_E, 'long', 0, _MMR)) &&
       isNaN(_LP(_E, 'x', 10, _MMR)));
+    h += T('MMR ≥ 1 返回 NaN（多空两侧都不产出负价/溢出）',
+      isNaN(_LP(_E, 'long', 10, 1)) && isNaN(_LP(_E, 'short', 10, 1.05)));
     h += T('MMR=0 时仍给出有效强平价（90000）', _LP(_E, 'long', 10, 0) === 90000);
-    // 与 calculator.js 的硬阻断阈值一致：最高可用杠杆 = floor(1/(2×MMR))
-    h += T('阈值口径一致：floor(1/(2×MMR))=100 放行、101 拦截',
+    h += T('1x 杠杆（IMR=1）强平价 = 0 是合法解，不是 NaN（全额保证金无强平风险）',
+      _LP(_E, 'long', 1, _MMR) === 0);
+    // 与 calculator.js 的硬阻断阈值一致：保守风控边界 = floor(1/(2×MMR))
+    h += T('风控边界口径一致：floor(1/(2×MMR))=100 放行、101 拦截',
       Math.floor(1 / (2 * _MMR)) === 100 && 100 <= 100 && 101 > 100);
 
     // ---- 22. Chart.js 离线兜底守卫 ----
@@ -1828,11 +1868,15 @@
         return V.layoutRR({ entryPrice: 50000, stopPrice: 49000, targetPrice: 52000,
           grossProfit: 100 * x, netProfit: 100 * x, netLoss: 100, targetRR: x });
       };
-      h += T('RR 2.5 → amber', _vTier(2.5).tier === 'amber');
+      // v5.6.43 期望值迁移：色阶原写死 3/2，与结果卡片 / 开仓清单闸门的
+      // settings.minRRRatio 脱节（用户设 2.5 时卡片判达标显绿、这张图却显琥珀）。
+      // 现统一读 minRRRatio（离线/测试页回退默认 2）：≥minRR 绿、≥90%·minRR 琥珀、其余红。
+      // 故此处的默认 2 档下 2.5 与 1.999...（toFixed(2)="2.00"）都应为 green。
+      h += T('RR 2.5 → green（默认 minRRRatio=2，与卡片同档）', _vTier(2.5).tier === 'green');
       h += T('RR 3.0 → green', _vTier(3).tier === 'green');
       h += T('RR 1.5 → red', _vTier(1.5).tier === 'red');
-      h += T('反推浮点残差 1.9993518302 判 amber（与卡片同口径）',
-        _vTier(1.9993518302112037).tier === 'amber');
+      h += T('反推浮点残差 1.9993518302 判 green（与卡片同口径）',
+        _vTier(1.9993518302112037).tier === 'green');
       h += T('纯毛利 2R 的 1.7767691738 仍判 red（不因取整被放行）',
         _vTier(1.7767691737680744).tier === 'red');
       h += T('徽章 RR 就是条长之比（basisNet 路径不改动调用方数值）',
@@ -1948,8 +1992,8 @@
         h += T('盈亏比卡可见且徽章为 2.50 : 1',
           document.getElementById('rrVisualCard').style.display !== 'none' &&
           document.getElementById('rrBadge').textContent === '2.50 : 1');
-        h += T('徽章档位类与卡片三色语义一致（amber）',
-          /vv-badge-amber/.test(document.getElementById('rrBadge').className));
+        h += T('徽章档位类与卡片三色语义一致（默认 minRR=2 时 2.50R 判 green）',
+          /vv-badge-green/.test(document.getElementById('rrBadge').className));
         h += T('阶梯三行：价格行 / 比例条 / 金额行',
           document.getElementById('rrLadder').children.length === 3);
         h += T('三行共用同一套 grid 列（按价格距离分配 fr，上下严格对齐）', (function () {
@@ -2320,7 +2364,7 @@
     // 权威下结论不一致」的又一形式。这里的字面量是刻意的绊线：升版必须顺手改它，否则会红。
     (function () {
       h += T('APP_VERSION 已定义为字符串', typeof APP_VERSION === 'string' && APP_VERSION.length > 0);
-      h += T('APP_VERSION 为本次发布的 5.6.39（升版时同步改这行）', APP_VERSION === '5.6.39');
+      h += T('APP_VERSION 为本次发布的 5.6.43（升版时同步改这行）', APP_VERSION === '5.6.43');
       var vs = [];
       for (var i = 0; i < document.scripts.length; i++) {
         var s = document.scripts[i].getAttribute('src') || '';
@@ -2402,9 +2446,12 @@
       var r3 = getSplitEntries();
       h += T('getSplitEntries 全合法三批：落 3 条',
         r3 && r3.entries.length === 3 && r3.entries[0].alloc === 50 && r3.entries[1].alloc === 30 && r3.entries[2].alloc === 20);
-      // 50/30/20 加权入场价 = Σ(price·alloc)/Σ(alloc) = 50700（computeWeightedEntry 同口径）
-      h += T('getSplitEntries 三批加权入场价 = 50700',
-        r3 && Math.abs(r3.weightedEntry - 50700) < 1e-3, '得 ' + (r3 && r3.weightedEntry));
+      // v5.6.43：资金权重【调和平均】E=Σalloc/Σ(alloc/price)=50688.07339。
+      // 旧算术平均 Σ(price·alloc)/Σalloc=50700 只在各批同价时才成立。
+      h += T('getSplitEntries 三批加权入场价 = 50688.07339（调和平均）',
+        r3 && Math.abs(r3.weightedEntry - 50688.0733945) < 1e-3, '得 ' + (r3 && r3.weightedEntry));
+      h += T('新记录带 weightedEntryModel=harmonic（旧记录无标记 → 只读不重算）',
+        r3 && r3.weightedEntryModel === 'harmonic');
 
       // 70/70（总和 140）：归一化到 50/50
       _splitBatches = [

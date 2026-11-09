@@ -626,10 +626,10 @@ window.emBindRecalc = emBindRecalc;
 
 function emRecalc(item) {
   function num(id) { const el = document.getElementById(id); if (!el) return NaN; return parseFloat(el.value); }
-  var emFee = parseFloat((document.getElementById('emFee') || {}).value) || 0;
+  var emFee = toFiniteNum((document.getElementById('emFee') || {}).value);
   var emSlippage = (item.slippage && item.slippage.planning && item.slippage.planning.schema === 'ticks-v1')
     ? 0
-    : (parseFloat((document.getElementById('emSlippageCost') || {}).value) || 0);
+    : (toFiniteNum((document.getElementById('emSlippageCost') || {}).value));
   const entry = num('emEntryPrice');
   const stop = num('emStopLoss');
   const pos = num('emPositionSize');
@@ -736,7 +736,7 @@ function emRecalc(item) {
           for (var _pni = 0; _pni < item.closes.length - 1; _pni++) {
             var _pne = item.closes[_pni];
             if (_pne.type === 'partialTP' || _pne.type === 'reducePosition') {
-              _cumBefore += (parseFloat(_pne.ratio) || 0);
+              _cumBefore += (toFiniteNum(_pne.ratio));
             }
           }
           var _fracBE = 1 - _cumBefore / 100;
@@ -1109,7 +1109,7 @@ function saveEditLog(idx, _raceConfirmed) {
     // 编辑前累计已平（含最后一条事件自身）——用于从当前仓位反推原始仓位
     var cumClosedOld = 0;
     for (var _ci0 = 0; _ci0 < _partialsNow.length; _ci0++) {
-      cumClosedOld += (parseFloat(_partialsNow[_ci0].ratio) || 0);
+      cumClosedOld += (toFiniteNum(_partialsNow[_ci0].ratio));
     }
     // 编辑前累计已平——「本次操作发生时的剩余基数」取决于用户在弹窗里选了哪种意图：
     //   修改最后一笔 → 末条事件是被【替换】的对象，基数是末条发生前的累计（排除末条自身）
@@ -1125,11 +1125,11 @@ function saveEditLog(idx, _raceConfirmed) {
       cumClosedBeforeEvt = cumClosedOld;
     } else {
       for (var _ci1 = 0; _ci1 < _partialsNow.length - 1; _ci1++) {
-        cumClosedBeforeEvt += (parseFloat(_partialsNow[_ci1].ratio) || 0);
+        cumClosedBeforeEvt += (toFiniteNum(_partialsNow[_ci1].ratio));
       }
     }
     if (_partialsNow.length === 0) {   // 无事件簿记（旧数据 / CSV 导入）：退回 closedRatio
-      cumClosedOld = cumClosedBeforeEvt = parseFloat(item.closedRatio) || 0;
+      cumClosedOld = cumClosedBeforeEvt = toFiniteNum(item.closedRatio);
     }
     if (!isFinite(cumClosedOld) || cumClosedOld < 0) cumClosedOld = 0;
     if (cumClosedOld > 100) cumClosedOld = 100;
@@ -1192,7 +1192,7 @@ function saveEditLog(idx, _raceConfirmed) {
     var _prePosSize = _useAnchorTB
       ? _initPosTB * fracBeforeEvt
       : ((_posRawTB > 0) ? _posRawTB : 0) * _legBaseFactor;
-    var _preFee = (parseFloat(item.fee) || 0) * _legBaseFactor;
+    var _preFee = (toFiniteNum(item.fee)) * _legBaseFactor;
     // P0 修复（2026-10-20 改判扣回）：syncCloseBookkeeping 的分批分支会把收尾事件整条滤掉
     // （utils.js「收尾在改成分批类型后不再成立，一并移除」），可收尾腿已实现的
     // pnl/fee/gross 还躺在累计字段里 —— sum(closes[].ratio)===closedRatio、
@@ -1229,12 +1229,12 @@ function saveEditLog(idx, _raceConfirmed) {
         }
       }
       if (isFinite(_dcPnl) && (_rpFinTB || _ledgPnlTB > 0)) {
-        item.realizedPnl = parseFloat((((parseFloat(item.realizedPnl) || 0)) - _dcPnl).toFixed(2));
+        item.realizedPnl = parseFloat((((toFiniteNum(item.realizedPnl))) - _dcPnl).toFixed(2));
       }
       if (isFinite(_dcFee) && _rfFinTB) item.realizedFee = parseFloat(
-        ((parseFloat(item.realizedFee) || 0) - _dcFee).toFixed(8));
+        ((toFiniteNum(item.realizedFee)) - _dcFee).toFixed(8));
       if (isFinite(_dcGross) && _rgFinTB) item.grossPnlAmount = parseFloat(
-        ((parseFloat(item.grossPnlAmount) || 0) - _dcGross).toFixed(2));
+        ((toFiniteNum(item.grossPnlAmount)) - _dcGross).toFixed(2));
     }
     // 旧数据兼容：closes[] 为空但 closedRatio>0（v5.6.1 之前的本地数据，或没有「平仓明细」
     // 列的旧版 CSV 导入）。syncCloseBookkeeping 会把本次事件当作唯一事件重建 closes，那部分
@@ -1242,7 +1242,7 @@ function saveEditLog(idx, _raceConfirmed) {
     if (_orphanClosed > 0) {
       item.closes.unshift({ type: item.closeType, ratio: _orphanClosed, note: '历史记录（编辑前已平仓部分）' });
       item.closedRatio = parseFloat(Math.max(0, Math.min(100,
-        (parseFloat(item.closedRatio) || 0) + _orphanClosed)).toFixed(4));
+        (toFiniteNum(item.closedRatio)) + _orphanClosed)).toFixed(4));
     }
     // partialRatio 存用户输入（占剩余仓位口径），与 logs.js confirmClose 的存储口径一致，
     // 保证 rendering.js 行内平仓弹窗的预填值仍是人能读懂的那个数。
@@ -1259,14 +1259,14 @@ function saveEditLog(idx, _raceConfirmed) {
     if (_lastEvt2) {
       _lastEvt2.ratioOfRemaining = _lastLegRoR;
     }
-    var cumClosed = parseFloat(item.closedRatio) || 0;
+    var cumClosed = toFiniteNum(item.closedRatio);
     if (!isFinite(cumClosed) || cumClosed < 0) cumClosed = 0;
     if (cumClosed > 100) cumClosed = 100;
     var fracNow = 1 - cumClosed / 100;   // 本次编辑后的剩余仓位占原始仓位的比例
     var anchor = function(current, initial, field) {
       var base = parseFloat(initial);
       if (!isFinite(base) || base <= 0) {
-        base = (fracOld > 0) ? (parseFloat(current) / fracOld) : (parseFloat(current) || 0);
+        base = (fracOld > 0) ? (parseFloat(current) / fracOld) : (toFiniteNum(current));
         if (isFinite(base) && base > 0) item[field] = base;  // 一次性补写，保证后续幂等
       }
       return base;
@@ -1284,7 +1284,7 @@ function saveEditLog(idx, _raceConfirmed) {
     }
     // P1-3 FIX：编辑部分平仓时同步缩减剩余 round-trip 费用，避免最终平仓重复扣费。
     // 原始费用 = 剩余 fee + 已平仓部分 realizedFee（logs.js 累加维护），无重复计算。
-    var baseFee = (parseFloat(item.fee) || 0) + (parseFloat(item.realizedFee) || 0);
+    var baseFee = (toFiniteNum(item.fee)) + (toFiniteNum(item.realizedFee));
     if (item.fee != null && !isNaN(item.fee)) {
       item.fee = parseFloat((baseFee * fracNow).toFixed(8));
     }
@@ -1345,7 +1345,7 @@ function saveEditLog(idx, _raceConfirmed) {
             // 第一次部分平仓时 realizedPnl 与 pnlAmount 都还没有，此处必须播种：否则
             // confirmClose 最终平仓从 undefined(→0) 起算，第一腿毛利被永久抹掉（实测 65→40）。
             item.grossPnlAmount = parseFloat((_rpB
-              + (_rfOk ? (parseFloat(item.realizedFee) || 0) : 0)).toFixed(2));
+              + (_rfOk ? (toFiniteNum(item.realizedFee)) : 0)).toFixed(2));
             _rgOk = true;
           }
           // 旧数据的事件可能只有 {type, ratio}：缺失字段按 0 扣回——那笔腿本就从未进过累计，
@@ -1365,8 +1365,8 @@ function saveEditLog(idx, _raceConfirmed) {
           }
           item.realizedPnl = parseFloat(((_rpB || 0) - _oldPnl + _legNet).toFixed(2));
           // 不可重建的累计不写：写了就把「剩余 fee + 已实现 fee = 原始费用」这条链永久打脏。
-          if (_rfOk) item.realizedFee = parseFloat(((parseFloat(item.realizedFee) || 0) - _oldFee + _legFee).toFixed(8));
-          if (_rgOk) item.grossPnlAmount = parseFloat(((parseFloat(item.grossPnlAmount) || 0) - _oldGross + _legGross).toFixed(2));
+          if (_rfOk) item.realizedFee = parseFloat(((toFiniteNum(item.realizedFee)) - _oldFee + _legFee).toFixed(8));
+          if (_rgOk) item.grossPnlAmount = parseFloat(((toFiniteNum(item.grossPnlAmount)) - _oldGross + _legGross).toFixed(2));
           item.pnlAmount = parseFloat(item.realizedPnl.toFixed(2));
           item.rMultiple = window.utils.resolveRMultiple(item.realizedPnl, item.initialRiskAmount, _legSett.rMultiple);
           item.pnlPercent = window.utils.resolvePnlPercent(item.realizedPnl, item.initialMargin, _legSett.pnlPercent);
@@ -1497,8 +1497,8 @@ function saveEditLog(idx, _raceConfirmed) {
     // 手工 CSV）时退回 保证金×杠杆，仍无则只能提示——静默保留 0 敞口比报错更危险，
     // 但也不该凭空编一个仓位出来。
     var _unmarkPos = parseFloat(item.initialPositionSize);
-    var _unmarkLev = parseFloat(item.leverage) || 0;
-    var _unmarkMg = parseFloat(item.initialMargin) || parseFloat(item.actualMargin) || 0;
+    var _unmarkLev = toFiniteNum(item.leverage);
+    var _unmarkMg = toFiniteNum(item.initialMargin) || toFiniteNum(item.actualMargin);
     if (!isFinite(_unmarkPos) || _unmarkPos <= 0) {
       _unmarkPos = (_unmarkMg > 0 && _unmarkLev > 0) ? _unmarkMg * _unmarkLev : NaN;
     }
@@ -1547,9 +1547,9 @@ function saveEditLog(idx, _raceConfirmed) {
         continue;
       }
       _hadPartialEvt = true;
-      _partialsRatioSum += (parseFloat(_pe0.ratio) || 0);
-      var _pePnl = parseFloat(_pe0.pnl) || 0;
-      var _peFee = parseFloat(_pe0.fee) || 0;
+      _partialsRatioSum += (toFiniteNum(_pe0.ratio));
+      var _pePnl = toFiniteNum(_pe0.pnl);
+      var _peFee = toFiniteNum(_pe0.fee);
       var _peGross = parseFloat(_pe0.gross);
       _partialsPnlSum += _pePnl;
       _partialsFeeSum += _peFee;
@@ -1574,11 +1574,11 @@ function saveEditLog(idx, _raceConfirmed) {
       _closeFeeOverride = (_closeEvtFee != null && isFinite(_closeEvtFee) && _closeEvtFee >= 0)
         ? _closeEvtFee : null;
       var _initPos3 = parseFloat(item.initialPositionSize);
-      var _lev3 = parseFloat(item.leverage) || parseFloat((document.getElementById('emLeverage') || {}).value) || 0;
+      var _lev3 = toFiniteNum(item.leverage) || toFiniteNum((document.getElementById('emLeverage') || {}).value);
       if (isFinite(_initPos3) && _initPos3 > 0) {
         _closeLegPos = _initPos3 * _closeLegFrac;
       } else {
-        var _mg3 = parseFloat(item.initialMargin) || parseFloat(item.actualMargin) || 0;
+        var _mg3 = toFiniteNum(item.initialMargin) || toFiniteNum(item.actualMargin);
         if (isFinite(_mg3) && _mg3 > 0 && _lev3 > 0) _closeLegPos = _mg3 * _lev3 * _closeLegFrac;
       }
     }
@@ -1645,7 +1645,7 @@ function saveEditLog(idx, _raceConfirmed) {
     ? parseFloat(item.effectiveEntryPrice)
     : rawEntryPrice;
   const closePrice = gn('emClosePrice');
-  const positionSize = parseFloat(document.getElementById('emPositionSize')?.value) || 0;
+  const positionSize = toFiniteNum(document.getElementById('emPositionSize')?.value);
   const direction = document.getElementById('emDirection')?.value || item.direction;
   const fee = gn('emFee') || 0;
   const slippageCost = (item.slippage && item.slippage.planning && item.slippage.planning.schema === 'ticks-v1')
@@ -1916,7 +1916,7 @@ function doSaveSplit(calc, count) {
         var rEl = document.getElementById(id + 'Ratio');
         var pv = pEl ? parseFloat(pEl.value) : NaN;
         p.push((!isNaN(pv) && pv > 0) ? pv : null);
-        r.push(rEl ? (parseFloat(rEl.value) || 0) : 0);
+        r.push(rEl ? (toFiniteNum(rEl.value)) : 0);
       });
       return { prices: p, ratios: r, weightedRR: (w && w.rr != null && !w.overLimit) ? w.rr : null, remain: w.remain };
     })(),
@@ -2003,16 +2003,23 @@ function doSaveSplit(calc, count) {
   // F4: 将分批明细写入刚生成的条目（最后 count 条）
   // P1 FIX：原直接写纯数组，而读取端（编辑弹窗 :38）要求 { entries:[...], weightedEntry }
   // 对象 → 形状永不相等，saveSplit 生成的每笔记录分批明细在编辑弹窗中永不显示（死分支）。
-  var _weSum = 0, _waSum = 0;
+  // v5.6.42：与 computeWeightedEntry / getSplitEntries 统一为资金权重调和平均。
+  // 原实现在这里内联了第三份算术平均 Σ(price·alloc)/Σ(alloc)，于是「单条保存」与
+  // 「拆分保存」两条路径对同一组分批给出不同均价；且用全局 isFinite 会放行 Infinity。
+  var _wInv = 0, _waSum = 0;
   for (var _wi = 0; _wi < splitEntries.length; _wi++) {
-    var _wp = parseFloat(splitEntries[_wi].price), _wa = parseFloat(splitEntries[_wi].alloc);
-    if (isFinite(_wp) && _wp > 0 && isFinite(_wa) && _wa > 0) { _weSum += _wp * _wa; _waSum += _wa; }
+    var _wp = toFiniteNum(splitEntries[_wi].price, NaN), _wa = toFiniteNum(splitEntries[_wi].alloc, NaN);
+    if (Number.isFinite(_wp) && _wp > 0 && Number.isFinite(_wa) && _wa > 0) {
+      _wInv += _wa / _wp; _waSum += _wa;
+    }
   }
   var splitDetail = {
     entries: splitEntries,
-    weightedEntry: _waSum > 0
-      ? parseFloat((_weSum / _waSum).toFixed(5))
-      : (calc.weightedEntryPrice || calc.effectiveEntryPrice || null)
+    weightedEntry: (_waSum > 0 && _wInv > 0)
+      ? parseFloat((_waSum / _wInv).toFixed(5))
+      : (calc.weightedEntryPrice || calc.effectiveEntryPrice || null),
+    // 口径标记：无此字段的历史记录只读落库值，绝不按 entries 重算
+    weightedEntryModel: 'harmonic'
   };
   for (var li = logs.length - count; li < logs.length; li++) {
     if (logs[li]) logs[li].splitEntries = splitDetail;

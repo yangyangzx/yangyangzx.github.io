@@ -169,7 +169,19 @@
 
     var tier = 'neutral';
     if (gainValid && isNum(rr) && rr > 0) {
-      tier = rrMeets(rr, 3) ? 'green' : (rrMeets(rr, 2) ? 'amber' : 'red');
+      // v5.6.43：色阶原写死 3 / 2，与 calculator.js 结果卡片及开仓清单闸门的
+      // 「settings.minRRRatio」脱节——用户把最低盈亏比改成 2.5 后，卡片判达标
+      // 显示绿色，这张图却仍按 3 判成琥珀。统一读同一设置项，档位语义也与
+      // 卡片一致：≥ minRR 绿、≥ 90%·minRR 琥珀、其余红。
+      var _minRR = 2;
+      try {
+        if (typeof root.loadSettings === 'function') {
+          var _rs = root.loadSettings();
+          var _m = Number(_rs && _rs.minRRRatio);
+          if (Number.isFinite(_m) && _m > 0) _minRR = _m;
+        }
+      } catch (e) { /* 离线/测试页回退 2 */ }
+      tier = rrMeets(rr, _minRR) ? 'green' : (rrMeets(rr, _minRR * 0.9) ? 'amber' : 'red');
     } else if (hasTargetInput) {
       tier = 'invalid';
     }

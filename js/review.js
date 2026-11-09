@@ -264,7 +264,7 @@ function renderOrderTypeChart(closed) {
     var key = dir + ' ' + ot;
     if (!groups[key]) groups[key] = { total: 0, wins: 0, losses: 0, pnlTotal: 0 };
     groups[key].total++;
-    var pnl = parseFloat(closed[i].pnlAmount) || 0;
+    var pnl = toFiniteNum(closed[i].pnlAmount);
     if (pnl > 0) groups[key].wins++;
     else if (pnl < 0) groups[key].losses++;
     groups[key].pnlTotal += pnl;

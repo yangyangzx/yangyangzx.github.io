@@ -44,11 +44,11 @@ function positionCurrentRisk(pos) {
   if (!pos) return 0;
   var entry = parseFloat(pos.effectiveEntryPrice || pos.entryPrice);
   var sl = parseFloat(pos.stopLoss);
-  var ps = parseFloat(pos.positionSize) || 0;
+  var ps = toFiniteNum(pos.positionSize);
   if (Number.isFinite(entry) && entry > 0 && Number.isFinite(sl) && sl > 0 && ps > 0) {
     return Math.abs(entry - sl) / entry * ps;
   }
-  return parseFloat(pos.riskAmount) || 0;
+  return toFiniteNum(pos.riskAmount);
 }
 window.positionCurrentRisk = positionCurrentRisk;
 
@@ -185,7 +185,7 @@ function getCurrentDrawdown() {
     for (var i = 0; i < closed.length; i++) {
       var adj = Number(closed[i].balanceAdjustment);
       if (isFinite(adj) && adj !== 0) equity += adj;
-      equity += parseFloat(closed[i].pnlAmount) || 0;
+      equity += toFiniteNum(closed[i].pnlAmount);
       if (equity > peak) peak = equity;
     }
   }
@@ -234,17 +234,23 @@ function getCurrentDrawdown() {
  */
 function getHeatHardMax() {
   var settings = loadSettings();
-  var a = parseFloat(settings.riskHeatMax);
-  if (isFinite(a) && a > 0) return a;
-  // riskHeatMax 缺失/非法时才退回旧的「取较严者」口径，保住历史行为
-  var b = parseFloat(settings.heatWarnMax != null ? settings.heatWarnMax : settings.portfolioHeatMax);
+  var a = toFiniteNum(settings.riskHeatMax, 0);
+  if (a > 0) return a;
+  // riskHeatMax 缺失/非法时才退回旧的「取较严者」口径，保住历史行为。
+  // v5.6.43：别名 heatWarnMax 已从 SETTINGS_DEFAULTS 移除，portfolioHeatMax 是唯一来源。
+  var b = toFiniteNum(settings.portfolioHeatMax != null ? settings.portfolioHeatMax : settings.heatWarnMax, 0);
   return (b > 0) ? b : 6;
 }
 
 function getHeatWarnMax() {
   var settings = loadSettings();
-  var w = parseFloat(settings.heatWarnMax != null ? settings.heatWarnMax : settings.portfolioHeatMax);
-  return (w > 0) ? w : 8;
+  // v5.6.43 P1：原实现优先读 settings.heatWarnMax，而该键在 SETTINGS_DEFAULTS 里
+  // 恒为 8、设置页表单却只写 portfolioHeatMax —— 用户改的值永远读不到，
+  // getHeatWarnMax() 恒返回 8。且默认 8 > 默认硬上限 6，calcPortfolioHeat 里
+  // heat>=hard 先判 blocked，warn 档永远不可达。现以 portfolioHeatMax 为唯一来源，
+  // 默认值改为 5（< 6），历史残留的 heatWarnMax 仅在 portfolioHeatMax 缺失时兜底。
+  var w = toFiniteNum(settings.portfolioHeatMax != null ? settings.portfolioHeatMax : settings.heatWarnMax, 0);
+  return (w > 0) ? w : 5;
 }
 
 /**
@@ -292,13 +298,15 @@ function getStopLimitPct(symbol) {
  * @property {string} recommendation - 建议文本
  * @property {boolean} kellyCapped - 完整凯利是否被截断
  * @property {boolean} halfKellyCapped - 半凯利是否被截断
+ * @property {number} shrinkFactor - 小样本收缩系数（1 = 未收缩）
+ * @property {number} samples - 传入的历史样本数（0 = 未提供）
  */
 // P0-1 修复：三结果凯利。原实现 lossRate = 1 - winRate 把「保本单」当完整亏损，
 // 而本站胜率口径是「保本计入分母」（统计页期望值 = (GP-GL)/N 对保本中性）。
 // 同一批数据会出现「统计页 +15（正期望）/ 凯利 -5（判策略无价值）」的相反结论，
 // 且凯利直接驱动仓位大小。现由调用方传入 breakEvenRate，亏损率按实际笔数比例取。
 // 默认 0 保持旧调用行为不变（winRate + lossRate + breakEvenRate = 1）。
-function calcKelly(winRate, avgWin, avgLoss, accountSize, halfKelly, leverage, breakEvenRate) {
+function calcKelly(winRate, avgWin, avgLoss, accountSize, halfKelly, leverage, breakEvenRate, sampleCount) {
   if (halfKelly === undefined) halfKelly = true;
   if (leverage === undefined) leverage = 1;
   // P2 边界：avgWin/avgLoss 为 NaN 或 undefined 时无效。
@@ -306,7 +314,12 @@ function calcKelly(winRate, avgWin, avgLoss, accountSize, halfKelly, leverage, b
   // winRate=1,avgWin=0 得 0/0=NaN；winRate=0.5,avgWin=0 得 -Infinity。而下方 `kellyPct < 0`、
   // `halfKellyPct < 0`、以及后续所有比较对 NaN 全为 false，NaN 会穿过全部钳制并污染下游
   //（roundedKelly 变 "NaN%"，与 5%/4.5% 下拉脱节）。与 avgLoss<=0 同权按无效数据处理。
-  if (winRate == null || winRate === undefined || isNaN(avgWin) || isNaN(avgLoss) || avgLoss <= 0 || avgWin <= 0) return null;
+  // P0 修复（v5.6.41 核心算法升级）：原用全局 isNaN，isNaN(Infinity) === false，
+  // Infinity 会穿过全部钳制；winRate=NaN 时 `NaN < 0` / `NaN > 1` 均为 false 也直接放行，
+  // 最终把 NaN 仓位建议（kellyRiskAmount / expectancy）送进开仓链路。
+  // accountSize 一并做有限性校验，Infinity 本金同样会污染风险金额。
+  if (![winRate, avgWin, avgLoss, accountSize].every(Number.isFinite)) return null;
+  if (avgLoss <= 0 || avgWin <= 0) return null;
   if (winRate < 0 || winRate > 1) return null;
 
   // Kelly 公式：Kelly% = (WR × AvgWin - LR × AvgLoss) / AvgWin
@@ -315,12 +328,16 @@ function calcKelly(winRate, avgWin, avgLoss, accountSize, halfKelly, leverage, b
   var lossRate = Math.max(0, 1 - winRate - _beRate);
   var kellyPct = (winRate * avgWin - lossRate * avgLoss) / avgWin;
 
-  // 半凯利（实践标准）
-  var halfKellyPct = kellyPct * 0.5;
+  // v5.6.43：小样本收缩。凯利对胜率估计误差极敏感，5 笔历史就按公式满仓是
+  // 典型的「噪音放大器」。样本 < 30 时按 n/(n+20) 收缩（5 笔 → 0.20，
+  // 20 笔 → 0.50，29 笔 → 0.59），≥30 或未提供样本数时不收缩。
+  // sampleCount 由 calculator.js 的 dataset.kellySamples 传入；手动填字段时为 0。
+  var _samples = (Number.isFinite(sampleCount) && sampleCount > 0) ? sampleCount : 0;
+  var shrinkFactor = (_samples > 0 && _samples < 30) ? _samples / (_samples + 20) : 1;
+  if (shrinkFactor < 1) kellyPct *= shrinkFactor;
 
   // 确保不出现负值
   if (kellyPct < 0) kellyPct = 0;
-  if (halfKellyPct < 0) halfKellyPct = 0;
 
   // 杠杆感知上限（P1-5 修复）：Kelly% 本身就是「单笔风险占本金比例」，
   // 原实现再 ÷杠杆 会把「风险比例」和「名义敞口」混为一谈——同一策略
@@ -335,10 +352,16 @@ function calcKelly(winRate, avgWin, avgLoss, accountSize, halfKelly, leverage, b
   var riskLimit = (typeof _getKellyRiskLimitPct === 'function' ? _getKellyRiskLimitPct() : 5) / 100;
   if (!(riskLimit > 0 && riskLimit <= 1)) riskLimit = 0.05;
 
+  // v5.6.43 P0：原实现先各自 Math.min(rawKelly, limit) / Math.min(rawKelly/2, limit)。
+  // 当 rawKelly > 2×limit 时两者都被钳到 limit，halfKellyPct === kellyPct，
+  // 标着「半凯利」的按钮实际按完整凯利上限驱动仓位——实测 limit=5%、本金 10000
+  // 时半凯利风险额 500 U（正确 250 U），风险预算直接翻倍。
+  // 现改为「先钳完整凯利，再取其一半」，比值恒为 0.5，且永远不会超过上限。
   var kellyCapped = kellyPct > riskLimit;
-  var halfKellyCapped = halfKellyPct > riskLimit;
   kellyPct = Math.min(kellyPct, riskLimit);
-  halfKellyPct = Math.min(halfKellyPct, riskLimit);
+  var halfKellyPct = kellyPct * 0.5;
+  // half ≤ kelly ≤ limit，半凯利本身不可能再被截断；保留字段供 UI 兼容。
+  var halfKellyCapped = false;
 
   // P2-9 FIX：删除无金融含义的 kellyShares（账户×比例÷平均亏损没有推导依据），
   // 改为有明确语义的"凯利建议风险金额"（账户×比例），与 UI 使用的 halfKellyPct×capital 同源
@@ -355,7 +378,7 @@ function calcKelly(winRate, avgWin, avgLoss, accountSize, halfKelly, leverage, b
     recommendation = '推荐半凯利仓位（更安全）';
   }
 
-  return {
+  var kellyResult = {
     kellyPct: kellyPct,
     halfKellyPct: halfKellyPct,
     kellyRiskAmount: kellyRiskAmount,
@@ -363,8 +386,15 @@ function calcKelly(winRate, avgWin, avgLoss, accountSize, halfKelly, leverage, b
     expectancy: winRate * avgWin - lossRate * avgLoss,
     recommendation: recommendation,
     kellyCapped: kellyCapped,
-    halfKellyCapped: halfKellyCapped
+    halfKellyCapped: halfKellyCapped,
+    shrinkFactor: shrinkFactor,
+    samples: _samples
   };
+  // P0 修复（v5.6.41）：出参终检，任何非有限字段都不许流向仓位建议。
+  for (var _kk in kellyResult) {
+    if (typeof kellyResult[_kk] === 'number' && !Number.isFinite(kellyResult[_kk])) return null;
+  }
+  return kellyResult;
 }
 
 /**
@@ -376,10 +406,18 @@ function calcKelly(winRate, avgWin, avgLoss, accountSize, halfKelly, leverage, b
  * @returns {object} {stopDistance, stopPrice, atrPct}
  */
 function calcATRStop(entryPrice, atrValue, multiplier, direction) {
-  if (!entryPrice || entryPrice <= 0 || !atrValue || atrValue <= 0) return null;
+  // P1 修复（v5.6.41）：原实现只判 `!atrValue`——Infinity 被当成合法值，
+  // 极小 ATR × 极小倍数下溢成 0 也会返回 stopDistance=0，
+  // 下游 positionSize = 风险额 × 入场价 / 0 得到 Infinity 并写进文案。
+  // 入参与出参统一用 Number.isFinite 终检。
+  if (![entryPrice, atrValue, multiplier].every(Number.isFinite) ||
+      entryPrice <= 0 || atrValue <= 0 || multiplier <= 0) return null;
   var stopDistance = atrValue * multiplier;
+  if (!Number.isFinite(stopDistance) || stopDistance <= 0) return null;
   var stopPrice = direction === 'long' ? (entryPrice - stopDistance) : (entryPrice + stopDistance);
+  if (!Number.isFinite(stopPrice) || stopPrice <= 0) return null;
   var atrPct = (stopDistance / entryPrice) * 100;
+  if (!Number.isFinite(atrPct)) return null;
   return { stopDistance: stopDistance, stopPrice: stopPrice, atrPct: atrPct };
 }
 
@@ -445,7 +483,9 @@ function getSymbolConcentrationMaxPct() {
  */
 function checkSymbolConcentration(symbol, positionSize, leverage, capital, openPositions) {
   if (!capital || capital <= 0) {
-    return { pass: true, currentPct: 0, maxPct: getSymbolConcentrationMaxPct(), usedMargin: 0, allowedMargin: 0, allowedNewMargin: 0, warning: null };
+    // P1 修复（v5.6.41）：原分支直接 pass:true 且无任何标记，等于静默放行；
+    // 与 calcPortfolioHeat 的 readFailed 语义对齐，让消费方能区分「未超限」与「无法判定」。
+    return { pass: true, currentPct: 0, maxPct: getSymbolConcentrationMaxPct(), usedMargin: 0, allowedMargin: 0, allowedNewMargin: 0, warning: null, readFailed: true, capitalKnown: false };
   }
   var maxPct = getSymbolConcentrationMaxPct();
 
@@ -454,9 +494,9 @@ function checkSymbolConcentration(symbol, positionSize, leverage, capital, openP
   for (var i = 0; i < openPositions.length; i++) {
     var pos = openPositions[i];
     if (pos.symbol !== symbol) continue;
-    var posLev = parseFloat(pos.leverage) || 1;
+    var posLev = toFiniteNum(pos.leverage) || 1;
     if (posLev <= 0) posLev = 1;
-    var posSize = parseFloat(pos.positionSize) || 0;
+    var posSize = toFiniteNum(pos.positionSize);
     if (posSize > 0) usedMargin += posSize / posLev;
   }
 
@@ -484,7 +524,9 @@ function checkSymbolConcentration(symbol, positionSize, leverage, capital, openP
     newMargin: newMargin,
     allowedMargin: allowedMargin,
     allowedNewMargin: allowedNewMargin,
-    warning: warning
+    warning: warning,
+    readFailed: false,
+    capitalKnown: true
   };
 }
 
@@ -507,7 +549,7 @@ function checkDailyLossLimit(capitalOverride) {
     if (!ct) continue;
     var closeDateStr = window.utils.toLocalDateStr(ct);
     if (closeDateStr === todayStr) {
-      todayPnl += parseFloat(closed[i].pnlAmount) || 0;
+      todayPnl += toFiniteNum(closed[i].pnlAmount);
     }
   }
 
@@ -526,7 +568,12 @@ function checkDailyLossLimit(capitalOverride) {
     todayPnl: todayPnl,
     limit: dailyLossLimit,
     pctOfLimit: dailyLossLimit > 0 ? (Math.abs(Math.min(todayPnl, 0)) / dailyLossLimit * 100) : 0,
-    blocked: overLimit
+    blocked: overLimit,
+    // P1 修复（v5.6.41）：capital<=0 时 dailyLossLimit=Infinity、overLimit 恒 false，
+    // 等于静默放行；与同文件 calcPortfolioHeat 的 readFailed fail-closed 语义相反。
+    // 透出标记让消费方区分「未超限」与「无法判定」。
+    readFailed: !(capital > 0),
+    capitalKnown: capital > 0
   };
 }
 

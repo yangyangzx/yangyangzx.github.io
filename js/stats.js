@@ -3,8 +3,11 @@ function computeWinLoss(closed) {
   const wins = [], losses = [];
   let grossProfit = 0, grossLoss = 0;
   for (const l of closed) {
-    const v = parseFloat(l.pnlAmount);
-    if (isNaN(v)) continue;
+    // v5.6.43：parseFloat('Infinity') === Infinity 且 isNaN(Infinity) === false，
+    // 旧写法把 Infinity 累加进 grossProfit，利润因子/期望值/成本侵蚀全被污染。
+    // toFiniteNum 的 fallback=null 让非有限值直接跳过，0（保本）仍是合法值。
+    const v = toFiniteNum(l.pnlAmount, null);
+    if (v === null) continue;
     if (v > 0) { wins.push(l); grossProfit += v; }
     else if (v < 0) { losses.push(l); grossLoss += Math.abs(v); }
   }
@@ -16,7 +19,7 @@ function updateStats() {
   // --- 基础数据 ---
   var totalLogs = logs.length;
   var allClosed = logs.filter(function(l) { return window.utils.isClosedTrade(l); });
-  var allClosedPnl = allClosed.reduce(function(s, l) { return s + (parseFloat(l.pnlAmount) || 0); }, 0);
+  var allClosedPnl = allClosed.reduce(function(s, l) { return s + (toFiniteNum(l.pnlAmount)); }, 0);
   var openLogs = totalLogs - allClosed.length;
 
   // --- 过滤逻辑 ---
@@ -31,7 +34,7 @@ function updateStats() {
   var displayClosed = hasAnyFilter ? closed.length : allClosed.length;
   var displayOpen = hasAnyFilter ? (displayTotal - displayClosed) : openLogs;
   var displayPnl = hasAnyFilter
-    ? closed.reduce(function(s, l) { return s + (parseFloat(l.pnlAmount) || 0); }, 0)
+    ? closed.reduce(function(s, l) { return s + (toFiniteNum(l.pnlAmount)); }, 0)
     : allClosedPnl;
 
   var summaryBar = document.getElementById('summaryBar');
@@ -132,32 +135,73 @@ function updateStats() {
         if (_t0 === null || _ct < _t0) _t0 = _ct;
         if (_t1 === null || _ct > _t1) _t1 = _ct;
       }
-      if (_t0 !== null && _t1 > _t0 && totalPnl !== 0) {
+      // v5.6.43 P0：原实现按「金额线性外推」totalPnl × 365/span 当作年化收益，
+      // 既不含本金（本金 10000 与 1000000 给出同一个 U/年），也不是复利/百分比，
+      // 实测当日 +100 U 显示「+36500 U/年」。改 CAGR：
+      //   CAGR = (期末权益 / 期初权益)^(365/跨度天数) − 1
+      // 期初权益取不到（新用户 accountBalance=0）或权益被打穿时 fail-closed 显示「—」。
+      var _startEq = (typeof getAccountCapital === 'function') ? getAccountCapital() : null;
+      _startEq = Number(_startEq);
+      if (_t0 !== null && _t1 > _t0 && totalPnl !== 0 &&
+          Number.isFinite(_startEq) && _startEq > 0) {
         var _spanDays = Math.max((_t1 - _t0) / 86400000, 1);
-        var _ann = totalPnl * (365 / _spanDays);
-        annEl.textContent = (_ann >= 0 ? '+' : '') + _ann.toFixed(0) + ' U/年';
-        annEl.style.color = _ann >= 0 ? 'var(--color-success)' : 'var(--color-danger)';
-        annEl.title = '跨度 ' + _spanDays.toFixed(1) + ' 天';
+        var _endEq = _startEq + totalPnl;
+        if (_endEq > 0) {
+          var _cagr = Math.pow(_endEq / _startEq, 365 / _spanDays) - 1;
+          annEl.textContent = (_cagr >= 0 ? '+' : '') + (_cagr * 100).toFixed(2) + '% / 年';
+          annEl.style.color = _cagr >= 0 ? 'var(--color-success)' : 'var(--color-danger)';
+          annEl.title = 'CAGR（复利年化）：期初权益 ' + _startEq.toFixed(2) +
+            ' USDT → 期末权益 ' + _endEq.toFixed(2) + ' USDT，跨度 ' + _spanDays.toFixed(1) +
+            ' 天；短期样本外推波动极大，仅供参考';
+        } else {
+          annEl.textContent = '—';
+          annEl.style.color = '';
+          annEl.title = '权益已≤0，CAGR 无实数解';
+        }
       } else {
         annEl.textContent = '—';
         annEl.style.color = '';
+        annEl.title = (!Number.isFinite(_startEq) || _startEq <= 0)
+          ? '未读取到期初权益（账户余额），无法计算 CAGR。请在系统设置中填写账户余额。'
+          : '有效平仓时间跨度不足或区间盈亏为 0，无法计算 CAGR';
       }
     }
     // 夏普（日频）：权威实现在 utils.dailySharpe（铺满空闲日 + 365 天年化）。
     // 原先这里内联一份，只取「有平仓的交易日」——持有中无平仓的空闲日整段被丢弃，
     // 持有 20 天只在其中 3 天平仓的账户会按 3 天算，波动率被低估、夏普被系统性抬高；
     // 且年化系数用 252（A股/美股口径），对 7×24 永续合约低估约 31%。现统一委托。
+    // v5.6.42：夏普已改为【日收益率】口径，必须传入期初权益；账户余额取不到时
+    // dailySharpe 返回 null，这里显示「—」并说明原因，绝不退回旧的金额口径。
     var shEl = document.getElementById('statSharpe');
     if (shEl) {
-      var _sh = window.utils.dailySharpe(closed);
+      // v5.6.43：筛选态下 closed 只是子集，却拿全局账户余额当日收益率的分母，
+      // 会把「只看 BTC」的收益摊到全账户本金上，夏普被系统性压低。
+      // 筛选样本每条都带合法 capital 时改用该样本的期初权益均值；缺字段时
+      // fail-closed 返回 null（显示「—」），不用全局本金冒充。
+      var _sharpeEquity = (typeof getAccountCapital === 'function') ? getAccountCapital() : null;
+      if (hasAnyFilter) {
+        var _caps = closed.map(function (l) { var c = toFiniteNum(l.capital, 0); return c > 0 ? c : null; });
+        var _allHaveCapital = _caps.length > 0 && _caps.every(function (c) { return c !== null; });
+        _sharpeEquity = _allHaveCapital
+          ? _caps.reduce(function (s, c) { return s + c; }, 0) / _caps.length
+          : null;
+      }
+      var _sh = window.utils.dailySharpe(closed, { startEquity: _sharpeEquity });
       if (_sh) {
         shEl.textContent = _sh.sharpe.toFixed(2);
         shEl.style.color = _sh.sharpe >= 1 ? 'var(--color-success)' : (_sh.sharpe >= 0 ? 'var(--color-warning)' : 'var(--color-danger)');
-        shEl.title = '基于 ' + _sh.days + ' 个持仓日（含 ' + _sh.zeroDays + ' 个无平仓日）· 365 天年化';
+        shEl.title = '日收益率口径 · 期初权益 ' + _sh.startEquity.toFixed(2) + ' USDT' +
+          (hasAnyFilter ? '（当前筛选样本口径）' : '') + ' · ' +
+          '基于 ' + _sh.days + ' 个持仓日（含 ' + _sh.zeroDays + ' 个无平仓日）· ' +
+          '样本标准差 · 365 天年化';
       } else {
         shEl.textContent = '—';
         shEl.style.color = '';
-        shEl.title = '有效交易日不足 2 天或日盈亏标准差为 0，无法计算';
+        shEl.title = (hasAnyFilter && _sharpeEquity === null)
+          ? '当前筛选样本缺少期初权益（capital）字段，无法按日收益率口径计算夏普'
+          : (!Number.isFinite(Number(_sharpeEquity)) || Number(_sharpeEquity) <= 0)
+            ? '未读取到期初权益（账户余额），无法按日收益率口径计算夏普。请在系统设置中填写账户余额。'
+            : '有效交易日不足 2 天、日收益率标准差为 0，或权益被打穿，无法计算';
       }
     }
     // 成本侵蚀：Σ手续费 ÷ Σ(盈利+亏损绝对值)
@@ -249,8 +293,8 @@ function updateStats() {
   let biasSum = 0, biasCount = 0, biasExcluded = 0, biasNoPlan = 0;
   for (const l of closed) {
     if (l.direction !== 'long' && l.direction !== 'short') continue;
-    const rp = parseFloat(l.pnlAmount);
-    const planNet = parseFloat(l.plannedNetProfit);
+    const rp = toFiniteNum(l.pnlAmount, NaN);
+    const planNet = toFiniteNum(l.plannedNetProfit, NaN);
     if (Number.isFinite(rp) && Number.isFinite(planNet) && planNet > 0) {
       biasSum += rp / planNet;
       biasCount++;
@@ -286,9 +330,11 @@ function updateStats() {
   let mfeTotal = 0, mfeCount = 0;
   let maemfeTotal = 0, maemfeCount = 0;
   for (const l of closed) {
-    const pnl = parseFloat(l.pnlAmount);
-    const mae = parseFloat(l.mae);
-    const mfe = parseFloat(l.mfe);
+    // v5.6.43：parseFloat('Infinity') 被 !isNaN 放行，会把 Infinity 累加进
+    // MAE/MFE 均值。统一走 toFiniteNum，非有限值按「无数据」跳过。
+    const pnl = toFiniteNum(l.pnlAmount, NaN);
+    const mae = toFiniteNum(l.mae, NaN);
+    const mfe = toFiniteNum(l.mfe, NaN);
     // MAE: 仅亏损单
     if (!isNaN(mae) && !isNaN(pnl) && pnl < 0) {
       maeTotal += Math.abs(mae); maeCount++;
@@ -444,6 +490,18 @@ function _getTradeDate(l) {
   return window.utils.toLocalDateStr(l.closeTime || l.time);
 }
 
+// v5.6.43 P0：连亏排序必须按真实时刻，不能按时间字符串字典序。
+// 同一天的 '2026-11-09T18:00:00+08:00'（=UTC 10:00）与 '2026-11-09T11:00:00.000Z'
+// 字典序会把 18:00 那笔排在 11:00 之后，真实时刻却更早。实测「末尾一笔是盈利」
+// 被误判为 streak=1，直接驱动降仓与当日熔断，风控结论反转。
+// closeTime 缺失/非法时回退 time；两者都非法返回 NaN，排序时置于最前，
+// 绝不让它冒充「最后一笔」。
+function _closedTimeMs(l) {
+  var t = l && l.closeTime ? new Date(l.closeTime).getTime() : NaN;
+  if (!Number.isFinite(t) && l && l.time) t = new Date(l.time).getTime();
+  return Number.isFinite(t) ? t : NaN;
+}
+
 // ==================== 当日连亏计数（纯计算，不更新 UI） ====================
 // BUG-6 修复：函数名和注释明确为"连续亏损"（末尾倒序），并导出总亏损笔数供参考
 function _getTodayLossStreak() {
@@ -458,20 +516,24 @@ function _getTodayLossStreak() {
     return isClosed && _getTradeDate(l) === todayStr;
   });
   todayClosed.sort(function(a, b) {
-    return (a.closeTime || '').localeCompare(b.closeTime || '');
+    var ta = _closedTimeMs(a), tb = _closedTimeMs(b);
+    if (Number.isNaN(ta) && Number.isNaN(tb)) return 0;
+    if (Number.isNaN(ta)) return -1;
+    if (Number.isNaN(tb)) return 1;
+    return ta - tb;
   });
   // 连续亏损：从末尾倒序统计连续亏损笔数
   let streak = 0;
   for (let i = todayClosed.length - 1; i >= 0; i--) {
-    const v = parseFloat(todayClosed[i].pnlAmount);
-    if (!isNaN(v) && v < 0) { streak++; }
+    const v = toFiniteNum(todayClosed[i].pnlAmount, null);
+    if (v !== null && v < 0) { streak++; }
     else { break; }
   }
   // 同时计算当日总亏损笔数（供 UI 参考）
   var totalLossCount = 0;
   for (let j = 0; j < todayClosed.length; j++) {
-    const v2 = parseFloat(todayClosed[j].pnlAmount);
-    if (!isNaN(v2) && v2 < 0) totalLossCount++;
+    const v2 = toFiniteNum(todayClosed[j].pnlAmount, null);
+    if (v2 !== null && v2 < 0) totalLossCount++;
   }
   return { streak: streak, totalLossCount: totalLossCount };
 }

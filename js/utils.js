@@ -2,8 +2,71 @@
 // 全局挂载：window.utils = { ... }
 // 依赖：全局变量 logs（由 trading.html 内联脚本或 storage.js 定义）
 
+// ======== 数值守卫（全局函数，所有模块共用，必须先于 util 定义） ========
+/**
+ * 把「可能来自历史日志 / 表单」的值收敛为有限数。
+ *
+ * 立项原因（v5.6.42）：全站曾有 70+ 处 `parseFloat(x) || 0`。这个写法只挡 NaN，
+ * 不挡 Infinity —— parseFloat('Infinity') === Infinity 且 `Infinity || 0` 仍为 Infinity，
+ * 于是脏值能一路流进胜率 / 权益曲线 / 凯利样本 / 保证金占用，还会经 toFixed 落成
+ * 字符串 "Infinity"，再被 JSON.stringify 写成 null，整笔交易从统计里凭空消失。
+ *
+ * 语义与 `parseFloat(x) || 0` 保持等价（保留 "12.5abc" → 12.5 的前缀解析习惯，
+ * 保留 0 为合法值），只额外把 ±Infinity / NaN / 不可解析值替换为 fallback。
+ *
+ * @param {*} v 输入值
+ * @param {number} [fallback=0] 非有限时的兜底值
+ * @returns {number} 有限数
+ */
+function toFiniteNum(v, fallback) {
+  var n = (typeof v === 'number') ? v : parseFloat(v);
+  return Number.isFinite(n) ? n : (fallback === undefined ? 0 : fallback);
+}
+
 (function() {
   var util = {};
+  util.toFiniteNum = toFiniteNum;
+
+  /**
+   * 存量日志非有限数值隔离（v5.6.42 数据迁移项）。
+   *
+   * 写入侧已在 v5.6.41 挡住新的脏数据，但历史日志里仍可能存着 "Infinity" / "NaN" /
+   * 溢出的 "1e999" 字符串，或 JSON 反序列化后的 null。读端再有守卫也挡不住
+   * 「null 让 isClosedTrade 判成未平仓」这类语义丢失，故在唯一数据入口做一次
+   * 原地规范化：只把「本该是数字、却非有限」的字段改成 0，普通文本/合法数值不动。
+   *
+   * 刻意不动 null：把 pnlAmount=null 改成 0 会凭空造出一笔「0 盈亏已平仓」交易，
+   * 反而污染胜率分母。null 保持原样，由 isClosedTrade 判为未平仓（fail-closed）。
+   *
+   * @param {Array} rows 日志数组（原地修改）
+   * @returns {number} 被修正的字段数
+   */
+  util.sanitizeLogNumbers = function(rows) {
+    var fixed = 0;
+    if (!Array.isArray(rows)) return 0;
+    function walk(node) {
+      if (!node || typeof node !== 'object') return;
+      var keys = Object.keys(node);
+      for (var i = 0; i < keys.length; i++) {
+        var k = keys[i], v = node[k];
+        if (typeof v === 'number') {
+          if (!Number.isFinite(v)) { node[k] = 0; fixed++; }
+        } else if (typeof v === 'string') {
+          var s = v.trim();
+          if (!s) continue;
+          // ① 显式的 Infinity / NaN 字面量；② 纯数字但溢出（1e999）
+          if (/^[+\-]?(?:Inf(?:inity)?|NaN)$/i.test(s) ||
+              (/^[+\-]?\d*\.?\d+(?:e[+\-]?\d+)?$/i.test(s) && !Number.isFinite(Number(s)))) {
+            node[k] = 0; fixed++;
+          }
+        } else if (v && typeof v === 'object') {
+          walk(v);
+        }
+      }
+    }
+    for (var i = 0; i < rows.length; i++) walk(rows[i]);
+    return fixed;
+  };
 
   // ======== 来自 risk.js ========
   /**
@@ -199,7 +262,7 @@
       }
       item.closes = partials;
       item.closedRatio = clamp4(partials.reduce(function(s, c) {
-        return s + (parseFloat(c.ratio) || 0);
+        return s + (toFiniteNum(c.ratio));
       }, 0));
       item.partialRatio = r;
       return item;
@@ -219,7 +282,7 @@
       return PARTIAL_TYPES.indexOf(e.type) >= 0;
     });
     var closedSum = parseFloat(partialEvts.reduce(function(s, e) {
-      return s + (parseFloat(e.ratio) || 0);
+      return s + (toFiniteNum(e.ratio));
     }, 0).toFixed(4));
     item.closedRatio = 100;
     if (closedSum < 99.999) {
@@ -384,8 +447,11 @@
    */
   util.safeParseNum = function(val) {
     if (val == null || val === '') return null;
-    var n = parseFloat(val);
-    return isNaN(n) ? null : n;
+    // v5.6.43：原用全局 isNaN，isNaN(Infinity) === false，'Infinity' / '1e999'
+    // 会原样放行（与全站 toFiniteNum 的收敛口径不一致）。保留前缀解析习惯
+    // （'12.5abc' → 12.5），只额外挡住 ±Infinity 与 NaN。
+    var n = (typeof val === 'number') ? val : parseFloat(val);
+    return Number.isFinite(n) ? n : null;
   };
 
   // ======== 来自 storage.js ========
@@ -442,96 +508,106 @@
 
   // ======== 共享公式 ========
   /**
-   * USDT-M 逐仓强平价格（标准公式，参考主流交易所）
-   * 公式来源: 币安/OKX/火币等主流期货交易所标准
-   * Long:  LP = Entry × (1 - InitialMargin% + MMR%) / (1 - MMR%)
-   * Short: LP = Entry × (1 + InitialMargin% - MMR%) / (1 + MMR%)
-   * 其中: InitialMargin% = 1/leverage, MMR% = 维持保证金率
+   * USDT-M 逐仓强平价格（v5.6.42 单一计价口径）。
+   *
+   * 推导（Q=数量，IMR=1/L，MMR=维持保证金率）：
+   *   初始保证金 IM = E×Q×IMR（按开仓名义 E 计）
+   *   维持保证金 MM = LP×Q×MMR（按强平价名义 LP 计）
+   *   强平条件 IM − 亏损 = MM
+   *   多头：E·IMR − (E−LP) = LP·MMR  →  LP = E(1−IMR)/(1−MMR)
+   *   空头：E·IMR − (LP−E) = LP·MMR  →  LP = E(1+IMR)/(1+MMR)
+   *
+   * v5.6.42 修复：旧公式 LP = E(1−IMR+MMR)/(1−MMR) 把「MM 按开仓名义 E 计」
+   * 的分子与「MM 按强平价名义 LP 计」的分母拼在一起，两种互斥口径混合，
+   * 多头强平价被系统性高估约 E·MMR。上式满足严格恒等式
+   *   多头 E−LP = E·IMR − LP·MMR ；空头 LP−E = E·IMR − LP·MMR。
+   *
+   * 注意：正确公式的零缓冲点（LP=E）在 IMR=MMR 即 L=1/MMR（MMR=0.5% 时 200x）。
+   * 但 calculator.js 的杠杆硬阻断【刻意仍锁在 1/(2×MMR)=100x】——那是留出
+   * 一倍价格缓冲的保守风控边界，不是公式推导结果，不随本次公式修正放宽。
+   *
    * @param {number} entryPrice - 入场价
    * @param {string} direction - 'long' | 'short'
-   * @param {number} leverage - 杠杆倍数
-   * @param {number} mmr - 维持保证金率（小数，如 0.005 表示 0.5%）
-   * @returns {number} 强平价格
+   * @param {number} leverage - 杠杆倍数（0=现货，无强平价，返回 NaN）
+   * @param {number} mmr - 维持保证金率（小数，如 0.005 表示 0.5%），必须 0 ≤ mmr < 1
+   * @returns {number} 强平价格；参数非法返回 NaN
    */
   util.calcLiquidationPrice = function(entryPrice, direction, leverage, mmr) {
-    // 参数验证
-    if (!entryPrice || entryPrice <= 0) {
-      console.error('calcLiquidationPrice: invalid entryPrice', entryPrice);
+    var E = toFiniteNum(entryPrice, NaN);
+    var L = toFiniteNum(leverage, NaN);
+    var M = toFiniteNum(mmr, NaN);
+    if (!Number.isFinite(E) || E <= 0 || !Number.isFinite(L) || L <= 0 ||
+        !Number.isFinite(M) || M < 0 || M >= 1) {
+      console.error('calcLiquidationPrice: invalid params',
+        { entryPrice: entryPrice, leverage: leverage, mmr: mmr, direction: direction });
       return NaN;
     }
-    if (!leverage || leverage <= 0) {
-      console.error('calcLiquidationPrice: invalid leverage', leverage);
-      return NaN;
-    }
-    if (mmr == null || mmr < 0) {
-      console.error('calcLiquidationPrice: invalid mmr', mmr);
-      return NaN;
-    }
-    
-    // 初始保证金率 = 1/杠杆
-    const initialMarginRatio = 1 / leverage;
-
-    let liquidationPrice;
-    if (direction === 'long') {
-      // BUG 修复：使用币安/OKX 标准强平价格公式
-      // 正确公式: LP = Entry × (1 - IMR + MMR) / (1 - MMR)
-      // 原公式缺少 MMR 修正项，导致强平价被低估约 MMR% (约 0.5%)
-      liquidationPrice = entryPrice * (1 - initialMarginRatio + mmr) / (1 - mmr);
-
-      // 合理性检查：多头强平价应低于入场价
-      if (liquidationPrice >= entryPrice) {
-        console.warn('calcLiquidationPrice: long liquidation price >= entry price, check parameters');
-      }
-    } else if (direction === 'short') {
-      // 正确公式: LP = Entry × (1 + IMR - MMR) / (1 + MMR)
-      liquidationPrice = entryPrice * (1 + initialMarginRatio - mmr) / (1 + mmr);
-
-      // 合理性检查：空头强平价应高于入场价
-      if (liquidationPrice <= entryPrice) {
-        console.warn('calcLiquidationPrice: short liquidation price <= entry price, check parameters');
-      }
-    } else {
+    if (direction !== 'long' && direction !== 'short') {
       console.error('calcLiquidationPrice: invalid direction', direction);
       return NaN;
     }
-    
-    // 防止负数和异常值
-    if (!isFinite(liquidationPrice) || liquidationPrice <= 0) {
+
+    // 初始保证金率 = 1/杠杆
+    var initialMarginRatio = 1 / L;
+    var liquidationPrice = (direction === 'long')
+      ? E * (1 - initialMarginRatio) / (1 - M)
+      : E * (1 + initialMarginRatio) / (1 + M);
+
+    // 杠杆已越过零缓冲点时强平价跑到入场价另一侧，公式仍有数学解但没有交易意义；
+    // 由调用方（calculator.js 的 leverage-below-mmr 闸门）拦截，这里只保证数值有效。
+    // 注意 LP = 0 是合法解：IMR = 1（1x 杠杆 / 全额保证金）时多头强平价恰为 0，
+    // 含义是「价格归零才亏完本金」，不是计算失败。早期版本把 <= 0 一律判 NaN，
+    // 会让 1x 仓位被 calculator 的 liquidation-unsolvable 闸门误拦（实测 216 组参数）。
+    // 只有 NaN / Infinity / 负价才是真异常。
+    if (!Number.isFinite(liquidationPrice) || liquidationPrice < 0) {
       console.error('calcLiquidationPrice: calculated invalid liquidation price', liquidationPrice);
       return NaN;
     }
-    
     return liquidationPrice;
   };
 
   // ======== 日频夏普比率（单一权威实现，可单测） ========
   /**
-   * 按平仓日聚合日盈亏，并按「首笔平仓 → 末笔平仓」逐日铺满后计算夏普。
+   * 按平仓日聚合日盈亏，铺满「首笔平仓 → 末笔平仓」的每一个自然日后计算夏普。
    *
-   * 两处口径要点（历史上都让夏普被系统性高估，故收敛为唯一实现）：
-   * ① 空闲日必须计入。只取「有平仓的交易日」会把持有中无平仓的日子整段丢弃，
+   * 口径要点（v5.6.42 数学升级，前两条为历史修复）：
+   * ① 空闲日必须计入。只取有平仓的交易日会把持有中无平仓的日子整段丢弃，
    *    持有 20 天只在其中 3 天平仓的账户会按 3 天算，波动率被低估、夏普被抬高。
-   *    本实现从首日铺到末日，无平仓日记 0。
-   * ② 年化系数默认 365：本站交易的是 7×24 永续合约，不是 A 股/美股，
-   *    按 252 折算会把年化低估约 31%。
+   * ② 年化系数默认 365：本站交易 7×24 永续合约，按 252 折算会低估约 31%。
+   * ③ 必须用【日收益率】而非日盈亏金额。金额口径下，本金 1 万与本金 100 万
+   *    的两段完全相同的盈亏曲线会给出同一个夏普，指标失去可比性；且本金变化后
+   *    同一段盈亏的波动率不会随权益缩放。现按逐日递推权益 E_d = E_{d-1} + pnl_d
+   *    计算 r_d = pnl_d / E_{d-1}，故 startEquity 为必需入参，缺失时返回 null
+   *    （fail-closed，不拿金额冒充收益率）。
+   * ④ 标准差用【样本标准差】÷(n−1)（夏普的行业惯例是无偏估计），
+   *    旧的总体口径 ÷n 会系统性低估波动、抬高夏普。
+   * ⑤ 可选无风险利率 riskFreeRate（年化小数，如 0.0365）；日超额收益
+   *    r_d − rf/annualDays，夏普 = mean(excess)/sd × √annualDays。
    *
-   * 标准差用总体口径（样本即全部观测日，不做 n-1 无偏修正）。
+   * 日期按字典序排序后才做权益递推——'YYYY-MM-DD' 的字典序即时间序，
+   * 而 Object.keys 的插入顺序取决于日志输入顺序，不排序会让权益递推错位。
    *
-   * @param {Array} closed  已平仓日志数组（需含 closeTime、pnlAmount）
-   * @param {Object} [opt]  { annualDays: number } 年化天数，默认 365
-   * @returns {{sharpe:number,days:number,zeroDays:number,mean:number,sd:number}|null}
-   *          有效日数 < 2 或标准差为 0 时返回 null（调用方显示「—」）
+   * @param {Array} closed 已平仓日志数组（需含 closeTime、pnlAmount）
+   * @param {Object} opt { startEquity:number（必需）, annualDays:number, riskFreeRate:number }
+   * @returns {{sharpe:number,days:number,zeroDays:number,mean:number,sd:number,
+   *            basis:string,startEquity:number,endEquity:number,riskFreeDaily:number}|null}
    */
   util.dailySharpe = function(closed, opt) {
     opt = opt || {};
     var annualDays = Number.isFinite(opt.annualDays) && opt.annualDays > 0 ? opt.annualDays : 365;
+    var startEquity = toFiniteNum(opt.startEquity, NaN);
+    if (!Number.isFinite(startEquity) || startEquity <= 0) return null;
+    var rf = toFiniteNum(opt.riskFreeRate, 0);
+    if (!Number.isFinite(rf)) rf = 0;
+    var rfDaily = rf / annualDays;
+
     var arr = Array.isArray(closed) ? closed : [];
     var dayMap = {}, minT = null, maxT = null;
     for (var i = 0; i < arr.length; i++) {
       var t = new Date(arr[i] && arr[i].closeTime).getTime();
       if (isNaN(t)) continue;
-      var pnl = parseFloat(arr[i].pnlAmount);
-      if (!isFinite(pnl)) continue;
+      var pnl = toFiniteNum(arr[i].pnlAmount, NaN);
+      if (!Number.isFinite(pnl)) continue;
       var dk = util.toLocalDateStr(arr[i].closeTime);
       if (!dk) continue;
       dayMap[dk] = (dayMap[dk] || 0) + pnl;
@@ -551,21 +627,36 @@
         cursor.setDate(cursor.getDate() + 1);
       }
     }
-    var vals = Object.keys(dayMap).map(function(k) { return dayMap[k]; });
-    if (vals.length < 2) return null;
+    var keys = Object.keys(dayMap).sort();
+    if (keys.length < 2) return null;
+
+    // 逐日权益递推 → 日收益率序列
+    var equity = startEquity, returns = [], solvable = true;
+    for (var k = 0; k < keys.length; k++) {
+      if (!Number.isFinite(equity) || equity <= 0) { solvable = false; break; }
+      returns.push(dayMap[keys[k]] / equity);
+      equity += dayMap[keys[k]];
+    }
+    if (!solvable) return null;   // 权益被打穿后收益率无定义，不硬凑数字
+
     var mean = 0;
-    for (var a = 0; a < vals.length; a++) mean += vals[a];
-    mean /= vals.length;
+    for (var a = 0; a < returns.length; a++) mean += returns[a];
+    mean /= returns.length;
     var sumSq = 0;
-    for (var b = 0; b < vals.length; b++) sumSq += Math.pow(vals[b] - mean, 2);
-    var sd = Math.sqrt(sumSq / vals.length);
-    if (sd <= 0) return null;
+    for (var b = 0; b < returns.length; b++) sumSq += Math.pow(returns[b] - mean, 2);
+    var sd = Math.sqrt(sumSq / (returns.length - 1));   // 样本标准差
+    if (!(sd > 0) || !Number.isFinite(sd)) return null;
+    var excessMean = mean - rfDaily;
     return {
-      sharpe: mean / sd * Math.sqrt(annualDays),
-      days: vals.length,
+      sharpe: excessMean / sd * Math.sqrt(annualDays),
+      days: returns.length,
       zeroDays: zeroDays,
       mean: mean,
-      sd: sd
+      sd: sd,
+      basis: 'return',
+      startEquity: startEquity,
+      endEquity: equity,
+      riskFreeDaily: rfDaily
     };
   };
 
@@ -737,8 +828,17 @@
       return { data: [], initCap: 0, peakVal: 0, maxDDPercent: 0, finalEq: 0, totalPnl: 0 };
     }
 
+    // v5.6.43：非法/缺失日期会让 new Date(...) 变 NaN，减法结果 NaN 被
+    // Array.sort 当成「相等」，脏记录于是随机插在曲线中间，破坏逐日递推的
+    // 时间顺序（峰值/最大回撤跟着错）。显式把无时刻的记录排到最前。
+    function _curveTimeMs(row) {
+      var t = new Date(row && (row.closeTime || row.time)).getTime();
+      return Number.isFinite(t) ? t : -Infinity;
+    }
     var sorted = [].concat(closed).sort(function(a, b) {
-      return new Date(a.closeTime || a.time) - new Date(b.closeTime || b.time);
+      var ta = _curveTimeMs(a), tb = _curveTimeMs(b);
+      if (ta === tb) return 0;
+      return ta - tb;
     });
 
     var _initCap = 0;

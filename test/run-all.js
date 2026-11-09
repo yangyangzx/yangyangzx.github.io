@@ -18,6 +18,8 @@ const TEST_DIR = __dirname;
 // 排在前面的是「最可能因改动失败」的那几组。
 const SUITES = [
   ['主回归（run-tests.html，无头）', '_rt_headless.js'],
+  ['核心算法升级（红测转绿 + 注入自检）', 'verify_core_algo.js'],
+  ['跨模块计算逻辑（v5.6.43）', 'verify_crossmodule.js'],
   ['编辑场景（S0~S12）', '_edit_scenarios.js'],
   ['平仓类型一致性', 'verify_close_type_consistency.js'],
   ['日志簿记回归', 'verify_logs_fixed.js'],

@@ -887,7 +887,7 @@ function renderCloseTypeChart(closed) {
     // trailingSL 等类型按实际盈亏金额着色：盈利>0 则绿，否则红
     var groupPnl = 0;
     for (var gi = 0; gi < groups[k].length; gi++) {
-      groupPnl += parseFloat(groups[k][gi].pnlAmount) || 0;
+      groupPnl += toFiniteNum(groups[k][gi].pnlAmount);
     }
     var avgPnl = count > 0 ? (groupPnl / count) : 0;
 

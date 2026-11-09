@@ -10,13 +10,19 @@ function isTickSlippageRecord(item) {
   return !!(s && s.schema === 'ticks-v1');
 }
 
+// P0 修复（v5.6.41 核心算法升级）：原实现 parseFloat + `|| 0` 对脏值毫无防御——
+// parseFloat('Infinity') 返回 Infinity，(gross - Infinity) 得到 -Infinity，
+// (-Infinity).toFixed(2) 写成字符串 "Infinity"，再经 JSON.stringify 落成 null，
+// 整笔交易会被 isClosed 判成未平仓，从胜率 / 权益曲线 / 凯利样本里彻底消失；
+// 负的 slippageCost 还会反向放大盈亏（fee 侧已有 `fee < 0 return null`，两者原本不对称）。
+// 统一用 Number.isFinite 守卫，非有限值与负值一律归零。
 function getLegacySlippageCost(item, overrideValue) {
   // 新模型的滑点已经通过 effectiveEntryPrice/实际平仓价计入 PnL，不能二次扣减。
   if (isTickSlippageRecord(item)) return 0;
-  if (overrideValue !== undefined && overrideValue !== null && overrideValue !== '') {
-    return parseFloat(overrideValue) || 0;
-  }
-  return parseFloat(item && item.slippageCost) || 0;
+  var raw = (overrideValue !== undefined && overrideValue !== null && overrideValue !== '')
+    ? overrideValue : (item && item.slippageCost);
+  var v = Number(raw);
+  return (Number.isFinite(v) && v > 0) ? v : 0;
 }
 
 function getEntryFillForPnL(item) {
@@ -48,11 +54,13 @@ function calculateCloseSettlement(item, closePrice, feeOverride, legacySlippageO
     legacySlippageCost = 0;
   }
   var netPnl = grossPnl - fee - legacySlippageCost;
+  // P0 修复（v5.6.41）：净盈亏本身必须是有限数，否则下游结算、预览、落库全被污染。
+  if (!Number.isFinite(netPnl)) return null;
   var leverage = Number(item.leverage);
   if (!Number.isFinite(leverage) || leverage <= 0) leverage = 1;
   var margin = positionSize / leverage;
   var riskAmount = Number(item.riskAmount);
-  return {
+  var settlement = {
     entryPrice: entryPrice,
     closePrice: exitPrice,
     grossPnl: grossPnl,
@@ -62,6 +70,43 @@ function calculateCloseSettlement(item, closePrice, feeOverride, legacySlippageO
     pnlPercent: margin > 0 ? (netPnl / margin * 100) : 0,
     rMultiple: Number.isFinite(riskAmount) && riskAmount > 0 ? netPnl / riskAmount : null
   };
+  // P0 修复（v5.6.41）：出参终检。入参干净不代表出参干净——极大价格/仓位仍可能
+  // 让 grossPnl 溢出，脏锚点会让 pnlPercent / rMultiple 变成 NaN。
+  // 任何非有限数值字段一律整体返回 null（fail-closed），调用方跳过结算而不是写脏数据。
+  for (var _sk in settlement) {
+    if (typeof settlement[_sk] === 'number' && !Number.isFinite(settlement[_sk])) return null;
+  }
+  return settlement;
+}
+
+/**
+ * 部分平仓一腿之后，按剩余比例缩减记录上的「整笔级」字段（v5.6.43，P0）。
+ *
+ * 立项原因：fee / positionSize / riskAmount / actualMargin 都按 keep=(1−ratio)
+ * 缩减，唯独 legacy slippageCost 漏了。它和 fee 一样是一次性的整笔成本，
+ * 不缩减就导致每一腿的 settlement 都读到原始全额再按本腿比例扣一次。
+ * 实测 1000 U 仓位 / 毛利 100 U / 滑点 10 U 分 50%→50%→全平三腿：
+ * 整笔一次性结算 90 U，旧实现三腿累计 80 U，凭空少 10 U。
+ * 抽成纯函数后展示/落库/测试共用同一条缩减规则，不再散写五段。
+ *
+ * @param {Object} record 日志行（原地修改）
+ * @param {number} partialRatio 占「当前剩余仓位」的百分比
+ * @returns {Object} 同一个 record
+ */
+function applyPartialShrink(record, partialRatio) {
+  var keep = 1 - (Number.isFinite(partialRatio) ? partialRatio : 0) / 100;
+  if (keep < 0) keep = 0;
+  function sc(v, digits) {
+    var n = toFiniteNum(v, null);
+    return n === null ? v : parseFloat((n * keep).toFixed(digits));
+  }
+  record.positionSize = sc(record.positionSize, 2);
+  if (record.riskAmount != null) record.riskAmount = sc(record.riskAmount, 2);
+  if (record.actualMargin != null) record.actualMargin = sc(record.actualMargin, 2);
+  if (record.fee != null) record.fee = sc(record.fee, 8);
+  // ticks-v1 新模型里 slippageCost 恒为 0，缩减不影响；legacy 模型才真正生效。
+  if (record.slippageCost != null) record.slippageCost = sc(record.slippageCost, 8);
+  return record;
 }
 
 function calcClosePnL(idx) {
@@ -313,7 +358,7 @@ function confirmClose(idx) {
   // ===== P0-1 FIX：整笔交易生命周期字段（closes 事件数组 + 累计已实现盈亏） =====
   if (!Array.isArray(logs[idx].closes)) logs[idx].closes = [];
   if (logs[idx].initialPositionSize == null || isNaN(parseFloat(logs[idx].initialPositionSize)) || parseFloat(logs[idx].initialPositionSize) <= 0) {
-    logs[idx].initialPositionSize = parseFloat(logs[idx].positionSize) || 0;
+    logs[idx].initialPositionSize = toFiniteNum(logs[idx].positionSize);
   }
   if (logs[idx].initialRiskAmount == null || isNaN(parseFloat(logs[idx].initialRiskAmount))) {
     logs[idx].initialRiskAmount = (logs[idx].riskAmount != null) ? parseFloat(logs[idx].riskAmount) : null;
@@ -328,7 +373,7 @@ function confirmClose(idx) {
 
   if (partialValid) {
     // —— 部分平仓 / 减仓：按比例缩减剩余仓位、剩余风险、剩余保证金、剩余费用 ——
-    var posBefore = parseFloat(logs[idx].positionSize) || 0;
+    var posBefore = toFiniteNum(logs[idx].positionSize);
     // P0 修复（基数错位）：partialRatio2 是「占当前剩余仓位」的比例（输入框与 settlement
     // 都是按剩余仓位计价），而 closedRatio / closes[].ratio 的口径是「占开仓原始仓位」
     // ——modals.js 正是用 sum(closes[].ratio) 反推剩余仓位（fracNow = 1 - cumClosed/100）。
@@ -338,29 +383,21 @@ function confirmClose(idx) {
     // 于是这 250 单位的敞口既不出现在持仓统计里，也不产生任何已实现盈亏。
     // 换算走 utils.closedRatioDelta（唯一权威实现），首次部分平仓时返回输入值，行为不变。
     var _closedDelta = window.utils.closedRatioDelta(partialRatio2, posBefore,
-      parseFloat(logs[idx].initialPositionSize) || posBefore || 0);
+      toFiniteNum(logs[idx].initialPositionSize) || posBefore || 0);
     var feeThis = settlement.fee * (partialRatio2 / 100);
     logs[idx].partialRatio = partialRatio2;
-    logs[idx].positionSize = parseFloat((posBefore * (1 - partialRatio2 / 100)).toFixed(2));
-    if (logs[idx].riskAmount != null && !isNaN(parseFloat(logs[idx].riskAmount))) {
-      logs[idx].riskAmount = parseFloat((parseFloat(logs[idx].riskAmount) * (1 - partialRatio2 / 100)).toFixed(2));
-    }
-    if (logs[idx].actualMargin != null && !isNaN(parseFloat(logs[idx].actualMargin))) {
-      logs[idx].actualMargin = parseFloat((parseFloat(logs[idx].actualMargin) * (1 - partialRatio2 / 100)).toFixed(2));
-    }
-    if (logs[idx].fee != null && !isNaN(parseFloat(logs[idx].fee))) {
-      // P1-3 FIX：剩余仓位费用按比例缩减，最终平仓时不再重复扣全额 round-trip 费
-      logs[idx].fee = parseFloat((parseFloat(logs[idx].fee) * (1 - partialRatio2 / 100)).toFixed(8));
-    }
+    // v5.6.43：五段散写收口为纯函数，并补上漏掉的 slippageCost 缩减。
+    applyPartialShrink(logs[idx], partialRatio2);
     logs[idx].realizedPnl = parseFloat((parseFloat(logs[idx].realizedPnl) + netPnlThis).toFixed(2));
     logs[idx].realizedFee = parseFloat((parseFloat(logs[idx].realizedFee) + feeThis).toFixed(8));
-    logs[idx].closedRatio = parseFloat((parseFloat(logs[idx].closedRatio) + _closedDelta).toFixed(4));
+    // 累计平仓比例封顶 100：脏历史数据或重复保存都不允许写出 >100% 的 closedRatio
+    logs[idx].closedRatio = parseFloat(Math.min(100, parseFloat(logs[idx].closedRatio) + _closedDelta).toFixed(4));
     // ratio 与 closedRatio 同口径（占原始仓位），保证 sum(closes[].ratio) === closedRatio
     logs[idx].closes.push({ type: closeType.value, price: closePrice, ratio: _closedDelta, fee: parseFloat(feeThis.toFixed(8)), gross: parseFloat((settlement.grossPnl * (partialRatio2 / 100)).toFixed(2)), pnl: parseFloat(netPnlThis.toFixed(2)), time: _nowISO, ratioOfRemaining: partialRatio2 });
     // P4-5 修复：grossPnlAmount 维护为"整笔累计价格毛利"（纯价格毛利，不含费/滑点）。
     // 部分平仓按"本次平掉比例"累加，而非原先覆盖为"剩余仓位全量毛利"——后者与
     // realizedFee(整笔累计) 口径脱节，导致 stats 成本侵蚀失真。
-    logs[idx].grossPnlAmount = parseFloat(((parseFloat(logs[idx].grossPnlAmount) || 0) + settlement.grossPnl * (partialRatio2 / 100)).toFixed(2));
+    logs[idx].grossPnlAmount = parseFloat(((toFiniteNum(logs[idx].grossPnlAmount)) + settlement.grossPnl * (partialRatio2 / 100)).toFixed(2));
     logs[idx].pnlAmount = parseFloat(netPnlThis.toFixed(2));
     // P0-1 FIX：中间态记录的收益率/R 用"本次已实现"口径（本次平仓保证金、初始风险为基准）
     var _levNow = Number(logs[idx].leverage) > 0 ? Number(logs[idx].leverage) : 1;
@@ -375,7 +412,7 @@ function confirmClose(idx) {
   } else if (hadPartialBefore) {
     // —— 部分平仓后的最终平仓：pnlAmount 为整笔累计已实现盈亏 ——
     var feeFinal = settlement.fee;
-    var ratioFinal = 100 - (parseFloat(logs[idx].closedRatio) || 0);
+    var ratioFinal = 100 - (toFiniteNum(logs[idx].closedRatio));
     logs[idx].realizedPnl = parseFloat((parseFloat(logs[idx].realizedPnl) + netPnlVal).toFixed(2));
     logs[idx].realizedFee = parseFloat((parseFloat(logs[idx].realizedFee) + feeFinal).toFixed(8));
     logs[idx].closedRatio = 100;
@@ -383,7 +420,7 @@ function confirmClose(idx) {
     logs[idx].positionSize = 0; // 全部退出
     delete logs[idx].partialRatio;
     // P4-5 修复：最终平仓累加最后一腿毛利，grossPnlAmount 成为整笔累计毛利。
-    logs[idx].grossPnlAmount = parseFloat(((parseFloat(logs[idx].grossPnlAmount) || 0) + settlement.grossPnl).toFixed(2));
+    logs[idx].grossPnlAmount = parseFloat(((toFiniteNum(logs[idx].grossPnlAmount)) + settlement.grossPnl).toFixed(2));
     logs[idx].pnlAmount = parseFloat(logs[idx].realizedPnl.toFixed(2)); // 整笔累计
     logs[idx].actualCloseFee = parseFloat(logs[idx].realizedFee.toFixed(8));
     logs[idx].actualExitLegacySlippageCost = parseFloat(settlement.legacySlippageCost.toFixed(8));

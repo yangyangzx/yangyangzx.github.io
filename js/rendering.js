@@ -73,7 +73,7 @@ function buildRowsHTML(dl) {
       ctBadge = '<span class="badge-ct sl">止损</span>';
     } else if (item.closeType === 'trailingSL') {
       // 追踪止损：根据实际盈亏金额着色（盈利=绿，亏损=黄）
-      var _pnl = parseFloat(item.pnlAmount) || 0;
+      var _pnl = toFiniteNum(item.pnlAmount);
       ctBadge = _pnl >= 0
         ? '<span class="badge-ct win">追踪盈</span>'
         : '<span class="badge-ct trail">追踪损</span>';

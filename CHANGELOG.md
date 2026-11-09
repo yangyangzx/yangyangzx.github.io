@@ -5,6 +5,195 @@
 
 ---
 
+// 5.6.43：跨模块计算逻辑全面修复 —— 12 条实证缺陷 + 口径变更收口（2026-11-09）
+//   立项：v5.6.42 全量门禁 15/15 全绿（3300+ 断言），但四组并行审计 + 两轮 jsdom
+//     真链路探针复现出 12 条「算错钱 / 闸门 fail-open / CSV 往返毁库」缺陷。
+//     既有断言保护单模块计算自洽，不覆盖跨模块接线、异常路径与 UI↔落库口径。
+//   红测：新增 test/verify_crossmodule.js（接入 run-all.js，第 16 个跑测器），
+//     修复前 37 条红；修复后 56/0；--inject 退回旧实现复现 22 条红。
+//
+//   【批次 A · 纯 bug，零口径变更】
+//   1. P0 半凯利钳制顺序：完整凯利与半凯利各自 Math.min(raw, limit)，raw>2×limit 时
+//      两者都变 5%，「半凯利」= 完整凯利，实测本金 10000 风险额 500 应为 250。
+//      改为「先钳完整凯利，再取其一半」，比值恒 0.5（skills-integration.js:343）。
+//   2. P0 阈值读侧 fail-open：五道闸门各写 Number(settings.X)||default，手改
+//      localStorage 把 dailyLossLimit=999 得到 99900 U 上限（应 500）、集中度 999%。
+//      新增 settings._sanitizeLoadedSettings() 在 loadSettings() 唯一入口按
+//      SETTINGS_VALIDATORS 区间净化，数字字符串先归一（保住 loadMmr('0.8') 行为）。
+//   3. P0 CSV 往返毁库：导出把 closeType 写成中文标签、导入只映表头不映值，
+//      partialTP → 「部分止盈」→ isClosedTrade 由中间态误判已全平，且不可逆。
+//      导出改机器键；导入新增 _normalizeCsvCloseType 中文反查 + _isKnownCloseType
+//      值域告警；未知值保留原值，避免绕过 _prepareImportedRecords 的 fail-closed 校验。
+//   4. P1 非法 closeTime 毁整批导出：new Date('not-a-date').toISOString() 抛
+//      RangeError 被外层 catch 吞成「导出失败」，2 条日志导出 0 行。
+//      新增 io._safeISOString()，非法值置空 + 计数告警，其余照常导出。
+//   5. P0 当日连亏字典序排序：'T18:00+08' 与 'T11:00Z' 字典序颠倒了真实时刻，
+//      末尾盈利被误判 streak=1（应 0），驱动降仓与熔断的结论反转。
+//      stats._closedTimeMs() 按时间戳排序，非法时间置最前（不冒充最后一笔）。
+//   6. P1 部分平仓 legacy 滑点重复扣：fee/仓位/风险额都按剩余比例缩减，唯独
+//      slippageCost 漏了；三腿累计 80 U vs 整笔 90 U。抽出纯函数
+//      logs.applyPartialShrink()，五段散写收口并补滑点；closedRatio 封顶 100。
+//   7. P1 heatWarnMax 死键：SETTINGS_DEFAULTS.heatWarnMax 恒为 8 且优先于
+//      portfolioHeatMax 被读，用户设 15 完全无效；默认 8 > 硬上限 6 使 warn 档
+//      永不可达。删别名、改以 portfolioHeatMax 为唯一来源、默认 8→5。
+//   8. P1 分批展示 140%：70/70 两批落库已归一 50/50，结果区表格仍按原始
+//      ba/100 各显示 21000 U。抽 computeNormalizedSplitAlloc()，展示/触发行/落库同源。
+//   9. P1 RR 双入场价：目标腿用 orderType 的 entryTicks、止损腿用 stopType 的，
+//      同一笔仓位出现 50000.1 / 50000.2 两个入场成交价。目标腿复用 stopEntryTicks。
+//  10. P1 限价单费率不联动：切 orderType 后 #feeRate 仍 0.08，设置页
+//      feeRateLimit 形同虚设。app.js 加 change 监听 + data-fee-auto 区分手填值。
+//  11. P1 Infinity 漏网：utils.safeParseNum 与 stats.computeWinLoss / MAE-MFE
+//      仍用 parseFloat + 全局 isNaN。统一 toFiniteNum；CSV 数值列加有限性检查。
+//  12. P2 分批常量字面量：渲染层 `<3` 与 MAX_SPLITS=5 冲突，加到 3 批后
+//      「增加一批」按钮消失，4/5 批不可达（CLAUDE.md 老隐患）。全部改读常量。
+//
+//   【批次 B · 口径变更（本轮获授权）】
+//   - 年化收益改 CAGR：期初/期末权益 + Math.pow(..., 365/span)，以 % 显示；
+//     本金缺失或权益被打穿时 fail-closed 显示「—」。原为金额线性外推（+36500 U/年）。
+//   - 组合热量预检降级为软标记：表单风险只是估算值，硬阻断会拒掉「表单 10%
+//     但半凯利 1%」的合法计划；唯一硬阻断保留在截断后复核点（用 effectiveRiskAmount）。
+//     readFailed 仍 fail-closed 硬阻断。
+//   - 凯利小样本收缩：calcKelly 新增第 8 参 sampleCount，n<30 时按 n/(n+20) 收缩，
+//     结果透出 shrinkFactor / samples；calculator 传 dataset.kellySamples。
+//   - 夏普筛选态本金：筛选样本每条都有合法 capital 时用其均值作期初权益，
+//     缺字段时 fail-closed 显示「—」，不再拿全局本金摊薄筛选样本收益。
+//   - RR 色阶读 settings.minRRRatio（原写死 3/2，与结果卡片口径脱节）；
+//     权益曲线非法日期显式兜底（NaN 不再参与排序）。
+//
+//   【刻意未改 · 已复核为正确或会放宽风控】
+//   - 利润因子：pnlAmount 本身就是扣费扣滑点后的净额，当前 grossProfit/grossLoss
+//     已是净额口径（变量名误导，非数值错误），不为了改而改。
+//   - 集中度方向净额：同品种双向逐仓都实际占用保证金，累加（绝对值口径）才是
+//     保守正确；改净额会掩盖对冲仓位风险、放宽闸门。
+//   - 导入设置：v5.6.14 已有 _validateImportedField 逐字段校验，读侧净化是第二道防线。
+//
+//   【断言迁移】run-tests.html 半凯利三处期望值 0.05→0.025 并补比值断言（674→675）；
+//     verify_param_fix.js 回撤场景改用合法区间值（亏 3000 / 阈值 50）与默认警告线 5；
+//     verify_sideeffects.js / verify_core_algo.js 越界 riskHeatMax:50 改为合法 15。
+//   验证：npm test 16/16 全绿（主回归 675、不变量 2207、核心 67、跨模块 56）；
+//     node --check 全过；no-undef 真泄漏 0；版本四处同步 5.6.43。
+
+---
+
+// 5.6.42：核心算法数学口径升级 + 存量脏值全链路收口（2026-11-09）
+//
+//   立项：5.6.41 收口了正确性/稳健性/结构，但刻意留下三项「改了会放宽风控或破坏历史
+//   可比性」的数学口径，以及一条「存量脏日志读端放行」的残余风险。本轮按杨老板「全部修复」
+//   授权，连同迁移方案一起做完，四项全部以「先红测 → 再修 → 注入自检」闭环验证。
+//
+//   红测实证（升级前，test/verify_core_algo.js 追加 H/I/J/K 四组，共 27 条红）：
+//     · 强平价旧公式不满足逐仓恒等式 IM−亏损=MM：10x/0.5% 多头给 90954.77，正确 90452.26
+//     · 分批 100/200 各 50% 资金 → 旧算术均价 150，正确调和均价 133.3333（高估 12.5%）
+//     · 加权止损距离缺 E/bp_i 因子：bp=100/200、dist=10/40 → 旧 25，正确 20
+//     · 夏普 mean=1.6667 是「日盈亏金额」不是收益率；sd 用总体 ÷n；无风险利率缺席
+//     · 7 个文件仍有 parseFloat(pnlAmount)||0，parseFloat('Infinity') 一路放行
+//
+//   【数学 1】强平价改单一计价口径（utils.js）
+//     LP_long = E(1−IMR)/(1−MMR)、LP_short = E(1+IMR)/(1+MMR)，IMR=1/L。
+//     旧式 E(1−IMR+MMR)/(1−MMR) 把「维持保证金按开仓名义」的分子与「按强平价名义」
+//     的分母拼接，两种互斥口径混合。修后满足严格恒等式，多空对称。
+//     MMR 显式上界 [0,1)；1x（IMR=1）时 LP=0 是合法解（价格归零才亏完本金）——
+//     首次实现误把 <=0 判 NaN，导致 216 组参数被 liquidation-unsolvable 误拦、
+//     不变量跑测器断言从 2207 掉到 1910；已修正并补 H8/H9/H10 三条护栏，
+//     复跑精确恢复 2207。
+//   【风控不变】新公式零缓冲点在 1/MMR=200x，但 calculator.js 的杠杆硬阻断
+//     【刻意仍锁 1/(2×MMR)=100x】，注释写明这是留一倍价格缓冲的保守风控边界、
+//     不是公式推导结果。修 bug 不等于放宽风控，禁止顺手改成 1/mmr（H7 源码级断言守护）。
+//
+//   【数学 2】分批加权入场价改调和平均（calculator.js / modals.js / risk.js）
+//     E = Σalloc / Σ(alloc_i/price_i)：alloc 分配的是资金，数量 q_i ∝ alloc_i/price_i，
+//     等效均价必须是「总资金 / 总数量」。同口径收口三处：computeWeightedEntry、
+//     doSaveSplit 内联的第三份算术平均、risk.js 聚合持仓加权均价（同一个数学错误）。
+//     加权止损距离抽成纯函数 computeWeightedStopDistance，补 E/bp_i 量纲因子：
+//     dist = E × Σ(w_i·dist_i/bp_i)；calculate() 只消费结果，不再内联第二份实现。
+//     历史兼容：新记录 getSplitEntries/doSaveSplit 打 weightedEntryModel='harmonic'，
+//     旧记录无该字段，读端（modals.js:259）只读落库值、绝不按 entries 重算。
+//
+//   【数学 3】夏普改日收益率口径（utils.js / stats.js）
+//     逐日递推权益 E_d = E_{d-1} + pnl_d，r_d = pnl_d / E_{d-1}；startEquity 为必需
+//     入参（stats.js 从 getAccountCapital() 取），缺失时返回 null 并显示「—」+ 原因，
+//     绝不拿金额冒充收益率。标准差改样本 ÷(n−1)，新增 riskFreeRate（年化小数）。
+//     日期字典序排序后才做权益递推（Object.keys 插入顺序依赖日志输入，不排序会错位）。
+//     返回 basis='return' / startEquity / endEquity / riskFreeDaily 供 UI 与复盘核对。
+//
+//   【数据】存量脏值全链路收口
+//     · 新增全局 toFiniteNum(v, fallback)：语义等价于 parseFloat(x)||0，额外挡 ±Infinity/NaN。
+//       机械替换 js/ 下 79 处 parseFloat(X)||0（含嵌套表达式与 || 链），语法全过。
+//     · 新增 utils.sanitizeLogNumbers(rows)：在唯一数据入口 loadLogs() 的 JSON.parse
+//       之后无条件原地规范化历史日志（递归含 closes[] / splitEntries.entries[]），
+//       只改「本该是数字却非有限」的字段，普通文本/合法数值/null 一律不动
+//       （null 改成 0 会凭空造一笔 0 盈亏已平仓交易，反而污染胜率分母）。
+//       只改内存、不改写磁盘原始证据；一次 toast + console.warn 告知字段数。
+//       多标签同步的两处 logs=remoteLogs 与 migrateLogsToCurrentSchema（导入路径）同样调用。
+//
+//   【迁移的断言】run-tests.html 20 组（夏普，全部期望值改收益率口径）、21 组（强平价，
+//     新公式期望值 + 恒等式 + 100x 缓冲 + 200x 零缓冲 + MMR≥1 + 1x 合法解）、
+//     30.11 组（加权均价 50700 → 50688.07339 + 模型标记）；verify-fixes.html 同步调和口径。
+//
+//   验证：核心跑测器 28 → 67 条断言 / 0 失败（其中 H10 1x 真计算、J9~J11 统计面板
+//     UI 真链路、K10 loadLogs 真链路，都不是纯源码正则）；--inject 注入旧实现 33 条红；
+//     全量 npm test 15/15 全绿（主回归 665 → 674，不变量精确恢复 2207）；
+//     node --check 全过；no-undef 专项 1212 条跨文件全局误报、真泄漏 0 条。
+//   版本四处同步：js/version.js → index.html 43 处 ?v= → run-tests.html 17 处 ?v=
+//     （含 30.8 组 APP_VERSION 字面量绊线）→ 本条目。
+//
+---
+
+// 5.6.41：核心算法升级 —— 闸门真实早退 / 非有限数终检 / 单次计算取数上下文（2026-11-09）
+//
+//   立项：基线 14 个跑测器、3300+ 断言全绿，但保护的是「计算自洽」，不覆盖异常路径与
+//   数值稳健性。新增 test/verify_core_algo.js（28 条断言 + --inject 注入自检）：
+//   先写红测证明缺陷真实存在（21 红），修复后转绿，再注入旧实现证明断言有捕获力（9 红）。
+//
+//   ① P0 · 连亏熔断的早退被 IIFE 吞掉（calculator.js）
+//      renderHardBlock() 在匿名 IIFE 内 return，只退出 IIFE；主流程继续跑到 setCalc()，
+//      把刚渲染的阻断 UI 覆盖成「计算成功」。实测当日连亏 3 笔达阈值仍算出
+//      99512.44 USDT 仓位。现改为 IIFE 只写 _streakBlock 描述、主流程统一早退；
+//      取数异常路径同样 fail-closed。该闸门此前零断言覆盖。
+//
+//   ② P0 · 结算与凯利的非有限数终检（logs.js / skills-integration.js）
+//      parseFloat('Infinity') → Infinity → (-Infinity).toFixed(2) → "Infinity" →
+//      JSON.stringify → null，整笔交易被 isClosed 判成未平仓，从胜率/曲线/凯利样本消失；
+//      负 slippageCost 还会反向放大盈亏（fee 侧原本有 `fee < 0 return null`，两者不对称）。
+//      calcKelly 原用全局 isNaN，Infinity 与 winRate=NaN 都能穿过全部钳制输出 NaN 仓位建议。
+//      现：getLegacySlippageCost 用 Number + Number.isFinite 守卫（脏值/负值归零），
+//      calculateCloseSettlement 与 calcKelly 各加出参终检（任一非有限字段整体返回 null）。
+//
+//   ③ P1 · ATR 止损与仓位有限性前移
+//      calcATRStop 原只判 `!atrValue`：Infinity 合法、极小值×极小倍数下溢成 0，
+//      使 positionSize = Infinity 并先写进 capMsg 文案（"Infinity"）。现入参/出参全程
+//      Number.isFinite；计算管线在仓位求解结束处统一拦截，沿用 available-margin-limit
+//      阻断码，不新增对外口径。
+//
+//   ④ P1 · 闸门 readFailed 语义对称
+//      组合热量早已透出 readFailed，但预检与复核两处消费点只判 blocked；日亏损在
+//      capital<=0 时用 Infinity 让闸门恒不触发、集中度直接 pass:true。现三道闸门统一
+//      透出 readFailed / capitalKnown，四处消费点全部 fail-closed（主路径 capital>0 不受影响）。
+//
+//   ⑤ P1 · 单次计算取数上下文（calculator.js）
+//      _numSetting 原先每调一次都 loadSettings() 一次；实测单次 calculate() 共 30 次调用。
+//      现 calculate() 入口建立快照、finally 释放，_numSetting 在计算期间只读同一份数据，
+//      实测降到 22 次（余量为其它模块直读）。顺带把 20+ 处手写 _calcCleanup() 收进
+//      finally 单点兜底，消除「漏调 → _calculating 永真 → 计算按钮永久失效」这一类事故。
+//
+//   ⑥ 版本同步：项目原本 version.js / run-tests.html 停在 5.6.39、index.html 已是
+//      5.6.40（正是 CLAUDE.md 警告的漏改一处的缓存事故隐患），本次四处统一为 5.6.41。
+//
+//   ⚠️ 已审计但【未改动】的三项数学口径（属产品决策，改动会放宽风控 / 破坏历史可比性）：
+//      · 强平价 utils.js:479/487 把两种维持保证金计价口径拼接；但 run-tests.html 21 组
+//        按此推导出「零缓冲边界 = 1/(2×MMR) = 100x」，calculator.js:940 的杠杆上限
+//        硬阻断正依赖该边界。换成教科书公式会把上限放宽到 200x，必须连同闸门与
+//        20+ 条断言一起改，不可单独动公式。
+//      · 分批加权入场价 calculator.js:2080 用资金权重算术平均（严格应为调和平均），
+//        加权止损距离缺 E/bp_i 因子；但 weightedEntry 已落库历史日志，
+//        run-tests.html 30.11 组把 50700 写死，改口径会让新旧记录不可比。
+//      · 夏普 utils.js:525-569 用日盈亏金额而非日收益率、÷n 总体标准差、无无风险利率；
+//        run-tests.html 20 组按旧口径写死，且改收益率口径需要权益序列入参。
+//      这三项需单独立项并给出迁移方案，不随本次稳健性升级夹带。
+//
+// 5.6.40 / 5.6.39 / 5.6.38：版本历史未在本文件留条目（本次审计发现），仅 index.html
+//    的 ?v= 与 git log 可追溯。
+//
 // 5.6.37：编辑弹窗已全平→分批改判 P0 修复 + 裸调用守卫 + 编辑场景 S13-S15 补盲（2026-10-20）
 //
 //   ① P0 · 已全平记录切回分批加腿的账面重述链（modals.js saveEditLog 分批分支）

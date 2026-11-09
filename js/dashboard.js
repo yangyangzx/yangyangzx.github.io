@@ -67,7 +67,7 @@ window._animateDashValue = function(el, value, opts) {
   var format = typeof opts.format === 'function' ? opts.format : function(v) { return String(v); };
   var prefix = opts.prefix || '';
 
-  var targetNum = typeof value === 'number' ? value : (parseFloat(value) || 0);
+  var targetNum = typeof value === 'number' ? value : (toFiniteNum(value));
   if (isNaN(targetNum)) targetNum = 0;
 
   // 中断上一次未完成的动画，避免两个 rAF 循环互相覆盖
@@ -114,7 +114,7 @@ function _renderTodayPnl() {
     var closeDateStr = window.utils.toLocalDateStr(ct);
     if (!closeDateStr) continue;
     if (closeDateStr === todayStr) {
-      totalPnl += parseFloat(closed[i].pnlAmount) || 0;
+      totalPnl += toFiniteNum(closed[i].pnlAmount);
       count++;
     }
   }
@@ -167,7 +167,7 @@ function _renderWinRate() {
     var closeDateStr = window.utils.toLocalDateStr(ct);
     if (!closeDateStr) continue;
     if (closeDateStr >= mondayStr) {
-      var pnl = parseFloat(closed[i].pnlAmount) || 0;
+      var pnl = toFiniteNum(closed[i].pnlAmount);
       totalPnl += pnl;
       count++;
       if (pnl > 0) wins.push(pnl);
@@ -222,18 +222,18 @@ function _renderRiskExposure() {
 
   for (var i = 0; i < openLogs.length; i++) {
     var log = openLogs[i];
-    totalPosition += parseFloat(log.positionSize) || 0;
+    totalPosition += toFiniteNum(log.positionSize);
     // 按当前止损价实时重算，不读冻结的 riskAmount：止损可移动（recordStopMove 只改
     // stopLoss/stopHistory，不动 riskAmount），读 riskAmount 会让本卡与组合热量闸门/
     // 风控中心对同一笔持仓报出相差数倍的敞口，而下方还用热量阈值给它上色。
     totalRisk += (typeof positionCurrentRisk === 'function')
-      ? positionCurrentRisk(log) : (parseFloat(log.riskAmount) || 0);
-    var lev = parseFloat(log.leverage) || 0;
+      ? positionCurrentRisk(log) : (toFiniteNum(log.riskAmount));
+    var lev = toFiniteNum(log.leverage);
     // BUG-7 修复：现货(leverage=0)时保证金等于仓位本身
     if (lev > 0) {
-      totalMargin += (parseFloat(log.positionSize) || 0) / lev;
+      totalMargin += (toFiniteNum(log.positionSize)) / lev;
     } else {
-      totalMargin += parseFloat(log.positionSize) || 0;
+      totalMargin += toFiniteNum(log.positionSize);
     }
   }
 

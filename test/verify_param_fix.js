@@ -82,8 +82,11 @@ function makeStorage() {
     if (fa) fa.checked = false;
   };
   // 构造「历史大回撤、今日无亏损」：亏损日期设为过去，
-  // 否则 -6000 的当日亏损会先触发 daily-loss-limit 闸门（它在回撤闸门之前），
+  // 否则当日亏损会先触发 daily-loss-limit 闸门（它在回撤闸门之前），
   // 回撤闸门永远轮不到，就测不出它是否真实生效。
+  // v5.6.43：亏损额改用 -3000（30% 回撤），使「放宽阈值」场景能用
+  // 设置页合法区间内的 maxDrawdownAlert=50 表达，而不再依赖 90 这种
+  // 越界值（读侧净化后越界值一律回退默认，测试不该靠绕过产品约束造场景）。
   const pushLoss = (pnl, daysAgo = 0) => {
     w.logs.length = 0;
     const t = new Date(Date.now() - daysAgo * 86400000).toISOString();
@@ -185,16 +188,16 @@ console.log('\n[3] 连亏降仓阈值与系数（现货，连亏 2 笔）');
   w.logs.length = 0;
   const dd0 = w.getCurrentDrawdown();
   check('无日志时不阻断', dd0 && dd0.blocked === false, 'blocked=' + (dd0 && dd0.blocked));
-  pushLoss(-6000, 5);           // 5 天前，今日无亏损 → 不会被日亏损闸门拦下
+  pushLoss(-3000, 5);           // 5 天前，今日无亏损 → 不会被日亏损闸门拦下
   const dd1 = w.getCurrentDrawdown();
   check('历史亏损后回撤被算出（非 0）', dd1 && dd1.drawdownPct > 5,
     'dd%=' + (dd1 && dd1.drawdownPct.toFixed(2)) + ' peak=' + (dd1 && dd1.peak.toFixed(0)) + ' equity=' + (dd1 && dd1.equity.toFixed(0)));
-  // 本金 10000 亏 6000 → 真实回撤 60%（峰值 10000、净值 4000）。
-  // 修复 utils.calcEquityCurve 的重复计入前，这里算出的10.8% 是失真值
-  // （accountBalance 被当作曲线起点又叠加历史盈亏），故本断言随口径修正更新。
-  check('历史亏损 60% 被如实算出', dd1 && Math.abs(dd1.drawdownPct - 60) < 1,
+  // 本金 10000 亏 3000 → 真实回撤 30%（峰值 10000、净值 7000）。
+  // 修复 utils.calcEquityCurve 的重复计入前，这里算出的失真值会让断言失败
+  //（accountBalance 被当作曲线起点又叠加历史盈亏），故本断言随口径修正更新。
+  check('历史亏损 30% 被如实算出', dd1 && Math.abs(dd1.drawdownPct - 30) < 1,
     'dd%=' + (dd1 && dd1.drawdownPct.toFixed(2)));
-  // 默认阈值 20% < 60% → 应判定阻断（此前因口径失真而算成 10.8% 未阻断）
+  // 默认阈值 20% < 30% → 应判定阻断
   check('默认阈值 20% 下判定阻断', dd1 && dd1.blocked === true,
     'dd%=' + (dd1 && dd1.drawdownPct.toFixed(2)) + ' blocked=' + (dd1 && dd1.blocked));
   // 阈值低于实际回撤时才阻断
@@ -202,9 +205,9 @@ console.log('\n[3] 连亏降仓阈值与系数（现货，连亏 2 笔）');
   const dd1b = w.getCurrentDrawdown();
   check('阈值下调到 10% 后判定阻断', dd1b && dd1b.blocked === true,
     'dd%=' + (dd1b && dd1b.drawdownPct.toFixed(2)) + ' blocked=' + (dd1b && dd1b.blocked));
-  setS({ maxDrawdownAlert: 90 });
+  setS({ maxDrawdownAlert: 50 });
   const dd2 = w.getCurrentDrawdown();
-  check('阈值放宽 90% 后不再阻断', dd2 && dd2.blocked === false,
+  check('阈值放宽到合法上限 50% 后不再阻断', dd2 && dd2.blocked === false,
     'dd%=' + (dd2 && dd2.drawdownPct.toFixed(2)) + ' th=' + (dd2 && dd2.thresholdPct));
 
   console.log('\n[7] 回撤熔断真实阻断开仓（阈值 10% < 历史回撤）');
@@ -214,7 +217,7 @@ console.log('\n[3] 连亏降仓阈值与系数（现货，连亏 2 笔）');
   const blk1 = w.getCalcBlocker();
   check('开仓被 drawdown-limit 阻断', !!(blk1 && blk1.code === 'drawdown-limit'),
     'blocker=' + (blk1 && blk1.code));
-  setS({ maxDrawdownAlert: 90, dailyLossLimit: 50 });
+  setS({ maxDrawdownAlert: 50, dailyLossLimit: 50 });
   fill();
   run();
   const blk2 = w.getCalcBlocker();
@@ -282,8 +285,9 @@ console.log('\n[3] 连亏降仓阈值与系数（现货，连亏 2 笔）');
   console.log('\n[9] 组合热量硬上限与警告上限解耦');
   setS({ riskHeatMax: 12 });
   const hard = w.getHeatHardMax();
-  check('硬上限 = riskHeatMax 12（不被警告值 8 拉低）', hard === 12, 'hard=' + hard);
-  check('警告上限独立 = 8', w.getHeatWarnMax() === 8, 'warn=' + w.getHeatWarnMax());
+  check('硬上限 = riskHeatMax 12（不被警告值拉低）', hard === 12, 'hard=' + hard);
+  // v5.6.43：默认警告线由 8 改为 5，使其 < 默认硬上限 6（否则 warn 档永不可达）
+  check('默认警告上限 = 5（< 硬上限，warn 档可达）', w.getHeatWarnMax() === 5, 'warn=' + w.getHeatWarnMax());
 
   console.log('\n[10] 设置快照落库');
   setS({ mmr: 0.5, riskPercent: 2 });

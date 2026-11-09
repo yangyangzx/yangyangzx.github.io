@@ -179,14 +179,21 @@ var splitEntries = [
   { index: 1, price: 100, alloc: 50, positionSize: 100, fee: 0.1, slippageCost: 0.05, riskAmount: 5, label: '主', stopLoss: 90 },
   { index: 2, price: 110, alloc: 50, positionSize: 100, fee: 0.1, slippageCost: 0.05, riskAmount: 5, label: '第2笔', stopLoss: 95 }
 ];
-var weSum = 0, waSum = 0;
+// v5.6.42：与 calculator.computeWeightedEntry / modals.doSaveSplit 统一为资金权重调和平均
+var wInv = 0, waSum = 0;
 for (var i = 0; i < splitEntries.length; i++) {
   var wp = parseFloat(splitEntries[i].price), wa = parseFloat(splitEntries[i].alloc);
-  if (isFinite(wp) && wp > 0 && isFinite(wa) && wa > 0) { weSum += wp * wa; waSum += wa; }
+  if (isFinite(wp) && wp > 0 && isFinite(wa) && wa > 0) { wInv += wa / wp; waSum += wa; }
 }
-var splitDetail = { entries: splitEntries, weightedEntry: waSum > 0 ? parseFloat((weSum / waSum).toFixed(5)) : null };
+var splitDetail = {
+  entries: splitEntries,
+  weightedEntry: waSum > 0 && wInv > 0 ? parseFloat((waSum / wInv).toFixed(5)) : null,
+  weightedEntryModel: 'harmonic'
+};
 T('写入形状可被读取端识别', Array.isArray(splitDetail.entries) && splitDetail.entries.length >= 2);
-T('加权入场价正确 (100+110)/2=105', splitDetail.weightedEntry === 105, '得 ' + splitDetail.weightedEntry);
+T('加权入场价为调和平均 104.76190（旧算术平均 105 是错的）',
+  splitDetail.weightedEntry === 104.7619, '得 ' + splitDetail.weightedEntry);
+T('口径标记存在', splitDetail.weightedEntryModel === 'harmonic');
 T('每批含 price/alloc/stopLoss', splitDetail.entries[0].price === 100 && splitDetail.entries[0].alloc === 50 && splitDetail.entries[0].stopLoss === 90);
 
 // ---------- 9. P2: 分批止损方向校验 ----------

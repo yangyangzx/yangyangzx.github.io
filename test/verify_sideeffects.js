@@ -46,8 +46,10 @@ function makeStorage() {
     const el = d.getElementById(id); if (!el) return;
     el.value = v; el.dispatchEvent(new w.Event('input', { bubbles: true }));
   };
+  // v5.6.43：riskHeatMax 用设置页合法区间内的 15（原 50 是越界值，
+  // 读侧净化后会被回退默认 6，导致「放宽上限后放行」的场景无从构造）。
   const DEFAULTS = {
-    accountBalance: 100000, mmr: 0.5, riskPercent: 10, riskHeatMax: 50, singleSymbolMaxPct: 50,
+    accountBalance: 100000, mmr: 0.5, riskPercent: 10, riskHeatMax: 15, singleSymbolMaxPct: 50,
     minRRRatio: 2, marginUsageLimitPct: 100, aggregateMarginLimitPct: 100,
     lossStreakBlock: 3, lossStreakDerisk: 2, lossStreakDeriskFactor: 0.8, maxDrawdownAlert: 20
   };
@@ -153,7 +155,7 @@ function makeStorage() {
   setS({ riskHeatMax: 15 });
   ck('调至 15 时不被警告值拉回', w.getHeatHardMax() === 15, '实际=' + w.getHeatHardMax());
   setS({});
-  ck('警告上限独立 = 8', w.getHeatWarnMax() === 8, '实际=' + w.getHeatWarnMax());
+  ck('默认警告上限 = 5（< 默认硬上限 6，warn 档可达）', w.getHeatWarnMax() === 5, '实际=' + w.getHeatWarnMax());
 
   console.log('[G] 保存链路新增字段');
   setS({}); fillOk(); w.calculate();
