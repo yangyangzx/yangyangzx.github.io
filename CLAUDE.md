@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目性质
 
-TradingDiscipline：纯前端交易风控/复盘终端（**v5.6.43**），无任何构建工具。原生 JS（IIFE + 全局函数）+ CSS（OKLCH 变量），数据全部存 localStorage，完全离线。`index.html` 直接可运行，但推荐用本地 HTTP 服务器打开（file:// 下 PWA manifest / 部分浏览器行为受限）：
+TradingDiscipline：纯前端交易风控/复盘终端（**v5.6.45**），无任何构建工具。原生 JS（IIFE + 全局函数）+ CSS（OKLCH 变量），数据全部存 localStorage，完全离线。`index.html` 直接可运行，但推荐用本地 HTTP 服务器打开（file:// 下 PWA manifest / 部分浏览器行为受限）：
 
 ```bash
 python3 -m http.server 8000   # 然后开 http://localhost:8000
@@ -17,7 +17,7 @@ python3 -m http.server 8000   # 然后开 http://localhost:8000
 ```bash
 node --check js/<file>.js          # 改完 JS 先语法检查
 npx eslint js/                     # Lint（注意：.eslintrc.json 未启用 no-undef，见下）
-npm test                           # 无头全量回归：跑完 13 个跑测器，有失败则 exit 1
+npm test                           # 无头全量回归：跑完 18 个跑测器，有失败则 exit 1
 npm run test:main                  # 只跑主回归（test/_rt_headless.js，浏览器内 run-tests.html）
 npm run test:browser               # 浏览器内回归：打开 test/run-tests.html 自动跑全部断言
 # 改完前端后强刷：URL 追加 ?cb=<时间戳> 避开缓存（index.html 里 script 已带 ?v=5.6.37，改 CSS 时同样需要）
@@ -215,7 +215,7 @@ v5.6.19 引入两个 P0 时前两套都是全绿的 —— 它们只证明**计�
 
 ## 核心算法升级（v5.6.41）与口径边界
 
-**新增有效门禁**：`test/verify_core_algo.js`（v5.6.41）与 `test/verify_crossmodule.js`（v5.6.43）已接入 `run-all.js`（现 **16 个跑测器**）。它们专攻「3300+ 断言全绿也保护不到」的异常路径、数值稳健性与跨模块接线，都带 `--inject` 自检模式：
+**新增有效门禁**：`test/verify_core_algo.js`（v5.6.41）与 `test/verify_crossmodule.js`（v5.6.43）已接入 `run-all.js`（现 **18 个跑测器**）。它们专攻「3300+ 断言全绿也保护不到」的异常路径、数值稳健性与跨模块接线，都带 `--inject` 自检模式：
 
 ```bash
 node test/verify_core_algo.js           # 全绿才算修复完成
@@ -243,7 +243,7 @@ node test/verify_core_algo.js --inject  # 注入旧实现，必须出现 FAIL，
 
 ## 跨模块口径边界（v5.6.43）
 
-**新增门禁**：`test/verify_crossmodule.js`（56 断言，带 `--inject`），专测跨模块接线与 UI↔落库口径；`npm test` 现为 **16 个跑测器**。
+**新增门禁**：`test/verify_crossmodule.js`（56 断言，带 `--inject`），专测跨模块接线与 UI↔落库口径；`npm test` 现为 **18 个跑测器**。
 
 **改代码前必读的新不变量**：
 - **设置读侧**：`loadSettings()` 是唯一净化入口（`_sanitizeLoadedSettings`），所有阈值消费点都不许再自行 `Number(x)||default`。数字字符串会先归一（保住 `loadMmr('0.8')`）；越界/非有限/非整数一律回退 `SETTINGS_DEFAULTS`。**测试不得再用越界设置值构造场景**——`(v5.6.43)` 已把 `riskHeatMax:50`、`maxDrawdownAlert:90` 这类值迁到合法区间，否则场景会被净化吞掉。

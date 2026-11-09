@@ -58,26 +58,41 @@ body {
   border-bottom: 1px solid var(--nav-border);
 }
 
+/* v5.6.45：品牌区是「回主入口」链接。改用 <a> 但保留原排版：display:flex 不变，
+   去掉链接默认下划线/蓝字，hover 只提亮标题（不动自带浅米底的图标，
+   否则深浅主题下底色会忽明忽暗）；focus 描边与汉堡按钮同色，保证键盘可达可见。 */
 .nav-logo {
   display: flex;
   align-items: center;
   gap: 10px;
   margin-bottom: 0;
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.nav-logo:hover .nav-title { color: var(--color-primary); }
+.nav-logo:active { opacity: 0.85; }
+.nav-logo:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
 }
 
 /* 尺寸受栏宽硬约束：桌面栏 200px − 左右 padding 32 = 168px 可用，
    图标 40 + gap 10 + 内边距 8×2 → 文字区仅剩 ~110px。8 个汉字在 15px（--font-base）
    下为 120px，nowrap + 父级 overflow-x:hidden 会被右缘裁掉一个字——故标题压到 14px、
-   图标收到 40px（原 48px），并换用 assets/icon-192.png（原 img/logo.png 是 803KB 的
-   全尺寸品牌图，缩到 48px 后内部文字糊成噪点，且与副标题重复表达品牌名）。 */
+   图标定 40px。
+   v5.6.44：图标换成自带浅米底的不透明成品图（透明源图已清理，成品为唯一权威），故去掉
+   background / padding——否则图标被压到 28px、四周还露出主题色形成双重边框。
+   描边保留，用来在浅米底上勾出圆角边界，深浅主题都成立。 */
 .nav-logo-img {
   width: 40px;
   height: 40px;
   border-radius: var(--radius-md);
   object-fit: contain;
   flex-shrink: 0;
-  background: var(--color-primary-bg);
-  padding: 6px;
   /* 1px 低透明描边：暗底纯白、浅底纯黑，不用着色调（会拾取底色显脏） */
   outline: 1px solid oklch(100% 0 0 / 0.1);
   outline-offset: -1px;

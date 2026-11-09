@@ -35,45 +35,56 @@
     })();
   </script>
 
-  <link rel="manifest" href="manifest.json">
-  <link rel="apple-touch-icon" href="assets/icon-192.png">
+  <link rel="manifest" href="manifest.json?v=5.6.45">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="icon" href="assets/logo.png">
+  <!-- v5.6.44：全站品牌图标统一为同一品牌标的的浅米底 #F9F6ED 派生成品。
+       实证：源图铺深底 #0f1419 时深灰圆环/字母 T 几乎不可见，只有浅米底
+       （与浅色 theme-color 一致）在深浅两种界面下都清晰，故成品统一铺该底色。
+       原 584KB 透明源图 assets/logo.png 页面从不加载，已清理；assets/ 下 7 个
+       不透明成品即唯一权威。同名覆盖的 icon-192/512 靠 ?v= 破缓存。 -->
+  <link rel="icon" href="assets/favicon.ico?v=5.6.45" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png?v=5.6.45">
+  <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16.png?v=5.6.45">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=5.6.45">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <script src="js/chart-guard.js?v=5.6.43"></script>
-  <link rel="stylesheet" href="css/variables.css?v=5.6.43">
-  <link rel="stylesheet" href="css/base.css?v=5.6.43">
-  <link rel="stylesheet" href="css/calculator.css?v=5.6.43">
-  <link rel="stylesheet" href="css/table.css?v=5.6.43">
-  <link rel="stylesheet" href="css/modals.css?v=5.6.43">
-  <link rel="stylesheet" href="css/select-ui.css?v=5.6.43">
-  <link rel="stylesheet" href="css/responsive.css?v=5.6.43">
-  <link rel="stylesheet" href="css/layout.css?v=5.6.43">
-  <link rel="stylesheet" href="css/dashboard.css?v=5.6.43">
-  <link rel="stylesheet" href="css/planner.css?v=5.6.43">
-  <link rel="stylesheet" href="css/discipline-led.css?v=5.6.43">
-  <link rel="stylesheet" href="css/risk.css?v=5.6.43">
-  <link rel="stylesheet" href="css/analytics.css?v=5.6.43">
-  <link rel="stylesheet" href="css/review.css?v=5.6.43">
-  <link rel="stylesheet" href="css/settings.css?v=5.6.43">
+  <script src="js/chart-guard.js?v=5.6.45"></script>
+  <link rel="stylesheet" href="css/variables.css?v=5.6.45">
+  <link rel="stylesheet" href="css/base.css?v=5.6.45">
+  <link rel="stylesheet" href="css/calculator.css?v=5.6.45">
+  <link rel="stylesheet" href="css/table.css?v=5.6.45">
+  <link rel="stylesheet" href="css/modals.css?v=5.6.45">
+  <link rel="stylesheet" href="css/select-ui.css?v=5.6.45">
+  <link rel="stylesheet" href="css/responsive.css?v=5.6.45">
+  <link rel="stylesheet" href="css/layout.css?v=5.6.45">
+  <link rel="stylesheet" href="css/dashboard.css?v=5.6.45">
+  <link rel="stylesheet" href="css/planner.css?v=5.6.45">
+  <link rel="stylesheet" href="css/discipline-led.css?v=5.6.45">
+  <link rel="stylesheet" href="css/risk.css?v=5.6.45">
+  <link rel="stylesheet" href="css/analytics.css?v=5.6.45">
+  <link rel="stylesheet" href="css/review.css?v=5.6.45">
+  <link rel="stylesheet" href="css/settings.css?v=5.6.45">
 </head>
 <body>
 <nav id="mainNav" role="navigation" aria-label="主导航">
   <div class="nav-header">
-    <div class="nav-logo">
-      <!-- 用 PWA 图标（192px）而非 img/logo.png：后者是 803KB 的全尺寸品牌图，
-           缩到 40px 后内部文字糊成噪点，且与副标题重复表达品牌名。
-           alt 留空：品牌名已由右侧 .nav-title/.nav-subtitle 文本承载，
-           再读一遍图标名对屏幕阅读器是纯噪音。 -->
-      <img class="nav-logo-img" src="assets/icon-192.png" alt="">
+    <!-- v5.6.45：品牌区改为「回主入口」链接 —— 语义是回到默认落地页，不是打开某个功能。
+         复用 navigation.js 的 activateNav：与 nav-item 同样 preventDefault + 键盘激活，
+         并自动继承设置页脏检查、退出批量模式、销毁图表、滚动置顶、关移动端抽屉、pushState。
+         必须用 <a href> 而非 div + onclick：否则丢失键盘可达与 Cmd/中键新标签打开。
+         aria-label 覆盖内部两行文字（否则读屏会把副标题一起读进链接名）；
+         图标 alt 留空是对的，品牌名已由右侧文字承载。 -->
+    <a class="nav-logo" href="#planner" data-view="planner" aria-label="返回开仓计划首页" title="返回开仓计划（首页）">
+      <!-- 图标为 192px 派生图（浅米底不透明，自带底色），故 .nav-logo-img
+           不再叠 padding / 容器底色，避免图标缩小 + 双重边框。 -->
+      <img class="nav-logo-img" src="assets/icon-192.png?v=5.6.45" alt="">
       <div>
         <div class="nav-title">交易风险管理终端</div>
         <div class="nav-subtitle">TradingDiscipline</div>
       </div>
-    </div>
+    </a>
   </div>
   <!-- 导航按实际工作流排序：开仓计划（主入口）→ 仪表盘（概览）→ 日志 → 风控 → 复盘 → 设置。
        active/aria-current 的初始值必须与 navigation.js 的默认视图（switchView('planner')）一致，
@@ -1416,33 +1427,33 @@
 
 </main>
 
-  <script src="js/constants.js?v=5.6.43"></script>
-  <script src="js/utils.js?v=5.6.43"></script>
-  <script src="js/select-ui.js?v=5.6.43"></script>
-  <script src="js/toast.js?v=5.6.43"></script>
-  <script src="js/slippage.js?v=5.6.43"></script>
-  <script src="js/storage.js?v=5.6.43"></script>
-  <script src="js/skills-integration.js?v=5.6.43"></script>
-  <script src="js/calc-visuals.js?v=5.6.43"></script>
-  <script src="js/calculation-ui.js?v=5.6.43"></script>
-  <script src="js/calculator.js?v=5.6.43"></script>
-  <script src="js/logs.js?v=5.6.43"></script>
-  <script src="js/rendering.js?v=5.6.43"></script>
-  <script src="js/stats.js?v=5.6.43"></script>
-  <script src="js/modals.js?v=5.6.43"></script>
-  <script src="js/navigation.js?v=5.6.43"></script>
-  <script src="js/dashboard.js?v=5.6.43"></script>
-  <script src="js/planner.js?v=5.6.43"></script>
-  <script src="js/discipline-led.js?v=5.6.43"></script>
-  <script src="js/settings.js?v=5.6.43"></script>
-  <script src="js/risk.js?v=5.6.43"></script>
-  <script src="js/chart-factory.js?v=5.6.43"></script>
-  <script src="js/analytics.js?v=5.6.43"></script>
-  <script src="js/review.js?v=5.6.43"></script>
-  <script src="js/io.js?v=5.6.43"></script>
-  <script src="js/dom-cache.js?v=5.6.43"></script>
-  <script src="js/app.js?v=5.6.43"></script>
-<script src="js/version.js?v=5.6.43"></script>
+  <script src="js/constants.js?v=5.6.45"></script>
+  <script src="js/utils.js?v=5.6.45"></script>
+  <script src="js/select-ui.js?v=5.6.45"></script>
+  <script src="js/toast.js?v=5.6.45"></script>
+  <script src="js/slippage.js?v=5.6.45"></script>
+  <script src="js/storage.js?v=5.6.45"></script>
+  <script src="js/skills-integration.js?v=5.6.45"></script>
+  <script src="js/calc-visuals.js?v=5.6.45"></script>
+  <script src="js/calculation-ui.js?v=5.6.45"></script>
+  <script src="js/calculator.js?v=5.6.45"></script>
+  <script src="js/logs.js?v=5.6.45"></script>
+  <script src="js/rendering.js?v=5.6.45"></script>
+  <script src="js/stats.js?v=5.6.45"></script>
+  <script src="js/modals.js?v=5.6.45"></script>
+  <script src="js/navigation.js?v=5.6.45"></script>
+  <script src="js/dashboard.js?v=5.6.45"></script>
+  <script src="js/planner.js?v=5.6.45"></script>
+  <script src="js/discipline-led.js?v=5.6.45"></script>
+  <script src="js/settings.js?v=5.6.45"></script>
+  <script src="js/risk.js?v=5.6.45"></script>
+  <script src="js/chart-factory.js?v=5.6.45"></script>
+  <script src="js/analytics.js?v=5.6.45"></script>
+  <script src="js/review.js?v=5.6.45"></script>
+  <script src="js/io.js?v=5.6.45"></script>
+  <script src="js/dom-cache.js?v=5.6.45"></script>
+  <script src="js/app.js?v=5.6.45"></script>
+<script src="js/version.js?v=5.6.45"></script>
 
   <!-- 样式见 css/modals.css #toastContainer（原为内联，z-index 硬编码 400 低于弹窗遮罩 500 导致提示被盖住） -->
   <div id="toastContainer" role="status" aria-live="polite"></div>

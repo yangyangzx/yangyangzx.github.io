@@ -291,12 +291,21 @@ document.addEventListener('DOMContentLoaded', function() {
   //    与点击处理器各调一次 switchView，一次点击产生两条 pushState 历史条目
   //  - 补 keydown 键盘激活：Enter/Space 若不 preventDefault，href 锚点会触发页面跳转/滚动
   function activateNav(viewName, e) {
-    if (e) e.preventDefault();
+    if (e) {
+      // 修饰键 / 中键：交还 <a> 原生语义（新标签、新窗口打开），既不拦截也不切换当前页。
+      // keydown 事件没有 button 属性，故用 typeof 守卫；⌘/Ctrl+Enter 同样放行。
+      // v5.6.45：品牌区是真链接，若一律 preventDefault 会连 Cmd+点击的新标签也吃掉。
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey ||
+          (typeof e.button === 'number' && e.button !== 0)) return;
+      e.preventDefault();
+    }
     if (!viewName) return;
     // 第二参 true：用户主动导航写入历史，浏览器后退可回退视图
     switchView(viewName, true);
   }
-  var navItems = document.querySelectorAll('#mainNav .nav-item');
+  // v5.6.45：品牌区与菜单项共用同一套激活逻辑。logo 刻意不加 .nav-item，
+  // 否则会套上导航凹槽/色标样式；updateNavActive 仍只查 .nav-item，故 logo 不会被标 active。
+  var navItems = document.querySelectorAll('#mainNav .nav-item, #mainNav .nav-logo');
   for (var i = 0; i < navItems.length; i++) {
     (function(item) {
       var viewName = item.getAttribute('data-view');

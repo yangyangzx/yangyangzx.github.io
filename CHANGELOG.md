@@ -5,6 +5,61 @@
 
 ---
 
+// 5.6.45：左上角品牌区改为「回主入口」链接（2026-11-09）
+//   背景：.nav-logo 一直是纯 <div>，无 href / 无监听 / 无 cursor，点击图标或
+//     「交易风险管理终端」文字完全无反应；而左上角品牌区按惯例应可点回起点。
+//   决策（方案 A，已拍板）：回到开仓计划 planner。语义是「重置到默认落地页」，
+//     不是「打开某个功能」。实证依据：_currentView 初值、无 hash 时 switchView
+//     ('planner')、index.html 初始 active/aria-current、导航顺序注释四处一致；
+//     若改成仪表盘，须连默认视图 / 初始高亮 / 深链兜底一起改，否则首屏与
+//     logo 落点分裂。仪表盘是只读速览，planner 才是 README 定义的工作流行动入口。
+//   实现：.nav-logo 由 div 改 <a href="#planner" data-view="planner">，
+//     带 aria-label="返回开仓计划首页"（否则读屏把副标题读进链接名）、title；
+//     图标 alt 保持空。navigation.js 的 navItems 选择器扩到 nav-logo，复用
+//     activateNav —— 自动继承设置页脏检查、退出批量模式、销毁图表、滚动置顶、
+//     关移动端抽屉、pushState。刻意不加 .nav-item，避免套上导航凹槽样式；
+//     updateNavActive 仍只查 .nav-item，logo 不会被误标 active。
+//     同时给 activateNav 加修饰键守卫：meta/ctrl/shift/alt 或中键直接放行，
+//     交还 <a> 原生「新标签打开」语义（原来一律 preventDefault 会吃掉 Cmd+点击）。
+//     layout.css 补 cursor / hover 提亮标题 / :active / :focus-visible 描边。
+//   新增门禁：test/verify_nav_logo.js（第 18 个跑测器，jsdom 真链路点击 +
+//     --inject 逐条独立注入自检），守护 DOM 结构、点击落点、键盘激活、修饰键放行、
+//     设置页脏检查不被绕过、同视图点击不重复绑定事件。
+//   版本四处同步 5.6.45：js/version.js / index.html 49 处 ?v= / run-tests.html
+//     17 处 ?v= + 30.8 组 APP_VERSION 字面量绊线 / 本文件；manifest.json 3 个
+//     icon src 的缓存戳同步。
+//   验证：npm test 18/18 全绿且断言总数无退化（主回归 675 / 不变量 2207 /
+//     核心 67 / 资产 15 / 导航 12）；verify_nav_logo.js --inject 9/9、
+//     verify_assets.js --inject 7/7 全被捕获；node --check 4 文件通过；
+//     引用完整性 0 missing、JSON 可解析。
+//
+// 5.6.44：全站品牌图标换版 —— 统一由 assets/logo.png 派生（2026-11-09）
+//   背景：新增 assets/logo.png（1254×1254 RGBA 透明源图：深灰圆环 + 字母 T + 绿色
+//     K 线上升曲线）。此前 favicon 直接引用这张 584KB 透明大图，而导航 / apple-touch /
+//     PWA 图标仍是 2026-08 的旧版浅色品牌全图（含文字，缩到 40px 糊成噪点）——
+//     同一站点并存两套品牌标识。
+//   底色实证：把源图分别铺 #0f1419 / #F9F6ED / #FFFFFF 缩到 192px 对比，深底上
+//     深灰圆环与 T 几乎消失（只剩绿色曲线），浅米底全部清晰；且 #F9F6ED 与
+//     index.html 的浅色 theme-color 一致，深浅两种界面下都是可辨识的品牌徽章。
+//   产出：icon-192 / icon-512（purpose=any，同名覆盖靠 ?v= 破缓存）、
+//     icon-maskable-512（图形缩到 76%，落入 maskable 中心 80% 安全圆）、
+//     apple-touch-icon 180、favicon-32 / favicon-16、favicon.ico（16/32/48 三帧）。
+//     全部 PNG24 不透明，避免 iOS 把透明区渲染成黑块。
+//   接线：index.html 图标组 + 导航 img + manifest.json（purpose 由「any maskable」
+//     拆成 any / maskable 两条，避免 Android 裁掉圆环外沿）；layout.css 去掉
+//     .nav-logo-img 的 padding / background 双重边框；README 资源清单同步。
+//   版本四处同步 5.6.44：js/version.js / index.html 43 处 ?v= / run-tests.html 17 处
+//     ?v= + 30.8 组 APP_VERSION 字面量绊线 / 本文件。
+//   新增门禁：test/verify_assets.js（第 17 个跑测器，15 条断言 + --inject 自检），
+//     守护资源引用完整性、四处缓存戳同步、PNG 尺寸/不透明性、ICO 帧数与
+//     any/maskable 分离。红测阶段注入自检抓出 2 条「恒假 / 漏判」断言并修正，
+//     最终改为逐条独立注入、7/7 全被捕获；npm test 17/17。
+//   收尾清理（同日）：assets/logo.png（584KB 透明源图）页面 / PWA 从不加载，属零引用
+//     冗余，经确认后移入系统废纸篓；原件副本仍在 ~/Downloads/LOGO.png
+//     （SHA256 dbe3c122…）。assets/ 现只留 7 个在用的不透明成品，它们是唯一权威。
+//     verify_assets.js 移除 source-kept、补 no-orphan-assets（总数仍 15 条，注入改逐条
+//     独立 7/7）；index.html / layout.css / README / 项目记忆同步；npm test 仍 17/17。
+//
 // 5.6.43：跨模块计算逻辑全面修复 —— 12 条实证缺陷 + 口径变更收口（2026-11-09）
 //   立项：v5.6.42 全量门禁 15/15 全绿（3300+ 断言），但四组并行审计 + 两轮 jsdom
 //     真链路探针复现出 12 条「算错钱 / 闸门 fail-open / CSV 往返毁库」缺陷。

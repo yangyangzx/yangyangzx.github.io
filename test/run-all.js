@@ -20,6 +20,8 @@ const SUITES = [
   ['主回归（run-tests.html，无头）', '_rt_headless.js'],
   ['核心算法升级（红测转绿 + 注入自检）', 'verify_core_algo.js'],
   ['跨模块计算逻辑（v5.6.43）', 'verify_crossmodule.js'],
+  ['品牌图标与缓存戳接线（v5.6.44）', 'verify_assets.js'],
+  ['导航品牌区回主入口（v5.6.45）', 'verify_nav_logo.js'],
   ['编辑场景（S0~S12）', '_edit_scenarios.js'],
   ['平仓类型一致性', 'verify_close_type_consistency.js'],
   ['日志簿记回归', 'verify_logs_fixed.js'],
