@@ -154,4 +154,5 @@ console.log('\n== 5. P1-1/P1-3 grossPnlAmount 整笔累计毛利（部分平仓�
 }
 
 console.log('\n==== 结果：' + pass + ' 通过，' + fail + ' 失败 ====');
+require('./_gate').emit(pass, fail);
 process.exit(fail ? 1 : 0);

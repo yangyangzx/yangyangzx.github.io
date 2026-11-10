@@ -27,6 +27,19 @@ var _bypassSettingsDirtyOnce = false;
  * 离设置页时若检测到未保存修改，复用 confirmDialog 弹确认；
  * 取消则中止本次切换（不写历史、不丢失修改），确认则继续。
  */
+// P1-15：popstate / hashchange 是「浏览器先把地址栏改成目标 hash，再派发事件」。
+// 脏检查被用户取消时若什么都不做，location.hash 已是 #journal 而 _currentView
+// 仍是 settings，界面 / 地址栏 / 历史栈永久失配，之后每次前进后退都会重复弹窗。
+// 用 replaceState 只改当前条目 URL：不新增历史条目、不触发 popstate/hashchange，
+// 因此不会形成「回退 → pushState → 再回退」递归。
+function _rollbackUrlToCurrentView() {
+  var desired = '#' + _currentView;
+  if (window.location.hash !== desired) {
+    try { history.replaceState(null, '', desired); }
+    catch (e) { /* file:// 等环境不支持时降级忽略 */ }
+  }
+}
+
 function switchView(viewName, writeHistory) {
   if (!_viewMap[viewName]) {
     console.warn('[Navigation] 无效视图名:', viewName);
@@ -49,6 +62,8 @@ function switchView(viewName, writeHistory) {
           _bypassSettingsDirtyOnce = true;
           _doSwitchView(viewName, writeHistory);
           _bypassSettingsDirtyOnce = false;
+        } else {
+          _rollbackUrlToCurrentView();
         }
       });
       return;

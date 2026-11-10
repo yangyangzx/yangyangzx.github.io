@@ -69,16 +69,9 @@ function getClosedSorted() {
  * 无过滤器时返回全量
  */
 function getFilteredClosed() {
-  var allClosed = getClosedSorted();
-  if (typeof applyFilters === 'function' && _activeFilters) {
-    var hasAnyFilter = !!( _activeFilters.direction || _activeFilters.symbol ||
-                           _activeFilters.strategy || _activeFilters.status ||
-                           _activeFilters.pnl || _activeFilters.time );
-    if (hasAnyFilter) {
-      return applyFilters(allClosed);
-    }
-  }
-  return allClosed;
+  // P1-04：与 stats.js / analytics.js 共用 utils.getDisplayClosed() 单一入口，
+  // 顺序也统一为「先 applyFilters(logs) 再筛 isClosedTrade」，保留 status 维度。
+  return window.utils.getDisplayClosed();
 }
 
 // ==================== 卡片渲染 ====================
@@ -135,7 +128,9 @@ function renderRiskCenter() {
   // 统一数据源：有过滤器时使用过滤后数据，否则全量（与 stats.js 口径一致）
   var closed = getFilteredClosed();
   renderAccountOverview();
-  renderDailyLoss(closed);
+  // P1-02：今日盈亏是账户级风控结论，硬闸门 checkDailyLossLimit 恒用全量；
+  // 显示侧若传筛选样本会出现「页面 +100 / 闸门 -900 blocked」的自相矛盾。
+  renderDailyLoss(getClosedSorted());
   renderDrawdown(closed);
   renderLiqTable();
   renderConcentration(closed);
@@ -194,20 +189,10 @@ function renderDailyLoss(closedOverride) {
   var container = document.getElementById('riskDailyContent');
   if (!container) return;
 
-  var todayStr = window.utils.toLocalDateStr(new Date().toISOString());
-  var todayPnl = 0;
-  // 优先使用传入的过滤数据，否则使用全量数据
-  var closed = closedOverride || getClosedSorted();
-
-  for (var i = 0; i < closed.length; i++) {
-    var ct = closed[i].closeTime;
-    if (!ct) continue;
-    var closeDateStr = window.utils.toLocalDateStr(ct);
-    if (!closeDateStr) continue;
-    if (closeDateStr === todayStr) {
-      todayPnl += toFiniteNum(closed[i].pnlAmount);
-    }
-  }
+  // P1-02 / 批次 3：求和只走 utils.computeTodayPnl，且恒用全量样本。
+  // closedOverride 保留形参兼容旧调用，但今日盈亏绝不允许被 UI 筛选削弱。
+  var closed = getClosedSorted();
+  var todayPnl = window.utils.computeTodayPnl(closed);
 
   var dailyLossSettings = loadSettings();
   // 必须兜底：dailyLossLimit 为 null/NaN 时 dailyLossLimit 得 NaN，
@@ -270,28 +255,16 @@ function renderDrawdown(closedOverride) {
   } catch(e) { curve = null; }
 
   var capital = 0, equity = 0, peak = 0;
-  if (curve && curve.data && curve.data.length > 0) {
+  if (curve && curve.capitalKnown && curve.data && curve.data.length > 0) {
     capital = curve.initCap;
     equity = curve.finalEq;
     peak = curve.peakVal;
   } else {
-    // 无数据兜底（与 calcEquityCurve 相同的取数顺序）
-    try { var _ddSettings = loadSettings(); if (_ddSettings && _ddSettings.accountBalance > 0) capital = _ddSettings.accountBalance; } catch(e) {}
-    if (capital <= 0 && closed.length > 0 && closed[0].capital != null && !isNaN(closed[0].capital) && closed[0].capital > 0) {
-      capital = closed[0].capital;
-    } else if (capital <= 0) {
-      var _ddCapital = getAccountCapital();
-      if (_ddCapital != null && _ddCapital > 0) capital = _ddCapital;
-    }
-    equity = capital;
-    peak = capital;
-    for (var i = 0; i < closed.length; i++) {
-      // 与 calcEquityCurve 口径一致：balanceAdjustment（存取款）+ 已实现盈亏累加
-      var _adj = Number(closed[i].balanceAdjustment);
-      if (Number.isFinite(_adj) && _adj !== 0) equity += _adj;
-      equity += toFiniteNum(closed[i].pnlAmount);
-      if (equity > peak) peak = equity;
-    }
+    // P0-5 / 批次 3：原「无数据兜底」在这里又用 accountBalance 自行递推了一遍权益，
+    // 恰好是曲线 fail-closed 后会常态触发的路径，等于把重复计入原样放回。
+    // 现在唯一权威是 calcEquityCurve；缺 capital 一律显式提示，不猜、不递推。
+    container.innerHTML = '<div class="risk-empty">缺少开仓本金快照（capital），无法计算权益与回撤；请在编辑页补录本金</div>';
+    return;
   }
 
   var drawdownAmount = peak - equity;
@@ -577,7 +550,8 @@ function renderFrequency(closedOverride) {
   // 今日交易次数
   var todayStr = window.utils.toLocalDateStr(new Date().toISOString());
   var todayCount = dailyStats[todayStr] ? dailyStats[todayStr].count : 0;
-  var todayPnl = dailyStats[todayStr] ? dailyStats[todayStr].pnl : 0;
+  // P1-02：与日亏硬闸门 / 风控卡共用全量今日盈亏，筛选样本只影响笔数明细。
+  var todayPnl = window.utils.computeTodayPnl(getClosedSorted());
 
   var html = '';
   html += '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;">';

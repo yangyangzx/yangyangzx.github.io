@@ -183,5 +183,6 @@ function makeStorage() {
   console.log('');
   console.log('================ 结果 ================');
   console.log('通过 ' + pass + ' / 失败 ' + fail);
+  require('./_gate').emit(pass, fail);
   process.exit(fail > 0 ? 1 : 0);
 })().catch(e => { console.error('FATAL', e); process.exit(2); });

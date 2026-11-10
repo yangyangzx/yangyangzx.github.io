@@ -210,10 +210,11 @@ function calcClosePnL(idx) {
 
 // ==================== MAE/MFE 统一计算 ====================
 function storeMAEMFE(item) {
-  // 使用 effectiveEntryPrice（含入场滑点）作为基准，与平仓盈亏计算口径一致
-  const ep = (item.effectiveEntryPrice != null && !isNaN(parseFloat(item.effectiveEntryPrice)))
-    ? parseFloat(item.effectiveEntryPrice)
-    : parseFloat(item.entryPrice);
+  // P1-07：MAE/MFE 必须与 PnL 用同一个入场成交价基准。旧实现内联读顶层
+  // effectiveEntryPrice，而 calculateCloseSettlement 走 getEntryFillForPnL
+  // （优先 slippage.planning.effectiveEntryPrice）——顶层 100 / 快照 101 时
+  // 极值百分比整体错位。统一调唯一权威函数，历史记录行为不变。
+  const ep = getEntryFillForPnL(item);
   if (isNaN(ep) || ep <= 0 || !item.direction) {
     item.mae = null;
     item.mfe = null;
@@ -241,9 +242,8 @@ function storeMAEMFE(item) {
 // 校验不阻断保存，仅 toast 提示，避免覆盖用户已填数据。
 function validateExtremes(item, closePrice) {
   if (!item || !item.direction || (item.lowPrice == null && item.highPrice == null)) return;
-  var ep = (item.effectiveEntryPrice != null && !isNaN(parseFloat(item.effectiveEntryPrice)))
-    ? parseFloat(item.effectiveEntryPrice) : parseFloat(item.entryPrice);
-  if (isNaN(ep) || ep <= 0) return;
+  var ep = getEntryFillForPnL(item);   // P1-07：与 storeMAEMFE / PnL 同源
+  if (!Number.isFinite(ep) || ep <= 0) return;
   var lo = item.lowPrice != null ? parseFloat(item.lowPrice) : null;
   var hi = item.highPrice != null ? parseFloat(item.highPrice) : null;
   var warn = function(m) { if (typeof showToast === 'function') showToast(m, 'warn'); };
@@ -388,17 +388,17 @@ function confirmClose(idx) {
     logs[idx].partialRatio = partialRatio2;
     // v5.6.43：五段散写收口为纯函数，并补上漏掉的 slippageCost 缩减。
     applyPartialShrink(logs[idx], partialRatio2);
-    logs[idx].realizedPnl = parseFloat((parseFloat(logs[idx].realizedPnl) + netPnlThis).toFixed(2));
-    logs[idx].realizedFee = parseFloat((parseFloat(logs[idx].realizedFee) + feeThis).toFixed(8));
+    logs[idx].realizedPnl = window.utils.roundAmount(toFiniteNum(logs[idx].realizedPnl, 0) + netPnlThis);
+    logs[idx].realizedFee = window.utils.roundAmount(toFiniteNum(logs[idx].realizedFee, 0) + feeThis);
     // 累计平仓比例封顶 100：脏历史数据或重复保存都不允许写出 >100% 的 closedRatio
     logs[idx].closedRatio = parseFloat(Math.min(100, parseFloat(logs[idx].closedRatio) + _closedDelta).toFixed(4));
     // ratio 与 closedRatio 同口径（占原始仓位），保证 sum(closes[].ratio) === closedRatio
-    logs[idx].closes.push({ type: closeType.value, price: closePrice, ratio: _closedDelta, fee: parseFloat(feeThis.toFixed(8)), gross: parseFloat((settlement.grossPnl * (partialRatio2 / 100)).toFixed(2)), pnl: parseFloat(netPnlThis.toFixed(2)), time: _nowISO, ratioOfRemaining: partialRatio2 });
+    logs[idx].closes.push({ type: closeType.value, price: closePrice, ratio: _closedDelta, fee: window.utils.roundAmount(feeThis), gross: window.utils.roundAmount(settlement.grossPnl * (partialRatio2 / 100)), pnl: window.utils.roundAmount(netPnlThis), time: _nowISO, ratioOfRemaining: partialRatio2 });
     // P4-5 修复：grossPnlAmount 维护为"整笔累计价格毛利"（纯价格毛利，不含费/滑点）。
     // 部分平仓按"本次平掉比例"累加，而非原先覆盖为"剩余仓位全量毛利"——后者与
     // realizedFee(整笔累计) 口径脱节，导致 stats 成本侵蚀失真。
-    logs[idx].grossPnlAmount = parseFloat(((toFiniteNum(logs[idx].grossPnlAmount)) + settlement.grossPnl * (partialRatio2 / 100)).toFixed(2));
-    logs[idx].pnlAmount = parseFloat(netPnlThis.toFixed(2));
+    logs[idx].grossPnlAmount = window.utils.roundAmount((toFiniteNum(logs[idx].grossPnlAmount)) + settlement.grossPnl * (partialRatio2 / 100));
+    logs[idx].pnlAmount = window.utils.roundAmount(netPnlThis);
     // P0-1 FIX：中间态记录的收益率/R 用"本次已实现"口径（本次平仓保证金、初始风险为基准）
     var _levNow = Number(logs[idx].leverage) > 0 ? Number(logs[idx].leverage) : 1;
     var marginThis = posBefore > 0 ? (posBefore / _levNow) * (partialRatio2 / 100) : 0;
@@ -407,47 +407,51 @@ function confirmClose(idx) {
     // 分母用「初始风险额 / 初始保证金」：部分平仓已把 riskAmount 按剩余仓位缩减，
     // 直接拿它当分母会让 R 随平仓次数漂移，全链不守恒。
     logs[idx].rMultiple = window.utils.resolveRMultiple(netPnlThis, logs[idx].initialRiskAmount, settlement.rMultiple);
-    logs[idx].actualCloseFee = parseFloat(feeThis.toFixed(8));
-    logs[idx].actualExitLegacySlippageCost = parseFloat(settlement.legacySlippageCost.toFixed(8));
+    logs[idx].actualCloseFee = window.utils.roundAmount(feeThis);
+    logs[idx].actualExitLegacySlippageCost = window.utils.roundAmount(settlement.legacySlippageCost);
   } else if (hadPartialBefore) {
     // —— 部分平仓后的最终平仓：pnlAmount 为整笔累计已实现盈亏 ——
     var feeFinal = settlement.fee;
     var ratioFinal = 100 - (toFiniteNum(logs[idx].closedRatio));
-    logs[idx].realizedPnl = parseFloat((parseFloat(logs[idx].realizedPnl) + netPnlVal).toFixed(2));
-    logs[idx].realizedFee = parseFloat((parseFloat(logs[idx].realizedFee) + feeFinal).toFixed(8));
+    logs[idx].realizedPnl = window.utils.roundAmount(toFiniteNum(logs[idx].realizedPnl, 0) + netPnlVal);
+    logs[idx].realizedFee = window.utils.roundAmount(toFiniteNum(logs[idx].realizedFee, 0) + feeFinal);
     logs[idx].closedRatio = 100;
-    logs[idx].closes.push({ type: closeType.value, price: closePrice, ratio: parseFloat(Math.max(0, ratioFinal).toFixed(4)), fee: parseFloat(feeFinal.toFixed(8)), pnl: parseFloat(netPnlVal.toFixed(2)), time: _nowISO });
+    logs[idx].closes.push({ type: closeType.value, price: closePrice, ratio: parseFloat(Math.max(0, ratioFinal).toFixed(4)), fee: window.utils.roundAmount(feeFinal), pnl: window.utils.roundAmount(netPnlVal), time: _nowISO });
     logs[idx].positionSize = 0; // 全部退出
     delete logs[idx].partialRatio;
     // P4-5 修复：最终平仓累加最后一腿毛利，grossPnlAmount 成为整笔累计毛利。
-    logs[idx].grossPnlAmount = parseFloat(((toFiniteNum(logs[idx].grossPnlAmount)) + settlement.grossPnl).toFixed(2));
-    logs[idx].pnlAmount = parseFloat(logs[idx].realizedPnl.toFixed(2)); // 整笔累计
-    logs[idx].actualCloseFee = parseFloat(logs[idx].realizedFee.toFixed(8));
-    logs[idx].actualExitLegacySlippageCost = parseFloat(settlement.legacySlippageCost.toFixed(8));
+    logs[idx].grossPnlAmount = window.utils.roundAmount((toFiniteNum(logs[idx].grossPnlAmount)) + settlement.grossPnl);
+    logs[idx].pnlAmount = window.utils.roundAmount(logs[idx].realizedPnl); // 整笔累计
+    logs[idx].actualCloseFee = window.utils.roundAmount(logs[idx].realizedFee);
+    logs[idx].actualExitLegacySlippageCost = window.utils.roundAmount(settlement.legacySlippageCost);
     // 整笔 R 与收益率以初始风险/初始保证金为基准（部分止盈的已实现盈亏计入分子）
     logs[idx].rMultiple = window.utils.resolveRMultiple(logs[idx].realizedPnl, logs[idx].initialRiskAmount, settlement.rMultiple);
     logs[idx].pnlPercent = window.utils.resolvePnlPercent(logs[idx].realizedPnl, logs[idx].initialMargin, settlement.pnlPercent);
   } else {
     // —— 全新平仓：原有逻辑 + 初始化整笔累计字段 ——
-    logs[idx].grossPnlAmount = parseFloat(settlement.grossPnl.toFixed(2));
-    logs[idx].pnlAmount = parseFloat(settlement.netPnl.toFixed(2));
+    logs[idx].grossPnlAmount = window.utils.roundAmount(settlement.grossPnl);
+    logs[idx].pnlAmount = window.utils.roundAmount(settlement.netPnl);
     // 全新平仓：没有「本次已实现 vs 整笔累计」之分，settlement 算出的口径就是最终口径。
     logs[idx].pnlPercent = parseFloat(settlement.pnlPercent.toFixed(2));
     // R 走锚点：initialRiskAmount 在 :318 刚由 riskAmount 播种，故与直接取
     // settlement.rMultiple 恒等——统一走 resolveRMultiple，避免「有锚点用锚点」
     // 这条规则在本文件里出现第三种写法。
     logs[idx].rMultiple = window.utils.resolveRMultiple(settlement.netPnl, logs[idx].initialRiskAmount, settlement.rMultiple);
-    logs[idx].actualCloseFee = parseFloat(settlement.fee.toFixed(8));
-    logs[idx].actualExitLegacySlippageCost = parseFloat(settlement.legacySlippageCost.toFixed(8));
-    logs[idx].realizedPnl = parseFloat(settlement.netPnl.toFixed(2));
-    logs[idx].realizedFee = parseFloat(settlement.fee.toFixed(8));
+    logs[idx].actualCloseFee = window.utils.roundAmount(settlement.fee);
+    logs[idx].actualExitLegacySlippageCost = window.utils.roundAmount(settlement.legacySlippageCost);
+    logs[idx].realizedPnl = window.utils.roundAmount(settlement.netPnl);
+    logs[idx].realizedFee = window.utils.roundAmount(settlement.fee);
     logs[idx].closedRatio = 100;
     // #6 FIX：全新平仓必须把剩余仓位归零，与部分/最终平仓路径（:341）口径对齐。
     // 此前遗漏 → CSV 仓位列误导为开仓量，且 edit-modal 首编辑即拿到 positionSize=0，
     // 放大「亏损理由误拦」的触发面（#2）。
     logs[idx].positionSize = 0;
-    logs[idx].closes.push({ type: closeType.value, price: closePrice, ratio: 100, fee: parseFloat(settlement.fee.toFixed(8)), pnl: parseFloat(settlement.netPnl.toFixed(2)), time: _nowISO });
+    logs[idx].closes.push({ type: closeType.value, price: closePrice, ratio: 100, fee: window.utils.roundAmount(settlement.fee), pnl: window.utils.roundAmount(settlement.netPnl), time: _nowISO });
   }
+  // P1-05：closePrice 保留「末腿成交价」语义（编辑链收尾腿结算、极值覆盖校验、
+  // CSV「平仓价」列的历史含义都依赖它），另存按各腿占原始仓位比例加权的均价，
+  // 供反推整笔毛利 / 目标达成率使用。历史记录无 closes 时返回 null，消费端自动回退。
+  logs[idx].weightedClosePrice = window.utils.computeWeightedClosePrice(logs[idx].closes);
   logs[idx].closeNote = closeNoteEl ? closeNoteEl.value.trim() : '';
   // Execution score
   const execChecks = document.getElementById('cpExecChecks_' + idx);
@@ -742,6 +746,12 @@ function _filterMatch(l) {
       var useTime = isClosedT ? (l.closeTime || l.time) : l.time;
       var t = new Date(useTime);
       if (t < since) return false;
+      // P1-01：thisWeek 还必须带上界 [周一, 周一+7天)，否则 2099 年这类
+      // 未来日期会通过 `t >= since` 被算进「本周」筛选与统计。
+      if (f.time === 'thisWeek') {
+        var _wr = window.utils.getWeekRange(now);
+        if (!_wr || !Number.isFinite(t.getTime()) || t.getTime() >= _wr.endMs) return false;
+      }
     }
   }
   return true;

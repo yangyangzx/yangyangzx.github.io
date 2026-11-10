@@ -18,7 +18,7 @@ const check=(l,c,d)=>{if(c){pass++;say('  ✅ '+l);}else{fail++;say('  ❌ '+l);
 say('========== C1 热量警告阈值：设置项真的生效了吗 ========');
 const c1=w.eval(`(function(){
   function setWarn(v){ var s=loadSettings(); s.heatWarnMax=v; s.portfolioHeatMax=v;
-    localStorage.setItem('trade_settings_v1', JSON.stringify(s)); }
+    localStorage.setItem('trade_settings_v1', JSON.stringify(s)); _clearSettingsCache(); }
   // 正确签名：calcPortfolioHeat(pendingRiskAmount, pendingSymbol, capitalOverride)
   // heat 必须落在「两条警告线之间、且低于硬上限」，才能观察到 warning 分支的差异。
   // 硬上限默认 6% → 取 heat=5.5%：警告线 5 触发、警告线 20 不触发。
@@ -49,7 +49,7 @@ check('getHeatWarnMax 已有真实消费方（定义+调用 > 1）',
 say('\n========== C2 单品种集中度：三处结论一致 ========');
 const c2=w.eval(`(function(){
   function setConc(v){ var s=loadSettings(); s.singleSymbolMaxPct=v;
-    localStorage.setItem('trade_settings_v1', JSON.stringify(s)); }
+    localStorage.setItem('trade_settings_v1', JSON.stringify(s)); _clearSettingsCache(); }
   function probe(v){ setConc(v); return { auth:checkSymbolConcentration('BTC',10,10,1000,[]).maxPct,
     reader:getSymbolConcentrationMaxPct() }; }
   return { normal:probe(20), zero:probe(0), str:probe('abc'), nul:probe(null) };
@@ -69,7 +69,7 @@ check('risk.js 卡片已改走 getSymbolConcentrationMaxPct', riskSrc.includes('
 say('\n========== C3 手续费率：副本已收口到 _getDefaultFeeRate ========');
 const c3=w.eval(`(function(){
   function setFee(lim,mkt){ var s=loadSettings(); s.feeRateLimit=lim; s.feeRateMarket=mkt;
-    localStorage.setItem('trade_settings_v1', JSON.stringify(s)); }
+    localStorage.setItem('trade_settings_v1', JSON.stringify(s)); _clearSettingsCache(); }
   setFee(0.02,0.03);
   return { limit:_getDefaultFeeRate('limit'), market:_getDefaultFeeRate('market'),
            market2:_getDefaultFeeRate('market') };
@@ -84,15 +84,18 @@ check('modals.js 已无写死 0.04/0.08 兜底', !/\? 0\.04 : 0\.08/.test(md));
 say('\n========== C4 回撤阈值守卫已补 ========');
 const c4=w.eval(`(function(){
   function setDd(v){ var s=loadSettings(); s.maxDrawdownAlert=v;
-    localStorage.setItem('trade_settings_v1', JSON.stringify(s)); }
+    localStorage.setItem('trade_settings_v1', JSON.stringify(s)); _clearSettingsCache(); }
   setDd(null);
   var a=loadSettings().maxDrawdownAlert;
   setDd(15);
   var b=loadSettings().maxDrawdownAlert;
   return { nul:a, val:b };
 })()`);
-check('设置读写正常（回退守卫在消费侧，不影响存储）',
-  c4.nul===null && c4.val===15, JSON.stringify(c4));
+// v5.6.46 P0-3 真链路修正：旧断言靠「原地改缓存」让 null 一直挂在内存里，
+// 从未真正写盘。loadSettings() 是唯一净化入口，null 会按 SETTINGS_DEFAULTS 回退，
+// 而正常值 15 必须原样落库、原样读回（这条证明新行为确实跟随写入的参数）。
+check('设置读写正常：null 由唯一净化入口回退、15 正常落库读回',
+  c4.nul!==null && Number.isFinite(c4.nul) && c4.nul>0 && c4.val===15, JSON.stringify(c4));
 const rk=fs.readFileSync(path.join(ROOT,'js','risk.js'),'utf8');
 check('risk.js 回撤阈值已加 isFinite 守卫（与闸门一致）',
   rk.includes('maxDrawdownAlert') && /isFinite\(v\)\s*&&\s*v\s*>\s*0/.test(rk));
@@ -100,4 +103,5 @@ check('risk.js 回撤阈值已加 isFinite 守卫（与闸门一致）',
 say('\n========================================');
 say(`结果：${pass} 通过 / ${fail} 失败（共 ${pass+fail} 项）`);
 say('========================================\n');
+require('./_gate').emit(pass, fail);
 process.exit(fail > 0 ? 1 : 0);

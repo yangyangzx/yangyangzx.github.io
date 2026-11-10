@@ -872,11 +872,13 @@ window.cpUpdateExecScore = cpUpdateExecScore;
 function calcMAEMFE(idx) {
   const item = logs[idx];
   if (!item || !item.entryPrice || !item.direction) return;
-  // 使用 effectiveEntryPrice（含入场滑点）作为基准，与 storeMAEMFE 口径一致
-  const entry = (item.effectiveEntryPrice != null && !isNaN(parseFloat(item.effectiveEntryPrice)))
-    ? parseFloat(item.effectiveEntryPrice)
-    : parseFloat(item.entryPrice);
-  if (isNaN(entry) || entry <= 0) return;
+  // P1-07：面板预览的极值基准必须与 storeMAEMFE / calculateCloseSettlement
+  // 同源（getEntryFillForPnL 优先读 slippage.planning），否则预览与落库 MAE/MFE 分叉。
+  const entry = (typeof getEntryFillForPnL === 'function')
+    ? getEntryFillForPnL(item)
+    : ((item.effectiveEntryPrice != null && !isNaN(parseFloat(item.effectiveEntryPrice)))
+      ? parseFloat(item.effectiveEntryPrice) : parseFloat(item.entryPrice));
+  if (!Number.isFinite(entry) || entry <= 0) return;
 
   const lowEl = document.getElementById('cpLowPrice_' + idx);
   const highEl = document.getElementById('cpHighPrice_' + idx);
@@ -1229,12 +1231,12 @@ function saveEditLog(idx, _raceConfirmed) {
         }
       }
       if (isFinite(_dcPnl) && (_rpFinTB || _ledgPnlTB > 0)) {
-        item.realizedPnl = parseFloat((((toFiniteNum(item.realizedPnl))) - _dcPnl).toFixed(2));
+        item.realizedPnl = window.utils.roundAmount(toFiniteNum(item.realizedPnl) - _dcPnl);
       }
-      if (isFinite(_dcFee) && _rfFinTB) item.realizedFee = parseFloat(
-        ((toFiniteNum(item.realizedFee)) - _dcFee).toFixed(8));
-      if (isFinite(_dcGross) && _rgFinTB) item.grossPnlAmount = parseFloat(
-        ((toFiniteNum(item.grossPnlAmount)) - _dcGross).toFixed(2));
+      if (isFinite(_dcFee) && _rfFinTB) item.realizedFee = window.utils.roundAmount(
+        toFiniteNum(item.realizedFee) - _dcFee);
+      if (isFinite(_dcGross) && _rgFinTB) item.grossPnlAmount = window.utils.roundAmount(
+        toFiniteNum(item.grossPnlAmount) - _dcGross);
     }
     // 旧数据兼容：closes[] 为空但 closedRatio>0（v5.6.1 之前的本地数据，或没有「平仓明细」
     // 列的旧版 CSV 导入）。syncCloseBookkeeping 会把本次事件当作唯一事件重建 closes，那部分
@@ -1327,8 +1329,9 @@ function saveEditLog(idx, _raceConfirmed) {
           // 闸门拦死、编辑无法保存。
           var _rpAccrue = _rpWasFinite || _ledgPnl > 0;
           if (!_rpWasFinite) {
-            item.realizedPnl = parseFloat((isFinite(parseFloat(item.pnlAmount))
-              ? parseFloat(item.pnlAmount) : 0).toFixed(2));
+            // P1-08：金额链统一 8 位（utils.roundAmount），与 logs.js / 本文件其余
+            // 编辑链同源；旧 toFixed(2) 会在编辑保存后把高精度累计值重新截断。
+            item.realizedPnl = window.utils.roundAmount(toFiniteNum(item.pnlAmount, 0));
             _rpB = parseFloat(item.realizedPnl);
           }
           // realizedFee / grossPnlAmount 只在【可重建】时才动账：
@@ -1344,8 +1347,8 @@ function saveEditLog(idx, _raceConfirmed) {
             // 以「累计净盈亏 + 累计费用」起算（与 logs.js:330 的「整笔累计价格毛利」口径一致）。
             // 第一次部分平仓时 realizedPnl 与 pnlAmount 都还没有，此处必须播种：否则
             // confirmClose 最终平仓从 undefined(→0) 起算，第一腿毛利被永久抹掉（实测 65→40）。
-            item.grossPnlAmount = parseFloat((_rpB
-              + (_rfOk ? (toFiniteNum(item.realizedFee)) : 0)).toFixed(2));
+            item.grossPnlAmount = window.utils.roundAmount(_rpB
+              + (_rfOk ? (toFiniteNum(item.realizedFee)) : 0));
             _rgOk = true;
           }
           // 旧数据的事件可能只有 {type, ratio}：缺失字段按 0 扣回——那笔腿本就从未进过累计，
@@ -1363,11 +1366,11 @@ function saveEditLog(idx, _raceConfirmed) {
               }
             }
           }
-          item.realizedPnl = parseFloat(((_rpB || 0) - _oldPnl + _legNet).toFixed(2));
+          item.realizedPnl = window.utils.roundAmount(toFiniteNum(_rpB, 0) - _oldPnl + _legNet);
           // 不可重建的累计不写：写了就把「剩余 fee + 已实现 fee = 原始费用」这条链永久打脏。
-          if (_rfOk) item.realizedFee = parseFloat(((toFiniteNum(item.realizedFee)) - _oldFee + _legFee).toFixed(8));
-          if (_rgOk) item.grossPnlAmount = parseFloat(((toFiniteNum(item.grossPnlAmount)) - _oldGross + _legGross).toFixed(2));
-          item.pnlAmount = parseFloat(item.realizedPnl.toFixed(2));
+          if (_rfOk) item.realizedFee = window.utils.roundAmount((toFiniteNum(item.realizedFee)) - _oldFee + _legFee);
+          if (_rgOk) item.grossPnlAmount = window.utils.roundAmount((toFiniteNum(item.grossPnlAmount)) - _oldGross + _legGross);
+          item.pnlAmount = window.utils.roundAmount(item.realizedPnl);
           item.rMultiple = window.utils.resolveRMultiple(item.realizedPnl, item.initialRiskAmount, _legSett.rMultiple);
           item.pnlPercent = window.utils.resolvePnlPercent(item.realizedPnl, item.initialMargin, _legSett.pnlPercent);
           // 与 emRecalc 实时预览口径对齐：把本腿盈亏/收益率/R 写回表单，
@@ -1383,9 +1386,9 @@ function saveEditLog(idx, _raceConfirmed) {
           if (_lastEvt && (item.closeType === 'partialTP' || item.closeType === 'reducePosition')) {
             if (_lastEvt.type !== item.closeType) _lastEvt.type = item.closeType;
             _lastEvt.price = _legCp;
-            _lastEvt.pnl = parseFloat(_legNet.toFixed(2));
-            _lastEvt.fee = parseFloat(_legFee.toFixed(8));
-            _lastEvt.gross = parseFloat(_legGross.toFixed(2));
+            _lastEvt.pnl = window.utils.roundAmount(_legNet);
+            _lastEvt.fee = window.utils.roundAmount(_legFee);
+            _lastEvt.gross = window.utils.roundAmount(_legGross);
             _lastEvt.time = new Date().toISOString();
             _lastEvt.ratioOfRemaining = _lastLegRoR;
           }
@@ -1594,31 +1597,33 @@ function saveEditLog(idx, _raceConfirmed) {
       // 收尾腿是**替换**不是追加：已全平记录改价时旧收尾腿整条作废，按「累加」处理会把
       // 最后一腿算两遍（实测 50% 分批 + 收尾的单子改一次价，累计盈亏翻倍）。按分批腿
       // 求和也不依赖旧收尾腿是否有审计字段 —— 历史版本写的是裸 {type,ratio}，扣回它必漏。
-      item.realizedPnl = parseFloat((_partialsPnlSum + _closeSett.netPnl).toFixed(2));
-      item.realizedFee = parseFloat((_partialsFeeSum + _closeSett.fee).toFixed(8));
+      // P1-08：编辑链金额精度必须与平仓链同源（统一 8 位），否则「平仓时 8 位 →
+      // 打开编辑保存一次 → 回退 2 位」会静默磨损小额盈亏。
+      item.realizedPnl = window.utils.roundAmount(_partialsPnlSum + _closeSett.netPnl);
+      item.realizedFee = window.utils.roundAmount(_partialsFeeSum + _closeSett.fee);
       // grossPnlAmount 保持"整笔累计价格毛利"语义（logs.js:354）
-      item.grossPnlAmount = parseFloat((_partialsGrossSum + _closeSett.grossPnl).toFixed(2));
-      item.pnlAmount = parseFloat(item.realizedPnl.toFixed(2));
+      item.grossPnlAmount = window.utils.roundAmount(_partialsGrossSum + _closeSett.grossPnl);
+      item.pnlAmount = window.utils.roundAmount(item.realizedPnl);
       item.rMultiple = window.utils.resolveRMultiple(item.realizedPnl, item.initialRiskAmount, _closeSett.rMultiple);
       item.pnlPercent = window.utils.resolvePnlPercent(item.realizedPnl, item.initialMargin, _closeSett.pnlPercent);
     } else if (!_hadPartialEvt && !_partialNow) {
       // —— 全新平仓记录（从未分批）：整笔重算，含「已全平后再改价」 ——
-      item.grossPnlAmount = parseFloat(_closeSett.grossPnl.toFixed(2));
-      item.pnlAmount = parseFloat(_closeSett.netPnl.toFixed(2));
+      item.grossPnlAmount = window.utils.roundAmount(_closeSett.grossPnl);
+      item.pnlAmount = window.utils.roundAmount(_closeSett.netPnl);
       item.pnlPercent = parseFloat(_closeSett.pnlPercent.toFixed(2));
       item.rMultiple = _closeSett.rMultiple == null ? null : parseFloat(_closeSett.rMultiple.toFixed(2));
       // P0 修复：全新平仓的 realizedPnl 应该等于 pnlAmount，否则统计模块会用到旧值
-      item.realizedPnl = parseFloat(_closeSett.netPnl.toFixed(2));
-      item.realizedFee = parseFloat(_closeSett.fee.toFixed(8));
+      item.realizedPnl = window.utils.roundAmount(_closeSett.netPnl);
+      item.realizedFee = window.utils.roundAmount(_closeSett.fee);
     }
     // 收尾事件的逐腿审计字段随新价刷新：syncCloseBookkeeping 就地更新的只有 type/ratio，
     // price/pnl/fee/gross 仍是改价前的值 —— 不改的话 CSV 导出会带上旧的逐腿明细。
     var _lastEvtF = (Array.isArray(item.closes) && item.closes.length) ? item.closes[item.closes.length - 1] : null;
     if (_lastEvtF && !_partialNow) {
       _lastEvtF.price = item.closePrice;
-      _lastEvtF.pnl = parseFloat(_closeSett.netPnl.toFixed(2));
-      _lastEvtF.fee = parseFloat(_closeSett.fee.toFixed(8));
-      _lastEvtF.gross = parseFloat(_closeSett.grossPnl.toFixed(2));
+      _lastEvtF.pnl = window.utils.roundAmount(_closeSett.netPnl);
+      _lastEvtF.fee = window.utils.roundAmount(_closeSett.fee);
+      _lastEvtF.gross = window.utils.roundAmount(_closeSett.grossPnl);
       _lastEvtF.time = new Date().toISOString();
     }
   }

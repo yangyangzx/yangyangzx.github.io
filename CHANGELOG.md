@@ -5,6 +5,115 @@
 
 ---
 
+// 5.6.47：数据准确度收口（深度审计批次 2 / 3，2026-11-10）
+//   背景：用户授权「代办的修复全部优化」，把 AUDIT.md 剩余 2 个 P0、15 个 P1 与
+//     批次 3 结构项一次性修完。红测 test/verify_batch2.js 首跑 49 条断言 42 条报红。
+//   —— P0-4 有效入场价双来源 ——
+//     顶层 effectiveEntryPrice 按 orderType 取入场 ticks，三份滑点快照却按
+//     stopType 重取 → 同一笔仓位落库 50000.1 与 50000.2 两个互斥价。
+//     口径拍板：入场腿 ticks 一律由下单方式 orderType 决定（开仓滑点只与下单方式
+//     有关），只有退出腿 ticks 按各腿执行类型区分；止损腿不再覆写 stopEntryTicks。
+//     四价（顶层 / planning / stop / target 快照的 effectiveEntryPrice）统一。
+//   —— P0-5 权益曲线 capital 重复计入 ——
+//     有日志但全部缺 capital 时，旧实现回退 accountBalance（当前净值，已含已实现
+//     盈亏）作起点再累加 Σpnl。改为 fail-closed：透出 capitalKnown=false / 空曲线，
+//     由 getCurrentDrawdown().readFailed=true 触发开仓硬阻断；同时区分「零日志的新
+//     用户」（正常，不拦截），避免把首笔开仓误拦。stats/dashboard/risk/analytics
+//     全部改读同一决议结果，缺本金时显示「—」并给出设置提示，不再静默出数。
+//   —— P1 口径统一 ——
+//     P1-01 本周分桶补上界（getWeekRange / isInThisWeek，未来日期不再计入）；
+//     P1-02 风控中心显示与硬闸门共用全量样本（computeTodayPnl 单一函数）；
+//     P1-03 CAGR 与夏普共用 resolveStartEquity 同一本金决议；
+//     P1-04 分析页 / 统计卡 / 权益曲线共用 getDisplayClosed 筛选样本；
+//     P1-05 多腿部分平仓新增 weightedClosePrice（资金权重加权平仓均价）+ CSV 列，
+//           末腿价仍保留在 closePrice / closes[] 里，不改写历史记录；
+//     P1-06 成本侵蚀分母补 legacy slippageCost；
+//     P1-07 MAE/MFE 基准统一取 getEntryFillForPnL（与 PnL 同源）；
+//     P1-08 金额链统一 8 位精度（utils.roundAmount / PNL_DIGITS=8），
+//           logs.js / modals.js 平仓与编辑链同源，100 笔 0.0049 不再被抹成 0。
+//   —— P1 导入导出可逆性 ——
+//     P1-09 值域告警与「列数不符已跳过」拆成两个数组，3 条未知 closeType 全部导入
+//           且不再误报跳过；P1-10 IMPORT_NUM_FIELDS 剔除枚举 / 布尔 / 版本列；
+//     P1-11 signals 导出改机器键 + ';'（新增导出侧断言 D10，导入侧保留历史中文
+//           标签反查以兼容旧备份）；P1-12 strategyPattern 独立成列，不再拼进
+//           strategyFramework 展示文案；P1-13 新增 parseImportNumber 统一 CSV 与
+//           JSON 数值解析，识别欧式小数逗号 / 千位分隔并拒绝 Infinity。
+//     CSV 末尾追加「加权平仓价」「形态方向/具体形态」两列（追加而非插入，旧列序号不变）。
+//   —— 批次 3 结构与边界 ——
+//     P1-15 设置页脏检查取消时回滚 URL（_rollbackUrlToCurrentView，
+//           replaceState 不新增历史条目）；权益递推收敛到 utils.calcEquityCurve 一处，
+//           删除 risk.js / skills-integration.js 两份与净值重复计入的兜底递推；
+//     P1-16 calcRoundTripFee 改 toFiniteNum 并钳制负值；P1-17 本金走 toFiniteNum
+//           + Number.isFinite 二次校验、极小本金拒绝、manual ticks 输入框默认留空
+//           （不再预置 0 制造零滑点假设）、L1 文案按实际两腿 ticks、负 targetRR 拦截；
+//     D-06 README / CLAUDE 修正「完全离线」口径（图表库走 CDN + chart-guard 降级）；
+//     D-07 清理 13/15/16/18 个跑测器、665 条断言、28 处缓存戳、5.6.37 等历史数字。
+//   —— 验证 ——
+//     test/verify_batch2.js：6 组 50 条断言，--inject 25 个注入点逐条独立 boot 干净
+//       JSDOM 全部复红（25/25）。首批 23/24：P1-11 导出写中文标签被导入侧反查兜住，
+//       往返断言 D5 仍绿；补 D10 专门守护导出侧后 24/24。关闭任务前的跨模块同类
+//       审计又发现 modals.js:1330~1390 编辑平仓链整段金额仍用 toFixed(2)（C7 首版
+//       只查「文件里出现过 roundAmount」，恒真抓不住）—— 修齐 9 处为 roundAmount，
+//       强化 C7 为「金额链累计字段禁止 parseFloat(...toFixed(2/8)) 落库」并补第 25
+//       个独立注入点，最终 25/25。positionSize / pnlPercent 等按业务 2 位口径落库，
+//       不属 P1-08 范围，未改（不为改而改）。
+//     npm test：31 项（22 正常 + 9 注入自检）/ 3724 条断言，无存量回归。
+//   版本四处同步 5.6.47：js/version.js / index.html 49 处 ?v= / run-tests.html
+//     17 处 ?v= + APP_VERSION 绊线 / manifest.json 3 处 ?v=。
+
+// 5.6.46：门禁可信化 + 数据不丢（深度审计批次 0 / 1，2026-11-10）
+//   背景：四组只读专项审计 + 14 个 jsdom 端到端探针，实证 6 个 P0。本版先修
+//     「验证结论不可信」与「数据静默丢失」两类前置问题；完整台账见 AUDIT.md。
+//   —— 批次 0：门禁可信化（P0-1 / P1-18）——
+//     旧 test/run-all.js 只信 exit code、靠正则猜 7 种中文汇总文案（基线 18 个
+//     跑测器里 7 个显示「(无摘要)」）。实证：输出「失败 5」却 exit(0) 的假跑测器
+//     与零断言跑测器都被判 PASS；--inject 从不进 npm test；失败时 results 双 push；
+//     _verify_bugs.js（14 条断言）从未纳入 SUITES。
+//   新增 test/_gate.js 统一机器可读契约：GATE PASS=n FAIL=n TOTAL=n /
+//     GATE INJECT CAUGHT=n EXPECTED=n；19 个存量跑测器收尾各加一行 emit，
+//     不动原有汇总文案与 process.exit 逻辑。
+//   重写 run-all.js：SUITES 改 [label, file, min]，min 为实测断言下限；
+//     evaluate() 只认契约、G1~G9 逐条 fail-closed（断言结果优先于 exit code）；
+//     修双 push；补跑 _verify_bugs.js；新增 INJECT_SUITES 让 --inject/REGRESSION
+//     反向用例进入 npm test；全局「断言总数 >= Σmin」再兜一层防退化。
+//   新增 test/verify_gate.js：把真实 run-all.js 源码复制到临时 fixture、只替换
+//     两个 SUITES 字面量后 spawn，测的是真实判定逻辑，生产文件零测试钩子。
+//     15 个端到端场景 + 5 条静态守护；--inject 11 条守卫逐条独立变异。
+//   —— 批次 1：数据不丢（P0-2 / P0-3 / P0-6 / P1-14）——
+//   P0-6 js/utils.js _localeToISO 把旧版 zh-CN 本地墙钟时间硬拼 'Z'，UTC+8 下
+//     2026/11/09 20:00 记成 20:00Z（应 12:00Z），toLocalDateStr 漂到 11-10，
+//     今日/本周/连亏/熔断/夏普分桶全错，且与导出侧 io._safeISOString 不对称。
+//     改为本地 Date 构造 + toISOString()，并拒绝日历溢出把脏输入伪装成合法 ISO。
+//   P0-3 js/settings.js loadSettings() 返回可变缓存本身，任何消费点原地改一个
+//     字段就把日亏硬闸门从 500 放大到 4500，而磁盘仍是 5。改为一律交出深拷贝，
+//     写盘失败分支补 _clearSettingsCache()（内存/磁盘不再分叉）。
+//   P0-2 js/storage.js saveLogs 全量覆盖，另一标签写入的记录被静默抹掉。新增
+//     _logsDiskBaseline + _reconcileLogsWithDisk()：磁盘被别的标签改过时以磁盘
+//     为基合并、同 id 本标签优先、对账进来的数据同样走 _sanitizeLoadedLogs；
+//     loadLogs / 写盘成功 / 两处 storage 同步分支都同步基线。
+//   P1-14 restoreFromAutoBackup 直接 logs=obj.data，跳过迁移/补 id/脏值隔离。
+//     新增 _normalizeRestoredLogs()：数值归一 → migrateLogsToCurrentSchema →
+//     sanitizeLogNumbers → genLogId；失败整批拒绝，恢复后 saveLogs() 也校验返回值。
+//   —— 揭出的存量假绿断言（按纪律改真链路，未回退修复）——
+//     全量首跑主回归 2 条 / verify_config_fix.js 6 条报红：它们靠「原地改
+//     loadSettings() 缓存」造场景，从未验证真的写盘。test/run-tests.html 补齐
+//     setTpRR1/2/3 元素（否则 saveSettings 在 tpRR 循环直接 return）；
+//     verify_config_fix.js 四个 setter 补 _clearSettingsCache()，C4 期望值迁移为
+//     「null 由唯一净化入口回退、15 正常落库读回」并保留真链路断言。
+//   新增 test/verify_data_integrity.js：TZ=Asia/Shanghai 下 jsdom 加载真实
+//     index.html，A 时间 5 / B 缓存 4 / C 并发 3 / D 恢复 4 共 16 条；
+//     --inject 4 个注入点各自单独 boot 干净 JSDOM，4/4 全捕获。
+//   版本四处同步 5.6.46：js/version.js / index.html 49 处 ?v= / run-tests.html
+//     17 处 ?v= + APP_VERSION 字面量绊线 / 本文件；manifest.json 3 个 icon src
+//     的缓存戳同步；README.md / CLAUDE.md 顶部版本同步。
+//   验证：npm test 29/29 全绿（21 正常 + 8 注入自检），断言总数 3674 / 下限
+//     3674（基线 3624 + 补跑 14 + 门禁 20 + 数据完整性 16，无退化）；
+//     verify_gate --inject 11/11、verify_data_integrity --inject 4/4；
+//     前后同一假绿 fixture：修复前 exit=0 全 PASS → 修复后 exit=1（G5/G1 各判红）；
+//     改动 JS 全部 node --check 通过。
+//   未修（下一版）：P0-4 有效入场价双来源、P0-5 权益曲线缺 capital 回退当前净值，
+//     以及 AUDIT.md 中 13 个 P1 与 7 个产品决策项。
+
 // 5.6.45：左上角品牌区改为「回主入口」链接（2026-11-09）
 //   背景：.nav-logo 一直是纯 <div>，无 href / 无监听 / 无 cursor，点击图标或
 //     「交易风险管理终端」文字完全无反应；而左上角品牌区按惯例应可点回起点。

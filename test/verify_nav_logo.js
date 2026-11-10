@@ -284,6 +284,7 @@ const INJECTIONS = [
       if (r.dom) { try { r.dom.window.close(); } catch (e) { /* ignore */ } }
     }
     console.log('\n[注入自检] ' + caught + '/' + INJECTIONS.length + ' 个注入点被逐条捕获');
+    require('./_gate').emitInject(caught, INJECTIONS.length);
     process.exit(caught === INJECTIONS.length ? 0 : 1);
   } else {
     let r;
@@ -294,6 +295,7 @@ const INJECTIONS = [
       process.exit(1);
     }
     console.log('\n通过 ' + r.pass + ' / 失败 ' + r.failures.length);
+    require('./_gate').emit(r.pass, r.failures.length);
     try { r.dom.window.close(); } catch (e) { /* ignore */ }
     process.exit(r.failures.length > 0 ? 1 : 0);
   }

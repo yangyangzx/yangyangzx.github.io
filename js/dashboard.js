@@ -103,9 +103,10 @@ window._animateDashValue = function(el, value, opts) {
 
 // ==================== 卡片 1：今日 PnL ====================
 function _renderTodayPnl() {
+  // P1-02 / 批次 3：求和统一走 utils.computeTodayPnl，与风险中心、日亏硬闸门同源。
   var todayStr = window.utils.toLocalDateStr(new Date().toISOString());
   var closed = getClosedLogs();
-  var totalPnl = 0;
+  var totalPnl = window.utils.computeTodayPnl(closed);
   var count = 0;
 
   for (var i = 0; i < closed.length; i++) {
@@ -113,10 +114,7 @@ function _renderTodayPnl() {
     if (!ct) continue;
     var closeDateStr = window.utils.toLocalDateStr(ct);
     if (!closeDateStr) continue;
-    if (closeDateStr === todayStr) {
-      totalPnl += toFiniteNum(closed[i].pnlAmount);
-      count++;
-    }
+    if (closeDateStr === todayStr) count++;
   }
 
   var valueEl = document.getElementById('dashPnlValue');
@@ -149,12 +147,10 @@ function _renderTodayPnl() {
 
 // ==================== 卡片 2：本周胜率 ====================
 function _renderWinRate() {
-  // 计算本周一的本地日期字符串
+  // P1-01：统一走 utils.getWeekRange / isInThisWeek（本地周一 00:00 起 7 天的半开区间）。
+  // 旧实现只做 `closeDateStr >= mondayStr` 字符串比较，没有上界，2099 年的记录
+  // 字典序必然 >= 本周，被算进「本周胜率」。
   var now = new Date();
-  var day = now.getDay();
-  var diff = day === 0 ? 6 : day - 1;
-  var monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - diff);
-  var mondayStr = window.utils.toLocalDateStr(monday.toISOString());
   var closed = getClosedLogs();
   var wins = [];
   var losses = [];
@@ -166,7 +162,7 @@ function _renderWinRate() {
     if (!ct) continue;
     var closeDateStr = window.utils.toLocalDateStr(ct);
     if (!closeDateStr) continue;
-    if (closeDateStr >= mondayStr) {
+    if (window.utils.isInThisWeek(ct, now)) {
       var pnl = toFiniteNum(closed[i].pnlAmount);
       totalPnl += pnl;
       count++;
@@ -512,6 +508,16 @@ function _renderEquityChart() {
 
   // P3-13 FIX：占位/报错文字改读主题色（原 #ffffff / #ff4444 在浅色主题下基本不可见）
   const cc = utils.getChartColors();
+
+  // P0-5：曲线 fail-closed 返回空 data 时不能继续按 sorted.length 画点（会越界），
+  // 也不能画一条从 0 起的假曲线。
+  if (curve.capitalKnown === false && sorted.length > 0) {
+    ctx.clearRect(0, 0, rectWidth, rectHeight);
+    ctx.fillStyle = cc.canvasText; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = '13px -apple-system, sans-serif';
+    ctx.fillText('缺少开仓本金快照（capital），无法绘制资金曲线', rectWidth / 2, rectHeight / 2);
+    return;
+  }
 
   if (sorted.length === 0) {
     // 绘制占位文字（使用 CSS 像素坐标，因为 ctx 已缩放）

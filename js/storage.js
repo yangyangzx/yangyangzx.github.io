@@ -270,6 +270,7 @@ function loadLogs() {
   try {
     raw = localStorage.getItem(STORAGE_KEY);
     logs = raw ? JSON.parse(raw) : [];
+    _logsDiskBaseline = raw;   // 本次读盘结果即为多标签对账基线
     if (!Array.isArray(logs)) throw new Error('日志根节点不是数组');
     // v5.6.42 存量脏数据隔离：写入侧（v5.6.41）已挡住新脏值，但历史日志里仍可能存着
     // "Infinity" / "NaN" / 溢出数字串，读端 70+ 处 parseFloat||0 曾让它们一路流进
@@ -375,6 +376,7 @@ function loadLogs() {
         // 改用应用内对话框，保持非阻塞。
         if (typeof window.confirmDialog !== 'function') {
           logs = remoteLogs;
+          _logsDiskBaseline = e.newValue;   // 已接受外部快照，避免下次 saveLogs 再合并一次
           _sanitizeLoadedLogs();   // v5.6.42：另一标签页推来的数据同样要隔离脏值
           _safeRenderAfterStorageChange({ externalReplace: true });
           if (typeof showToast === 'function') showToast('已同步为最新数据', 'info');
@@ -388,6 +390,7 @@ function loadLogs() {
         }).then(function(ok) {
           if (!ok) return;
           logs = remoteLogs;
+          _logsDiskBaseline = e.newValue;   // 已接受外部快照，避免下次 saveLogs 再合并一次
           _sanitizeLoadedLogs();   // v5.6.42：另一标签页推来的数据同样要隔离脏值
           _safeRenderAfterStorageChange({ externalReplace: true });
           if (typeof showToast === 'function') showToast('已同步为最新数据', 'info');
@@ -397,9 +400,56 @@ function loadLogs() {
   }
   return true;
 }
+// ── 多标签写入栅栏（P0-2，v5.6.46） ──
+// _logsDiskBaseline 是本标签上次确认过的磁盘原始快照。null = 尚未建立基线。
+// 旧实现 saveLogs 无条件全量覆盖：A 标签持有旧快照时，一次保存就把 B 标签刚写入的
+// 记录从磁盘抹掉，而 A 的内存里还看得见自己那条 —— 静默丢数据且无任何提示。
+var _logsDiskBaseline = null;
+
+/**
+ * 写盘前对账：若磁盘被另一个标签页改过，以磁盘为基合并，绝不静默覆盖别人的记录。
+ * 同一 id 冲突时以本标签为准（用户当前编辑的是这一份），磁盘独有的记录一律保留。
+ * @returns {Array|null} 合并后的数组；null 表示无需合并（交给调用方保持原 logs）。
+ */
+function _reconcileLogsWithDisk(localArr) {
+  var diskRaw;
+  try { diskRaw = localStorage.getItem(STORAGE_KEY); }
+  catch (e) { return null; }                 // 读失败：不合并，也不推进基线
+  if (diskRaw === null) return null;         // 空盘，首次写入
+  if (_logsDiskBaseline === null) { _logsDiskBaseline = diskRaw; return null; }
+  if (diskRaw === _logsDiskBaseline) return null;
+  var diskArr;
+  try { diskArr = JSON.parse(diskRaw); } catch (e) { return null; }
+  if (!Array.isArray(diskArr)) return null;
+
+  var merged = diskArr.slice();
+  var posById = Object.create(null);
+  for (var i = 0; i < merged.length; i++) {
+    if (merged[i] && merged[i].id != null) posById[merged[i].id] = i;
+  }
+  for (var j = 0; j < localArr.length; j++) {
+    var it = localArr[j];
+    if (!it) continue;
+    if (it.id != null && Object.prototype.hasOwnProperty.call(posById, it.id)) {
+      merged[posById[it.id]] = it;
+    } else {
+      merged.push(it);
+      if (it.id != null) posById[it.id] = merged.length - 1;
+    }
+  }
+  _logsDiskBaseline = diskRaw;
+  return merged;
+}
+
 // 返回值契约：仅当主日志写入并读回校验成功时返回 true；任何失败均返回 false。
 // skipBackup: true 时跳过备份轮转（用于迁移和高频自动保存）。
 function saveLogs(skipBackup) {
+  // 写盘前先与磁盘对账：另一标签页刚写入的记录必须保留下来。
+  var reconciled = _reconcileLogsWithDisk(logs);
+  if (reconciled) {
+    logs = reconciled;
+    _sanitizeLoadedLogs();   // 对账进来的数据同样要按唯一入口隔离非有限数值
+  }
   var jsonStr;
   try { jsonStr = JSON.stringify(logs); }
   catch (e) {
@@ -422,6 +472,7 @@ function saveLogs(skipBackup) {
     localStorage.setItem(STORAGE_KEY, jsonStr);
     var verification = localStorage.getItem(STORAGE_KEY);
     if (verification !== jsonStr) throw new Error('写入验证失败：内容不一致');
+    _logsDiskBaseline = jsonStr;   // 本次写入成为新的对账基线
   } catch (e) {
     // 不自动截断或改写内存日志；所有数据必须保持可恢复。
     StorageSecurity.createEmergencyBackup();

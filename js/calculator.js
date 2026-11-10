@@ -85,7 +85,9 @@ function calcDirectionalPnl(direction, entryFill, exitFill, quantity) {
 }
 
 function calcRoundTripFee(quantity, entryFill, exitFill, feeRatePct) {
-  var rate = (Number(feeRatePct) || 0) / 100;
+  // P1-16：原 `Number(x) || 0` 会把 'abc'/Infinity/负费率分别变成 0/Infinity/负费用。
+  // 全局统一走 toFiniteNum，并把负费率钳到 0（fail-closed）；合法费率结果逐位不变。
+  var rate = Math.max(0, toFiniteNum(feeRatePct, 0)) / 100;
   return quantity * entryFill * rate + quantity * exitFill * rate;
 }
 
@@ -287,9 +289,11 @@ function _calculateImpl() {
     return null;
   }
   const capitalEl = document.getElementById('capital');
-  let capital = capitalEl ? parseFloat(capitalEl.value) : 0;
+  // P1-17：parseFloat('1e999') === Infinity，原来 `!capital || capital <= 0` 与
+  // `isNaN(capital)` 都拦不住它，Infinity 会一路污染 riskPercent/仓位/百分比显示。
+  let capital = capitalEl ? toFiniteNum(capitalEl.value, 0) : 0;
   // P1-5 FIX：本金权威源统一——表单为空/无效时回退到系统设置的账户余额（getAccountCapital 优先 settings.accountBalance）
-  if (!capital || capital <= 0) {
+  if (!Number.isFinite(capital) || capital <= 0) {
     try {
       var _capSettings = loadSettings();
       if (_capSettings && _capSettings.accountBalance > 0) {
@@ -298,7 +302,10 @@ function _calculateImpl() {
       }
     } catch(e) { /* 忽略 */ }
   }
-  if (!capital || capital <= 0) { markFieldInvalid('capital', '请输入本金，或在系统设置中填写账户余额'); showCalcError('无效本金', '请输入本金，或在系统设置中填写账户余额', 'capital'); _calcCleanup(); return; }
+  if (!Number.isFinite(capital) || capital <= 0) { markFieldInvalid('capital', '请输入本金，或在系统设置中填写账户余额'); showCalcError('无效本金', '请输入本金，或在系统设置中填写账户余额', 'capital'); _calcCleanup(); return; }
+  // P1-17：极小本金会让 `(positionSize/capital).toFixed(1)` / 百分比产出超长数字串
+  // 撑破卡片，且金额显示恒为 0.00 失去意义。设 1 USDT 正下限，与 HTML min="1" 对齐。
+  if (capital < 1) { markFieldInvalid('capital', '本金不得小于 1 USDT'); showCalcError('本金过小', '本金不得小于 1 USDT', 'capital'); _calcCleanup(); return; }
   const leverageEl = document.getElementById('leverage');
   const leverage = leverageEl ? Math.max(0, toFiniteNum(leverageEl.value)) : 0;
   const directionEl = document.getElementById('direction');
@@ -567,7 +574,7 @@ function _calculateImpl() {
   }
 
   if (entryPrice <= 0) { showCalcError('无效入场价', '入场价必须大于 0', 'entryPrice'); _calcCleanup(); return; }
-  if (isNaN(capital) || capital <= 0) { showCalcError('无效本金', '请输入本金', 'capital'); _calcCleanup(); return; }
+  if (!Number.isFinite(capital) || capital <= 0) { showCalcError('无效本金', '请输入本金', 'capital'); _calcCleanup(); return; }
   if (isNaN(stopLoss) || stopLoss <= 0) { showCalcError('无效止损价', '请输入有效止损价格', 'stopLoss'); _calcCleanup(); return; }
 
   let riskAmount=0, riskPercent=0;
@@ -1212,13 +1219,15 @@ function _calculateImpl() {
   if (feeRate <= 0) feeRate = _getDefaultFeeRate(orderType);
 
   const quantity = effectivePositionSize / effectiveEntryPrice;
-  // P2 FIX：止损腿原复用入场腿的 ticks（planSlippageInput 按 #orderType 解析），
-  // 使止损成交被假设得与限价入场一样从容。自动模式下改按 #stopType 解析默认 ticks
-  // （stop-market → 2/2，stop-limit → 2/2）；手动模式下保留用户显式填写的数值。
+  // P0-4（v5.6.47）：入场腿 ticks 的**唯一权威**是 planSlippageInput.entryTicks
+  // （由 #orderType / 手动入场输入决定）。旧实现在自动模式下连入场腿也一起覆盖成
+  // getDefaultTicks(stopType).entry，导致顶层 effectiveEntryPrice=50000.1 而三份
+  // 滑点快照都是 50000.2，同一笔仓位落库两个互斥价、编辑重算被静默改写。
+  // 退出腿 ticks 仍按各腿执行类型区分（止损腿按 #stopType，目标腿按订单类型），
+  // 风控边界（minRR / 保证金 / 热量 / 集中度 / 强平 / 连亏）一律不变。
   let stopEntryTicks = planSlippageInput.entryTicks, stopExitTicks = planSlippageInput.exitTicks;
   if (planSlippageInput.mode !== 'manual') {
     const stopDefaults = Slippage.getDefaultTicks(stopType);
-    stopEntryTicks = stopDefaults.entry;
     stopExitTicks = stopDefaults.exit;
   }
   const stopSlippageModel = Slippage.calculate({
@@ -1286,7 +1295,9 @@ function _calculateImpl() {
         netProfit: grossProfit - targetFee,
         netLoss: Math.abs(grossStopLoss - stopFee)
       };
-      if (rrAmounts.netLoss > 0) targetRR = rrAmounts.netProfit / rrAmounts.netLoss;
+      // P1-17：净目标盈利 <= 0（目标距入场太近 / 费率吞掉毛利）时不得产出负 RR，
+      // 否则卡片显示 -0.01R、plannedNetProfit 被污染；保持 null 走中性灰「—」。
+      if (rrAmounts.netLoss > 0 && rrAmounts.netProfit > 0) targetRR = rrAmounts.netProfit / rrAmounts.netLoss;
     }
   }
 
@@ -1367,7 +1378,9 @@ function _calculateImpl() {
   let costL1HTML = '<span>最大亏损 <span class="cost-loss ' + riskClass + '">' + fmtMoney(realMaxLoss, 2) + ' USDT (' + realMaxLossPct.toFixed(2) + '%)</span> <span class="cost-tag">含费</span></span>';
   if (stopCost > 0) {
     costL1HTML += '<span>止损预估费用 ' + fmtMoney(stopCost, 2) + ' USDT</span>';
-    costL1HTML += '<span>滑点 ' + planSlippageInput.entryTicks + '+' + planSlippageInput.exitTicks + ' ticks</span>';
+    // P1-17：L1 描述的是「止损路径实际生效」的双侧 ticks，原写死 planSlippageInput
+    // （按 #orderType）会显示 1+1，而实际是 1+2；与同面板 L2 的有效入场价自相矛盾。
+    costL1HTML += '<span>滑点 入场 ' + stopSlippage.entryTicks + ' + 退出 ' + stopSlippage.exitTicks + ' ticks（止损腿）</span>';
   }
   if (atrStopMode) {
     costL1HTML += '<span class="atr-badge" style="margin-left:8px;padding:2px 6px;background:var(--color-primary-bg);color:var(--color-primary);border-radius:4px;font-size:11px;"><i class="fas fa-wave-square"></i> ATR 动态止损 ' + atrMultiplier.toFixed(1) + 'x</span>';
@@ -2426,8 +2439,10 @@ function resetForm() {
   var entrySlipEl = document.getElementById('entrySlippageTicks');
   var exitSlipEl = document.getElementById('exitSlippageTicks');
   if (slippageModeEl) slippageModeEl.value = 'default';
-  if (entrySlipEl) entrySlipEl.value = '0';
-  if (exitSlipEl) exitSlipEl.value = '0';
+  // P1-17：留空让 Slippage.readPlanInput 走「空输入 → 订单类型保守默认值」分支；
+  // 预置 '0' 会按零滑点假设风险，与 default 模式自相矛盾。用户显式填 0 仍被尊重。
+  if (entrySlipEl) entrySlipEl.value = '';
+  if (exitSlipEl) exitSlipEl.value = '';
   var resetStopLossEl = document.getElementById('stopLoss');
   if (resetStopLossEl) delete resetStopLossEl.dataset.provisionalStop;
   if (typeof syncSlippageModeUI === 'function') syncSlippageModeUI();

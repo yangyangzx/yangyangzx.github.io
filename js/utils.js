@@ -479,9 +479,18 @@ function toFiniteNum(v, fallback) {
   util._localeToISO = function(t) {
     if (!t || t.indexOf('T') !== -1) return t;
     var m = t.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{1,2}):(\d{1,2})/);
-    if (m) return m[1] + '-' + m[2].padStart(2, '0') + '-' + m[3].padStart(2, '0') +
-      'T' + m[4].padStart(2, '0') + ':' + m[5].padStart(2, '0') + ':' + m[6].padStart(2, '0') + '.000Z';
-    return t;
+    if (!m) return t;
+    // P0-6（v5.6.46）：旧版 zh-CN locale 时间是【本地墙钟时间】，不是 UTC。
+    // 历史实现把各分量拼串后硬加 'Z'，在 UTC+8 下把 20:00 记成 20:00Z（真实应为
+    // 12:00Z），日期分桶整体漂一天，今日/本周/连亏/熔断/夏普全错。导出侧
+    // io._safeISOString 一直是正确的 → 导入/导出不对称。必须用本地 Date 构造再转 UTC。
+    var y = +m[1], mo = +m[2], d = +m[3], h = +m[4], mi = +m[5], s = +m[6];
+    var dt = new Date(y, mo - 1, d, h, mi, s);
+    if (!Number.isFinite(dt.getTime())) return t;
+    // Date 对非法日历会自动溢出（2026/13/45 → 2027/02/14），不得把脏输入伪装成合法 ISO。
+    if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d ||
+        dt.getHours() !== h || dt.getMinutes() !== mi || dt.getSeconds() !== s) return t;
+    return dt.toISOString();
   };
 
   /**
@@ -825,7 +834,8 @@ function toFiniteNum(v, fallback) {
   util.calcEquityCurve = function(closed, settingsOverride, opts) {
     opts = opts || {};
     if (!closed || closed.length === 0) {
-      return { data: [], initCap: 0, peakVal: 0, maxDDPercent: 0, finalEq: 0, totalPnl: 0 };
+      return { data: [], initCap: 0, peakVal: 0, maxDDPercent: 0, finalEq: 0, totalPnl: 0,
+        capitalKnown: false, equityKnown: false, reason: 'no-trades', balanceIsCurrentEquity: false };
     }
 
     // v5.6.43：非法/缺失日期会让 new Date(...) 变 NaN，减法结果 NaN 被
@@ -842,41 +852,31 @@ function toFiniteNum(v, fallback) {
     });
 
     var _initCap = 0;
-    // accountBalance 是否被判定为「已含历史盈亏的当前净值」（见下方注释）
-    var _balanceIsCurrentEquity = false;
+    var _capitalKnown = false;
+    var _equityKnown = true;
+    var _reason = '';
     if (opts.purePnl) {
+      // 纯盈亏模式：起点显式为 0，属合法语义，但没有「本金快照」可供比例型指标使用。
       _initCap = 0;
+      _reason = 'pure-pnl';
+      _equityKnown = true;
     } else {
-      // P0 修复（2026-10-10 深度审计）：原实现把 settings.accountBalance 当作曲线
-      // 「起点」并再叠加全部历史 pnlAmount，但该字段的语义是「当前账户余额」，
-      // 用户会在净值变化后同步更新它——同一笔盈亏于是被算两次。
-      // 实测：初始 10000、赚 3000、余额更新为 13000 → 曲线终点算成 16000；
-      // 亏损场景更严重，真实回撤 0% 却报 42.86%，会误触回撤熔断拦住用户。
+      // P0-5（v5.6.47）：原实现在「有日志、但 capital 缺失」时回退到
+      // settings.accountBalance（当前净值，本身已含已实现盈亏）作起点，再累加
+      // ΣpnlAmount，同一笔盈亏被算两次。实测 3 笔 Σpnl=250、余额 10250 →
+      // finalEq 报 10500（多计 250），最大回撤 / 夏普 / CAGR 全部跟着错。
       //
-      // 之前尝试用「bal与 初始本金+累计盈亏 的差值」启发式反推，结果两种解释
-      // 都可能成立（无法从数值区分「初始本金」与「当前净值」），必然误判其一——
-      // 数值启发式在此不可用，改为取**无歧义的权威来源**：
-      //
-      //   每条日志的 capital 是「开仓那一刻的账户快照」，故**最早一条**的 capital
-      //   即初始本金。据此起点 + 累加全部已实现盈亏，天然不存在重复计入，
-      //   也不受用户是否更新账户余额影响。
-      //   settings.accountBalance 仅在无日志时作为唯一可用来源。
-      //
-      // 代价：若用户故意把 accountBalance 设为一个与日志快照不同的「基准本金」
-      // （如刻意只算最近一段行情），该基准不再影响曲线。
-      var _firstCap = 0;
-      if (sorted.length > 0) {
-        var _c0 = Number(sorted[0].capital);
-        if (Number.isFinite(_c0) && _c0 > 0) _firstCap = _c0;
+      // 口径：capital 是开仓那一刻的账户快照，是唯一无歧义的期初权益来源。
+      // 扫描全部记录取**最早一条有效** capital（旧写法只看 sorted[0]，
+      // 首条缺字段就误判成「无快照」）。一条都没有时 fail-closed：
+      // 返回空曲线 + capitalKnown=false，绝不再猜 accountBalance。
+      for (var _ci = 0; _ci < sorted.length; _ci++) {
+        var _c0 = toFiniteNum(sorted[_ci].capital, NaN);
+        if (Number.isFinite(_c0) && _c0 > 0) { _initCap = _c0; _capitalKnown = true; break; }
       }
-      if (_firstCap > 0) {
-        _initCap = _firstCap;
-      } else {
-        var bal = (settingsOverride && settingsOverride.accountBalance > 0) ? settingsOverride.accountBalance : 0;
-        if (!bal) {
-          try { var _s = loadSettings(); if (_s && _s.accountBalance > 0) bal = _s.accountBalance; } catch(e) { console.error('[utils]', e); }
-        }
-        _initCap = bal;   // 无日志：没有快照可用，只能用它作为起点
+      if (!_capitalKnown) {
+        return { data: [], initCap: 0, peakVal: 0, maxDDPercent: 0, finalEq: 0, totalPnl: 0,
+          capitalKnown: false, equityKnown: false, reason: 'capital-missing', balanceIsCurrentEquity: false };
       }
     }
 
@@ -900,10 +900,100 @@ function toFiniteNum(v, fallback) {
       initCap: _initCap,
       peakVal: peakVal,
       maxDDPercent: maxDD,
-      balanceIsCurrentEquity: _balanceIsCurrentEquity,
+      balanceIsCurrentEquity: false,
+      capitalKnown: _capitalKnown,
+      equityKnown: _equityKnown,
+      reason: _reason,
       finalEq: cum,
       totalPnl: totalPnl
     };
+  };
+
+  // ======== v5.6.47 批次 2/3：跨模块单一口径 helper ========
+  // 这些函数取代了散落在 dashboard / risk / stats / logs / analytics /
+  // skills-integration 里的 4 份「今日盈亏」、2 份「权益递推」、3 份「起点本金决议」
+  // 与 2 份「本周分桶」。任何新消费方必须调用这里，禁止再自行内联。
+
+  // 金额统一 8 位精度（P1-08）：fee 原本 toFixed(8)、pnlAmount 原本 toFixed(2)，
+  // 100 笔 0.0049 会把 0.49 抹成 0。显示层自带 toFixed(2)，不受影响。
+  util.PNL_DIGITS = 8;
+  util.roundAmount = function(v) {
+    var n = toFiniteNum(v, NaN);
+    return Number.isFinite(n) ? parseFloat(n.toFixed(util.PNL_DIGITS)) : null;
+  };
+
+  // 多腿部分平仓的加权均价（P1-05）：closePrice 保留「末腿成交价」语义供编辑链/
+  // 极值校验使用，反推整笔毛利 / 目标达成率一律改用本函数结果 weightedClosePrice。
+  util.computeWeightedClosePrice = function(closes) {
+    if (!Array.isArray(closes) || closes.length === 0) return null;
+    var sumW = 0, sumR = 0;
+    for (var i = 0; i < closes.length; i++) {
+      var c = closes[i] || {};
+      var p = toFiniteNum(c.price, NaN);
+      var r = toFiniteNum(c.ratio, NaN);
+      if (!Number.isFinite(p) || !Number.isFinite(r) || r <= 0) continue;
+      sumW += p * r;
+      sumR += r;
+    }
+    return sumR > 0 ? util.roundAmount(sumW / sumR) : null;
+  };
+
+  // 本周分桶（P1-01）：本地周一 00:00 起 7 天，[start, end) 半开区间。
+  // 旧实现只做 `closeDateStr >= mondayStr` 字符串比较，2099 年的记录会被计入本周。
+  util.getWeekRange = function(now) {
+    var d = new Date(now == null ? Date.now() : now);
+    if (!Number.isFinite(d.getTime())) return null;
+    var day = d.getDay();
+    var diff = day === 0 ? 6 : day - 1;
+    var start = new Date(d.getFullYear(), d.getMonth(), d.getDate() - diff, 0, 0, 0, 0);
+    return { startMs: start.getTime(), endMs: start.getTime() + 7 * 86400000 };
+  };
+  util.isInThisWeek = function(iso, now) {
+    var r = util.getWeekRange(now);
+    var t = new Date(iso).getTime();
+    return !!(r && Number.isFinite(t) && t >= r.startMs && t < r.endMs);
+  };
+
+  // 今日盈亏（P1-02 / 批次 3）：全站唯一实现，按本地日期归入今天后累加净盈亏。
+  util.computeTodayPnl = function(closed, now) {
+    var d = new Date(now == null ? Date.now() : now);
+    var todayStr = util.toLocalDateStr(d.toISOString());
+    var sum = 0;
+    for (var i = 0; i < (closed || []).length; i++) {
+      var l = closed[i] || {};
+      var ct = l.closeTime || l.time;
+      if (!ct) continue;
+      if (util.toLocalDateStr(ct) === todayStr) sum += toFiniteNum(l.pnlAmount, 0);
+    }
+    return util.roundAmount(sum);
+  };
+
+  // 展示样本（P1-04）：统计卡 / 分析页图表 / 风控中心共用同一份筛选后已平仓记录。
+  // 顺序必须与 stats.js 原有语义一致：先 applyFilters(logs)（保留 status 筛选），
+  // 再筛 isClosedTrade；旧 getFilteredClosed() 是反序，缺 status 维度。
+  util.getDisplayClosed = function() {
+    var arr = (typeof logs === 'undefined' || !Array.isArray(logs)) ? [] : logs;
+    if (typeof applyFilters === 'function') {
+      try { arr = applyFilters(arr) || []; } catch (e) { /* 筛选器异常则退回全量，不静默造空 */ }
+    }
+    return arr.filter(function(l) { return util.isClosedTrade(l); });
+  };
+
+  // 期初权益决议（P1-03）：CAGR 与夏普必须共用同一本金口径。
+  // 筛选态用样本 capital 均值，任一缺失即 fail-closed 返回 null（不冒充全局本金）；
+  // 非筛选态用调用方传入的全局账户本金。
+  util.resolveStartEquity = function(closed, hasAnyFilter, fallbackCapital) {
+    if (hasAnyFilter) {
+      var caps = (closed || []).map(function(l) {
+        var c = toFiniteNum(l && l.capital, NaN);
+        return Number.isFinite(c) && c > 0 ? c : null;
+      });
+      if (caps.length === 0 || caps.some(function(c) { return c === null; })) return null;
+      var total = caps.reduce(function(s, c) { return s + c; }, 0);
+      return total / caps.length;
+    }
+    var g = toFiniteNum(fallbackCapital, NaN);
+    return Number.isFinite(g) && g > 0 ? g : null;
   };
 
   // ======== 主题感知 Chart.js / Canvas 颜色桥接 ========

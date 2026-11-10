@@ -320,5 +320,7 @@ function makeStorage() {
   console.log('\n============================================');
   console.log('结果: ' + pass + ' 通过 / ' + fail + ' 失败' + (INJECT ? '  [注入自检模式，期望出现失败]' : ''));
   console.log('============================================');
+  require('./_gate').emit(pass, fail);
+  if (INJECT) require('./_gate').emitInject(fail > 0 ? 1 : 0, 1);
   process.exit(INJECT ? (fail > 0 ? 0 : 1) : (fail === 0 ? 0 : 1));
 })().catch(e => { fs.writeSync(2, '跑测器崩溃: ' + (e && e.stack || e) + '\n'); process.exit(1); });

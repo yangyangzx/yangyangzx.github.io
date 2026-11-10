@@ -1,8 +1,8 @@
 # TradingDiscipline · 交易风险管理终端
 
-**纯前端期货/合约交易风控与复盘工具 · v5.6.45**
+**纯前端期货/合约交易风控与复盘工具 · v5.6.47**
 
-面向加密货币/合约交易者的全流程交易管理系统：开仓前计算 → 持仓监控 → 平仓记录 → 统计分析 → 复盘优化。所有数据本地存储（`localStorage`），完全离线运行，无构建工具，双击 `index.html` 即可使用。
+面向加密货币/合约交易者的全流程交易管理系统：开仓前计算 → 持仓监控 → 平仓记录 → 统计分析 → 复盘优化。所有数据本地存储（`localStorage`），无构建工具，双击 `index.html` 即可使用；**图表库（Chart.js 4.4.0 / Font Awesome）走 CDN**，断网时 `js/chart-guard.js` 会注入占位桩，核心计算、风控闸门与全部交易数据仍可离线使用（不是「完全零外部依赖」）。
 
 ---
 
@@ -191,7 +191,7 @@ notes/
 │   ├── skills-integration.js  凯利/ATR/集中度/热量/日亏熔断/频率
 │   ├── calc-visuals.js     计算结果可视化（风险/保证金/盈亏比/多止盈条）
 │   ├── calculation-ui.js   计算器 UI 状态渲染（脏态徽章）
-│   ├── calculator.js       开仓计算管线（2205 行，核心）
+│   ├── calculator.js       开仓计算管线（核心，行数以 `wc -l` 为准）
 │   ├── logs.js             平仓生命周期（结算单一入口）
 │   ├── rendering.js        日志列表渲染
 │   ├── stats.js            统计聚合（胜率/期望/成本侵蚀/连亏）
@@ -210,8 +210,11 @@ notes/
 │   ├── app.js              事件绑定/主题/初始化
 │   └── version.js          版本号（完整 changelog 见 CHANGELOG.md）
 ├── test/
-│   ├── run-all.js           聚合跑测器（npm test 入口，跑 18 个无头跑测器）
-│   ├── run-tests.html       浏览器内回归测试（665 条断言，打开即跑）★ 活跃主套件
+│   ├── run-all.js           聚合门禁（npm test 入口，21 个正常跑测器 + 8 组注入自检 = 29 项；只认 GATE 契约）
+│   ├── _gate.js             统一机器可读契约（GATE PASS/FAIL/TOTAL、GATE INJECT CAUGHT/EXPECTED）
+│   ├── verify_gate.js       门禁自身回归（假绿 fixture + 11 条守卫逐条变异注入）
+│   ├── verify_data_integrity.js 数据完整性回归（时间 / 缓存 / 并发 / 备份恢复）
+│   ├── run-tests.html       浏览器内回归测试（675 条断言，打开即跑）★ 活跃主套件
 │   ├── _rt_headless.js      run-tests.html 的无头运行器
 │   ├── _edit_scenarios.js   编辑弹窗场景回归（S0~S12）
 │   ├── verify_*.js          各专项回归（平仓类型 / 日志簿记 / 配置 / 重置 / 参数化 / 不变量 …）
@@ -226,8 +229,8 @@ notes/
 
 ## 六、测试与验证
 
-- **一键全量回归**：`npm test` → `test/run-all.js`，依次跑完 18 个无头跑测器（主回归 + 核心算法升级 + 跨模块计算逻辑 + 品牌图标接线 + 导航品牌区 + 编辑场景 + 平仓类型 + 日志簿记 + 配置 + 重置 + 冒烟 + 参数化 + 副作用 + 不变量 + MAE/MFE + 开仓审计 + 覆盖率补盲），任一失败 `exit 1`。这是本仓库唯一有效的自动化门禁；`test/verify_core_algo.js`、`test/verify_crossmodule.js`、`test/verify_assets.js` 与 `test/verify_nav_logo.js` 带 `--inject` 自检模式，注入错误必须复红，否则断言没有捕获力。
-- **浏览器内回归**：打开 `test/run-tests.html` 自动运行 665 条断言（平仓三态、凯利链、集中度、一致性门、分批建仓、回撤告警阈值、移动端适配、纪律 LED 文案条数与顺序等 32 组）；也可 `npm run test:main` 无头跑；
+- **一键全量回归**：`npm test` → `test/run-all.js`，依次跑完 **22 个正常跑测器 + 9 组注入自检（共 31 项）**，任一失败 `exit 1`。这是本仓库唯一有效的自动化门禁。v5.6.46 起门禁只认每个跑测器收尾打印的机器可读契约 `GATE PASS=n FAIL=n TOTAL=n`（注入模式为 `GATE INJECT CAUGHT=n EXPECTED=n`）：解析不到契约、`FAIL>0`（即使 `exit 0`）、`PASS=0`、`TOTAL` 不自洽、断言总数低于该组登记下限 `min`、退出码非 0，一律 fail-closed 判红；并在汇总行核对全局断言总数（当前 **3724 条**）。`test/verify_gate.js` 用真实 `run-all.js` 副本跑假绿/零断言 fixture，`--inject` 把 11 条守卫逐条独立架空；`test/verify_data_integrity.js --inject` 4 个点、`test/verify_batch2.js --inject` 25 个点各自单独 boot 干净 JSDOM。注入错误必须复红，否则断言没有捕获力。
+- **浏览器内回归**：打开 `test/run-tests.html` 自动运行 675 条断言（平仓三态、凯利链、集中度、一致性门、分批建仓、回撤告警阈值、移动端适配、纪律 LED 文案条数与顺序等 32 组）；也可 `npm run test:main` 无头跑；
 - 修改 JS 后建议：`node --check js/<file>.js` 语法检查 → `npm test` → 浏览器强刷（URL 追加 `?cb=<时间戳>` 避开缓存）→ 关键链路 E2E；
 - ⚠️ Jest 已移除：`tests/` 目录早已删除，`package.json` 中的 jest 配置为悬空配置（v5.6.34 已清理）。加测试请用 `run-tests.html` 或 `test/verify_*.js`；
 - ⚠️ `test/verify-fixes.html` 是 2026-09-23 的一次性验证页，**不是回归套件**：其第 6–9 节是内联复现的算法（页面自身注释已声明"改动 modals.js 后不会自动失效"），不要作为验收依据。
@@ -265,13 +268,13 @@ notes/
 ### 3. 注释规范问题
 
 - **投机性注释**（描述未来假设而非当前决策）：`chart-guard.js:15/19`、`calculator.js:69/1208`、`planner.js:545`、`storage.js:10` 等处出现"供将来…""便于日后调整""将来若有人…""暂不启用"；
-- `js/version.js` 348 行中 **346 行是注释（99.4%）**，完整 changelog 常驻生产脚本，每次刷新下载 35 KB 只为 1 行 `var APP_VERSION`。建议迁至 `CHANGELOG.md`；
+- `js/version.js` 现仅保留 `APP_VERSION` 一行（完整 changelog 已于 v5.6.35 迁至 `CHANGELOG.md`），历史「348 行 / 35 KB」的性能问题已消除；
 - 项目约定：注释只写"为什么"，不写未来假设；不留注释掉的代码块；调试残留随修复一并删除。
 
-### 4. 版本号同步（四处，漏一处即缓存事故）
+### 4. 版本号同步（漏一处即缓存事故）
 
-`js/version.js` 的 `APP_VERSION` → `index.html` 的 28 处 JS `?v=` + 15 处 CSS `?v=` → `test/run-tests.html` 的 17 处 `?v=` → `version.js` 顶部 changelog。  
-（`package.json` 的 `version: 5.0.0` 与实际 5.6.35 脱节且无程序读取。）
+`js/version.js` 的 `APP_VERSION` → `index.html` **49 处** `?v=`（43 个 JS/CSS + 6 个图标/manifest 引用）→ `test/run-tests.html` **17 处** `?v=`（含 `APP_VERSION === '<版本号>'` 字面量绊线）→ `CHANGELOG.md` 条目；`manifest.json` 的 **3 个** icon `src` 也带同一 `?v=`（同名覆盖必须破缓存）。另同步 `README.md` / `CLAUDE.md` 顶部版本与跑测器数量。守护：`test/verify_assets.js` 正常断言 + `--inject`。  
+（`package.json` 已删除 `version` 字段，避免与 `APP_VERSION` 脱节且无程序读取的死配置。）
 
 ---
 

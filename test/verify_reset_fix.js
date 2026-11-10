@@ -194,4 +194,5 @@ check(`无设置时 resetForm 回退默认 0.08`,
 say('\n========================================');
 say(`结果：${pass} 通过 / ${fail} 失败（共 ${pass+fail} 项）`);
 say('========================================\n');
+require('./_gate').emit(pass, fail);
 process.exit(fail > 0 ? 1 : 0);

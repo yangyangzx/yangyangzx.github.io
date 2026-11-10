@@ -159,6 +159,7 @@ function makeStorage() {
   Object.keys(blockerTally).sort((a, b) => blockerTally[b] - blockerTally[a])
     .forEach(k => console.log('   ' + k + ' × ' + blockerTally[k]));
   console.log('通过 ' + pass + ' / 失败 ' + fail);
+  require('./_gate').emit(pass, fail);
   if (bad.length) { console.log('\n失败明细：'); bad.slice(0, 12).forEach(b => console.log('  - ' + b)); if (bad.length > 12) console.log('  … 共 ' + bad.length + ' 条'); }
   process.exit(fail > 0 ? 1 : 0);
 })().catch(e => { console.error('FATAL', e); process.exit(2); });

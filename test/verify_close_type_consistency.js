@@ -107,6 +107,7 @@ if (!r) {
 
 console.log('\n' + '='.repeat(64));
 console.log('PASS=' + r.pass + '  FAIL=' + r.fail);
+require('./_gate').emit(r.pass, r.fail);
 if (r.notes.length) {
   console.log('\n--- 落库快照 ---');
   r.notes.forEach(function (n) { console.log('  · ' + n); });

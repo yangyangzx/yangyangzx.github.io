@@ -327,5 +327,6 @@ console.log('\n[3] 连亏降仓阈值与系数（现货，连亏 2 笔）');
 
   console.log('\n================ 结果 ================');
   console.log('通过 ' + pass + ' / 失败 ' + fail);
+  require('./_gate').emit(pass, fail);
   process.exit(fail > 0 ? 1 : 0);
 })().catch(e => { console.error('FATAL', e); process.exit(2); });

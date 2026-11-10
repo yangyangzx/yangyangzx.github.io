@@ -179,6 +179,7 @@ const { window } = dom;
   console.log('='.repeat(60));
   console.log('覆盖率补盲跑测器 (verify_coverage_gaps.js)');
   console.log('  PASS=' + pass + ' FAIL=' + fail);
+  require('./_gate').emit(pass, fail);
   if (failures.length > 0) {
     console.log('  失败明细:');
     failures.forEach(f => console.log('    - ' + f));

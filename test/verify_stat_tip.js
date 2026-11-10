@@ -109,4 +109,7 @@ T('同一按钮重复悬停保持同一浮层实例', popover() === before);
 
 console.log('\n════════════════════════════');
 console.log(MODE ? `[反向用例 ${MODE}]  ${pass} 通过 / ${fail} 失败` : `${pass} 通过 / ${fail} 失败`);
-process.exit(fail ? 1 : 0);
+require('./_gate').emit(pass, fail);
+if (MODE) require('./_gate').emitInject(fail > 0 ? 1 : 0, 1);
+// 注入自检语义与其余 --inject 跑测器统一：捕获到缺陷 → exit 0；没捕获到 → exit 1。
+process.exit(MODE ? (fail > 0 ? 0 : 1) : (fail ? 1 : 0));

@@ -102,7 +102,9 @@ function extractPatternName(raw) {
 function renderAnalytics() {
   destroyAnalyticsCharts();
 
-  var closed = getClosedSorted();
+  // P1-04：分析页图表与统计卡共用同一份「筛选后已平仓样本」。
+  // 旧实现恒用全量 getClosedSorted()，同一面板出现图表最大回撤 8% / 统计卡 58%。
+  var closed = window.utils.getDisplayClosed();
 
   var fns = [
     ['renderEquityChart',       function() { renderEquityChart(closed); }],
@@ -145,15 +147,12 @@ function renderEquityChart(closed) {
     return;
   }
 
-  // 取初始权益：从首笔已平仓日志的 capital 取，无则从 getAccountCapital() 兜底
+  // 取初始权益：P0-5 / 批次 3 —— 唯一权威是 calcEquityCurve 的 initCap。
+  // 旧实现在此自行「首笔 capital → getAccountCapital()」三级回退，而后者是
+  // 已含历史盈亏的当前净值；缺 capital 时等于把 P0-5 的重复计入原样放回。
   var sortedClosed = [...closed].sort(function(a, b) { return new Date(a.closeTime || a.time) - new Date(b.closeTime || b.time); });
-  var capital = 0;
-  if (sortedClosed.length > 0 && sortedClosed[0].capital != null && !isNaN(sortedClosed[0].capital) && sortedClosed[0].capital > 0) {
-    capital = sortedClosed[0].capital;
-  } else {
-    var _eqCapital = getAccountCapital();
-    if (_eqCapital != null && _eqCapital > 0) capital = _eqCapital;
-  }
+  var _curve = window.utils.calcEquityCurve(sortedClosed);
+  var capital = _curve.capitalKnown ? _curve.initCap : 0;
 
   // 检查设置中的 accountBalance 是否与曲线实际起点差异较大
   var _abSettings = null;
@@ -186,13 +185,12 @@ function renderEquityChart(closed) {
       _noteEl.style.cssText = 'font-size:11px;color:var(--chart-canvas-text);margin-top:6px;text-align:right;';
       canvas.parentElement.appendChild(_noteEl);
     }
-    _noteEl.textContent = '账户余额未设置，权益从 0 开始计算。请在「系统设置」中填写账户余额以获得准确资金曲线';
+    _noteEl.textContent = '缺少开仓本金快照（capital），无法计算权益曲线；旧记录请在编辑页补录本金';
   } else if (_noteEl) {
     _noteEl.remove();
   }
 
-  // 使用统一权益曲线计算（避免手动重复实现相同逻辑）
-  var _curve = window.utils.calcEquityCurve(sortedClosed);
+  // 使用统一权益曲线计算（_curve 已在起点决议处算好，避免重复递推）
   var _eqLabels = [], _eqData = [];
   for (var _j = 0; _j < _curve.data.length; _j++) {
     _eqLabels.push(fmtDate(sortedClosed[_j].closeTime));

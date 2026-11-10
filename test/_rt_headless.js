@@ -83,4 +83,5 @@ if (errors.length) {
 // 整段没执行时 summary 仍是初始占位、out 停在「加载中…」——静默失败也当失败上报。
 const ran = /PASS=\d+ FAIL=\d+/.test(text) && (nPass + nFail) > 0;
 if (!ran) console.log('ERROR: runAll 未产出任何断言结果（整段代码未执行）');
+require('./_gate').emit(nPass, nFail + (ran ? 0 : 1));
 process.exit(ran && nFail === 0 ? 0 : 1);

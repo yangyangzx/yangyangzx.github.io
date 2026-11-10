@@ -217,6 +217,7 @@ function waitFor(fn, ms) {
 console.log('\n==== 汇总 ====');
 let pass = results.filter(r => r.ok).length;
 console.log('PASS=' + pass + ' FAIL=' + (results.length - pass) + ' TOTAL=' + results.length);
+require('./_gate').emit(pass, results.length - pass);
 if (errors.length) {
   console.log('\n--- 页面错误（前 5 条）---');
   errors.slice(0, 5).forEach(e => console.log(String(e).slice(0, 800)));

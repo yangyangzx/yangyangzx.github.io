@@ -210,9 +210,11 @@ if (INJECT) {
       (ok ? '已捕获（本轮 ' + r.failures.length + ' 条复红）' : '未捕获 → 断言无捕获力'));
   }
   console.log('\n[注入自检] ' + caught + '/' + INJECTIONS.length + ' 个注入点被逐条捕获');
+  require('./_gate').emitInject(caught, INJECTIONS.length);
   process.exit(caught === INJECTIONS.length ? 0 : 1);
 } else {
   const r = runChecks(loadInputs());
   console.log('\n通过 ' + r.pass + ' / 失败 ' + r.failures.length);
+  require('./_gate').emit(r.pass, r.failures.length);
   process.exit(r.failures.length > 0 ? 1 : 0);
 }

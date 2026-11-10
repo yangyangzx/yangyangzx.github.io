@@ -440,4 +440,5 @@ console.log('\n== H. 编辑弹窗「修改最后一笔」：替换末腿不重�
 //   H：getHeatWarnMax 内部 loadSettings() 有兜底，实际不可达；仅为结构性瑕疵，非运行期缺陷。
 
 console.log('\n==== 结果：' + pass + ' 项符合预期，' + fail + ' 项缺陷被实证确认 ====');
+require('./_gate').emit(pass, fail);
 process.exit(fail ? 1 : 0);

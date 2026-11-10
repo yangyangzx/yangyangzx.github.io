@@ -171,23 +171,24 @@ function getCurrentDrawdown() {
     }
   } catch (e) { curve = null; }
 
-  if (curve && curve.data && curve.data.length > 0) {
+  if (curve && curve.capitalKnown && curve.data && curve.data.length > 0) {
     capital = curve.initCap;
     equity = curve.finalEq;
     peak = curve.peakVal;
-  } else {
+  } else if (!closed.length) {
+    // 新用户 / 无历史平仓记录：属正常状态，绝不能判 readFailed，
+    // 否则 calculator 的回撤闸门会把首次开仓也 fail-closed 拦死。
+    // 这里只保留账户余额作展示基准，不做任何权益递推（没有记录可累加）。
     try { if (settings && Number(settings.accountBalance) > 0) capital = Number(settings.accountBalance); } catch (e) {}
-    if (capital <= 0 && closed.length > 0 && Number(closed[0].capital) > 0) {
-      capital = Number(closed[0].capital);
-    }
     equity = capital;
     peak = capital;
-    for (var i = 0; i < closed.length; i++) {
-      var adj = Number(closed[i].balanceAdjustment);
-      if (isFinite(adj) && adj !== 0) equity += adj;
-      equity += toFiniteNum(closed[i].pnlAmount);
-      if (equity > peak) peak = equity;
-    }
+  } else {
+    // P0-5 / 批次 3：删掉与 risk.js 逐行同构的兜底递推。它用 accountBalance
+    // （当前净值，已含已实现盈亏）作起点再累加 Σpnl，恰好在曲线 fail-closed
+    // 时把「重复计入」原样放回，且 readFailed 仍为 false → 闸门静默放行。
+    // 有记录却算不出权益 ⇒ 真失败，透出 readFailed=true 由 calculator 硬阻断。
+    _readFailed = true;
+    capital = 0; equity = 0; peak = 0;
   }
 
   out.peak = peak;
@@ -535,23 +536,16 @@ function checkSymbolConcentration(symbol, positionSize, leverage, capital, openP
  * @returns {object} {overLimit, todayPnl, limit, blocked}
  */
 function checkDailyLossLimit(capitalOverride) {
-  var todayStr = window.utils.toLocalDateStr(new Date().toISOString());
-  var todayPnl = 0;
-  // 统一使用 isClosedTrade 判定已平仓，与 renderLogs/stats.js 口径一致
+  // P1-02 / 批次 3：硬闸门恒用全量已平仓样本（getClosedSorted），求和走
+  // utils.computeTodayPnl 唯一实现，与 risk.js 风控卡 / dashboard 今日盈亏同值。
+  // 旧实现在此内联第四份「今日盈亏」且直接遍历全量 logs，与显示侧筛选态分叉。
   var closed = [];
-  for (var i = 0; i < logs.length; i++) {
-    if (window.utils.isClosedTrade(logs[i])) {
-      closed.push(logs[i]);
-    }
-  }
-  for (var i = 0; i < closed.length; i++) {
-    var ct = closed[i].closeTime;
-    if (!ct) continue;
-    var closeDateStr = window.utils.toLocalDateStr(ct);
-    if (closeDateStr === todayStr) {
-      todayPnl += toFiniteNum(closed[i].pnlAmount);
-    }
-  }
+  try {
+    closed = (typeof getClosedSorted === 'function')
+      ? (getClosedSorted() || [])
+      : logs.filter(window.utils.isClosedTrade);
+  } catch (e) { closed = []; }
+  var todayPnl = window.utils.computeTodayPnl(closed);
 
   var settings = loadSettings();
   // 口径统一：优先用调用方传入的表单本金（与本次计算的风险预算分母一致），

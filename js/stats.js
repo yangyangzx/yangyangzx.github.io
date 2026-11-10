@@ -25,7 +25,9 @@ function updateStats() {
   // --- 过滤逻辑 ---
   // 先在全部日志上筛选，再派生已平仓样本；否则“未平仓/状态”筛选会被提前丢弃。
   var filteredLogs = applyFilters(logs);
-  let closed = filteredLogs.filter(function(l) { return window.utils.isClosedTrade(l); });
+  // P1-04：统计卡 / 分析页图表 / 风控中心共用 utils.getDisplayClosed() 单一入口，
+  // 顺序保持「先 applyFilters(logs) 再筛 isClosedTrade」，不丢 status 筛选维度。
+  let closed = window.utils.getDisplayClosed();
   var hasAnyFilter = !!( _activeFilters.direction || _activeFilters.symbol || _activeFilters.strategy ||
                          _activeFilters.status || _activeFilters.pnl || _activeFilters.time );
 
@@ -112,7 +114,13 @@ function updateStats() {
   var peak = ddCurve.peakVal;
   var maxDD = ddCurve.maxDDPercent;
   const ddEl = document.getElementById('statMaxDD');
-  if (maxDD > 0 || peak > 0) {
+  // P0-5：缺 capital 时曲线 fail-closed 返回空数据，必须显式告知用户，
+  // 不能用「—」冒充「没有回撤」，否则会误导成风险已达标。
+  if (!ddCurve.capitalKnown && closed.length > 0) {
+    ddEl.textContent = '—';
+    ddEl.style.color = '';
+    ddEl.title = '缺少开仓本金快照（capital），无法计算权益与最大回撤';
+  } else if (maxDD > 0 || peak > 0) {
     ddEl.textContent = maxDD.toFixed(1) + '%';
     ddEl.classList.remove('dd-danger', 'dd-warn', 'dd-safe');
     // 阈值走 utils.drawdownAlertClass（单一权威，读 settings.maxDrawdownAlert）。
@@ -140,8 +148,12 @@ function updateStats() {
       // 实测当日 +100 U 显示「+36500 U/年」。改 CAGR：
       //   CAGR = (期末权益 / 期初权益)^(365/跨度天数) − 1
       // 期初权益取不到（新用户 accountBalance=0）或权益被打穿时 fail-closed 显示「—」。
-      var _startEq = (typeof getAccountCapital === 'function') ? getAccountCapital() : null;
-      _startEq = Number(_startEq);
+      // P1-03：CAGR 与夏普共用 resolveStartEquity —— 筛选态用样本 capital 均值
+      // （缺字段即 null，绝不退回全局账户余额冒充），非筛选态用全局本金。
+      // 旧实现分子用筛选样本 totalPnl、分母却恒用全局本金，口径自相矛盾。
+      var _startEqRaw = window.utils.resolveStartEquity(closed, hasAnyFilter,
+        (typeof getAccountCapital === 'function') ? getAccountCapital() : null);
+      var _startEq = Number(_startEqRaw);
       if (_t0 !== null && _t1 > _t0 && totalPnl !== 0 &&
           Number.isFinite(_startEq) && _startEq > 0) {
         var _spanDays = Math.max((_t1 - _t0) / 86400000, 1);
@@ -161,9 +173,11 @@ function updateStats() {
       } else {
         annEl.textContent = '—';
         annEl.style.color = '';
-        annEl.title = (!Number.isFinite(_startEq) || _startEq <= 0)
-          ? '未读取到期初权益（账户余额），无法计算 CAGR。请在系统设置中填写账户余额。'
-          : '有效平仓时间跨度不足或区间盈亏为 0，无法计算 CAGR';
+        annEl.title = (hasAnyFilter && _startEqRaw === null)
+          ? '当前筛选样本缺少期初权益（capital）字段，无法计算 CAGR'
+          : (!Number.isFinite(_startEq) || _startEq <= 0)
+            ? '未读取到期初权益（账户余额），无法计算 CAGR。请在系统设置中填写账户余额。'
+            : '有效平仓时间跨度不足或区间盈亏为 0，无法计算 CAGR';
       }
     }
     // 夏普（日频）：权威实现在 utils.dailySharpe（铺满空闲日 + 365 天年化）。
@@ -178,14 +192,9 @@ function updateStats() {
       // 会把「只看 BTC」的收益摊到全账户本金上，夏普被系统性压低。
       // 筛选样本每条都带合法 capital 时改用该样本的期初权益均值；缺字段时
       // fail-closed 返回 null（显示「—」），不用全局本金冒充。
-      var _sharpeEquity = (typeof getAccountCapital === 'function') ? getAccountCapital() : null;
-      if (hasAnyFilter) {
-        var _caps = closed.map(function (l) { var c = toFiniteNum(l.capital, 0); return c > 0 ? c : null; });
-        var _allHaveCapital = _caps.length > 0 && _caps.every(function (c) { return c !== null; });
-        _sharpeEquity = _allHaveCapital
-          ? _caps.reduce(function (s, c) { return s + c; }, 0) / _caps.length
-          : null;
-      }
+      // P1-03：与上方 CAGR 走同一个 resolveStartEquity，杜绝两处本金口径分叉。
+      var _sharpeEquity = window.utils.resolveStartEquity(closed, hasAnyFilter,
+        (typeof getAccountCapital === 'function') ? getAccountCapital() : null);
       var _sh = window.utils.dailySharpe(closed, { startEquity: _sharpeEquity });
       if (_sh) {
         shEl.textContent = _sh.sharpe.toFixed(2);
@@ -220,9 +229,17 @@ function updateStats() {
         // P4-5 修复：优先用整笔累计毛利 = realizedPnl + realizedFee（部分平仓链下新旧数据都
         // 正确，且与分子 realizedFee 同口径）；缺失才退回 grossPnlAmount，再退回 |pnlAmount|。
         // （修复前部分平仓链的 grossPnlAmount 是"末段全量毛利"，拿它当分母会失真）
+        // P1-06：pnlAmount = grossPnl − fee − legacySlippageCost，故 realizedPnl +
+        // realizedFee 只还原到「扣滑点之前」还差一个 slippageCost，分母偏小会把
+        // 成本侵蚀系统性抬高（实测 1.8% 报成 2.0%）。ticks-v1 模型的滑点已计入
+        // effectiveEntryPrice，落库的 planning.totalCost 不得二次加回。
         var _gpRp = parseFloat(closed[_k].realizedPnl);
         var _gpRf = parseFloat(closed[_k].realizedFee);
-        var _gpSum = (!isNaN(_gpRp) && !isNaN(_gpRf)) ? Math.abs(_gpRp + _gpRf) : NaN;
+        var _scObj = closed[_k].slippage;
+        var _ticksModel = !!(_scObj && (_scObj.schema === 'ticks-v1' ||
+          (_scObj.planning && _scObj.planning.schema === 'ticks-v1')));
+        var _slip = _ticksModel ? 0 : Math.max(0, toFiniteNum(closed[_k].slippageCost, 0));
+        var _gpSum = (!isNaN(_gpRp) && !isNaN(_gpRf)) ? Math.abs(_gpRp + _gpRf + _slip) : NaN;
         var _gpRaw = parseFloat(closed[_k].grossPnlAmount);
         var _gp = (!isNaN(_gpSum) && _gpSum > 0) ? _gpSum
           : ((!isNaN(_gpRaw) && Math.abs(_gpRaw) > 0) ? Math.abs(_gpRaw)
@@ -242,7 +259,10 @@ function updateStats() {
   let targetTotal = 0, targetHit = 0;
   for (const l of closed) {
     if (l.targetPrice == null || l.closePrice == null) continue;
-    const tp = parseFloat(l.targetPrice), cp = parseFloat(l.closePrice);
+    // P1-05：多腿部分平仓的 closePrice 是末腿价，不能代表整笔成交水平。
+    // 新记录带 weightedClosePrice（按各腿占原始仓位比例加权），历史记录自动回退。
+    const tp = parseFloat(l.targetPrice);
+    const cp = parseFloat(l.weightedClosePrice != null ? l.weightedClosePrice : l.closePrice);
     if (isNaN(tp) || isNaN(cp)) continue;
     if (l.direction !== 'long' && l.direction !== 'short') continue;
     targetTotal++;

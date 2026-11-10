@@ -165,12 +165,22 @@ function _sanitizeLoadedSettings(merged) {
 }
 
 /**
- * 加载设置（返回对象）
+ * 设置对象的深拷贝。SETTINGS_CACHE 是唯一可变副本，对外一律交出副本：
+ * P0-3（v5.6.46）实证——旧实现返回缓存本身，任何消费点原地改一个字段
+ * （如 dailyLossLimit=45）就会把日亏硬闸门从 500 放大到 4500，而磁盘仍是 5。
+ * 风控闸门必须只认落库值，绝不能被内存里的一次临时改写污染。
+ */
+function _cloneSettings(s) {
+  return JSON.parse(JSON.stringify(s));
+}
+
+/**
+ * 加载设置（返回对象副本）
  */
 function loadSettings() {
-  if (SETTINGS_CACHE !== null) return SETTINGS_CACHE;
+  if (SETTINGS_CACHE !== null) return _cloneSettings(SETTINGS_CACHE);
   var raw = localStorage.getItem(SETTINGS_KEY);
-  if (!raw) { SETTINGS_CACHE = JSON.parse(JSON.stringify(SETTINGS_DEFAULTS)); return SETTINGS_CACHE; }
+  if (!raw) { SETTINGS_CACHE = _cloneSettings(SETTINGS_DEFAULTS); return _cloneSettings(SETTINGS_CACHE); }
   try {
     var settings = JSON.parse(raw);
     var merged = {};
@@ -180,10 +190,10 @@ function loadSettings() {
       merged[k] = (settings[k] != null) ? settings[k] : SETTINGS_DEFAULTS[k];
     }
     SETTINGS_CACHE = _sanitizeLoadedSettings(merged);
-    return SETTINGS_CACHE;
+    return _cloneSettings(SETTINGS_CACHE);
   } catch (e) {
-    SETTINGS_CACHE = JSON.parse(JSON.stringify(SETTINGS_DEFAULTS));
-    return SETTINGS_CACHE;
+    SETTINGS_CACHE = _cloneSettings(SETTINGS_DEFAULTS);
+    return _cloneSettings(SETTINGS_CACHE);
   }
 }
 
@@ -518,8 +528,10 @@ function saveSettings() {
   }
   settings.tpRRs = _tpVals;
 
-  // 配额不足时不得误报"设置已保存"；失败则保留内存中的设置对象，避免表单输入被回滚
-  if (!_safeSetSettings(settings)) return;
+  // 配额不足时不得误报"设置已保存"。P0-3：写盘失败必须让缓存失效——
+  // 此时 settings 可能已被本次表单写入，留着缓存会让后续 loadSettings() 拿到
+  // 一个磁盘上根本不存在的值（内存/磁盘分叉，风控闸门按脏值判定）。
+  if (!_safeSetSettings(settings)) { _clearSettingsCache(); return; }
   _clearSettingsCache();
 
   showToast('设置已保存', 'success');
@@ -673,6 +685,39 @@ function stripBOM(text) {
  * 修复策略是双向的：导出端改写成机器键（数据文件不该存展示文案），
  * 导入端保留中文反查以兼容历史备份，并拒绝值域外的值。
  */
+// P1-13：CSV 与 JSON 两条导入路径共用的数值解析。
+// 旧 CSV 路径 `v.replace(/[, ]/g,'')` 把欧式小数逗号当千分位（'1,5' → 15），
+// JSON 路径 `parseFloat('1,5')` 又前缀截断成 1，同一个值给两个错值且无告警。
+// 规则：逗号后 1~2 位视为小数逗号；'1.234,56' 是千分位分组 + 小数逗号；
+// 其余（含 '1,234.56' / '1,100'）按千分位剥离。Infinity / 1e999 一律 null。
+function parseImportNumber(v) {
+  var s = String(v == null ? '' : v).trim().replace(/\u00A0/g, ' ');
+  if (!s) return null;
+  if (/^[+-]?\d{1,3}(?:\.\d{3})+,\d{1,2}$/.test(s)) {
+    s = s.replace(/\./g, '').replace(',', '.');
+  } else if (/^[+-]?\d+,\d{1,2}$/.test(s)) {
+    s = s.replace(',', '.');
+  } else {
+    s = s.replace(/[\s,]/g, '');
+  }
+  var n = parseFloat(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+// P1-11：signals 是机器键数组，历史 CSV 可能写中文标签（SIGNAL_LABELS 值）。
+// 参照 closeType 的反查模式；未知值保留原字符串，绝不抹空（抹空会静默丢信号）。
+function _normalizeCsvSignal(v) {
+  var s = String(v == null ? '' : v).trim();
+  if (!s) return '';
+  if (typeof SIGNAL_LABELS === 'undefined') return s;
+  if (Object.prototype.hasOwnProperty.call(SIGNAL_LABELS, s)) return s;
+  var keys = Object.keys(SIGNAL_LABELS);
+  for (var i = 0; i < keys.length; i++) {
+    if (SIGNAL_LABELS[keys[i]] === s) return keys[i];
+  }
+  return s;
+}
+
 function _isKnownCloseType(s) {
   if (typeof CLOSE_TYPE_LABELS === 'undefined' || !s) return false;
   if (Object.prototype.hasOwnProperty.call(CLOSE_TYPE_LABELS, s)) return true;
@@ -719,7 +764,9 @@ function parseCSVImport(csvText) {
     '盘中动作':'actions','止损轨迹':'stopHistory','分批明细':'splitEntries','加权均价模型':'weightedEntryModel',
     '目标盈亏比':'targetRR','计划净盈利':'plannedNetProfit',
     // 含费净 RR 的三段金额（2026-10-10）。缺列时复盘无法还原 RR 是含费口径还是价格距离口径。
-    '毛利盈利':'rrGrossProfit','净盈利':'rrNetProfit','净亏损':'rrNetLoss'
+    '毛利盈利':'rrGrossProfit','净盈利':'rrNetProfit','净亏损':'rrNetLoss',
+    // v5.6.47：两列追加在表头末尾，与 io.js exportCSV 的 line 数组一一对应。
+    '加权平仓价':'weightedClosePrice','形态方向/具体形态':'strategyPattern'
   };
   var CSV_ARRAY_FIELDS = ['signals','lossReason','emotions','reason'];
   // actions/stopHistory 与 closes 同为 JSON 列：导出时序列化，导入时还原成数组。
@@ -727,18 +774,22 @@ function parseCSVImport(csvText) {
   var CSV_JSON_FIELDS = ['actions','splitEntries','closes','stopHistory'];
   // targetRR / plannedNetProfit 必须入表：stats.js 的「盈亏比偏差」靠这对字段比对，
   // 缺列时它们退成 undefined 被整笔排除，指标样本量静默缩小（导出→导入一轮后全丢）。
-  var CSV_NUM_FIELDS = ['entryPrice','stopLoss','targetPrice','positionSize','leverage','riskAmount','capital','fee','slippageCost','closePrice','pnlAmount','mae','mfe','lowPrice','highPrice','rMultiple','pnlPercent','holdDuration','realizedPnl','realizedFee','closedRatio','initialRiskAmount','initialPositionSize','targetRR','plannedNetProfit','rrGrossProfit','rrNetProfit','rrNetLoss'];
+  var CSV_NUM_FIELDS = ['entryPrice','stopLoss','targetPrice','positionSize','leverage','riskAmount','capital','fee','slippageCost','closePrice','weightedClosePrice','pnlAmount','mae','mfe','lowPrice','highPrice','rMultiple','pnlPercent','holdDuration','realizedPnl','realizedFee','closedRatio','initialRiskAmount','initialPositionSize','targetRR','plannedNetProfit','rrGrossProfit','rrNetProfit','rrNetLoss'];
   var CSV_INT_FIELDS = ['mindsetScore','executionScore'];
 
   var headers = lines[0];
   var imported = [];
-  var importWarnings = [];
+  // P1-09：旧实现把「列数不符（真的跳过）」与「值域告警（照常导入）」混进同一个
+  // importWarnings 数组，拼接时却统一冠上「N 行列数与表头不一致，已跳过」。
+  // 实测 3 条 closeType 值域外的记录全部导入成功，用户却看到「3 行已跳过」，
+  // 最常见的补救动作是重复导入同一份 CSV，反而引入去重风险。现拆成两类。
+  var skippedRows = [], valueWarnings = [];
   for (var i = 1; i < lines.length; i++) {
     var values = lines[i];
     // P1 修复：字段数与 header 不一致说明该行已损坏（换行/引号未闭合/列数变化）。
     // 静默跳过会让一条记录悄悄少列、且用户无从察觉；改为记录并提示。
     if (values.length !== headers.length) {
-      importWarnings.push('第 ' + (i + 1) + ' 行字段数 ' + values.length + ' ≠ 表头 ' + headers.length);
+      skippedRows.push('第 ' + (i + 1) + ' 行字段数 ' + values.length + ' ≠ 表头 ' + headers.length);
       continue;
     }
     var obj = {};
@@ -749,26 +800,25 @@ function parseCSVImport(csvText) {
       if (key === 'closeType') {
         v = _normalizeCsvCloseType(v);
         if (v && !_isKnownCloseType(v)) {
-          importWarnings.push('第 ' + (i + 1) + ' 行平仓类型「' + v + '」不在已知值域');
+          valueWarnings.push('第 ' + (i + 1) + ' 行平仓类型「' + v + '」不在已知值域（记录已导入，请核对）');
         }
       }
       if (CSV_ARRAY_FIELDS.indexOf(key) !== -1) {
-        obj[key] = v ? v.split(';').filter(Boolean) : [];
+        // P1-11：signals 是机器键数组，历史导出用中文标签 + ' / ' 连接；
+        // 这里同时兼容 ';' 与 ' / ' 分隔，并逐项反查回机器键。
+        var _parts = v ? v.split(key === 'signals' ? /;|\s\/\s/ : ';').filter(Boolean) : [];
+        obj[key] = key === 'signals' ? _parts.map(_normalizeCsvSignal) : _parts;
       } else if (CSV_JSON_FIELDS.indexOf(key) !== -1) {
         try { obj[key] = v ? JSON.parse(v) : (key === 'closes' ? [] : null); } catch(e) { obj[key] = key === 'closes' ? [] : null; }
       } else if (key === 'isPartial') {
         obj[key] = v === 'true' || v === '1';
       } else if (CSV_NUM_FIELDS.indexOf(key) !== -1) {
-        // Excel 里把单元格设成千位分隔后导出会是 "1,234.56"。parseFloat 遇到逗号只取
-        // 逗号前一位（"1,234.56" → 1），26 个数值列全部静默截断且无任何告警。
-        // 先剥掉千位分隔符与空白，让值能按预期还原成数字。
-        var _numSrc = (typeof v === 'string') ? v.replace(/[, ]/g, '') : v;
-        var parsed = parseFloat(_numSrc);
+        // P1-13：统一走 parseImportNumber（CSV 与 JSON 两条路径共口径），
+        // 区分欧式小数逗号与千分位，并挡住 Infinity / 1e999。
+        var _numSrc = v;
         // rMultiple 可能带 'R' 后缀（如 "2.5R"），需先去除
-        if (key === 'rMultiple' && typeof v === 'string') parsed = parseFloat(v.replace(/R$/g, ''));
-        // v5.6.43：parseFloat('Infinity') === Infinity 且 isNaN(Infinity) === false，
-        // 旧写法会把 Infinity / 1e999 直接写进 26 个数值列，再经 JSON 落库变 null。
-        obj[key] = Number.isFinite(parsed) ? parsed : null;
+        if (key === 'rMultiple' && typeof v === 'string') _numSrc = v.replace(/R$/g, '');
+        obj[key] = parseImportNumber(_numSrc);
       } else if (CSV_INT_FIELDS.indexOf(key) !== -1) {
         var parsedInt;
         if (key === 'mindsetScore' && typeof v === 'string' && v.indexOf('★') !== -1) {
@@ -803,12 +853,18 @@ function parseCSVImport(csvText) {
   // 迁移、补 id 与去重统一在 _prepareImportedRecords 里做（与 JSON 路径共用），避免两份实现。
   // 列数不匹配的行已跳过：必须让用户知道，否则「少了 N 条」无从追查。
   // 前 5 条明细 + 总数，避免对话框被一屏报错淹没。
-  var warnMsg = null;
-  if (importWarnings.length > 0) {
-    warnMsg = importWarnings.length + ' 行列数与表头不一致，已跳过：\n'
-      + importWarnings.slice(0, 5).join('\n')
-      + (importWarnings.length > 5 ? '\n…（另有 ' + (importWarnings.length - 5) + ' 行）' : '');
+  var warnParts = [];
+  if (skippedRows.length > 0) {
+    warnParts.push(skippedRows.length + ' 行列数与表头不一致，已跳过：\n'
+      + skippedRows.slice(0, 5).join('\n')
+      + (skippedRows.length > 5 ? '\n…（另有 ' + (skippedRows.length - 5) + ' 行）' : ''));
   }
+  if (valueWarnings.length > 0) {
+    warnParts.push(valueWarnings.length + ' 行字段值不在已知值域（记录已导入）：\n'
+      + valueWarnings.slice(0, 5).join('\n')
+      + (valueWarnings.length > 5 ? '\n…（另有 ' + (valueWarnings.length - 5) + ' 行）' : ''));
+  }
+  var warnMsg = warnParts.length ? warnParts.join('\n\n') : null;
   // v5.6.9：与 JSON 导入共用「迁移→校验→补 id→去重→确认」流水线，覆盖确认文案只写一处。
   var rep = _prepareImportedRecords(imported, warnMsg);
   if (rep.errors.length > 0) { _showImportValidationFailure(rep.errors); return; }
@@ -925,6 +981,35 @@ function listAutoBackups() {
 }
 
 /**
+ * 备份恢复的归一化流水线（P1-14，v5.6.46）。
+ * 旧实现 `logs = obj.data; saveLogs()` 直接落盘，跳过了导入侧统一的
+ * 「数值归一 → Schema/时间迁移 → 非有限脏值隔离 → 补稳定 id」四步，
+ * 于是从旧备份恢复出来的记录没有 id、时间还是 'YYYY/MM/DD HH:mm:ss' 旧格式、
+ * "Infinity"/"NaN" 字符串一路流进胜率与权益曲线。恢复与导入必须同口径。
+ * @returns {Array|null} 归一化后的数组；失败返回 null（调用方须整批拒绝恢复）。
+ */
+function _normalizeRestoredLogs(records) {
+  try {
+    var out = JSON.parse(JSON.stringify(records));
+    if (typeof _normalizeImportedValues === 'function') _normalizeImportedValues(out);
+    if (typeof migrateLogsToCurrentSchema === 'function') migrateLogsToCurrentSchema(out, 0);
+    else if (typeof _migrateTimes === 'function') _migrateTimes(out);
+    if (window.utils && typeof window.utils.sanitizeLogNumbers === 'function') {
+      window.utils.sanitizeLogNumbers(out);
+    }
+    if (window.utils && typeof window.utils.genLogId === 'function') {
+      for (var i = 0; i < out.length; i++) {
+        if (out[i] && !out[i].id) out[i].id = window.utils.genLogId(out);
+      }
+    }
+    return out;
+  } catch (e) {
+    console.error('[restoreFromAutoBackup] 备份数据归一失败，已放弃恢复:', e);
+    return null;
+  }
+}
+
+/**
  * 从指定槽位的自动备份恢复（覆盖当前日志，属破坏性操作，调用方须先确认）。
  * @param {number} slot
  * @returns {boolean} 是否恢复成功
@@ -941,9 +1026,11 @@ function restoreFromAutoBackup(slot) {
   var before = logs.slice();
   try { localStorage.setItem('trade_pre_restore_backup', JSON.stringify({ time: new Date().toISOString(), data: before })); } catch (e) {}
 
-  logs = obj.data;
-  saveLogs();
-  showToast('已从备份恢复 ' + obj.data.length + ' 条日志（原日志已另存为恢复前备份）', 'success');
+  var normalized = _normalizeRestoredLogs(obj.data);
+  if (!normalized) { showToast('备份数据归一化失败，未恢复任何日志', 'error'); return false; }
+  logs = normalized;
+  if (!saveLogs()) { showToast('恢复后写入失败，当前日志未被保存', 'error'); return false; }
+  showToast('已从备份恢复 ' + normalized.length + ' 条日志（原日志已另存为恢复前备份）', 'success');
   // P0 修复：恢复同样整体替换 logs，索引型状态全部失效（与覆盖导入同类）。
   // 用户确认文案已声明「未保存的界面状态会丢失」，但代码此前一个都没重置。
   if (typeof window.resetAllIndexState === 'function') window.resetAllIndexState();
@@ -970,7 +1057,11 @@ function _logKeys(item) {
 }
 
 // 导入时统一归一化的数值字段（JSON 里可能是字符串或 NaN/Infinity；CSV 解析已给数字，重复归一无害）
-var IMPORT_NUM_FIELDS = ['entryPrice','stopLoss','targetPrice','positionSize','leverage','riskAmount','capital','fee','slippageCost','closePrice','pnlAmount','mae','mfe','lowPrice','highPrice','rMultiple','pnlPercent','holdDuration','effectiveEntryPrice','stopType','atrStopMode','calculationVersion','grossPnlAmount','actualCloseFee','actualExitLegacySlippageCost','realizedPnl','realizedFee','closedRatio','initialRiskAmount','initialPositionSize','targetRR','plannedNetProfit','rrGrossProfit','rrNetProfit','rrNetLoss'];
+// P1-10：stopType 是枚举、atrStopMode 是布尔、calculationVersion 是版本字符串。
+// 旧实现把它们混进数值白名单，parseFloat 一律抹成 null（CSV / JSON / 拖拽导入 /
+// 自动备份恢复四条链全中招），止损默认 ticks 与 ATR 标记静默丢失且不可逆。
+var IMPORT_NUM_FIELDS = ['entryPrice','stopLoss','targetPrice','positionSize','leverage','riskAmount','capital','fee','slippageCost','closePrice','weightedClosePrice','pnlAmount','mae','mfe','lowPrice','highPrice','rMultiple','pnlPercent','holdDuration','effectiveEntryPrice','grossPnlAmount','actualCloseFee','actualExitLegacySlippageCost','realizedPnl','realizedFee','closedRatio','initialRiskAmount','initialPositionSize','targetRR','plannedNetProfit','rrGrossProfit','rrNetProfit','rrNetLoss'];
+var IMPORT_BOOL_FIELDS = ['atrStopMode','isPartial'];
 
 /**
  * 数值字段归一化：必须在结构校验之前跑，否则 validateFields 会把 JSON 里的 '100'
@@ -978,13 +1069,21 @@ var IMPORT_NUM_FIELDS = ['entryPrice','stopLoss','targetPrice','positionSize','l
  */
 function _normalizeImportedValues(records) {
   for (var k = 0; k < records.length; k++) {
+    var r = records[k];
+    if (!r) continue;
     for (var nf = 0; nf < IMPORT_NUM_FIELDS.length; nf++) {
       var f = IMPORT_NUM_FIELDS[nf];
-      if (records[k][f] != null) {
-        var v = parseFloat(records[k][f]);
-        records[k][f] = isNaN(v) ? null : v;
-      }
+      // P1-13：与 CSV 路径共用 parseImportNumber，杜绝 '1,5' 两条路径给出 15 / 1 两个错值。
+      if (r[f] != null) r[f] = parseImportNumber(r[f]);
     }
+    for (var bf = 0; bf < IMPORT_BOOL_FIELDS.length; bf++) {
+      var b = IMPORT_BOOL_FIELDS[bf];
+      if (r[b] == null || typeof r[b] === 'boolean') continue;
+      r[b] = (r[b] === 'true' || r[b] === '1' || r[b] === 1);
+    }
+    // 枚举 / 版本字段只做字符串归一，绝不数值化
+    if (r.stopType != null && typeof r.stopType !== 'string') r.stopType = String(r.stopType);
+    if (r.calculationVersion != null && typeof r.calculationVersion !== 'string') r.calculationVersion = String(r.calculationVersion);
   }
 }
 

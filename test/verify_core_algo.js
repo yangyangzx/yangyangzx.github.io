@@ -424,11 +424,13 @@ function makeStorage() {
 
   // ==================== 汇总 ====================
   console.log('\n通过 ' + pass + ' / 失败 ' + fail);
+  require('./_gate').emit(pass, fail);
   if (INJECT) {
     // 注入模式下「有失败」才是正确结果：证明断言不是恒真的
     const ok = fail > 0;
     console.log(ok ? '[注入自检] ✅ 断言确实捕获了被架空的守卫（FAIL ' + fail + ' 条）'
                    : '[注入自检] ❌ 注入旧实现后仍全绿，断言无捕获力');
+    require('./_gate').emitInject(ok ? 1 : 0, 1);
     process.exit(ok ? 0 : 1);
   }
   process.exit(fail > 0 ? 1 : 0);

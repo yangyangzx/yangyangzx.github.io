@@ -24,7 +24,9 @@ function exportCSV() {
   if (window.__exportingCSV) { showToast('正在导出中，请稍候', 'info'); return; }
   window.__exportingCSV = true;
   try {
-  const headers = ['ID','时间','品种','方向','订单类型','入场价','有效入场价','止损价','目标价','仓位(USDT)','杠杆','风险额','本金','心态评分','形态/策略','信号K','交易时段','市场环境','平仓类型','平仓价','平仓时间','持仓时长(分钟)','R倍数','盈亏金额','盈亏百分比','MAE%','MFE%','执行评分','出场理由','亏损原因','交易情绪','平仓备注','入场原因','手续费','滑点成本','计算版本','滑点Schema','入场Ticks','退出Ticks','TickSize','计划有效退出价','GroupId','已实现盈亏','累计手续费','已平仓比例%','初始风险','初始仓位','平仓明细','部分平仓','盘中动作','止损轨迹','目标盈亏比','计划净盈利','分批明细','加权均价模型','初始保证金','毛利盈利','净盈利','净亏损'];
+  // v5.6.47：末尾追加两列（P1-05 加权平仓价 / P1-12 形态机器键），
+  // 追加而非中间插入，保证旧列序号不变、历史 CSV 仍可按列数差异被识别。
+  const headers = ['ID','时间','品种','方向','订单类型','入场价','有效入场价','止损价','目标价','仓位(USDT)','杠杆','风险额','本金','心态评分','形态/策略','信号K','交易时段','市场环境','平仓类型','平仓价','平仓时间','持仓时长(分钟)','R倍数','盈亏金额','盈亏百分比','MAE%','MFE%','执行评分','出场理由','亏损原因','交易情绪','平仓备注','入场原因','手续费','滑点成本','计算版本','滑点Schema','入场Ticks','退出Ticks','TickSize','计划有效退出价','GroupId','已实现盈亏','累计手续费','已平仓比例%','初始风险','初始仓位','平仓明细','部分平仓','盘中动作','止损轨迹','目标盈亏比','计划净盈利','分批明细','加权均价模型','初始保证金','毛利盈利','净盈利','净亏损','加权平仓价','形态方向/具体形态'];
   // P2: 导出当前过滤结果（复用 logs.js 的 _filterMatch），无过滤时导出全部
   var hasActiveFilter = !!( _activeFilters.direction || _activeFilters.symbol || _activeFilters.strategy ||
                             _activeFilters.status || _activeFilters.pnl || _activeFilters.time );
@@ -37,13 +39,13 @@ function exportCSV() {
   let badTimeCount = 0;
   for (const row of exportRows) {
     const ms = row.mindsetScore ? '★'.repeat(row.mindsetScore)+'☆'.repeat(5-row.mindsetScore) : '';
+    // P1-12：strategyFramework 是结构化字段，不得把 strategyPattern 拼成展示文案
+    // 塞进来（旧实现一次往返就把「趋势」污染成「趋势 - 看涨延续 - 上升三角」，
+    // 而 strategyPattern 本身永久丢失）。两者现在各自独立成列。
     let sf = row.strategyFramework || '';
-    if (row.strategyPattern) {
-      const pts = row.strategyPattern.split('|');
-      if (pts.length===2) sf += ' - ' + (PATTERN_GROUP_LABELS[pts[0]]||pts[0]) + ' - ' + pts[1];
-      else sf += ' - ' + row.strategyPattern;
-    }
-    const ss = (row.signals&&row.signals.length) ? row.signals.map(s=>SIGNAL_LABELS[s]||s).join(' / ') : '';
+    // P1-11：数据文件必须写机器键 + 与导入侧一致的分隔符 ';'。
+    // 旧实现写中文标签并用 ' / ' 连接，导入按 ';' 切且无反查，往返不可逆。
+    const ss = Array.isArray(row.signals) ? row.signals.join(';') : '';
     // v5.6.43：数据文件必须存机器键。旧实现写中文标签（CLOSE_TYPE_LABELS），
     // 导入端没有反查，一次 CSV 往返就把 partialTP 变成「部分止盈」，
     // isClosedTrade 由中间态误判为已全平，且英文键不可逆丢失。
@@ -64,7 +66,8 @@ function exportCSV() {
       // weightedEntryModel 丢失会让新记录失去「调和均价」标记、被读端误按旧口径解释；
       // 三段 RR 金额丢失会让复盘无法区分含费/不含费口径。
       (row.splitEntries!=null?JSON.stringify(row.splitEntries):''),row.weightedEntryModel??'',row.initialMargin??'',
-      row.rrGrossProfit??'',row.rrNetProfit??'',row.rrNetLoss??''].map(v=>'"'+(v==null?'':String(v).replace(/"/g,'""'))+'"').join(',');
+      row.rrGrossProfit??'',row.rrNetProfit??'',row.rrNetLoss??'',
+      row.weightedClosePrice??'',row.strategyPattern??''].map(v=>'"'+(v==null?'':String(v).replace(/"/g,'""'))+'"').join(',');
     csv += line + '\n';
   }
   const b = new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'});
