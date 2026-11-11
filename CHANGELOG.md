@@ -5,6 +5,30 @@
 
 ---
 
+// 5.6.48：侧栏模块按钮「流动柔光」改良版（2026-11-11）
+//   背景：用户提供 Uiverse「12 光斑金黄 CTA」的 CSS，问能否套到左侧 7 个模块按钮。
+//     评估结论：不建议原样套用 —— 固定金黄 + 白字（对比度约 1.5:1）会把
+//     --nav-hue 的 7 色相锚点抹平，7 项同亮使 active/inactive 层级消失，
+//     12×7=84 个 blur 光斑常驻 infinite 动画持续吃 GPU；且 .wrapper / .circle
+//     的 DOM 与 :before 内阴影环会和现有凹槽立体结构（浮起层 ::before /
+//     色标 ::after）正面撞车。用户拍板「改良版」：只借流动光斑，不搬它的形。
+//   —— css/layout.css ——
+//     新增两团从 --nav-hue 派生的 radial-gradient 柔光，圆心由 @property
+//     <percentage> 变量插值（navGlowDrift 9s），仅挂在 .nav-item.active::before，
+//     其余 6 项零动画；hover 只覆写 --nav-glow-duration 到 3.2s 做加速，
+//     不新开动画。零新增 DOM，不动 7 色相 / 凹槽立体 / 双主题 / focus-visible。
+//     不支持 @property 的浏览器定格成静态柔光，按钮仍可读。
+//   —— 顺带修一个真缺陷（P1）——
+//     文件顶部 `body { animation: none; }` 只作用于 body 自身，animation 不继承，
+//     navSweep / navDotPulse 在系统开启「减少动态效果」时照跑；补一条显式点名
+//     .nav-item 及 ::before/::after 的 !important 兜底。
+//   —— 守护 ——
+//     新增 test/verify_nav_glow.js（18 条静态断言 / 12 点逐条独立注入），
+//     覆盖作用域、颜色派生、无障碍、结构、成本与 layout.css 缓存戳一致性。
+//     红测首跑 11 绿 7 红，改完 18/0，注入 12/12。
+//   升版 5.6.48：version.js + index.html 49 处 + run-tests.html 18 处（含
+//     APP_VERSION 绊线）+ manifest 3 处；npm test 33 项（23 正常 + 10 注入）/ 3742 条。
+
 // 5.6.47：数据准确度收口（深度审计批次 2 / 3，2026-11-10）
 //   背景：用户授权「代办的修复全部优化」，把 AUDIT.md 剩余 2 个 P0、15 个 P1 与
 //     批次 3 结构项一次性修完。红测 test/verify_batch2.js 首跑 49 条断言 42 条报红。

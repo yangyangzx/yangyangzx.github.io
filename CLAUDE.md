@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目性质
 
-TradingDiscipline：纯前端交易风控/复盘终端（**v5.6.47**），无任何构建工具。原生 JS（IIFE + 全局函数）+ CSS（OKLCH 变量），数据全部存 localStorage、不上传任何服务端；图表库走 CDN，断网时由 `js/chart-guard.js` 降级为占位桩，核心计算与数据不依赖网络。`index.html` 直接可运行，但推荐用本地 HTTP 服务器打开（file:// 下 PWA manifest / 部分浏览器行为受限）：
+TradingDiscipline：纯前端交易风控/复盘终端（**v5.6.48**），无任何构建工具。原生 JS（IIFE + 全局函数）+ CSS（OKLCH 变量），数据全部存 localStorage、不上传任何服务端；图表库走 CDN，断网时由 `js/chart-guard.js` 降级为占位桩，核心计算与数据不依赖网络。`index.html` 直接可运行，但推荐用本地 HTTP 服务器打开（file:// 下 PWA manifest / 部分浏览器行为受限）：
 
 ```bash
 python3 -m http.server 8000   # 然后开 http://localhost:8000
@@ -17,7 +17,7 @@ python3 -m http.server 8000   # 然后开 http://localhost:8000
 ```bash
 node --check js/<file>.js          # 改完 JS 先语法检查
 npx eslint js/                     # Lint（注意：.eslintrc.json 未启用 no-undef，见下）
-npm test                           # 无头全量回归：22 个正常跑测器 + 9 组注入自检（31 项），有失败则 exit 1
+npm test                           # 无头全量回归：23 个正常跑测器 + 10 组注入自检（33 项），有失败则 exit 1
 npm run test:main                  # 只跑主回归（test/_rt_headless.js，浏览器内 run-tests.html）
 npm run test:browser               # 浏览器内回归：打开 test/run-tests.html 自动跑全部断言
 # 改完前端后强刷：URL 追加 ?cb=<时间戳> 避开缓存（index.html 里资源已带 ?v=<当前版本>，改 JS/CSS/图标时须同步升版）
@@ -35,7 +35,7 @@ npx eslint --no-eslintrc --env browser,es2021 \
 ```
 报错里会混入大量跨文件全局（`showToast`、`Slippage`…）属正常误报；**只需看那些"本文件内有同名 `const/let/var/function` 声明"的**——那就是真泄漏。
 
-✅ **`npm test` 可用**（v5.6.34 起）：它跑 `node test/run-all.js`，聚合正常跑测器与注入自检组，任一失败即 `exit 1`。当前为 31 项（22 正常 + 9 注入自检）/ 3724 条断言。
+✅ **`npm test` 可用**（v5.6.34 起）：它跑 `node test/run-all.js`，聚合正常跑测器与注入自检组，任一失败即 `exit 1`。当前为 33 项（23 正常 + 10 注入自检）/ 3742 条断言。
 
 > 历史（勿照旧结论理解）：此前 `npm test` 指向 jest 配置，`testMatch` 写 `**/tests/**/*.test.js`、`setupFiles` 写 `./tests/setup.js`，而 `tests/` 目录早在 2026-08-14（`4ba7130`）就已删除 —— 跑必然 Validation Error。同时 14 个跑测器里 6 个无条件 `process.exit(0)`，而唯一退出码正确的 `_rt_headless.js` 又被一条 jsdom `maxHeight "0"` vs 浏览器 `"0px"` 的断言卡成永久红灯，等于全仓 3,300+ 条断言**没有任何一道有效门禁**。这三处已在 v5.6.34 全部修掉。
 
@@ -152,7 +152,7 @@ v5.6.19 引入两个 P0 时前两套都是全绿的 —— 它们只证明**计�
 
 ## 测试
 
-- `npm test` → `test/run-all.js`：聚合 31 项（22 个正常跑测器 + 9 组注入自检），任一失败 `exit 1`。这是唯一该挂在 CI / 预提交钩子上的门禁。
+- `npm test` → `test/run-all.js`：聚合 33 项（23 个正常跑测器 + 10 组注入自检），任一失败 `exit 1`。这是唯一该挂在 CI / 预提交钩子上的门禁。
 - `test/run-tests.html`（活跃回归套件，打开即跑，**675 条** `T()` 断言，32 组）：主回归。`npm run test:main` 可无头跑它（`test/_rt_headless.js`）。
 - `test/verify_*.js` / `test/_edit_scenarios.js`：专项跑测器，按场景拆分，各自 Node CLI 可直接跑。
 - `test/verify-fixes.html`：**已过时的一次性验证页**（2026-09-23）。它引用的 js 不带 `?v=`（缓存风险），且第 6–9 节是**内联复现的算法**、不是对真实代码的回归（其自身注释已声明"改动 modals.js 后这些节不会自动失效"）。不要把它当作回归依据。
@@ -243,7 +243,7 @@ node test/verify_core_algo.js --inject  # 注入旧实现，必须出现 FAIL，
 
 ## 跨模块口径边界（v5.6.43）
 
-**新增门禁**：`test/verify_crossmodule.js`（56 断言，带 `--inject`），专测跨模块接线与 UI↔落库口径；`npm test` 现为 **31 项（22 正常 + 9 注入自检）**。
+**新增门禁**：`test/verify_crossmodule.js`（56 断言，带 `--inject`），专测跨模块接线与 UI↔落库口径；`npm test` 现为 **33 项（23 正常 + 10 注入自检）**。
 
 **改代码前必读的新不变量**：
 - **设置读侧**：`loadSettings()` 是唯一净化入口（`_sanitizeLoadedSettings`），所有阈值消费点都不许再自行 `Number(x)||default`。数字字符串会先归一（保住 `loadMmr('0.8')`）；越界/非有限/非整数一律回退 `SETTINGS_DEFAULTS`。**测试不得再用越界设置值构造场景**——`(v5.6.43)` 已把 `riskHeatMax:50`、`maxDrawdownAlert:90` 这类值迁到合法区间，否则场景会被净化吞掉。

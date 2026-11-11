@@ -1,6 +1,6 @@
 # TradingDiscipline · 交易风险管理终端
 
-**纯前端期货/合约交易风控与复盘工具 · v5.6.47**
+**纯前端期货/合约交易风控与复盘工具 · v5.6.48**
 
 面向加密货币/合约交易者的全流程交易管理系统：开仓前计算 → 持仓监控 → 平仓记录 → 统计分析 → 复盘优化。所有数据本地存储（`localStorage`），无构建工具，双击 `index.html` 即可使用；**图表库（Chart.js 4.4.0 / Font Awesome）走 CDN**，断网时 `js/chart-guard.js` 会注入占位桩，核心计算、风控闸门与全部交易数据仍可离线使用（不是「完全零外部依赖」）。
 
@@ -229,7 +229,7 @@ notes/
 
 ## 六、测试与验证
 
-- **一键全量回归**：`npm test` → `test/run-all.js`，依次跑完 **22 个正常跑测器 + 9 组注入自检（共 31 项）**，任一失败 `exit 1`。这是本仓库唯一有效的自动化门禁。v5.6.46 起门禁只认每个跑测器收尾打印的机器可读契约 `GATE PASS=n FAIL=n TOTAL=n`（注入模式为 `GATE INJECT CAUGHT=n EXPECTED=n`）：解析不到契约、`FAIL>0`（即使 `exit 0`）、`PASS=0`、`TOTAL` 不自洽、断言总数低于该组登记下限 `min`、退出码非 0，一律 fail-closed 判红；并在汇总行核对全局断言总数（当前 **3724 条**）。`test/verify_gate.js` 用真实 `run-all.js` 副本跑假绿/零断言 fixture，`--inject` 把 11 条守卫逐条独立架空；`test/verify_data_integrity.js --inject` 4 个点、`test/verify_batch2.js --inject` 25 个点各自单独 boot 干净 JSDOM。注入错误必须复红，否则断言没有捕获力。
+- **一键全量回归**：`npm test` → `test/run-all.js`，依次跑完 **23 个正常跑测器 + 10 组注入自检（共 33 项）**，任一失败 `exit 1`。这是本仓库唯一有效的自动化门禁。v5.6.46 起门禁只认每个跑测器收尾打印的机器可读契约 `GATE PASS=n FAIL=n TOTAL=n`（注入模式为 `GATE INJECT CAUGHT=n EXPECTED=n`）：解析不到契约、`FAIL>0`（即使 `exit 0`）、`PASS=0`、`TOTAL` 不自洽、断言总数低于该组登记下限 `min`、退出码非 0，一律 fail-closed 判红；并在汇总行核对全局断言总数（当前 **3742 条**）。`test/verify_gate.js` 用真实 `run-all.js` 副本跑假绿/零断言 fixture，`--inject` 把 11 条守卫逐条独立架空；`test/verify_data_integrity.js --inject` 4 个点、`test/verify_batch2.js --inject` 25 个点各自单独 boot 干净 JSDOM；`test/verify_nav_glow.js --inject` 12 个点走 CSS/HTML 内存副本注入。注入错误必须复红，否则断言没有捕获力。
 - **浏览器内回归**：打开 `test/run-tests.html` 自动运行 675 条断言（平仓三态、凯利链、集中度、一致性门、分批建仓、回撤告警阈值、移动端适配、纪律 LED 文案条数与顺序等 32 组）；也可 `npm run test:main` 无头跑；
 - 修改 JS 后建议：`node --check js/<file>.js` 语法检查 → `npm test` → 浏览器强刷（URL 追加 `?cb=<时间戳>` 避开缓存）→ 关键链路 E2E；
 - ⚠️ Jest 已移除：`tests/` 目录早已删除，`package.json` 中的 jest 配置为悬空配置（v5.6.34 已清理）。加测试请用 `run-tests.html` 或 `test/verify_*.js`；

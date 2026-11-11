@@ -47,6 +47,7 @@ const SUITES = [
   ['门禁自身回归（假绿 / 结构守护）', 'verify_gate.js', 20],
   ['数据完整性（时间 / 缓存 / 并发 / 恢复）', 'verify_data_integrity.js', 16],
   ['批次 2/3 数据准确度（6 组 50 条）', 'verify_batch2.js', 50],
+  ['侧栏柔光样式守护（5 组 18 条）', 'verify_nav_glow.js', 18],
 ];
 
 // 注入自检组：[标签, 文件, 参数, 环境变量, 期望捕获点数]
@@ -62,6 +63,7 @@ const INJECT_SUITES = [
   ['门禁自身（11 点守卫变异）', 'verify_gate.js', ['--inject'], {}, 11],
   ['数据完整性（4 点独立注入）', 'verify_data_integrity.js', ['--inject'], {}, 4],
   ['批次 2/3（25 点逐条独立注入）', 'verify_batch2.js', ['--inject'], {}, 25],
+  ['侧栏柔光（12 点逐条独立注入）', 'verify_nav_glow.js', ['--inject'], {}, 12],
 ];
 
 // 单一判定入口。所有守卫独占一行，便于 test/verify_gate.js 做逐条独立注入变异。

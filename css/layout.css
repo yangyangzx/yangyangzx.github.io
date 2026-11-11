@@ -184,6 +184,9 @@ body {
    ═══════════════════════════════════════ */
 .nav-item {
   --nav-hue: 248;
+  /* v5.6.48 改良版柔光：周期定义在基础块上，伪元素继承；只有 active 挂 animation，
+     非选中项成本恒为 0。hover 覆写同一个变量做加速（对应 Uiverse 的 7s→1.4s 手感）。 */
+  --nav-glow-duration: 9s;
   /* 色标条尺寸：3×18 的细条取代原 8px 圆点——圆点看起来像未读/故障指示灯，
      而细条读作「色标」，与图标同色时形成「图标—文字—色标」的完整色锚 */
   --nav-mark-w: 3px;
@@ -296,6 +299,7 @@ body {
 @media (hover: hover) and (pointer: fine) {
   .nav-item:hover {
     filter: drop-shadow(4px 0 12px oklch(58% 0.18 var(--nav-hue) / 0.40));
+    --nav-glow-duration: 3.2s;
   }
 
   .nav-item:hover::before {
@@ -353,6 +357,10 @@ body {
      若 @property 不可用，三道弧定格在起始角，退化成一记静态柔光，按钮仍可读。 */
   background-color: transparent;
   background-image:
+    radial-gradient(circle at calc(24% + var(--nav-glow-x)) calc(70% + var(--nav-glow-y)),
+      oklch(68% 0.10 var(--nav-hue) / 0.13) 0%, transparent 44%),
+    radial-gradient(circle at calc(78% - var(--nav-glow-x)) calc(30% - var(--nav-glow-y)),
+      oklch(70% 0.09 calc(var(--nav-hue) + 40) / 0.10) 0%, transparent 48%),
     linear-gradient(180deg, transparent 48%,
                     oklch(62% 0.06 var(--nav-hue) / 0.10) 100%),
     conic-gradient(from calc(var(--sweep) + 150deg) at 50% 142%,
@@ -378,7 +386,7 @@ body {
   background-size: 100% 100%;
   filter: blur(2.5px);
   animation: navSweep 4.5s linear infinite, navSweep2 7.2s linear infinite,
-             navSweep3 11s linear infinite;
+             navSweep3 11s linear infinite, navGlowDrift var(--nav-glow-duration) ease-in-out infinite alternate;
 }
 
 /* 角度必须注册成 <angle> 类型才会被插值；inherits: false 避免子元素继承残留值。
@@ -410,6 +418,31 @@ body {
 @keyframes navSweep3 {
   from { --sweep3: 0deg; }
   to   { --sweep3: 360deg; }
+}
+
+/* ═══════════════════════════════════════
+   改良版柔光（v5.6.48）—— 只借 Uiverse 的「流动光斑」，不搬它的形
+   ═══════════════════════════════════════
+   两团水色光斑从各自的圆心缓慢漂移，颜色全部由 --nav-hue 派生，所以每个模块
+   流的是自己的颜色，不会把 7 个色相锚点抹成同一片金黄。沿用上方三波扫光已
+   验证过的 @property 思路（这里注册 <percentage> 让圆心可插值）；不支持
+   @property 的浏览器定格在 initial-value，退化成一记静态柔光，按钮仍可读。
+   刻意不用原版的 12 个 DOM 光斑 + blur(8~16px)：那是给单个 CTA 的成本，侧栏
+   7 项常驻播放会持续吃 GPU，而且固定四色 + 全亮底会让选中态彻底消失。 */
+@property --nav-glow-x {
+  syntax: '<percentage>';
+  inherits: false;
+  initial-value: 0%;
+}
+@property --nav-glow-y {
+  syntax: '<percentage>';
+  inherits: false;
+  initial-value: 0%;
+}
+@keyframes navGlowDrift {
+  0%   { --nav-glow-x: -12%; --nav-glow-y: 16%; }
+  50%  { --nav-glow-x: 14%;  --nav-glow-y: -10%; }
+  100% { --nav-glow-x: -6%;  --nav-glow-y: 12%; }
 }
 /* 选中态文字/图标取本模块色相（原为固定主色蓝 248，与 --nav-hue 并存两套色）。
    亮度走 --nav-accent-l：暗底 72% / 浅底 46%，两套主题各自 ≥5:1。
@@ -475,6 +508,19 @@ body {
 .nav-item[data-view='analytics'] { --nav-hue: 80;  }
 .nav-item[data-view='review']    { --nav-hue: 158; }
 .nav-item[data-view='settings']  { --nav-hue: 320; }
+
+/* ═══════════════════════════════════════
+   减少动态效果（v5.6.48）—— 真正关掉导航动画
+   ═══════════════════════════════════════
+   文件顶部的 `body { animation: none; }` 只作用于 body 自身：animation 不是继承
+   属性，navSweep / navDotPulse / navGlowDrift 与呼吸色标此前全都照跑。这里显式
+   点名 .nav-item 及两个伪元素，带 !important 压过后面声明的无限动画。 */
+@media (prefers-reduced-motion: reduce) {
+  .nav-item, .nav-item::before, .nav-item::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
 
 /* ═══════════════════════════════════════
    主题切换 — Spark 开关（Uiverse swift_9148 适配版，保持原样）

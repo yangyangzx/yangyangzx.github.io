@@ -564,7 +564,7 @@ const INJECTIONS = [
     { file: 'README.md', from: '核心计算、风控闸门与全部交易数据仍可离线使用（不是「完全零外部依赖」）。',
       to: '核心计算、风控闸门与全部交易数据完全离线运行。' } ] },
   { key: 'D-07 CLAUDE 历史数字回归', group: 'F', mutators: [
-    { file: 'CLAUDE.md', from: '`npm test` 现为 **31 项（22 正常 + 9 注入自检）**。',
+    { file: 'CLAUDE.md', from: '`npm test` 现为 **33 项（23 正常 + 10 注入自检）**。',
       to: '`npm test` 现为 **18 个跑测器**。' } ] }
 ];
 

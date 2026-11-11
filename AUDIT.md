@@ -176,3 +176,17 @@
 | 全量 | `npm test` **31/31**（22 正常 + 9 注入自检），`断言总数 3724 / 下限 3724 ✅`（基线 3674 + 新增 50，无退化）；全部改动 JS `node --check` 通过；`verify_assets.js` 15/0 |
 | 版本收口 | 升版 **5.6.47**：`js/version.js` + `index.html` 49 处 / `run-tests.html` 17 处 + `APP_VERSION` 绊线 / `manifest.json` 3 处；`CHANGELOG.md` 新增条目；README / CLAUDE 顶部版本与门禁数字（31 项 / 3724 条）同步 |
 | 剩余 | D-01~D-05 五项产品决策（资金费率建模、三结果凯利精确解、风险加权 R、无目标价最大亏损口径、涨红跌绿配色）需用户拍板，未擅改；D-06 仅做「修正文档口径」，CDN 本地化未做 |
+
+---
+
+## v5.6.48 补记（2026-11-11 · 侧栏样式改良，不属数据准确度范围）
+
+| 项 | 内容 |
+|---|---|
+| 触发 | 用户提供 Uiverse「12 光斑金黄 CTA」CSS，问能否套到左侧 7 个模块按钮。评估出 **P0×2 / P1×3** 冲突：固定金黄抹平 `--nav-hue` 七色相锚点、7 项同亮使 active 层级消失、白字黄底约 1.5:1、12×7=84 个 blur 光斑常驻 `infinite`、`.wrapper/.circle` 与 `:before` 内阴影环撞上现有浮起层/色标。结论「不建议原样套用」，用户拍板**改良版** |
+| 新发现（P1，已修复） | `css/layout.css:21` 的 `prefers-reduced-motion` 兜底只写 `body { animation: none; }`，animation 不继承，`navSweep` / `navDotPulse` 在系统开启「减少动态效果」时照跑 → 补一条显式点名 `.nav-item` 及 `::before/::after` 的 `!important` 兜底 |
+| 落地 | `css/layout.css` 新增两团从 `--nav-hue` 派生的 `radial-gradient` 柔光，圆心由 `@property <percentage>` 插值（`navGlowDrift` 9s），**仅 active::before 播**；hover 覆写 `--nav-glow-duration` 到 3.2s 加速，不新开动画。零新增 DOM，7 色相 / 凹槽立体 / 双主题 / focus-visible 全部不动 |
+| 守护 | 新增 `test/verify_nav_glow.js`：18 条静态断言（作用域 / 颜色派生 / 无障碍 / 结构 / 成本 / layout.css 缓存戳）+ `--inject` 12 点逐条独立内存副本注入。红测首跑 **11 绿 7 红**，改完 **18/0**，注入 **12/12** |
+| 实证 | Chrome headless 真渲染：7 项各色相清晰、选中项淡蓝高亮、文字可读、无金黄胶囊；正常模式侧栏两帧像素差异 245，开启 reduced-motion 后两帧差异 **0**（兜底真生效） |
+| 全量 | `npm test` **33/33**（23 正常 + 10 注入自检），`断言总数 3742 / 下限 3742 ✅`（基线 3724 + 新增 18，无退化）；升版 5.6.48，缓存戳 49 / 18 / 3 处同步 |
+| 边界 | 本轮仅为 UI 样式改动，未新增数据准确度问题；D-01~D-05 五项产品决策仍未擅改 |
