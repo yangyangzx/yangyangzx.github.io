@@ -28,7 +28,7 @@ const SUITES = [
   ['主回归（run-tests.html，无头）', '_rt_headless.js', 675],
   ['核心算法升级', 'verify_core_algo.js', 67],
   ['跨模块计算逻辑', 'verify_crossmodule.js', 56],
-  ['品牌图标与缓存戳接线', 'verify_assets.js', 15],
+  ['品牌图标与缓存戳接线 / 文档戳数 / HTML 结构 / 本地外链', 'verify_assets.js', 18],
   ['导航品牌区回主入口', 'verify_nav_logo.js', 12],
   ['编辑场景（S0~S15）', '_edit_scenarios.js', 189],
   ['平仓类型一致性', 'verify_close_type_consistency.js', 79],
@@ -56,7 +56,7 @@ const SUITES = [
 const INJECT_SUITES = [
   ['核心算法（旧实现注入）', 'verify_core_algo.js', ['--inject'], {}, 1],
   ['跨模块（旧实现注入）', 'verify_crossmodule.js', ['--inject'], {}, 1],
-  ['资产接线（7 点逐条）', 'verify_assets.js', ['--inject'], {}, 7],
+  ['资产接线 / 文档戳数 / 结构 / 外链（10 点逐条）', 'verify_assets.js', ['--inject'], {}, 10],
   ['导航品牌区（9 点逐条）', 'verify_nav_logo.js', ['--inject'], {}, 9],
   ['统计浮层（bad-read）', 'verify_stat_tip.js', [], { REGRESSION: 'bad-read' }, 1],
   ['统计浮层（bad-hover）', 'verify_stat_tip.js', [], { REGRESSION: 'bad-hover' }, 1],

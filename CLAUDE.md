@@ -35,11 +35,17 @@ npx eslint --no-eslintrc --env browser,es2021 \
 ```
 报错里会混入大量跨文件全局（`showToast`、`Slippage`…）属正常误报；**只需看那些"本文件内有同名 `const/let/var/function` 声明"的**——那就是真泄漏。
 
-✅ **`npm test` 可用**（v5.6.34 起）：它跑 `node test/run-all.js`，聚合正常跑测器与注入自检组，任一失败即 `exit 1`。当前为 33 项（23 正常 + 10 注入自检）/ 3742 条断言。
+✅ **`npm test` 可用**（v5.6.34 起）：它跑 `node test/run-all.js`，聚合正常跑测器与注入自检组，任一失败即 `exit 1`。当前为 33 项（23 正常 + 10 注入自检）/ 3745 条断言。
 
 > 历史（勿照旧结论理解）：此前 `npm test` 指向 jest 配置，`testMatch` 写 `**/tests/**/*.test.js`、`setupFiles` 写 `./tests/setup.js`，而 `tests/` 目录早在 2026-08-14（`4ba7130`）就已删除 —— 跑必然 Validation Error。同时 14 个跑测器里 6 个无条件 `process.exit(0)`，而唯一退出码正确的 `_rt_headless.js` 又被一条 jsdom `maxHeight "0"` vs 浏览器 `"0px"` 的断言卡成永久红灯，等于全仓 3,300+ 条断言**没有任何一道有效门禁**。这三处已在 v5.6.34 全部修掉。
 
 新增断言优先加进 `run-tests.html`；只有需要完整 `index.html` DOM（`resetForm`、`openEditModal` 这类）时才写进 `test/verify_*.js`——`run-tests.html` 的 DOM 是精简的，调用依赖完整表单的函数会直接把整个 `runAll` 炸掉（summary 停在 `—`，比一条失败更隐蔽）。
+
+### 验证与交付纪律（v5.6.48 补丁 · 两次真实踩坑）
+
+- **Chrome 视觉验证必须 fail-closed**：`index.html` 曾省略 `</body>`（已补），按 `</body>` 找锚点注入预览脚本会静默失败；更隐蔽的是 **Chrome headless 对不存在的 `file://` URL 也返回 `exit 0`**，若脚本没 `set -e`、没检查截图产物存在且非空，中途就会打印 "done" 形成假绿——与 v5.6.47 修过的「假绿门禁」同源。固定流程：注入插在 `</html>` 前 → 生成后断言预览文件存在 → 截图后校验 PNG 尺寸 → 再比较像素。
+- **推送后必须比对远端 hash**：`git push ...; echo "PUSH_EXIT=$?"` 会让整条 shell 以 `echo` 的 exit 0 收尾，代理 502 时看起来像成功。收尾固定做 `git fetch origin main` + 比对 `origin/main == HEAD`，不等就不算交付完成。代理的 HTTP/2 framing / CONNECT 502 是**间歇性**的，重试即可，不要改 remote。
+- **文档里的缓存戳数量必须机器自洽**：升版用 `replace_all` 替换版本号字面量，容易把 `run-tests.html` 的「字面量总数」误当成「外链 `?v=` 数」（本轮 18 vs 17）。`test/verify_assets.js` 的 `doc-stamp-count` 会比对 CHANGELOG 当前版本条目声明与实测三处戳数，写错即红。
 
 ## 架构要点（跨文件才能看懂的部分）
 

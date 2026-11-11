@@ -26,8 +26,21 @@
 //     新增 test/verify_nav_glow.js（18 条静态断言 / 12 点逐条独立注入），
 //     覆盖作用域、颜色派生、无障碍、结构、成本与 layout.css 缓存戳一致性。
 //     红测首跑 11 绿 7 红，改完 18/0，注入 12/12。
-//   升版 5.6.48：version.js + index.html 49 处 + run-tests.html 18 处（含
-//     APP_VERSION 绊线）+ manifest 3 处；npm test 33 项（23 正常 + 10 注入）/ 3742 条。
+//   升版 5.6.48：version.js + index.html 49 处 + run-tests.html 17 处（另含
+//     APP_VERSION 绊线字面量，不是外链戳）+ manifest 3 处；
+//     npm test 33 项（23 正常 + 10 注入）/ 3742 条。
+//   —— 补丁（同版本：无 JS/CSS 资源内容变更，缓存戳与 APP_VERSION 保持 5.6.48）——
+//     P1 文档口径：本条曾把 run-tests.html 的戳数写成 18（那是版本号字面量总数），
+//       实测外链戳只有 17 处，已改正；新增 verify_assets.js 的 doc-stamp-count
+//       断言，机器比对「CHANGELOG 声明 == 实测」，防止升版时同类漂移复发。
+//     P2 结构：index.html 省略 </body>，任何按 </body> 找锚点的预览注入脚本都会
+//       静默失败；已补闭合标签，由 html-body-closed 断言守护。
+//     P2 护栏：新增 local-refs-exist，守护 43 个 js/css 外链路径真实存在（原本
+//       asset-missing 只覆盖 assets/ 图标，路径拼错只会静默 404）。
+//     P1 流程：视觉验证脚本生成失败后未 fail-fast，而 Chrome headless 对不存在的
+//       file:// URL 返回 exit 0，中途已打印 "done" 形成假绿；推送命令末尾 echo
+//       吞掉 exit code，代理 502 时看起来像成功。两条纪律写入 CLAUDE.md。
+//     补丁后 npm test 仍 33 项，断言总数 3742 → 3745（verify_assets 18 条 / 10 点注入）。
 
 // 5.6.47：数据准确度收口（深度审计批次 2 / 3，2026-11-10）
 //   背景：用户授权「代办的修复全部优化」，把 AUDIT.md 剩余 2 个 P0、15 个 P1 与

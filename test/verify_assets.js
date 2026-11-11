@@ -8,12 +8,18 @@
 //   已清理；故补一条「assets/ 不得有未被引用的冗余文件」，防止同类堆积复发。
 //   源图原件副本在 ~/Downloads/LOGO.png，需要重做图标时先把它复制回来。
 //
-// 纪律：--inject 逐条独立注入 7 个确定错误，对应断言必须各自变红。
+// v5.6.48 补丁：补三类「文档 / 结构」守护，都是本轮真实踩过的坑——
+//   ① 升版时把 CHANGELOG 的 run-tests.html 缓存戳写成 18 处，实测只有 17 处
+//      （18 是版本号字面量总数，被误当成外链戳数）；文档与实测必须机器自洽。
+//   ② index.html 省略 </body>，任何按 </body> 找锚点的注入工具都会静默失败。
+//   ③ 43 个 js/css 外链没有存在性守护，路径拼错只会静默 404。
+//
+// 纪律：--inject 逐条独立注入 10 个确定错误，对应断言必须各自变红。
 //   逐条独立（而非一次性全注）是为了避免交叉影响掩盖某条断言没有捕获力。
 //   注入只改内存副本，绝不碰磁盘文件。
 //
 // 用法：node test/verify_assets.js            正常跑（全绿才算接线完整）
-//       node test/verify_assets.js --inject   注入错误，必须 7/7 全被捕获
+//       node test/verify_assets.js --inject   注入错误，必须 10/10 全被捕获
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -46,6 +52,7 @@ function loadInputs() {
     html: text('index.html'),
     testHtml: text('test/run-tests.html'),
     manifestText: text('manifest.json'),
+    changelog: text('CHANGELOG.md'),
     dirFiles: fs.readdirSync(rel('assets')),
     bytes
   };
@@ -155,6 +162,50 @@ function runChecks(D, quiet) {
   const frames = icoFrames(D.bytes['assets/favicon.ico']);
   ck('ico-frames', 'favicon.ico 含 16/32/48 三帧', frames.join(',') === '16,32,48', frames.join(','));
 
+  // ── v5.6.48 补丁：文档 / 结构三类缺陷守护 ──────────────────────────────
+  // 只解析 CHANGELOG 中「当前版本」那一段，历史条目的验收数字是当时的证据，不参与比对。
+  const heads = [];
+  const entryRe = /^\/\/ (\d+\.\d+\.\d+)：/gm;
+  let hm;
+  while ((hm = entryRe.exec(D.changelog))) heads.push({ ver: hm[1], at: hm.index });
+  const cur = heads.find(x => x.ver === D.version);
+  const next = heads.find(x => cur && x.at > cur.at);
+  const entry = cur ? D.changelog.slice(cur.at, next ? next.at : D.changelog.length) : '';
+  const declared = {
+    index: /index\.html\s+(\d+)\s*处/.exec(entry),
+    test: /run-tests\.html\s+(\d+)\s*处/.exec(entry),
+    manifest: /manifest(?:\.json)?\s+(\d+)\s*处/.exec(entry)
+  };
+  const actual = {
+    index: hs.length,
+    test: ts.length,
+    manifest: icons.filter(i => /[?&]v=/.test(String(i.src))).length
+  };
+  const docOk = declared.index && declared.test && declared.manifest &&
+    Number(declared.index[1]) === actual.index &&
+    Number(declared.test[1]) === actual.test &&
+    Number(declared.manifest[1]) === actual.manifest;
+  ck('doc-stamp-count', 'CHANGELOG 当前版本条目声明的三处缓存戳数量与实测一致',
+    !!docOk,
+    '声明=' + [declared.index && declared.index[1], declared.test && declared.test[1],
+      declared.manifest && declared.manifest[1]].join('/') +
+    ' 实测=' + [actual.index, actual.test, actual.manifest].join('/'));
+
+  // 省略 </body> 虽是合法 HTML5，但会让按 </body> 找锚点的注入工具静默失败。
+  const bodyOpen = /<body\b/i.test(D.html);
+  const bodyClose = /<\/body>/i.test(D.html);
+  ck('html-body-closed', 'index.html 有 <body> 与 </body>，且闭合标签在 </html> 之前',
+    bodyOpen && bodyClose && D.html.lastIndexOf('</body>') < D.html.lastIndexOf('</html>'),
+    'open=' + bodyOpen + ' close=' + bodyClose);
+
+  // 43 个 js/css 外链路径拼错只会静默 404，原有 asset-missing 只管 assets/ 图标。
+  const localRefs = Array.from(D.html.matchAll(/(?:src|href)="((?:js|css)\/[^"?]+)(?:\?[^"]*)?"/g))
+    .map(m => m[1]);
+  const dangling = localRefs.filter(r => !fs.existsSync(rel(r)));
+  ck('local-refs-exist', 'index.html 引用的每个本地 js/css 文件都真实存在',
+    localRefs.length >= 40 && dangling.length === 0,
+    '引用 ' + localRefs.length + ' 个，缺失: ' + dangling.join(','));
+
   return { pass, failures };
 }
 
@@ -196,6 +247,23 @@ const INJECTIONS = [
   ['no-orphan-assets', D => {
     const X = clone(D);
     X.dirFiles = X.dirFiles.concat(['orphan-logo.png']);                 // 冗余文件复活
+    return X;
+  }],
+  ['doc-stamp-count', D => {
+    const X = clone(D);
+    // 只把「当前版本条目」声明的戳数 +1，不依赖具体数字，锚点恒有效
+    X.changelog = X.changelog.replace(/run-tests\.html (\d+) 处/,
+      (m, n) => 'run-tests.html ' + (Number(n) + 1) + ' 处');
+    return X;
+  }],
+  ['html-body-closed', D => {
+    const X = clone(D);
+    X.html = X.html.replace(/<body[^>]*>/i, '');                          // 结构闭合缺陷
+    return X;
+  }],
+  ['local-refs-exist', D => {
+    const X = clone(D);
+    X.html = X.html.replace(/(src=")js\/[^"?]+/, '$1js/__missing__.js');  // 静默 404
     return X;
   }]
 ];

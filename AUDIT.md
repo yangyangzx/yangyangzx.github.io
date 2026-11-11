@@ -188,5 +188,20 @@
 | 落地 | `css/layout.css` 新增两团从 `--nav-hue` 派生的 `radial-gradient` 柔光，圆心由 `@property <percentage>` 插值（`navGlowDrift` 9s），**仅 active::before 播**；hover 覆写 `--nav-glow-duration` 到 3.2s 加速，不新开动画。零新增 DOM，7 色相 / 凹槽立体 / 双主题 / focus-visible 全部不动 |
 | 守护 | 新增 `test/verify_nav_glow.js`：18 条静态断言（作用域 / 颜色派生 / 无障碍 / 结构 / 成本 / layout.css 缓存戳）+ `--inject` 12 点逐条独立内存副本注入。红测首跑 **11 绿 7 红**，改完 **18/0**，注入 **12/12** |
 | 实证 | Chrome headless 真渲染：7 项各色相清晰、选中项淡蓝高亮、文字可读、无金黄胶囊；正常模式侧栏两帧像素差异 245，开启 reduced-motion 后两帧差异 **0**（兜底真生效） |
-| 全量 | `npm test` **33/33**（23 正常 + 10 注入自检），`断言总数 3742 / 下限 3742 ✅`（基线 3724 + 新增 18，无退化）；升版 5.6.48，缓存戳 49 / 18 / 3 处同步 |
+| 全量 | `npm test` **33/33**（23 正常 + 10 注入自检），`断言总数 3742 / 下限 3742 ✅`（基线 3724 + 新增 18，无退化）；升版 5.6.48，缓存戳 49 / 17 / 3 处同步（**补丁订正**：初稿误写 18，那是版本号字面量总数，外链 `?v=` 实测 17） |
 | 边界 | 本轮仅为 UI 样式改动，未新增数据准确度问题；D-01~D-05 五项产品决策仍未擅改 |
+
+## v5.6.48 补丁复盘（2026-11-11 · 交付流程缺陷，非数据准确度）
+
+| 级别 | 问题 | 证据 | 修复 / 守护 |
+|---|---|---|---|
+| P1 | 文档口径错误：v5.6.48 条目把 `run-tests.html` 缓存戳写成 **18 处**，实测外链 `?v=` 只有 **17 处**（18 是版本号字面量总数，升版 `replace_all` 时被误当成戳数） | `CHANGELOG.md:29`、`AUDIT.md:191`；实测 49 / 17 / 3 | 两处订正为 17；`verify_assets.js` 新增 `doc-stamp-count`，机器比对「CHANGELOG 当前条目声明 == 实测」 |
+| P1 | 视觉验证链 fail-open：预览副本生成脚本 `assert '</body>'` 抛错后，Bash 未 fail-fast 继续跑，Chrome headless 对不存在的 `file://` URL 返回 `exit 0`，中途打印 "test done / base done" 形成**假绿**（与 v5.6.47 修过的假绿门禁同源） | 首轮工具输出 `AssertionError` + `done` + `compare: unable to open image` | 一次性脚本不入库；纪律写入 `CLAUDE.md`：注入锚点用 `</html>` 前、生成后断言文件存在、截图后校验 PNG、工具链 `set -e` |
+| P2 | `index.html` 省略 `</body>`，标准 DOM 注入工具按 `</body>` 找锚点静默失败 | `grep -c '</body>'` = 0；本轮直接踩中 | 补 `</body>`；`html-body-closed` 断言守护 |
+| P2 | 43 个 `js/` `css/` 外链无存在性守护，路径拼错只静默 404 | `verify_assets.js` 原 `asset-missing` 只覆盖 `assets/` 图标 | 新增 `local-refs-exist` 断言 |
+| P2 | `git push ...; echo "PUSH_EXIT=$?"` 让整条 shell 以 `echo` 的 exit 0 收尾，代理 502 时看起来像成功 | 首轮 `PUSH_EXIT=128` 但工具 Exit Code 0 | 纪律写入 `CLAUDE.md`：推送后固定 `git fetch` + 比对 `origin/main == HEAD` |
+
+**验收**：红测首跑 16 绿 / 2 红（正是文档口径与闭合标签），修复后 `verify_assets` 18/0、`--inject` 10/10；全量 `npm test` 33/33、断言总数 3745/3745。
+**已消除、无需修**：主 CTA 金黄按钮试验的三条缺陷（白字 1.16~1.45:1、光斑压字、配色割裂）随 `git restore` 全部回滚，仓库残留 0。
+**非代码 bug**：GitHub 代理 HTTP/2 framing / CONNECT 502 ×3，重试第 4 次成功，未改 remote。
+**存量观察项（非本轮引入，属产品配色决策，未擅改）**：深色主题下侧栏未选中项文字偏暗；`git diff 2c98748 HEAD -- css/layout.css` 证明本轮只改了 `active::before` 柔光，未触碰文字配色。
